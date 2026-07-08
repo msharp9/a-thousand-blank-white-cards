@@ -1,0 +1,29 @@
+[project]
+name = "a-thousand-blank-white-cards"
+version = "0.1.0"
+description = "A digital implementation of the party game 1000 Blank White Cards, where players draw, write, and play their own cards to invent the game as they go."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.12",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+minversion = "6.0"
+addopts = "--cov=src --cov-report=term-missing"
+testpaths = [
+    "tests",
+]
+
+[tool.coverage.report]
+fail_under = 80
