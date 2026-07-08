@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from tbwc.models.effects import Op
+
 
 class Card(BaseModel):
     """A single card in the game.
@@ -28,9 +30,8 @@ class Card(BaseModel):
     # Keys are arbitrary strings; values are Any (bool, int, str…).
     properties: dict[str, Any] = Field(default_factory=dict)
 
-    # Immediate ops stored by reference once the EffectProgram model exists.
-    # Typed Any for now; a later bead (p1-effects-ops) narrows this to list[Op].
-    immediate_ops: list[Any] = Field(default_factory=list)
+    # Immediate ops resolved against the effects Op discriminated union.
+    immediate_ops: list[Op] = Field(default_factory=list)
 
     # Hook ids (str uuids) pointing into the global HookRegistry.
     hook_ids: list[str] = Field(default_factory=list)
