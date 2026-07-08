@@ -169,9 +169,11 @@ cython_debug/
 
 # Data
 output/
-data/
+data/*
 datasets/
 plan/
+# ...but keep the curated gold seed card corpus
+!data/seed_cards_gold.json
 
 # Models
 models/
