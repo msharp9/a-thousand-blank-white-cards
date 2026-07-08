@@ -1,0 +1,242 @@
+[
+  {
+    "title": "Gain 5 Points",
+    "description": "You feel great about yourself. Gain 5 points immediately.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 5, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Lose 3 Points",
+    "description": "Oops. Lose 3 points. It happens to the best of us.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {"op": "add_points", "args": {"amount": -3, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Give 5 Points to Any Player",
+    "description": "Pick another player. They gain 5 points. Bask in their gratitude.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 5, "target": "chosen_player"}}
+      ]
+    }
+  },
+  {
+    "title": "Steal 3 Points",
+    "description": "Take 3 points from any player of your choice. They had too many anyway.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "ops": [
+        {"op": "add_points", "args": {"amount": -3, "target": "chosen_player"}},
+        {"op": "add_points", "args": {"amount": 3, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Skip Your Turn",
+    "description": "You are overcome with indecision. Skip your next turn.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {"op": "skip_turn", "args": {"count": 1, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Skip the Next Player's Turn",
+    "description": "The player to your left is suddenly very busy. They skip their next turn.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "ops": [
+        {"op": "skip_turn", "args": {"count": 1, "target": "next_player"}}
+      ]
+    }
+  },
+  {
+    "title": "Reverse Turn Order",
+    "description": "Everything is backwards now. Reverse the direction of play.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {"op": "reverse_order", "args": {}}
+      ]
+    }
+  },
+  {
+    "title": "Draw 3 Cards",
+    "description": "More cards! You draw 3 cards from the draw pile.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {"op": "draw_cards", "args": {"count": 3, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Everyone Draws 2",
+    "description": "The generosity! All players (including you) draw 2 cards.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {"op": "draw_cards", "args": {"count": 2, "target": "all"}}
+      ]
+    }
+  },
+  {
+    "title": "Discard Your Hand",
+    "description": "Start fresh. Discard your entire hand, then draw 5 new cards.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {"op": "discard_hand", "args": {"target": "self"}},
+        {"op": "draw_cards", "args": {"count": 5, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Win the Game",
+    "description": "Congratulations! You win immediately. The game is over. Really.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {"op": "set_win_condition", "args": {"winner": "self", "condition": "instant"}}
+      ]
+    }
+  },
+  {
+    "title": "Person with Fewest Points Wins",
+    "description": "New game rule: the player with the FEWEST points at game end wins instead.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger": "on_game_end",
+      "ops": [
+        {"op": "set_win_condition", "args": {"condition": "fewest_points"}}
+      ]
+    }
+  },
+  {
+    "title": "Double Points on Next Play",
+    "description": "Stay in play. The next card you play scores double points.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "trigger": "on_play_card",
+      "ops": [
+        {"op": "multiply_points", "args": {"factor": 2, "target": "self", "duration": "next_play"}}
+      ]
+    }
+  },
+  {
+    "title": "Negate the Previous Card",
+    "description": "That didn't count. Negate the effect of the last card played.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "center",
+      "placement": "self",
+      "ops": [
+        {"op": "negate_last_card", "args": {}}
+      ]
+    }
+  },
+  {
+    "title": "Trade Hands with Any Player",
+    "description": "Pick another player. Swap your entire hand of cards with theirs.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "ops": [
+        {"op": "trade_hands", "args": {"target": "chosen_player"}}
+      ]
+    }
+  },
+  {
+    "title": "Uno",
+    "description": "Announce 'Uno!' if you have exactly one card left, or play this card to make someone else who has one card draw two.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "snippet": "If target player has exactly 1 card in hand, they draw 2. If you have 1 card and announce Uno before this is played against you, effect is negated."
+    }
+  },
+  {
+    "title": "The Floor Is Lava",
+    "description": "Stay in play. Any player who stands up during the game loses 5 points.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger": "on_physical_action",
+      "snippet": "If any player stands from their seat while this card is in play, they lose 5 points. Honor system applies."
+    }
+  },
+  {
+    "title": "This Card is Worth 10 Points If You Keep It",
+    "description": "Hold onto this card. At game end, it's worth 10 points — but only if you still have it.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "trigger": "on_game_end",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 10, "target": "holder", "condition": "still_in_hand"}}
+      ]
+    }
+  },
+  {
+    "title": "Nothing Happens (Officially)",
+    "description": "Play this card. Read it aloud. Nothing happens. Thank you for your participation.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {"op": "no_op", "args": {}}
+      ]
+    }
+  },
+  {
+    "title": "Create a New Rule",
+    "description": "Invent a new rule. Write it on a blank card right now and shuffle it into the deck. The rule is now in effect.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "snippet": "The active player invents a rule, writes it on a blank card, shuffles it into the draw pile, and announces it. The rule takes effect immediately."
+    }
+  }
+]
