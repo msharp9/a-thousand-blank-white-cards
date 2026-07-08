@@ -175,6 +175,8 @@ plan/
 
 # Models
 models/
+# ...but not the Python source package
+!src/tbwc/models/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
