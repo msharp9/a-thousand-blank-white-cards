@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "a_thousand_blank_white_cards",
+  "project_id": "afa8cbb8-0293-4b43-b2e1-e7043ba61d7a"
+}
