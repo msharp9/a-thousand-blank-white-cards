@@ -1,0 +1,506 @@
+[
+  {
+    "title": "Gain 5 Points",
+    "description": "You feel great about yourself. Gain 5 points immediately.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "self"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Lose 3 Points",
+    "description": "Oops. Lose 3 points. It happens to the best of us.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": -3,
+            "target": "self"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Give 5 Points to Any Player",
+    "description": "Pick another player. They gain 5 points. Bask in their gratitude.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "chosen_player"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Steal 3 Points",
+    "description": "Take 3 points from any player of your choice. They had too many anyway.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": -3,
+            "target": "chosen_player"
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 3,
+            "target": "self"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Skip Your Turn",
+    "description": "You are overcome with indecision. Skip your next turn.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "skip_turn",
+          "args": {
+            "count": 1,
+            "target": "self"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Skip the Next Player's Turn",
+    "description": "The player to your left is suddenly very busy. They skip their next turn.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "skip_turn",
+          "args": {
+            "count": 1,
+            "target": "next_player"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Reverse Turn Order",
+    "description": "Everything is backwards now. Reverse the direction of play.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {
+          "op": "reverse_order",
+          "args": {}
+        }
+      ]
+    }
+  },
+  {
+    "title": "Draw 3 Cards",
+    "description": "More cards! You draw 3 cards from the draw pile.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "draw_cards",
+          "args": {
+            "count": 3,
+            "target": "self"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Everyone Draws 2",
+    "description": "The generosity! All players (including you) draw 2 cards.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {
+          "op": "draw_cards",
+          "args": {
+            "count": 2,
+            "target": "all"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Discard Your Hand",
+    "description": "Start fresh. Discard your entire hand, then draw 5 new cards.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "discard_hand",
+          "args": {
+            "target": "self"
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "count": 5,
+            "target": "self"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Win the Game",
+    "description": "Congratulations! You win immediately. The game is over. Really.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "winner": "self",
+            "condition": "instant"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Person with Fewest Points Wins",
+    "description": "New game rule: the player with the FEWEST points at game end wins instead.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "condition": "fewest_points"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Double Points on Next Play",
+    "description": "Stay in play. The next card you play scores double points.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "trigger": "on_play_card",
+      "ops": [
+        {
+          "op": "multiply_points",
+          "args": {
+            "factor": 2,
+            "target": "self",
+            "duration": "next_play"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Negate the Previous Card",
+    "description": "That didn't count. Negate the effect of the last card played.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "center",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "negate_last_card",
+          "args": {}
+        }
+      ]
+    }
+  },
+  {
+    "title": "Trade Hands with Any Player",
+    "description": "Pick another player. Swap your entire hand of cards with theirs.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "trade_hands",
+          "args": {
+            "target": "chosen_player"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Uno",
+    "description": "Announce 'Uno!' if you have exactly one card left, or play this card to make someone else who has one card draw two.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "snippet": "If target player has exactly 1 card in hand, they draw 2. If you have 1 card and announce Uno before this is played against you, effect is negated."
+    }
+  },
+  {
+    "title": "The Floor Is Lava",
+    "description": "Stay in play. Any player who stands up during the game loses 5 points.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger": "on_physical_action",
+      "snippet": "If any player stands from their seat while this card is in play, they lose 5 points. Honor system applies."
+    }
+  },
+  {
+    "title": "This Card is Worth 10 Points If You Keep It",
+    "description": "Hold onto this card. At game end, it's worth 10 points \u2014 but only if you still have it.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 10,
+            "target": "holder",
+            "condition": "still_in_hand"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Nothing Happens (Officially)",
+    "description": "Play this card. Read it aloud. Nothing happens. Thank you for your participation.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "no_op",
+          "args": {}
+        }
+      ]
+    }
+  },
+  {
+    "title": "Create a New Rule",
+    "description": "Invent a new rule. Write it on a blank card right now and shuffle it into the deck. The rule is now in effect.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "snippet": "The active player invents a rule, writes it on a blank card, shuffles it into the draw pile, and announces it. The rule takes effect immediately."
+    }
+  },
+  {
+    "title": "Compliment Someone",
+    "description": "Say something genuinely nice about another player right now. They gain 1 point if they believe you."
+  },
+  {
+    "title": "Mandatory Dance Break",
+    "description": "All players must stand up and dance for 10 seconds. No exceptions. The most enthusiastic dancer gains 2 points (voted by majority)."
+  },
+  {
+    "title": "Speak Only in Questions",
+    "description": "Stay in play until the start of your next turn. You may only communicate in the form of questions. Violations cost 2 points."
+  },
+  {
+    "title": "Left Hand Only",
+    "description": "For the rest of this round you may only use your left hand for everything. Lefties use their right hand."
+  },
+  {
+    "title": "This Card Is Actually Cursed",
+    "description": "Announce 'I am cursed.' You are cursed. What that means is up for debate."
+  },
+  {
+    "title": "Invisible Card",
+    "description": "Pretend to play an invisible card. Mime its effects. Other players must react as if it was real."
+  },
+  {
+    "title": "Point at the Ceiling",
+    "description": "Whoever looks up loses 1 point. If no one looks up, the player who played this card loses 1 point."
+  },
+  {
+    "title": "The Meta Card",
+    "description": "This card is about itself. By reading it, you have already played it. Nothing else happens."
+  },
+  {
+    "title": "High Five Tax",
+    "description": "Anyone who gives a high five for the rest of the game must pay 1 point to the other person."
+  },
+  {
+    "title": "Rename a Player",
+    "description": "Give any player a nickname. They must be addressed by that name for the rest of the game. Refusing costs 3 points."
+  },
+  {
+    "title": "The Prophecy",
+    "description": "Announce who you think will win the game right now. If you're correct, gain 5 points at game end."
+  },
+  {
+    "title": "Time Warp",
+    "description": "Undo the last card played as if it never happened. The card goes back into the hand it came from."
+  },
+  {
+    "title": "Pay to Win",
+    "description": "You may spend any number of points to gain an equal number of points. This does nothing but you feel good about it."
+  },
+  {
+    "title": "Dramatic Reading",
+    "description": "Read the last card played aloud in your most dramatic voice. Other players rate you out of 10. You gain points equal to the average."
+  },
+  {
+    "title": "Conspiracy Theory",
+    "description": "Accuse another player of cheating. Whether or not it's true, they must defend themselves. The group votes. If guilty, they lose 3 points."
+  },
+  {
+    "title": "Borrow a Card",
+    "description": "Look at another player's hand. Take one card. You must play it immediately, for better or worse."
+  },
+  {
+    "title": "The Wild Card",
+    "description": "You decide what this card does. Announce its effect out loud before playing it. It does exactly what you say."
+  },
+  {
+    "title": "Rock Paper Scissors Duel",
+    "description": "Challenge any player to best-of-three rock paper scissors. Winner gains 4 points."
+  },
+  {
+    "title": "The Referendum",
+    "description": "Propose any rule change. All players vote. If it passes (majority), it becomes a house rule for the rest of the game."
+  },
+  {
+    "title": "Tourist Mode",
+    "description": "For your next two turns, you must ask what everything means and how the game works, as if you've never played before."
+  },
+  {
+    "title": "Free Real Estate",
+    "description": "Claim any card currently on the table in front of another player. It is yours now. No take-backs."
+  },
+  {
+    "title": "The Pacifist",
+    "description": "No one may lose points this round. Protective aura. Very good vibes only."
+  },
+  {
+    "title": "Choose Your Destiny",
+    "description": "Draw 3 cards. Keep 1. Discard the others. You live with your choices."
+  },
+  {
+    "title": "Groundhog Day",
+    "description": "The last player's turn repeats exactly. Same cards, same effects. Don't think too hard about it."
+  },
+  {
+    "title": "Emotional Support Card",
+    "description": "Give this card to whoever looks like they're having the least fun. They gain 3 points."
+  },
+  {
+    "title": "Forbidden Word",
+    "description": "Pick a common word. No one may say it for the rest of the game. Anyone who does loses 2 points. You decide the word."
+  },
+  {
+    "title": "The Floor Vote",
+    "description": "All players simultaneously point at whoever they think deserves 3 points. The player with the most votes gets 3 points."
+  },
+  {
+    "title": "Chaos Shuffle",
+    "description": "All players pass their hands to the player on their left simultaneously."
+  },
+  {
+    "title": "Two Truths and a Lie (Card Edition)",
+    "description": "State two true things about a card in your hand and one lie. Other players guess the lie. Each correct guesser gets 1 point."
+  },
+  {
+    "title": "The Clone",
+    "description": "Copy the effect of any card that has already been played this game. If you can remember it."
+  },
+  {
+    "title": "Timeout",
+    "description": "The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence."
+  },
+  {
+    "title": "The Bystander",
+    "description": "Skip your turn but gain 2 points for not participating. Sometimes doing nothing is the move."
+  },
+  {
+    "title": "Hot Potato",
+    "description": "Pass this card to another player at any time, even out of turn, to give them a problem you don't want. They must play it on their next turn."
+  },
+  {
+    "title": "Unreliable Narrator",
+    "description": "Describe the last card that was played \u2014 but get one detail wrong. If no one notices, you gain 2 points. If someone does, they gain 2 points."
+  },
+  {
+    "title": "Legacy Card",
+    "description": "Write your name on this card. It is now named after you. If it is ever played again, you gain 1 point."
+  },
+  {
+    "title": "The Hype Card",
+    "description": "Announce the next card you play as if it's the most amazing thing anyone has ever done. If the table agrees, gain 3 points."
+  },
+  {
+    "title": "Nap Time",
+    "description": "Close your eyes for 30 seconds. You are resting. Nothing can target you during this time. Probably."
+  },
+  {
+    "title": "The Historian",
+    "description": "Recite from memory every card that has been played this game. Gain 1 point per card you correctly name."
+  },
+  {
+    "title": "Mystery Box",
+    "description": "Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first."
+  },
+  {
+    "title": "The Epilogue",
+    "description": "If this is the last card played in the game, whoever played it wins regardless of points. If it isn't, nothing happens."
+  }
+]

@@ -1,33 +1,60 @@
-"""Validate the gold seed card corpus parses against the schema."""
+"""Tests for seed card data files."""
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import pathlib
 
-from tbwc.models.card import GoldCard, parse_seed_card
+from tbwc.models.card import FillerCard, GoldCard, parse_seed_card
 
-GOLD_PATH = Path(__file__).resolve().parent.parent / "data" / "seed_cards_gold.json"
-
-
-def _load_gold() -> list[dict]:
-    return json.loads(GOLD_PATH.read_text(encoding="utf-8"))
+DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 
 
-def test_gold_file_has_20_cards() -> None:
-    assert len(_load_gold()) == 20
+def _load(filename: str) -> list[dict]:
+    return json.loads((DATA_DIR / filename).read_text())
 
 
-def test_gold_all_parse_as_gold_cards() -> None:
-    cards = [parse_seed_card(d) for d in _load_gold()]
-    assert all(isinstance(c, GoldCard) for c in cards)
-    assert len(cards) == 20
+class TestGoldCards:
+    def test_count(self) -> None:
+        assert len(_load("seed_cards_gold.json")) == 20
+
+    def test_all_parse_as_gold(self) -> None:
+        for d in _load("seed_cards_gold.json"):
+            card = parse_seed_card(d)
+            assert isinstance(card, GoldCard), f"Expected GoldCard: {d['title']}"
+
+    def test_timing_variety(self) -> None:
+        cards = [parse_seed_card(d) for d in _load("seed_cards_gold.json")]
+        timings = {c.canonical.timing for c in cards if isinstance(c, GoldCard)}
+        assert "immediate" in timings
+        assert "modifier" in timings
+
+    def test_has_ops_and_snippet_examples(self) -> None:
+        cards = [parse_seed_card(d) for d in _load("seed_cards_gold.json")]
+        gold = [c for c in cards if isinstance(c, GoldCard)]
+        assert any(c.canonical.ops for c in gold)
+        assert any(c.canonical.snippet for c in gold)
 
 
-def test_gold_corpus_diversity() -> None:
-    """At least one ops card, one snippet card, and one modifier."""
-    cards = [parse_seed_card(d) for d in _load_gold()]
-    gold = [c for c in cards if isinstance(c, GoldCard)]
-    assert any(c.canonical.ops for c in gold), "expected at least one ops-based card"
-    assert any(c.canonical.snippet for c in gold), "expected at least one snippet card"
-    assert any(c.canonical.timing == "modifier" for c in gold), "expected at least one modifier"
+class TestFillerCards:
+    def test_count(self) -> None:
+        assert len(_load("seed_cards_fillers.json")) == 40
+
+    def test_all_parse_as_filler(self) -> None:
+        for d in _load("seed_cards_fillers.json"):
+            card = parse_seed_card(d)
+            assert isinstance(card, FillerCard), f"Expected FillerCard: {d['title']}"
+
+    def test_no_canonical_key(self) -> None:
+        for d in _load("seed_cards_fillers.json"):
+            assert "canonical" not in d
+
+
+class TestCombinedFile:
+    def test_count(self) -> None:
+        assert len(_load("seed_cards.json")) == 60
+
+    def test_all_parse(self) -> None:
+        for d in _load("seed_cards.json"):
+            card = parse_seed_card(d)
+            assert card.title
