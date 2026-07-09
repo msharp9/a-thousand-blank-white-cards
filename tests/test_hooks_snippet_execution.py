@@ -1,0 +1,46 @@
+"""Tests for snippet hook dispatch via engine.hooks.make_snippet_handler."""
+
+from __future__ import annotations
+
+import pytest
+
+from tbwc.engine.events import GameEvent, HookContext
+from tbwc.engine.hooks import HookRegistry, RegisteredHook, cache_snippet, fire_hooks, make_snippet_handler
+from tbwc.models.cards import Card
+from tbwc.models.game_state import GameState, Player
+
+SNIPPET_ADD_10 = "def apply(state, ctx):\n    state.add_points('self', 10)\n"
+BAD_SNIPPET = "def apply(state, ctx):\n    raise RuntimeError('oops')\n"
+
+
+def _state_with_card(card_id: str) -> GameState:
+    st = GameState(room_code="TEST", players=[Player(id="p1", name="Alice", score=0)])
+    card = Card(id=card_id, title="t", description="d", creator_id="p1")
+    return st.model_copy(update={"cards": {card_id: card}})
+
+
+def test_snippet_hook_fires_and_mutates_state() -> None:
+    reg = HookRegistry()
+    state = _state_with_card("card-abc")
+    hook = RegisteredHook(source_card_id="card-abc", event=GameEvent.ON_TURN_START, scope="player", owner_id="p1")
+    reg.register(hook, make_snippet_handler("card-abc", SNIPPET_ADD_10))
+    ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
+    new_state = fire_hooks(state, GameEvent.ON_TURN_START, ctx, registry=reg)
+    assert new_state.get_player("p1").score == 10
+    assert state.get_player("p1").score == 0  # original unchanged
+
+
+def test_hook_failure_logs_and_continues() -> None:
+    reg = HookRegistry()
+    state = _state_with_card("card-bad")
+    hook = RegisteredHook(source_card_id="card-bad", event=GameEvent.ON_TURN_START, scope="player", owner_id="p1")
+    reg.register(hook, make_snippet_handler("card-bad", BAD_SNIPPET))
+    ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
+    new_state = fire_hooks(state, GameEvent.ON_TURN_START, ctx, registry=reg)
+    assert new_state.get_player("p1").score == 0
+    assert any("hook error" in entry for entry in new_state.log)
+
+
+def test_cache_snippet_rejects_invalid() -> None:
+    with pytest.raises(ValueError):
+        cache_snippet("card-x", "import os\ndef apply(state, ctx): pass")
