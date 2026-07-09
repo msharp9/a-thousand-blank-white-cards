@@ -1,53 +1,118 @@
 # a-thousand-blank-white-cards
 
-A digital implementation of the party game 1000 Blank White Cards, where players draw, write, and play their own cards to invent the game as they go.
+A digital, AI-refereed implementation of the party game **1000 Blank White Cards**, where players draw, write, and play their own cards to invent the game as they go.
 
+## What it is
 
-## Setup
+1000 Blank White Cards is a party game with no fixed rules: players write free-text cards ("Gain 5 points", "Everyone swaps hands", "Draw a cat, +2 to anyone who compliments it") and play them to make up the game collaboratively. This project brings that to a realtime web app where an **AI referee** — a LangGraph agent backed by retrieval-augmented generation (RAG) — reads each hand-written card, interprets its intent, and turns it into executable game effects. Multiple players join a shared room over WebSockets and play together in the browser.
 
-This project uses `uv` for dependency management.
+## Architecture
 
-1.  **Install `uv`**:
-    Follow the instructions at [docs.astral.sh/uv](https://docs.astral.sh/uv/getting-started/installation/).
-    ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
+- **Backend** — FastAPI app (`src/tbwc/`) exposing REST endpoints for rooms and a `/ws/{room_code}` WebSocket for realtime play. Key packages:
+  - `models/` — Pydantic domain models (cards, players, game state).
+  - `engine/` — deterministic game engine that applies interpreted effects to state.
+  - `agent/` — LangGraph agent that interprets free-text cards into structured effects.
+  - `rag/` — retrieval over a card corpus (Qdrant vector store) to ground interpretation.
+  - `sandbox/` — guarded execution of generated snippets (toggle via `SNIPPET_EXECUTION_ENABLED`).
+  - `rooms/` — in-memory room/session management.
+  - `evals/` — offline evaluation harness and A/B experiments.
+- **Frontend** — Next.js 16 app in `frontend/` that talks to the REST + WebSocket API.
+- **External services** — OpenAI (chat + embeddings), Tavily (agent web search), Qdrant (vector store), LangSmith (optional tracing/observability).
 
-2.  **Install Python**:
-    `uv` manages Python versions for you.
-    ```bash
-    uv python install
-    ```
+```mermaid
+flowchart LR
+  UI[Next.js frontend] -- REST + WS --> API[FastAPI backend]
+  API --> Engine[Game engine]
+  API --> Agent[LangGraph agent]
+  Agent --> RAG[RAG / Qdrant]
+  Agent --> OpenAI[(OpenAI)]
+  Agent --> Tavily[(Tavily)]
+  API -.traces.-> LangSmith[(LangSmith)]
+```
 
-3.  **Install Dependencies**:
-    ```bash
-    uv sync
-    ```
+## Quickstart — Backend
 
+**Prerequisites:** [`uv`](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.14 (uv can install it for you).
 
-## Contributing
+```bash
+# 1. Install uv (if needed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-### Setup Pre-Commit (Optional)
+# 2. Install Python 3.14 + dependencies
+uv python install
+uv sync
 
-All linting and testing is done in CI, however, if you want to run them locally, you can use prek (preferred) or pre-commit as documented below.
+# 3. Configure environment
+cp .env.example .env
+# Edit .env and set OPENAI_API_KEY (required).
+# Optional: TAVILY_API_KEY, LANGSMITH_*, QDRANT_* (see comments in .env.example).
+
+# 4. Run the API
+uv run uvicorn tbwc.app:app --reload
+
+# 5. Health check
+curl localhost:8000/health
+```
+
+### Docker
+
+```bash
+docker build -t tbwc .
+docker run -p 8000:8000 --env-file .env tbwc
+```
+
+## Quickstart — Frontend
+
+```bash
+cd frontend
+npm install
+
+# Configure environment
+cp .env.example .env.local
+# Set NEXT_PUBLIC_API_URL (e.g. http://localhost:8000)
+# and NEXT_PUBLIC_WS_URL (e.g. ws://localhost:8000).
+
+npm run dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000). Make sure the backend is running first.
+
+## Testing & quality
+
+```bash
+uv run pytest              # 367 tests, ~91% coverage (fails under 80%)
+uv run ruff check .        # lint
+uv run ruff format --check .   # formatting check
+```
+
+Optionally install pre-commit hooks (linting/testing also run in CI):
 
 ```bash
 uvx prek install
 ```
 
-### Running Tests
-Run the test suite using `pytest`. This will also check that code coverage is at least 80%.
+## Evals
+
+Offline evaluation of the agent + retriever. All eval scripts call OpenAI, so set `OPENAI_API_KEY` first.
+
 ```bash
-uv run pytest
+uv run python -m tbwc.evals.harness          # main eval harness
+uv run python -m tbwc.evals.retriever_ab     # retriever A/B comparison
+uv run python -m tbwc.evals.improvement_ab   # few-shot before/after eval
 ```
 
-### Linting and Formatting
-Check for linting errors using `ruff`:
-```bash
-uv run ruff check
-```
+See [`src/tbwc/evals/RETRIEVER_ANALYSIS.md`](src/tbwc/evals/RETRIEVER_ANALYSIS.md) for retriever analysis.
 
-Format code:
-```bash
-uv run ruff format
-```
+## Deployment
+
+- **Backend** — deployed to [Render](https://render.com) via [`render.yaml`](render.yaml) (Docker runtime, `/health` health check). See [`docs/deploy/render-steps.md`](docs/deploy/render-steps.md).
+- **Frontend** — deployed to [Vercel](https://vercel.com). See [`docs/deploy/vercel-steps.md`](docs/deploy/vercel-steps.md).
+- **Observability** — LangSmith setup in [`docs/deploy/langsmith-setup.md`](docs/deploy/langsmith-setup.md).
+- **Smoke test** — post-deploy checklist in [`docs/deploy/smoke-checklist.md`](docs/deploy/smoke-checklist.md).
+
+## Docs & links
+
+- [Retriever analysis](src/tbwc/evals/RETRIEVER_ANALYSIS.md) — eval findings.
+- [Deployment docs](docs/deploy/) — Render, Vercel, LangSmith, and smoke checklist.
+</content>
+</invoke>
