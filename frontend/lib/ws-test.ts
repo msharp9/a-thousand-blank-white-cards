@@ -23,7 +23,10 @@ export interface WsTestResult {
  * Attempt to open a WebSocket to the backend and receive one message.
  * Resolves within `timeoutMs` regardless of outcome.
  */
-export function testWsConnection(code: string, timeoutMs = 8000): Promise<WsTestResult> {
+export function testWsConnection(
+  code: string,
+  timeoutMs = 8000,
+): Promise<WsTestResult> {
   const url = `${WS_URL}/ws/${code}`;
   const start = Date.now();
 
@@ -61,7 +64,9 @@ export function testWsConnection(code: string, timeoutMs = 8000): Promise<WsTest
       result.openedMs = Date.now() - start;
       // Send a join with a null player_id (diagnostic only; server will reject,
       // but a reply proves the handshake + message round-trip works).
-      ws.send(JSON.stringify({ type: "join", player_id: null, name: "ws-test" }));
+      ws.send(
+        JSON.stringify({ type: "join", player_id: null, name: "ws-test" }),
+      );
     };
 
     ws.onmessage = (evt) => {
@@ -82,7 +87,8 @@ export function testWsConnection(code: string, timeoutMs = 8000): Promise<WsTest
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      result.error = "WebSocket error (check wss URL, CORS, and backend availability)";
+      result.error =
+        "WebSocket error (check wss URL, CORS, and backend availability)";
       resolve(result);
     };
   });

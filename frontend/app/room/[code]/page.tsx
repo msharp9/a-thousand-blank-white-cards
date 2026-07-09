@@ -34,10 +34,8 @@ export default function RoomPage() {
     setMyPlayerId(getPlayerId(code));
   }, [code]);
 
-  const { gameState, log, brewing, previewResult, error, connected, send } = useGameSocket(
-    nameSet ? code : "",
-    name,
-  );
+  const { gameState, log, brewing, previewResult, error, connected, send } =
+    useGameSocket(nameSet ? code : "", name);
 
   // Keep myPlayerId fresh (the WS join may store it after connect).
   useEffect(() => {
@@ -51,26 +49,36 @@ export default function RoomPage() {
   const me = gameState?.players.find((p) => p.id === myPlayerId);
   const isActive = useMemo(() => {
     if (!gameState || !gameState.players.length || !myPlayerId) return false;
-    const active = gameState.players[gameState.turn_index % gameState.players.length];
+    const active =
+      gameState.players[gameState.turn_index % gameState.players.length];
     return active?.id === myPlayerId;
   }, [gameState, myPlayerId]);
 
   const myHandCards: CardSnapshot[] = useMemo(() => {
     if (!gameState || !me) return [];
-    return me.hand.map((id) => gameState.cards[id]).filter((c): c is CardSnapshot => Boolean(c));
+    return me.hand
+      .map((id) => gameState.cards[id])
+      .filter((c): c is CardSnapshot => Boolean(c));
   }, [gameState, me]);
 
   const houseRuleCards: CardSnapshot[] = useMemo(() => {
     if (!gameState) return [];
-    return gameState.house_rules.map((id) => gameState.cards[id]).filter((c): c is CardSnapshot => Boolean(c));
+    return gameState.house_rules
+      .map((id) => gameState.cards[id])
+      .filter((c): c is CardSnapshot => Boolean(c));
   }, [gameState]);
 
   const otherPlayers = useMemo(
-    () => (gameState?.players ?? []).filter((p) => p.id !== myPlayerId).map((p) => ({ id: p.id, name: p.name })),
+    () =>
+      (gameState?.players ?? [])
+        .filter((p) => p.id !== myPlayerId)
+        .map((p) => ({ id: p.id, name: p.name })),
     [gameState, myPlayerId],
   );
 
-  const isHost = Boolean(gameState && myPlayerId && gameState.players[0]?.id === myPlayerId);
+  const isHost = Boolean(
+    gameState && myPlayerId && gameState.players[0]?.id === myPlayerId,
+  );
 
   const epilogueCards: CardSnapshot[] = useMemo(
     () => (gameState ? Object.values(gameState.cards) : []),
@@ -90,7 +98,9 @@ export default function RoomPage() {
           placeholder="Your name"
           maxLength={24}
           className="max-w-xs"
-          onKeyDown={(e) => e.key === "Enter" && name.trim() && setNameSet(true)}
+          onKeyDown={(e) =>
+            e.key === "Enter" && name.trim() && setNameSet(true)
+          }
         />
         <Button disabled={!name.trim()} onClick={() => setNameSet(true)}>
           Enter
@@ -100,7 +110,11 @@ export default function RoomPage() {
   }
 
   if (!connected && !gameState) {
-    return <main className="flex h-dvh items-center justify-center text-muted-foreground">Connecting to room {code}…</main>;
+    return (
+      <main className="flex h-dvh items-center justify-center text-muted-foreground">
+        Connecting to room {code}…
+      </main>
+    );
   }
 
   if (error) {
@@ -117,41 +131,73 @@ export default function RoomPage() {
   return (
     <main className="flex h-dvh flex-col">
       <header className="flex items-center gap-3 border-b bg-background/80 px-4 py-2 backdrop-blur">
-        <span className="font-mono text-sm text-muted-foreground">Room {code}</span>
-        <span className="text-xs text-muted-foreground">{connected ? "Connected" : "Reconnecting…"}</span>
-        <span className="ml-auto text-xs capitalize text-muted-foreground">{phase}</span>
+        <span className="font-mono text-sm text-muted-foreground">
+          Room {code}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {connected ? "Connected" : "Reconnecting…"}
+        </span>
+        <span className="ml-auto text-xs capitalize text-muted-foreground">
+          {phase}
+        </span>
       </header>
 
       <div className="flex-1 overflow-auto p-4">
-        {!gameState && <p className="text-muted-foreground">Waiting for game state…</p>}
+        {!gameState && (
+          <p className="text-muted-foreground">Waiting for game state…</p>
+        )}
 
         {gameState && phase === "lobby" && (
           <div className="flex flex-col items-center gap-4">
-            <p className="text-sm text-muted-foreground">Waiting in the lobby…</p>
-            {isHost && <Button onClick={() => send({ type: "start" })}>Start game</Button>}
+            <p className="text-sm text-muted-foreground">
+              Waiting in the lobby…
+            </p>
+            {isHost && (
+              <Button onClick={() => send({ type: "start" })}>
+                Start game
+              </Button>
+            )}
           </div>
         )}
 
         {gameState && phase === "setup" && (
-          <SetupPhase gameState={gameState} myPlayerId={myPlayerId ?? ""} send={send} previewResult={previewResult} isHost={isHost} />
+          <SetupPhase
+            gameState={gameState}
+            myPlayerId={myPlayerId ?? ""}
+            send={send}
+            previewResult={previewResult}
+            isHost={isHost}
+          />
         )}
 
         {gameState && phase === "playing" && (
           <div className="flex flex-col gap-6">
             <GameTable gameState={gameState} myPlayerId={myPlayerId ?? ""} />
-            <HouseRulesZone centerCards={houseRuleCards} brewingCardId={brewing} />
+            <HouseRulesZone
+              centerCards={houseRuleCards}
+              brewingCardId={brewing}
+            />
             <div className="flex items-center justify-between">
               <Button variant="outline" onClick={() => setDialogOpen(true)}>
                 Author a card
               </Button>
-              {isActive && <Button onClick={() => send({ type: "draw" })}>Draw</Button>}
+              {isActive && (
+                <Button onClick={() => send({ type: "draw" })}>Draw</Button>
+              )}
             </div>
-            <Hand cards={myHandCards} canPlay={isActive} otherPlayers={otherPlayers} send={send} />
+            <Hand
+              cards={myHandCards}
+              canPlay={isActive}
+              otherPlayers={otherPlayers}
+              send={send}
+            />
             <EffectLog log={log} brewing={brewing} />
           </div>
         )}
 
-        {gameState && phase === "epilogue" && <EpilogueView cards={epilogueCards} send={send} />}
+        {gameState && phase === "epilogue" && (
+          <EpilogueView cards={epilogueCards} send={send} />
+        )}
 
         {gameState && phase === "ended" && (
           <div className="flex flex-col items-center gap-4">
@@ -164,7 +210,12 @@ export default function RoomPage() {
         )}
       </div>
 
-      <CreateCardDialog open={dialogOpen} onOpenChange={setDialogOpen} send={send} previewResult={previewResult} />
+      <CreateCardDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        send={send}
+        previewResult={previewResult}
+      />
     </main>
   );
 }

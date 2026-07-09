@@ -7,7 +7,10 @@ interface HouseRulesZoneProps {
   brewingCardId: string | null;
 }
 
-export function HouseRulesZone({ centerCards, brewingCardId }: HouseRulesZoneProps) {
+export function HouseRulesZone({
+  centerCards,
+  brewingCardId,
+}: HouseRulesZoneProps) {
   if (centerCards.length === 0) {
     return (
       <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-center">
@@ -29,7 +32,12 @@ export function HouseRulesZone({ centerCards, brewingCardId }: HouseRulesZonePro
       <ScrollArea className="w-full">
         <div className="flex gap-2 pb-2">
           {centerCards.map((card) => (
-            <CardTile key={card.id} card={card} brewing={card.id === brewingCardId} className="shrink-0" />
+            <CardTile
+              key={card.id}
+              card={card}
+              brewing={card.id === brewingCardId}
+              className="shrink-0"
+            />
           ))}
         </div>
       </ScrollArea>

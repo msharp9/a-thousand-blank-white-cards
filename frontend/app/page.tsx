@@ -58,7 +58,10 @@ export default function LandingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim() }),
       });
-      if (!joinRes.ok) throw new Error(joinRes.status === 404 ? "Room not found" : "Failed to join");
+      if (!joinRes.ok)
+        throw new Error(
+          joinRes.status === 404 ? "Room not found" : "Failed to join",
+        );
       const { player_id } = await joinRes.json();
       storePlayerId(code, player_id);
       persistName();
@@ -74,7 +77,9 @@ export default function LandingPage() {
     <main className="flex min-h-dvh flex-col items-center justify-center gap-6 p-4">
       <div className="text-center">
         <h1 className="text-3xl font-bold">1000 Blank White Cards</h1>
-        <p className="text-sm text-muted-foreground">The card game where you make the rules.</p>
+        <p className="text-sm text-muted-foreground">
+          The card game where you make the rules.
+        </p>
       </div>
 
       <Card className="w-full max-w-sm">

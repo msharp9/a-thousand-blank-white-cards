@@ -19,10 +19,19 @@ interface CreateCardDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   send: (msg: ClientMsg) => void;
-  previewResult: { program?: string | null; snippet?: string | null; verdict: string } | null;
+  previewResult: {
+    program?: string | null;
+    snippet?: string | null;
+    verdict: string;
+  } | null;
 }
 
-export function CreateCardDialog({ open, onOpenChange, send, previewResult }: CreateCardDialogProps) {
+export function CreateCardDialog({
+  open,
+  onOpenChange,
+  send,
+  previewResult,
+}: CreateCardDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [previewing, setPreviewing] = useState(false);
@@ -35,12 +44,20 @@ export function CreateCardDialog({ open, onOpenChange, send, previewResult }: Cr
   function handlePreview() {
     if (!title.trim() || !description.trim()) return;
     setPreviewing(true);
-    send({ type: "preview_card", title: title.trim(), description: description.trim() });
+    send({
+      type: "preview_card",
+      title: title.trim(),
+      description: description.trim(),
+    });
   }
 
   function handleSubmit() {
     if (!title.trim() || !description.trim()) return;
-    send({ type: "create_card", title: title.trim(), description: description.trim() });
+    send({
+      type: "create_card",
+      title: title.trim(),
+      description: description.trim(),
+    });
     setTitle("");
     setDescription("");
     onOpenChange(false);
@@ -53,7 +70,11 @@ export function CreateCardDialog({ open, onOpenChange, send, previewResult }: Cr
           <DialogTitle>Create a card</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <Input placeholder="Card title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Input
+            placeholder="Card title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
           <Textarea
             placeholder="Describe the rule… e.g. 'Everyone loses 5 points'"
             value={description}
@@ -69,20 +90,39 @@ export function CreateCardDialog({ open, onOpenChange, send, previewResult }: Cr
             <div className="flex flex-col gap-1 rounded-lg border bg-muted/20 p-2 text-xs">
               <div className="flex items-center gap-2">
                 <span className="font-medium">Preview:</span>
-                <Badge variant={previewResult.verdict === "ok" ? "default" : "destructive"}>
+                <Badge
+                  variant={
+                    previewResult.verdict === "ok" ? "default" : "destructive"
+                  }
+                >
                   {previewResult.verdict}
                 </Badge>
               </div>
-              {previewResult.program && <pre className="whitespace-pre-wrap">{previewResult.program}</pre>}
-              {previewResult.snippet && <pre className="whitespace-pre-wrap">{previewResult.snippet}</pre>}
+              {previewResult.program && (
+                <pre className="whitespace-pre-wrap">
+                  {previewResult.program}
+                </pre>
+              )}
+              {previewResult.snippet && (
+                <pre className="whitespace-pre-wrap">
+                  {previewResult.snippet}
+                </pre>
+              )}
             </div>
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={handlePreview} disabled={!title.trim() || !description.trim()}>
+          <Button
+            variant="outline"
+            onClick={handlePreview}
+            disabled={!title.trim() || !description.trim()}
+          >
             Preview
           </Button>
-          <Button onClick={handleSubmit} disabled={!title.trim() || !description.trim()}>
+          <Button
+            onClick={handleSubmit}
+            disabled={!title.trim() || !description.trim()}
+          >
             Submit
           </Button>
         </DialogFooter>
