@@ -32,6 +32,7 @@ class AgentConfig(TypedDict, total=False):
     """Configurable keys accepted by the interpretation graph."""
 
     retriever_mode: str  # "dense" | "advanced"
+    few_shot_exemplars: bool  # inject retrieved exemplars into emit_ops (default True)
 
 
 def build_graph() -> StateGraph:
