@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,29 +19,42 @@ export default function RoomPage() {
   const router = useRouter();
   const code = ((params.code as string) ?? "").toUpperCase();
 
+  const subscribeStorage = useCallback((onChange: () => void) => {
+    window.addEventListener("storage", onChange);
+    return () => window.removeEventListener("storage", onChange);
+  }, []);
+
+  // Player identity is written per-room to sessionStorage by the landing page
+  // before navigation. useSyncExternalStore is the SSR-safe way to read it:
+  // the server snapshot is null (matching the pre-hydration markup) and the
+  // real value is adopted after hydration without a mismatch warning.
+  const myPlayerId = useSyncExternalStore(
+    subscribeStorage,
+    () => getPlayerId(code),
+    () => null,
+  );
+  const storedName = useSyncExternalStore(
+    subscribeStorage,
+    () => localStorage.getItem("tbwc_player_name"),
+    () => null,
+  );
+
   const [name, setName] = useState("");
   const [nameSet, setNameSet] = useState(false);
-  const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [adoptedStoredName, setAdoptedStoredName] = useState(false);
 
-  // On mount, hydrate name + player id from localStorage.
-  useEffect(() => {
-    const storedName = localStorage.getItem("tbwc_player_name");
-    if (storedName) {
-      setName(storedName);
-      setNameSet(true);
-    }
-    setMyPlayerId(getPlayerId(code));
-  }, [code]);
+  // Once the stored name hydrates in, adopt it and skip the name gate.
+  // Adjusting state during render is React's recommended alternative to a
+  // hydration effect and avoids a cascading re-render.
+  if (!adoptedStoredName && storedName) {
+    setAdoptedStoredName(true);
+    setName(storedName);
+    setNameSet(true);
+  }
 
   const { gameState, log, brewing, previewResult, error, connected, send } =
     useGameSocket(nameSet ? code : "", name);
-
-  // Keep myPlayerId fresh (the WS join may store it after connect).
-  useEffect(() => {
-    const id = getPlayerId(code);
-    if (id && id !== myPlayerId) setMyPlayerId(id);
-  }, [code, connected, gameState, myPlayerId]);
 
   const phase = gameState?.phase ?? "lobby";
 
