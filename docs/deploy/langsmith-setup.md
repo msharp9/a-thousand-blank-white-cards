@@ -9,9 +9,12 @@ token usage, and any errors.
 ## Background
 
 The LangChain/LangSmith SDK reads configuration from environment variables. It
-supports both the legacy `LANGCHAIN_*` names and the newer `LANGSMITH_*` names.
-tbwc's `Settings` (`src/tbwc/config.py`) exposes both conventions; new deployments
-should prefer the `LANGSMITH_*` variables:
+supports both the modern `LANGSMITH_*` names and the legacy `LANGCHAIN_*` names
+(the older names for the same settings). tbwc's `Settings`
+(`src/tbwc/config.py`) standardizes on the `LANGSMITH_*` variables and treats the
+`LANGCHAIN_*` names purely as back-compat aliases (a `LANGCHAIN_*` value is used
+only when the matching `LANGSMITH_*` value is unset). Always prefer the
+`LANGSMITH_*` variables for new deployments:
 
 | Variable             | Purpose                                   | Default                          |
 | -------------------- | ----------------------------------------- | -------------------------------- |
@@ -49,8 +52,11 @@ Notes:
 - Keep `LANGSMITH_API_KEY` as a **secret** env var — never commit it.
 - Only override `LANGSMITH_ENDPOINT` if you use LangSmith EU or a self-hosted
   instance; otherwise the default is correct.
-- The legacy `LANGCHAIN_*` variables can be left unset; the SDK honors either set,
-  and the app logs based on `LANGSMITH_TRACING`.
+- Leave the legacy `LANGCHAIN_*` variables unset for new deployments. They exist
+  only as back-compat aliases (`LANGCHAIN_TRACING_V2` → `LANGSMITH_TRACING`,
+  `LANGCHAIN_API_KEY` → `LANGSMITH_API_KEY`, `LANGCHAIN_PROJECT` → `LANGSMITH_PROJECT`)
+  and are ignored when the corresponding `LANGSMITH_*` var is set. The app logs
+  based on `LANGSMITH_TRACING`.
 
 ## 4. Redeploy
 

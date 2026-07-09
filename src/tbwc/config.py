@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,15 +21,24 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-5.4-mini"
     openai_embedding_model: str = "text-embedding-3-small"
 
-    # --- LangSmith ---
-    langchain_api_key: str = ""
-    langchain_project: str = "tbwc"
-    langchain_tracing_v2: bool = False
-
-    # LangSmith observability (newer LANGSMITH_* env var convention)
-    langsmith_tracing: bool = False
-    langsmith_api_key: str = ""
-    langsmith_project: str = "tbwc-dev"
+    # --- LangSmith observability ---
+    # Canonical config uses the modern LANGSMITH_* env var convention. The legacy
+    # LANGCHAIN_* names are the *old* names for the same LangSmith settings, kept
+    # here only as back-compat aliases so pre-existing .env files keep working:
+    # if the LANGSMITH_* value is unset, the LANGCHAIN_* value populates it.
+    # App code (see tbwc.app) reads only the langsmith_* fields.
+    langsmith_tracing: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("langsmith_tracing", "langchain_tracing_v2"),
+    )
+    langsmith_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("langsmith_api_key", "langchain_api_key"),
+    )
+    langsmith_project: str = Field(
+        default="tbwc-dev",
+        validation_alias=AliasChoices("langsmith_project", "langchain_project"),
+    )
     langsmith_endpoint: str = "https://api.smith.langchain.com"
 
     # --- Tavily ---

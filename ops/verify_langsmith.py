@@ -2,7 +2,7 @@
 """Verify LangSmith tracing is configured for the interpretation graph.
 
 Usage:
-    OPENAI_API_KEY=... LANGSMITH_API_KEY=... LANGCHAIN_TRACING_V2=true \\
+    OPENAI_API_KEY=... LANGSMITH_API_KEY=... LANGSMITH_TRACING=true \\
         uv run python ops/verify_langsmith.py
 
 Checks required env vars, runs the compiled graph on one sample card (which — with
@@ -14,7 +14,9 @@ from __future__ import annotations
 import os
 
 REQUIRED_ENV = ["OPENAI_API_KEY", "LANGSMITH_API_KEY"]
-TRACING_ENV = ["LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING"]
+# Modern LANGSMITH_TRACING first; LANGCHAIN_TRACING_V2 is the legacy alias the SDK
+# still honors, so accept either.
+TRACING_ENV = ["LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2"]
 
 SAMPLE_CARD = {"title": "Gain 5 Points", "description": "You feel great. Gain 5 points immediately."}
 
@@ -26,7 +28,7 @@ def check_env() -> list[str]:
         if not os.environ.get(var):
             problems.append(f"missing required env var: {var}")
     if not any(os.environ.get(v, "").lower() in ("1", "true", "yes") for v in TRACING_ENV):
-        problems.append("tracing not enabled: set LANGCHAIN_TRACING_V2=true (or LANGSMITH_TRACING=true)")
+        problems.append("tracing not enabled: set LANGSMITH_TRACING=true (or legacy LANGCHAIN_TRACING_V2=true)")
     return problems
 
 
