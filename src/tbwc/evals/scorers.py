@@ -1,0 +1,108 @@
+"""tbwc.evals.scorers — scorer callables for the card-interpretation eval harness.
+
+Each scorer conforms to ScorerFunction: scorer(context: ScorerContext) -> Score.
+  context.input    = raw card dict {title, description, ...}
+  context.output   = dict returned by the agent graph (keys: effect_program, snippet_effect, classification, ...)
+  context.expected = human_canonical dict
+"""
+
+from __future__ import annotations
+
+import json
+from functools import lru_cache
+from typing import Any
+
+from tbwc.evals.eval_core import Score, ScorerContext, create_scorer
+from tbwc.evals.judge import JudgeLLM, Verdict
+
+
+@lru_cache(maxsize=1)
+def _judge() -> JudgeLLM:
+    return JudgeLLM()
+
+
+def _effect_summary(output: dict[str, Any]) -> str:
+    """Extract a text summary of the agent's generated effect for the judge."""
+    ep = output.get("effect_program")
+    if ep:
+        return json.dumps(ep, default=str)
+    se = output.get("snippet_effect")
+    if se:
+        return str(se)
+    return json.dumps(output.get("classification", {}), default=str)
+
+
+def _run_judge(context: ScorerContext) -> Verdict:
+    card = context.input
+    canonical = context.expected or {}
+    summary = _effect_summary(context.output or {})
+    return _judge().evaluate(
+        card_description=f"{card.get('title', '')}\n{card.get('description', '')}",
+        generated_summary=summary,
+        human_canonical=canonical,
+    )
+
+
+def _intent_match_scorer(context: ScorerContext) -> Score:
+    verdict = _run_judge(context)
+    return Score(score=verdict.intent_match, metadata={"overall": verdict.overall, "reason": verdict.reason})
+
+
+intent_match_judge = create_scorer(
+    name="intent_match",
+    description="LLM judge: does the generated effect match the card's intent?",
+    scorer=_intent_match_scorer,
+)
+
+
+def _dsl_validity_scorer(context: ScorerContext) -> Score:
+    """1.0 if output contains a non-empty EffectProgram parseable by Pydantic, else 0.0."""
+    output = context.output or {}
+    ep = output.get("effect_program")
+    if not ep:
+        return Score(score=0.0, metadata={"reason": "no effect_program in output"})
+    try:
+        from tbwc.models.effects import EffectProgram
+
+        program = EffectProgram.model_validate(ep) if isinstance(ep, dict) else ep
+        # non-empty program required
+        ops = getattr(program, "ops", None)
+        if not ops:
+            return Score(score=0.0, metadata={"reason": "empty EffectProgram"})
+        return Score(score=1.0)
+    except Exception as exc:  # any validation failure -> invalid DSL
+        return Score(score=0.0, metadata={"reason": str(exc)})
+
+
+dsl_validity = create_scorer(
+    name="dsl_validity",
+    description="Structural check: is the effect_program a valid non-empty EffectProgram?",
+    scorer=_dsl_validity_scorer,
+)
+
+
+def _target_accuracy_scorer(context: ScorerContext) -> Score:
+    verdict = _run_judge(context)
+    return Score(score=verdict.target_placement_correct, metadata={"reason": verdict.reason})
+
+
+target_accuracy = create_scorer(
+    name="target_accuracy",
+    description="LLM judge: is the target/placement of the effect correct?",
+    scorer=_target_accuracy_scorer,
+)
+
+
+def _timing_accuracy_scorer(context: ScorerContext) -> Score:
+    verdict = _run_judge(context)
+    return Score(score=verdict.timing_correct, metadata={"reason": verdict.reason})
+
+
+timing_accuracy = create_scorer(
+    name="timing_accuracy",
+    description="LLM judge: is the timing (immediate/persistent/triggered) correct?",
+    scorer=_timing_accuracy_scorer,
+)
+
+
+ALL_SCORERS = [intent_match_judge, dsl_validity, target_accuracy, timing_accuracy]
