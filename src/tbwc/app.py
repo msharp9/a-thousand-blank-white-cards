@@ -10,12 +10,27 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from tbwc.config import get_settings
+from tbwc.rooms.manager import room_manager
 
 logger = logging.getLogger(__name__)
+
+
+class CreateRoomResponse(BaseModel):
+    code: str
+
+
+class JoinRoomRequest(BaseModel):
+    name: str
+
+
+class JoinRoomResponse(BaseModel):
+    code: str
+    player_id: str
 
 
 @asynccontextmanager
@@ -60,6 +75,21 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         """Liveness probe — returns {"status": "ok"}."""
         return {"status": "ok"}
+
+    @application.post("/rooms", response_model=CreateRoomResponse, tags=["rooms"])
+    async def create_room() -> CreateRoomResponse:
+        """Create a new game room. Returns a 6-char join code."""
+        code = room_manager.create_room()
+        return CreateRoomResponse(code=code)
+
+    @application.post("/rooms/{code}/join", response_model=JoinRoomResponse, tags=["rooms"])
+    async def join_room(code: str, body: JoinRoomRequest) -> JoinRoomResponse:
+        """Register a player in a room. Returns player_id for localStorage/reconnect."""
+        result = room_manager.join(code, body.name)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
+        room_code, player_id = result
+        return JoinRoomResponse(code=room_code, player_id=player_id)
 
     return application
 
