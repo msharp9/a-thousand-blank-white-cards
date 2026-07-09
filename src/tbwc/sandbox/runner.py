@@ -43,23 +43,26 @@ def execute_snippet(
     src_dir = str(Path(__file__).parent.parent.parent)  # .../src (parent of tbwc)
     cmd = [sys.executable, "-I", str(_CHILD_RUNNER)]
 
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={"PYTHONPATH": src_dir},
+    )
     try:
-        proc = subprocess.run(
-            cmd,
-            input=payload,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env={"PYTHONPATH": src_dir},
-            check=False,
-        )
+        stdout, stderr = proc.communicate(input=payload, timeout=timeout)
     except subprocess.TimeoutExpired as exc:
-        raise SnippetExecutionError(f"Snippet timed out after {timeout}s") from exc
+        proc.kill()
+        proc.wait()
+        raise SnippetExecutionError(f"Snippet timed out after {timeout}s (wall-clock)") from exc
+    returncode = proc.returncode
 
-    stdout = proc.stdout.strip()
+    stdout = stdout.strip()
     if not stdout:
-        stderr_snippet = proc.stderr[:500] if proc.stderr else "(no stderr)"
-        raise SnippetExecutionError(f"Child produced no output (exit={proc.returncode}): {stderr_snippet}")
+        stderr_snippet = stderr[:500] if stderr else "(no stderr)"
+        raise SnippetExecutionError(f"Child produced no output (exit={returncode}): {stderr_snippet}")
 
     try:
         response = json.loads(stdout)
