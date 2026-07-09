@@ -196,3 +196,8 @@ models/
 # Frontend (Next.js) build/deps safety net
 frontend/node_modules/
 frontend/.next/
+
+# dmux worktree orchestration artifacts (local tooling, not project code)
+.dmux/
+.claude/dmux/
+.claude/hooks/dmux-stop-hook.cjs
