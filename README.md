@@ -1,4 +1,4 @@
-# a-thousand-blank-white-cards
+# 1000 Blank White Cards
 
 A digital, AI-refereed implementation of the party game **1000 Blank White Cards**, where players draw, write, and play their own cards to invent the game as they go.
 
