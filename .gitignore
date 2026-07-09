@@ -192,3 +192,7 @@ models/
 .dolt/
 *.db
 .beads-credential-key
+
+# Frontend (Next.js) build/deps safety net
+frontend/node_modules/
+frontend/.next/
