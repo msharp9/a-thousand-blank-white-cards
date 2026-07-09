@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from tbwc.config import get_settings, require_openai_api_key
-from tbwc.rooms.manager import room_manager
+from tbwc.rooms.manager import check_single_worker, room_manager
 from tbwc.ws import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,10 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     # startup: fail fast with an actionable message if the OpenAI key is missing.
     # (OpenAI is currently required; skip this gate if an Ollama/local backend is added.)
     require_openai_api_key()
+
+    # startup: warn loudly if a multi-worker deployment is configured — the
+    # room registry uses a process-local in-memory store (single-worker only).
+    check_single_worker()
 
     try:
         from tbwc.rag.seed import load_seed_cards
