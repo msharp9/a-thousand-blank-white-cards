@@ -11,6 +11,17 @@ Run it directly::
 
 The core functions accept injected dependencies so the module is importable and
 unit-testable without any network or API access.
+
+Design notes
+------------
+* :func:`fetch_image_urls` pulls the *entire* album, following Imgur's paged
+  ``/album/{id}/images`` responses rather than assuming a fixed card count.
+* Every URL is validated with :func:`is_valid_imgur_url` -- only genuine
+  ``https://i.imgur.com/<hash>.<ext>`` direct links are accepted. Known-bad
+  placeholders (e.g. the ``fallback_NNN.jpg`` links previously committed to
+  ``real_cards.json``) are rejected so the script never writes junk URLs.
+* Failures are LOUD: a missing client id or an album that yields no valid URLs
+  raises rather than silently emitting placeholders.
 """
 
 from __future__ import annotations
@@ -18,6 +29,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 import httpx
@@ -34,16 +46,19 @@ VISION_MODEL = "gpt-5.4-mini"
 # Default output location for the transcribed corpus.
 DEFAULT_OUTPUT_PATH = Path(__file__).resolve().parent / "real_cards.json"
 
-# Placeholder image URLs used when the Imgur API is unavailable or no client id
-# is configured. These are NOT guaranteed to resolve to real images -- they are
-# stand-ins so the script (and its tests) can run offline. Replace them, or set
-# IMGUR_CLIENT_ID, to transcribe the actual album.
-FALLBACK_IMAGE_URLS: list[str] = [
-    "https://i.imgur.com/placeholder1.jpg",
-    "https://i.imgur.com/placeholder2.jpg",
-    "https://i.imgur.com/placeholder3.jpg",
-    "https://i.imgur.com/placeholder4.jpg",
-]
+# Imgur serves at most this many images per album page.
+_IMGUR_PAGE_SIZE = 50
+
+# A genuine Imgur direct image link, e.g. https://i.imgur.com/abc123.jpg.
+# The image hash is alphanumeric; extension is a common raster/animated format.
+_IMGUR_DIRECT_URL_RE = re.compile(
+    r"^https://i\.imgur\.com/[A-Za-z0-9]+\.(?:jpg|jpeg|png|gif|webp)$",
+    re.IGNORECASE,
+)
+
+# Substrings that mark a URL as a known placeholder rather than a real photo.
+# These were written by an earlier offline run and must never be accepted.
+_PLACEHOLDER_MARKERS: tuple[str, ...] = ("fallback_", "placeholder")
 
 # System instruction steering the model to transcribe faithfully and emit JSON.
 _TRANSCRIBE_SYSTEM = SystemMessage(
@@ -59,34 +74,97 @@ _TRANSCRIBE_SYSTEM = SystemMessage(
 )
 
 
-def _fetch_image_urls() -> list[str]:
-    """Return image URLs for the album, falling back to placeholders on any failure.
+class TranscriptionError(RuntimeError):
+    """Raised when the album cannot be fetched or yields no usable image URLs."""
 
-    When ``IMGUR_CLIENT_ID`` is set, query the Imgur API for the album images and
-    parse the ``data[].link`` fields. Any missing client id, network error, or
-    unexpected payload results in :data:`FALLBACK_IMAGE_URLS`.
+
+def is_valid_imgur_url(url: object) -> bool:
+    """Return ``True`` only for a real Imgur direct image link.
+
+    A valid URL matches ``https://i.imgur.com/<hash>.<ext>`` and contains none
+    of the known placeholder markers (``fallback_``, ``placeholder``). This is
+    the single guard that keeps stand-in URLs out of the corpus.
     """
-    client_id = os.environ.get("IMGUR_CLIENT_ID")
-    if not client_id:
-        logger.info("IMGUR_CLIENT_ID not set; using fallback image URLs.")
-        return FALLBACK_IMAGE_URLS
+    if not isinstance(url, str):
+        return False
+    lowered = url.lower()
+    if any(marker in lowered for marker in _PLACEHOLDER_MARKERS):
+        return False
+    return _IMGUR_DIRECT_URL_RE.match(url) is not None
 
-    try:
-        response = httpx.get(
-            f"https://api.imgur.com/3/album/{IMGUR_ALBUM_ID}/images",
-            headers={"Authorization": f"Client-ID {client_id}"},
-            timeout=30.0,
+
+def _fetch_album_page(client_id: str, page: int) -> list[dict]:
+    """Fetch a single page of album image records from the Imgur API."""
+    response = httpx.get(
+        f"https://api.imgur.com/3/album/{IMGUR_ALBUM_ID}/images",
+        headers={"Authorization": f"Client-ID {client_id}"},
+        params={"page": page},
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise TranscriptionError(f"Unexpected Imgur payload on page {page}: 'data' is not a list.")
+    return data
+
+
+def fetch_image_urls(client_id: str | None = None) -> list[str]:
+    """Return every validated image URL for the album, following pagination.
+
+    Args:
+        client_id: Imgur API client id. Defaults to ``$IMGUR_CLIENT_ID``.
+
+    Returns:
+        A de-duplicated list of validated ``https://i.imgur.com/<hash>.<ext>``
+        direct links, in album order.
+
+    Raises:
+        TranscriptionError: If no client id is available, the API errors, or the
+            album yields zero valid image URLs. The script fails loudly here
+            rather than falling back to placeholder URLs.
+    """
+    client_id = client_id or os.environ.get("IMGUR_CLIENT_ID")
+    if not client_id:
+        raise TranscriptionError(
+            "IMGUR_CLIENT_ID is not set. A real Imgur client id is required to "
+            "fetch the album; refusing to emit placeholder URLs."
         )
-        response.raise_for_status()
-        payload = response.json()
-        urls = [item["link"] for item in payload["data"] if item.get("link")]
-        if not urls:
-            logger.warning("Imgur returned no image links; using fallback URLs.")
-            return FALLBACK_IMAGE_URLS
-        return urls
-    except Exception:
-        logger.exception("Failed to fetch Imgur album; using fallback URLs.")
-        return FALLBACK_IMAGE_URLS
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    page = 0
+    while True:
+        try:
+            records = _fetch_album_page(client_id, page)
+        except httpx.HTTPError as exc:
+            raise TranscriptionError(f"Failed to fetch Imgur album page {page}: {exc}") from exc
+
+        if not records:
+            break
+
+        for item in records:
+            link = item.get("link")
+            if not link:
+                continue
+            if not is_valid_imgur_url(link):
+                logger.warning("Rejecting non-direct/placeholder Imgur URL: %s", link)
+                continue
+            if link in seen:
+                continue
+            seen.add(link)
+            urls.append(link)
+
+        # A short page means we've reached the end of the album.
+        if len(records) < _IMGUR_PAGE_SIZE:
+            break
+        page += 1
+
+    if not urls:
+        raise TranscriptionError("Imgur returned no valid direct image URLs for the album; nothing to transcribe.")
+
+    logger.info("Fetched %d valid image URL(s) from album %s.", len(urls), IMGUR_ALBUM_ID)
+    return urls
 
 
 def _build_llm():
@@ -100,15 +178,20 @@ def transcribe_image(url: str, llm=None) -> dict | None:
     """Transcribe a single card image into a corpus record, or ``None`` on failure.
 
     Args:
-        url: Public image URL of the card photo.
+        url: Public image URL of the card photo. Must be a valid Imgur direct
+            link (see :func:`is_valid_imgur_url`).
         llm: Optional injected chat model with an ``.invoke`` method. When omitted,
             a real :class:`~langchain_openai.ChatOpenAI` vision client is built.
 
     Returns:
         ``{"image_url", "title", "description", "human_canonical"}`` on success,
         where ``human_canonical`` is always ``None`` (filled in later by a human).
-        Returns ``None`` if the LLM call or JSON parsing fails.
+        Returns ``None`` if the URL is invalid or the LLM call / JSON parsing fails.
     """
+    if not is_valid_imgur_url(url):
+        logger.warning("Refusing to transcribe invalid/placeholder URL: %s", url)
+        return None
+
     if llm is None:
         llm = _build_llm()
 
@@ -138,22 +221,38 @@ def run(output_path: Path | None = None, urls: list[str] | None = None, llm=None
 
     Args:
         output_path: Destination file. Defaults to :data:`DEFAULT_OUTPUT_PATH`.
-        urls: Image URLs to transcribe. Defaults to :func:`_fetch_image_urls`.
+        urls: Image URLs to transcribe. Defaults to :func:`fetch_image_urls`
+            (the full album). Any URL failing :func:`is_valid_imgur_url` is
+            rejected before writing.
         llm: Optional injected chat model (see :func:`transcribe_image`).
 
     Returns:
         The number of records successfully transcribed and written.
+
+    Raises:
+        TranscriptionError: If no valid URLs are available to transcribe, or if
+            transcription produced zero records (so we never overwrite the
+            corpus with an empty array).
     """
     output_path = output_path or DEFAULT_OUTPUT_PATH
-    urls = urls if urls is not None else _fetch_image_urls()
+    urls = urls if urls is not None else fetch_image_urls()
+
+    valid_urls = [u for u in urls if is_valid_imgur_url(u)]
+    if not valid_urls:
+        raise TranscriptionError("No valid Imgur direct URLs to transcribe.")
 
     records = []
-    for url in urls:
+    for url in valid_urls:
         record = transcribe_image(url, llm=llm)
         if record is not None:
             records.append(record)
         else:
             logger.warning("Skipping image (transcription failed): %s", url)
+
+    if not records:
+        raise TranscriptionError(
+            f"Transcription produced zero records; refusing to overwrite {output_path} with an empty corpus."
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(records, indent=2, ensure_ascii=False))
