@@ -155,7 +155,32 @@ class Room:
 
         program = result.get("program")
         if result["verdict"] == "ok" and program is not None:
-            ctx = HookContext(event=GameEvent.ON_PLAY, actor_id=player_id, card_id=card_id)
+            # Cards whose interpreted program targets "chooser"/"target_player"
+            # need a chosen_player_id from the play message. Validate BEFORE
+            # applying so a missing/bogus choice yields a clean error rather than
+            # a 500 out of reducers._resolve_targets — and does NOT advance the turn.
+            chosen_player_id = getattr(msg, "chosen_player_id", None)
+            valid_player_ids = {p.id for p in self.state.players}
+
+            if getattr(program, "requires_choice", False) and chosen_player_id is None:
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": "This card requires you to choose a target player"},
+                )
+                return
+            if chosen_player_id is not None and chosen_player_id not in valid_player_ids:
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": f"Invalid target player: {chosen_player_id}"},
+                )
+                return
+
+            ctx = HookContext(
+                event=GameEvent.ON_PLAY,
+                actor_id=player_id,
+                card_id=card_id,
+                chosen_player_id=chosen_player_id,
+            )
             self.state = apply_effect(self.state, program, ctx)
             await self.connections.broadcast({"type": "effect_applied", "log_entry": f"Played {card_id}"})
 
