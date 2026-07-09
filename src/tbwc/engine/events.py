@@ -50,7 +50,14 @@ class EventBus:
     The engine calls ``bus.emit(event, state, ctx)``; the bus delegates to
     ``fire_hooks`` from tbwc.engine.hooks. The import cycle is avoided via a
     late import inside emit().
+
+    An optional ``registry`` (a HookRegistry) may be supplied so a bus can route
+    its emits to a specific registry; when None (the default), ``fire_hooks``
+    falls back to the module-level default registry, preserving behavior.
     """
+
+    def __init__(self, registry: Any = None) -> None:  # HookRegistry | None; Any avoids cycle
+        self._registry = registry
 
     def emit(
         self,
@@ -60,4 +67,4 @@ class EventBus:
     ) -> Any:  # returns (potentially modified) GameState
         from tbwc.engine.hooks import fire_hooks  # late import — avoids cycle
 
-        return fire_hooks(state, event, ctx)
+        return fire_hooks(state, str(event), ctx, registry=self._registry)

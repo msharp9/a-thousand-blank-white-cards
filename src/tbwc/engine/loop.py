@@ -9,9 +9,9 @@ Wires the pure reducers and the event bus into a playable turn cycle:
   then advance.
 
 Turn bookkeeping (``_skip_next`` / ``_extra_turn``) lives in PrivateAttr sets
-on GameState. Those cannot be set through ``model_copy(update=...)``, so we
-``model_copy()`` and rebind the private attr on the fresh copy, always with a
-NEW set object so the source state is never mutated.
+on GameState. Those cannot be set through ``model_copy(update=...)``, so we use
+``GameState.copy_with_turn_flags`` which always rebinds BOTH private sets to
+fresh set objects, keeping the source state pure.
 """
 
 from __future__ import annotations
@@ -79,9 +79,8 @@ def advance_turn(state: GameState) -> GameState:
 
     # Extra turn: the current player goes again; turn_index unchanged.
     if current_id in state._extra_turn:
-        new = state.model_copy()
-        new._extra_turn = set(state._extra_turn) - {current_id}
-        return new
+        new_extras = set(state._extra_turn) - {current_id}
+        return state.copy_with_turn_flags(extra_turn=new_extras)
 
     next_idx = (state.turn_index + state.direction) % n
     next_player = players[next_idx]
@@ -99,9 +98,7 @@ def advance_turn(state: GameState) -> GameState:
                 skip_set.discard(candidate.id)
                 next_idx = (next_idx + state.direction) % n
 
-    new = state.model_copy(update={"turn_index": next_idx})
-    new._skip_next = skip_set
-    return new
+    return state.copy_with_turn_flags(turn_index=next_idx, skip_next=skip_set)
 
 
 # ---------------------------------------------------------------------------

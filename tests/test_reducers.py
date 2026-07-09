@@ -12,9 +12,11 @@ from tbwc.models.effects import (
     CustomNoteOp,
     DestroyCardOp,
     DrawCardsOp,
+    ExtraTurnOp,
     ReverseOrderOp,
     SetPointsOp,
     SetWinConditionOp,
+    SkipTurnOp,
     StealPointsOp,
     SubtractPointsOp,
 )
@@ -76,6 +78,39 @@ class TestResolveTargets:
 
     def test_player_with_empty_hand(self):
         assert _resolve_targets("player_with_empty_hand", make_ctx("p1"), make_state()) == ["p3"]
+
+    def test_unknown_target_raises(self):
+        with pytest.raises(ValueError):
+            _resolve_targets("not_a_real_target", make_ctx("p1"), make_state())
+
+
+class TestSkipTurn:
+    def test_marks_target_and_leaves_original_unchanged(self):
+        state = make_state()
+        ctx = make_ctx("p1", chosen="p2")
+        new = apply_op(state, SkipTurnOp(target="target_player"), ctx)
+        assert new._skip_next == {"p2"}
+        assert state._skip_next == set()  # original untouched
+
+    def test_marks_multiple_targets(self):
+        state = make_state()
+        new = apply_op(state, SkipTurnOp(target="all_others"), make_ctx("p1"))
+        assert new._skip_next == {"p2", "p3"}
+        assert state._skip_next == set()
+
+
+class TestExtraTurn:
+    def test_marks_target_and_leaves_original_unchanged(self):
+        state = make_state()
+        new = apply_op(state, ExtraTurnOp(target="self"), make_ctx("p1"))
+        assert new._extra_turn == {"p1"}
+        assert state._extra_turn == set()  # original untouched
+
+    def test_marks_multiple_targets(self):
+        state = make_state()
+        new = apply_op(state, ExtraTurnOp(target="all"), make_ctx("p1"))
+        assert new._extra_turn == {"p1", "p2", "p3"}
+        assert state._extra_turn == set()
 
 
 class TestAddPoints:

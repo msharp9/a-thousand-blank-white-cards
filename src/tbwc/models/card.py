@@ -3,13 +3,11 @@
 Two card varieties:
   GoldCard   — fully annotated exemplar with structured game-logic ops.
   FillerCard — text-only placeholder for volume in RAG index.
-
-Both share a SeedCard union type used for JSON loading.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -24,8 +22,11 @@ class CardOp(BaseModel):
 
     op: str = Field(
         description=(
-            "Operation name, e.g. 'add_points', 'skip_turn', 'reverse_order', "
-            "'draw_cards', 'set_win_condition', 'transfer_cards', 'no_op'."
+            "Operation name from the seed-data vocabulary, e.g. 'add_points', "
+            "'skip_turn', 'reverse_order', 'draw_cards', 'set_win_condition', "
+            "'transfer_cards', 'no_op'. This is free-form authoring vocabulary "
+            "and is distinct from the runtime Op discriminated union in "
+            "tbwc.models.effects (not every name here maps 1:1 to a reducer)."
         )
     )
     args: dict[str, int | str | bool | None] = Field(
@@ -85,13 +86,8 @@ class FillerCard(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Union type for loading mixed arrays from JSON
+# Loading mixed arrays from JSON
 # ---------------------------------------------------------------------------
-
-SeedCard = Annotated[
-    Union[GoldCard, FillerCard],
-    Field(discriminator=None),  # not using discriminator — GoldCard detected by 'canonical' key
-]
 
 
 def parse_seed_card(data: dict) -> GoldCard | FillerCard:

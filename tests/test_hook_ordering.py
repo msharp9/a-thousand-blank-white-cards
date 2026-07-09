@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tbwc.engine.events import GameEvent, HookContext
-from tbwc.engine.hooks import HookRegistry, RegisteredHook, fire_hooks
+from tbwc.engine.hooks import HookRegistry, RegisteredHook, fire_hooks, get_default_registry
 from tbwc.models.cards import Card
 from tbwc.models.game_state import GameState, Player
 
@@ -116,3 +116,30 @@ class TestMissingHandlerSkipped:
         reg._hooks.append(h1)  # registered with no handler
         result = fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
         assert result.log == []
+
+
+class TestHookRegistryRemove:
+    def test_remove_drops_only_target_hook(self):
+        state = make_state_with_cards(c1={}, c2={})
+        reg = HookRegistry()
+        fired = []
+        h1 = make_hook("c1")
+        h2 = make_hook("c2")
+        reg.register(h1, lambda s, ctx: (fired.append("A"), s)[1])
+        reg.register(h2, lambda s, ctx: (fired.append("B"), s)[1])
+
+        reg.remove(h1.id)
+
+        assert h1 not in reg.hooks_for_event(GameEvent.ON_SCORE_CHANGE)
+        assert h2 in reg.hooks_for_event(GameEvent.ON_SCORE_CHANGE)
+        assert reg.get_handler(h1.id) is None
+        fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
+        assert fired == ["B"]  # only the surviving hook fires
+
+
+class TestGetDefaultRegistry:
+    def test_returns_registry_and_is_stable(self):
+        reg1 = get_default_registry()
+        reg2 = get_default_registry()
+        assert isinstance(reg1, HookRegistry)
+        assert reg1 is reg2

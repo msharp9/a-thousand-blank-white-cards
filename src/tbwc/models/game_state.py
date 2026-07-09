@@ -78,3 +78,21 @@ class GameState(BaseModel):
     def with_log(self, msg: str) -> GameState:
         """Return a copy of this state with msg appended to log."""
         return self.model_copy(update={"log": [*self.log, msg]})
+
+    def copy_with_turn_flags(
+        self,
+        *,
+        turn_index: int | None = None,
+        skip_next: set[str] | None = None,
+        extra_turn: set[str] | None = None,
+    ) -> "GameState":
+        """Return a copy that ALWAYS rebinds BOTH private turn-flag sets to fresh
+        copies (defaulting to copies of the current values), so the source state's
+        private sets are never shared or mutated. Optionally updates turn_index."""
+        update = {}
+        if turn_index is not None:
+            update["turn_index"] = turn_index
+        new = self.model_copy(update=update)
+        new._skip_next = set(self._skip_next if skip_next is None else skip_next)
+        new._extra_turn = set(self._extra_turn if extra_turn is None else extra_turn)
+        return new

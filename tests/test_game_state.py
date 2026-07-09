@@ -47,3 +47,33 @@ def test_private_attrs_default() -> None:
     assert state._extra_turn == set()
     state._skip_next.add("p1")
     assert "p1" in state._skip_next
+
+
+def test_copy_with_turn_flags_rebinds_both_sets() -> None:
+    state = GameState(room_code="AAAA", turn_index=1)
+    state._skip_next = {"p1"}
+    state._extra_turn = {"p2"}
+    new = state.copy_with_turn_flags()
+    # Values default to copies of the current values...
+    assert new._skip_next == {"p1"}
+    assert new._extra_turn == {"p2"}
+    # ...but BOTH are fresh objects, never shared with the source.
+    assert new._skip_next is not state._skip_next
+    assert new._extra_turn is not state._extra_turn
+    # turn_index unchanged when not provided.
+    assert new.turn_index == 1
+
+
+def test_copy_with_turn_flags_updates_index_and_sets() -> None:
+    state = GameState(room_code="AAAA", turn_index=0)
+    state._skip_next = {"a"}
+    state._extra_turn = {"b"}
+    new = state.copy_with_turn_flags(turn_index=2, skip_next={"x"}, extra_turn={"y"})
+    assert new.turn_index == 2
+    assert new._skip_next == {"x"}
+    assert new._extra_turn == {"y"}
+    # A provided set is copied, not aliased.
+    assert new._skip_next is not state._skip_next
+    # Source is untouched.
+    assert state._skip_next == {"a"}
+    assert state._extra_turn == {"b"}
