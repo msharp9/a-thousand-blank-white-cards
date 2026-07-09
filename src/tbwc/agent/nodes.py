@@ -10,7 +10,7 @@ import re
 
 from tbwc.agent.llm import get_chat_model
 from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM
-from tbwc.agent.schemas import Interpretation
+from tbwc.agent.schemas import Interpretation, SnippetEffect
 from tbwc.agent.state import InterpretState
 from tbwc.models.effects import EffectProgram
 from tbwc.rag.retrievers import dense_retriever
@@ -212,3 +212,50 @@ def emit_ops(state: InterpretState) -> dict:
         ]
     )
     return {"program": program}
+
+
+# ---------------------------------------------------------------------------
+# gen_snippet node
+# ---------------------------------------------------------------------------
+
+_SNIPPET_SYSTEM = """\
+You are generating a Python function body for a card effect in "1000 Blank White Cards".
+
+Requirements:
+- Write ONLY the body of `def apply(state, ctx)`.
+- Do NOT include any import statements.
+- Do NOT use exec, eval, open, compile, or access dunder attributes (__class__, etc.).
+- `state` is a GameState object with attributes: scores (dict[str,int]),
+  hands (dict[str, list]), deck (list), discard (list), turn_order (list[str]),
+  current_player_index (int), properties (dict).
+- `ctx` is a dict with keys: player_id (str), card (Card), event (str|None).
+- The function should mutate `state` in place and return None.
+- Be a faithful literalist — implement exactly what the card says.
+"""
+
+
+def gen_snippet(state: InterpretState) -> dict:
+    """Generate a Python def apply(state, ctx) body for snippet-mode cards.
+
+    Reads: state["card_draft"], state["interpretation"]
+    Writes: state["snippet"] (SnippetEffect)
+    """
+    draft = state["card_draft"]
+    interp = state.get("interpretation")
+
+    human_content = (
+        f"Card title: {draft['title']}\n"
+        f"Card description: {draft['description']}\n\n"
+        f"Classification: {interp.model_dump_json() if interp else 'unknown'}\n\n"
+        "Generate the body of def apply(state, ctx) that implements this card's "
+        "effect faithfully. Remember: no imports, no forbidden calls."
+    )
+
+    llm = get_chat_model(temperature=0.2).with_structured_output(SnippetEffect)
+    snippet = llm.invoke(
+        [
+            {"role": "system", "content": _SNIPPET_SYSTEM},
+            {"role": "human", "content": human_content},
+        ]
+    )
+    return {"snippet": snippet}
