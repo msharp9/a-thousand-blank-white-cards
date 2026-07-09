@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     qdrant_api_key: str = ""
     qdrant_collection: str = "tbwc_cards"
 
+    # --- Sandbox ---
+    snippet_execution_enabled: bool = True
+
     # --- Server / CORS ---
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
     host: str = "0.0.0.0"
