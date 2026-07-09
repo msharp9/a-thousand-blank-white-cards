@@ -52,3 +52,21 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return a cached Settings singleton. Call get_settings.cache_clear() in tests."""
     return Settings()
+
+
+# Actionable message surfaced at startup / on first LLM call when the key is absent.
+OPENAI_API_KEY_ERROR = "OPENAI_API_KEY is not set. Set it in your environment or .env file."
+
+
+def require_openai_api_key() -> str:
+    """Return the configured OpenAI API key, or raise a clear, actionable error.
+
+    ``Settings`` (via pydantic-settings ``env_file=".env"``) is the single source
+    of truth, so a key set only in ``.env`` is honoured without a manual
+    ``load_dotenv`` bridge. OpenAI is currently required; if a local/Ollama
+    backend is added later, this gate should be skipped in that mode.
+    """
+    key = get_settings().openai_api_key
+    if not key:
+        raise RuntimeError(OPENAI_API_KEY_ERROR)
+    return key

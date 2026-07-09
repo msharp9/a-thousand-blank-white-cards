@@ -6,11 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tbwc.app import create_app
-from tbwc.config import get_settings
+from tbwc.config import OPENAI_API_KEY_ERROR, get_settings
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    # Startup fails fast without a key; provide one so smoke tests can run.
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    get_settings.cache_clear()
     return TestClient(create_app())
 
 
@@ -33,3 +36,25 @@ def test_cors_headers_present(client: TestClient) -> None:
     )
     assert response.status_code == 200
     assert response.headers.get("access-control-allow-origin") in (origin, "*")
+
+
+def test_startup_fails_without_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Startup (lifespan) fails fast with a clear message when the key is unset."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    get_settings.cache_clear()
+    app = create_app()
+    with pytest.raises(RuntimeError) as exc:
+        # Entering the context manager runs the lifespan startup.
+        with TestClient(app):
+            pass
+    assert str(exc.value) == OPENAI_API_KEY_ERROR
+    get_settings.cache_clear()
+
+
+def test_startup_succeeds_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With a key present, startup completes and the app serves requests."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    get_settings.cache_clear()
+    with TestClient(create_app()) as c:
+        assert c.get("/health").status_code == 200
+    get_settings.cache_clear()

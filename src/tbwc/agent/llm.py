@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
-
 from langchain_openai import ChatOpenAI
+
+from tbwc.config import get_settings, require_openai_api_key
 
 DEFAULT_CHAT_MODEL = "gpt-5.4-mini"
 
@@ -13,11 +13,12 @@ def get_chat_model(model_name: str | None = None, *, temperature: float = 0) -> 
     """Return a ChatOpenAI instance.
 
     Args:
-        model_name: Model id. Falls back to OPENAI_CHAT_MODEL env var, then to
-            DEFAULT_CHAT_MODEL.
+        model_name: Model id. Falls back to Settings.openai_chat_model
+            (OPENAI_CHAT_MODEL / .env), then to DEFAULT_CHAT_MODEL.
         temperature: Sampling temperature (0 = deterministic).
 
-    The OPENAI_API_KEY environment variable must be set.
+    Reads the OpenAI API key via Settings (the single source of truth) and
+    raises a clear error if it is missing.
     """
-    name = model_name or os.environ.get("OPENAI_CHAT_MODEL", DEFAULT_CHAT_MODEL)
-    return ChatOpenAI(model=name, temperature=temperature, openai_api_key=os.environ["OPENAI_API_KEY"])
+    name = model_name or get_settings().openai_chat_model or DEFAULT_CHAT_MODEL
+    return ChatOpenAI(model=name, temperature=temperature, openai_api_key=require_openai_api_key())

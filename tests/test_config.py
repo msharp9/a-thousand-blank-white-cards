@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from tbwc.config import Settings, get_settings
+from pathlib import Path
+
+from tbwc.config import OPENAI_API_KEY_ERROR, Settings, get_settings, require_openai_api_key
 
 
 def test_defaults_load_without_env_file() -> None:
@@ -31,3 +33,30 @@ def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.openai_chat_model == "gpt-4o"
     get_settings.cache_clear()
+
+
+def test_require_openai_api_key_missing_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unset key produces a clear, actionable error."""
+    get_settings.cache_clear()
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(RuntimeError) as exc:
+        require_openai_api_key()
+    assert str(exc.value) == OPENAI_API_KEY_ERROR
+    assert "OPENAI_API_KEY" in str(exc.value)
+    get_settings.cache_clear()
+
+
+def test_require_openai_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-live")
+    assert require_openai_api_key() == "sk-live"
+    get_settings.cache_clear()
+
+
+def test_key_from_env_file_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A key defined only in a .env file (not the process env) is honoured."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=sk-from-dotenv\n")
+    s = Settings(_env_file=str(env_file))  # type: ignore[call-arg]
+    assert s.openai_api_key == "sk-from-dotenv"

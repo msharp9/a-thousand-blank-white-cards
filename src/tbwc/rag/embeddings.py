@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 
 from langchain_openai import OpenAIEmbeddings
+
+from tbwc.config import get_settings, require_openai_api_key
 
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 1536
@@ -15,12 +16,13 @@ EMBEDDING_DIMENSIONS = 1536
 def get_embeddings() -> OpenAIEmbeddings:
     """Return a cached OpenAIEmbeddings instance.
 
-    Reads OPENAI_API_KEY and optionally OPENAI_EMBEDDING_MODEL from the
-    environment. The lru_cache ensures a single instance per process.
+    Reads the OpenAI API key and embedding model via Settings (the single
+    source of truth, backed by env vars / .env). Raises a clear error if the
+    key is missing. The lru_cache ensures a single instance per process.
     """
     return OpenAIEmbeddings(
-        model=os.environ.get("OPENAI_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL),
-        openai_api_key=os.environ["OPENAI_API_KEY"],
+        model=get_settings().openai_embedding_model or DEFAULT_EMBEDDING_MODEL,
+        openai_api_key=require_openai_api_key(),
     )
 
 

@@ -6,6 +6,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tbwc.config import get_settings
+
+
+@pytest.fixture(autouse=True)
+def _clear_settings_cache() -> None:
+    """Settings is the single source for the OpenAI key; reset the cache per test."""
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
 
 def test_get_embeddings_uses_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
@@ -46,6 +56,18 @@ def test_embed_text_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
         out = mod.embed_text("hello")
         assert out == [0.1, 0.2, 0.3]
         inst.embed_query.assert_called_once_with("hello")
+    mod.get_embeddings.cache_clear()
+
+
+def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    import tbwc.rag.embeddings as mod
+
+    mod.get_embeddings.cache_clear()
+    with patch("tbwc.rag.embeddings.OpenAIEmbeddings") as MockEmb:
+        with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+            mod.get_embeddings()
+        MockEmb.assert_not_called()
     mod.get_embeddings.cache_clear()
 
 
