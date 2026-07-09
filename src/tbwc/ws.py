@@ -57,6 +57,15 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
         await websocket.close(code=4001)
         return
 
+    # If this player already has an open socket (duplicate tab / stale connection),
+    # close the old one before rebinding (4009 = replaced by new connection).
+    old_ws = room.connections._connections.get(player_id)
+    if old_ws is not None and old_ws is not websocket:
+        try:
+            await old_ws.close(code=4009)
+        except Exception:
+            pass
+
     room.connections.connect(player_id, websocket)
     logger.info("player %s connected to room %s", player_id, code)
 
