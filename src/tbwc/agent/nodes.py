@@ -259,6 +259,12 @@ _TARGET_FIELDS: tuple[str, ...] = ("target", "from_target", "to_target")
 # flips EffectProgram.requires_choice, mirroring the existing convention.
 _CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
 
+# Op fields that hold a CardTarget (the card axis, separate from player targets).
+# Only DestroyCardOp carries one today. When such a field is set to a
+# choice-requiring CardTarget ("chosen_card"), requires_choice flips too.
+_CARD_TARGET_FIELDS: tuple[str, ...] = ("card_target",)
+_CHOICE_CARD_TARGETS: frozenset[str] = frozenset({"chosen_card"})
+
 
 def _normalize_program_targets(program: EffectProgram) -> EffectProgram:
     """Defensively coerce every op target onto a valid runtime Target.
@@ -271,8 +277,9 @@ def _normalize_program_targets(program: EffectProgram) -> EffectProgram:
     resolves to a valid, play-time-choosable target rather than crashing the
     engine. Ops are rebuilt immutably via model_copy.
 
-    Also sets ``requires_choice=True`` if any op ends up targeting a
-    choice-requiring target ("chooser"/"target_player").
+    Also sets ``requires_choice=True`` if any op ends up needing a play-time
+    choice: a choice-requiring player target ("chooser"/"target_player") OR a
+    "chosen_card" CardTarget (the card axis).
     """
     if not isinstance(program, EffectProgram):
         return program  # defensive: nothing to normalize on non-programs
@@ -291,6 +298,13 @@ def _normalize_program_targets(program: EffectProgram) -> EffectProgram:
                 requires_choice = True
             if mapped != current:
                 updates[field] = mapped
+        # CardTarget axis: a "chosen_card" card target also requires a play-time
+        # choice. These values are already valid CardTargets (not authoring
+        # vocab), so no mapping is needed — just detect the choice flag.
+        for field in _CARD_TARGET_FIELDS:
+            value = getattr(op, field, None)
+            if isinstance(value, str) and value in _CHOICE_CARD_TARGETS:
+                requires_choice = True
         new_ops.append(op.model_copy(update=updates) if updates else op)
     return program.model_copy(update={"ops": new_ops, "requires_choice": requires_choice})
 

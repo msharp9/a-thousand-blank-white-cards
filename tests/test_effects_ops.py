@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from tbwc.models.effects import AddPointsOp, EffectProgram, StealPointsOp, map_authoring_target
+from tbwc.models.effects import (
+    AddPointsOp,
+    DestroyCardOp,
+    EffectProgram,
+    StealPointsOp,
+    map_authoring_target,
+)
 
 
 def test_discriminates_add_points() -> None:
@@ -32,6 +38,41 @@ def test_empty_program_defaults() -> None:
     prog = EffectProgram()
     assert prog.ops == []
     assert prog.requires_choice is False
+
+
+# ---------------------------------------------------------------------------
+# DestroyCardOp + CardTarget
+# ---------------------------------------------------------------------------
+
+
+def test_destroy_card_op_back_compat_card_id() -> None:
+    """Legacy shape: a bare card_id with no card_target still validates."""
+    op = DestroyCardOp(card_id="c1")
+    assert op.card_id == "c1"
+    assert op.card_target is None
+
+
+def test_destroy_card_op_accepts_card_target() -> None:
+    op = DestroyCardOp(card_target="all_in_play")
+    assert op.card_target == "all_in_play"
+    assert op.card_id is None
+
+
+def test_destroy_card_op_rejects_bad_card_target() -> None:
+    with pytest.raises(ValidationError):
+        DestroyCardOp(card_target="not_a_card_target")
+
+
+def test_destroy_card_op_defaults_both_none() -> None:
+    op = DestroyCardOp()
+    assert op.card_id is None
+    assert op.card_target is None
+
+
+def test_destroy_card_op_discriminates_from_program() -> None:
+    prog = EffectProgram.model_validate({"ops": [{"op": "destroy_card", "card_target": "chosen_card"}]})
+    assert isinstance(prog.ops[0], DestroyCardOp)
+    assert prog.ops[0].card_target == "chosen_card"
 
 
 # ---------------------------------------------------------------------------

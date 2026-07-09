@@ -50,6 +50,25 @@ def test_play_msg_chosen_player_id_defaults_none() -> None:
     assert msg.chosen_player_id is None
 
 
+def test_play_msg_carries_chosen_card_id() -> None:
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python(
+        {
+            "type": "play",
+            "card_id": "c1",
+            "placement": {"zone": "center"},
+            "chosen_card_id": "target_card",
+        }
+    )
+    assert isinstance(msg, PlayMsg)
+    assert msg.chosen_card_id == "target_card"
+
+
+def test_play_msg_chosen_card_id_defaults_none() -> None:
+    msg = PlayMsg(card_id="c1", placement={"zone": "center"})
+    assert msg.chosen_card_id is None
+
+
 def test_state_msg_envelope() -> None:
     m = StateMsg(state={"players": []})
     assert m.type == "state"

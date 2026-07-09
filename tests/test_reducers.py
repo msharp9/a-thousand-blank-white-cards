@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tbwc.engine.events import GameEvent, HookContext
-from tbwc.engine.reducers import _resolve_targets, apply_op
+from tbwc.engine.reducers import _resolve_card_targets, _resolve_targets, apply_op
 from tbwc.models.effects import (
     AddPointsOp,
     ChangeDrawCountOp,
@@ -177,11 +177,101 @@ class TestDrawCards:
         assert new.deck == ["d3"]
 
 
+def make_card_ctx(actor_id="p1", card_id=None, chosen_card_id=None) -> HookContext:
+    return HookContext(
+        event=GameEvent.ON_PLAY,
+        actor_id=actor_id,
+        card_id=card_id,
+        chosen_card_id=chosen_card_id,
+    )
+
+
+class TestResolveCardTargets:
+    def _state_with_zones(self):
+        players = [
+            Player(id="p1", name="Alice", hand=["h1", "h2"], in_play=["ip1"]),
+            Player(id="p2", name="Bob", hand=["h3"], in_play=["ip2", "ip3"]),
+        ]
+        return GameState(room_code="TEST", players=players, house_rules=["center1"])
+
+    def test_this(self):
+        ctx = make_card_ctx("p1", card_id="played")
+        assert _resolve_card_targets("this", ctx, self._state_with_zones()) == ["played"]
+
+    def test_this_none_resolves_empty(self):
+        ctx = make_card_ctx("p1", card_id=None)
+        assert _resolve_card_targets("this", ctx, self._state_with_zones()) == []
+
+    def test_chosen_card_with_ctx(self):
+        ctx = make_card_ctx("p1", chosen_card_id="ip2")
+        assert _resolve_card_targets("chosen_card", ctx, self._state_with_zones()) == ["ip2"]
+
+    def test_chosen_card_missing_raises(self):
+        ctx = make_card_ctx("p1", chosen_card_id=None)
+        with pytest.raises(ValueError):
+            _resolve_card_targets("chosen_card", ctx, self._state_with_zones())
+
+    def test_all_in_play(self):
+        ctx = make_card_ctx("p1")
+        assert _resolve_card_targets("all_in_play", ctx, self._state_with_zones()) == ["ip1", "ip2", "ip3"]
+
+    def test_all_in_hand_is_actor_hand(self):
+        ctx = make_card_ctx("p1")
+        assert _resolve_card_targets("all_in_hand", ctx, self._state_with_zones()) == ["h1", "h2"]
+
+    def test_unknown_card_target_raises(self):
+        ctx = make_card_ctx("p1")
+        with pytest.raises(ValueError):
+            _resolve_card_targets("not_a_real_card_target", ctx, self._state_with_zones())
+
+
 class TestDestroyCard:
     def test_removes_from_hand(self):
         new = apply_op(make_state(), DestroyCardOp(card_id="c1"), make_ctx("p1"))
         assert "c1" not in new.get_player("p1").hand
         assert "c1" in new.discard
+
+    def test_card_target_this_removes_played_card(self):
+        players = [Player(id="p1", name="Alice", in_play=["played"]), Player(id="p2", name="Bob")]
+        state = GameState(room_code="TEST", players=players)
+        ctx = make_card_ctx("p1", card_id="played")
+        new = apply_op(state, DestroyCardOp(card_target="this"), ctx)
+        assert "played" not in new.get_player("p1").in_play
+        assert "played" in new.discard
+
+    def test_card_target_all_in_play_removes_everywhere(self):
+        players = [
+            Player(id="p1", name="Alice", in_play=["ip1"]),
+            Player(id="p2", name="Bob", in_play=["ip2"]),
+        ]
+        state = GameState(room_code="TEST", players=players)
+        new = apply_op(state, DestroyCardOp(card_target="all_in_play"), make_card_ctx("p1"))
+        assert new.get_player("p1").in_play == []
+        assert new.get_player("p2").in_play == []
+        assert set(new.discard) == {"ip1", "ip2"}
+
+    def test_card_target_chosen_card_from_center(self):
+        players = [Player(id="p1", name="Alice")]
+        state = GameState(room_code="TEST", players=players, house_rules=["hr1", "hr2"])
+        ctx = make_card_ctx("p1", chosen_card_id="hr1")
+        new = apply_op(state, DestroyCardOp(card_target="chosen_card"), ctx)
+        assert new.house_rules == ["hr2"]
+        assert "hr1" in new.discard
+
+    def test_card_target_takes_precedence_over_card_id(self):
+        players = [Player(id="p1", name="Alice", hand=["h1"], in_play=["ip1"])]
+        state = GameState(room_code="TEST", players=players)
+        ctx = make_card_ctx("p1")
+        # card_id set to h1, but card_target=all_in_play should win -> ip1 destroyed, h1 kept
+        new = apply_op(state, DestroyCardOp(card_id="h1", card_target="all_in_play"), ctx)
+        assert new.get_player("p1").hand == ["h1"]
+        assert new.get_player("p1").in_play == []
+        assert new.discard == ["ip1"]
+
+    def test_no_target_is_noop(self):
+        state = make_state()
+        new = apply_op(state, DestroyCardOp(), make_card_ctx("p1"))
+        assert new.get_player("p1").hand == state.get_player("p1").hand
 
 
 class TestSetWinCondition:

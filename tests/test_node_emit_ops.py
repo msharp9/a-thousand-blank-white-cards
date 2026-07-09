@@ -123,6 +123,45 @@ def test_emit_ops_normalizes_steal_from_and_to_targets(monkeypatch: pytest.Monke
     assert program.requires_choice is True
 
 
+def test_emit_ops_sets_requires_choice_for_chosen_card(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A destroy op with card_target='chosen_card' flips requires_choice."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    from tbwc.models.effects import DestroyCardOp, EffectProgram
+
+    op = DestroyCardOp(card_target="chosen_card")
+    leaked = EffectProgram(ops=[op], requires_choice=False)
+    fake_llm = MagicMock()
+    fake_llm.with_structured_output.return_value.invoke.return_value = leaked
+    with patch("tbwc.agent.nodes.get_chat_model", return_value=fake_llm):
+        from tbwc.agent.nodes import emit_ops
+
+        interp = Interpretation(placement="self", timing="immediate", mode="immediate", rationale="r")
+        state = {"card_draft": {"title": "Nuke", "description": "Destroy a card you pick."}, "interpretation": interp}
+        program = emit_ops(state)["program"]
+
+    assert program.ops[0].card_target == "chosen_card"
+    assert program.requires_choice is True
+
+
+def test_emit_ops_no_choice_for_all_in_play_card_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A non-choice CardTarget ('all_in_play') does NOT flip requires_choice."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    from tbwc.models.effects import DestroyCardOp, EffectProgram
+
+    op = DestroyCardOp(card_target="all_in_play")
+    leaked = EffectProgram(ops=[op], requires_choice=False)
+    fake_llm = MagicMock()
+    fake_llm.with_structured_output.return_value.invoke.return_value = leaked
+    with patch("tbwc.agent.nodes.get_chat_model", return_value=fake_llm):
+        from tbwc.agent.nodes import emit_ops
+
+        interp = Interpretation(placement="self", timing="immediate", mode="immediate", rationale="r")
+        state = {"card_draft": {"title": "Wipe", "description": "Destroy all in-play cards."}, "interpretation": interp}
+        program = emit_ops(state)["program"]
+
+    assert program.requires_choice is False
+
+
 def test_emit_ops_leaves_targetless_ops_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ops without target fields (reverse_order) survive normalization unchanged."""
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")

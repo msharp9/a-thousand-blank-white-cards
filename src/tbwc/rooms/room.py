@@ -156,13 +156,27 @@ class Room:
         program = result.get("program")
         if result["verdict"] == "ok" and program is not None:
             # Cards whose interpreted program targets "chooser"/"target_player"
-            # need a chosen_player_id from the play message. Validate BEFORE
-            # applying so a missing/bogus choice yields a clean error rather than
-            # a 500 out of reducers._resolve_targets — and does NOT advance the turn.
+            # need a chosen_player_id; those with a "chosen_card" CardTarget need
+            # a chosen_card_id. Validate BEFORE applying so a missing/bogus choice
+            # yields a clean error rather than a 500 out of the reducers'
+            # _resolve_targets / _resolve_card_targets — and does NOT advance the
+            # turn. We inspect the ops to tell WHICH kind of choice is needed
+            # (requires_choice alone conflates the two axes).
             chosen_player_id = getattr(msg, "chosen_player_id", None)
+            chosen_card_id = getattr(msg, "chosen_card_id", None)
             valid_player_ids = {p.id for p in self.state.players}
+            # A card the actor may pick: anything currently in play or in their hand.
+            valid_card_ids = set(self.state.cards_in_play()) | set(self.state.get_player(player_id).hand)
 
-            if getattr(program, "requires_choice", False) and chosen_player_id is None:
+            ops = getattr(program, "ops", [])
+            needs_player_choice = any(
+                getattr(op, field, None) in ("chooser", "target_player")
+                for op in ops
+                for field in ("target", "from_target", "to_target")
+            )
+            needs_card_choice = any(getattr(op, "card_target", None) == "chosen_card" for op in ops)
+
+            if needs_player_choice and chosen_player_id is None:
                 await self.connections.send(
                     player_id,
                     {"type": "error", "message": "This card requires you to choose a target player"},
@@ -174,12 +188,25 @@ class Room:
                     {"type": "error", "message": f"Invalid target player: {chosen_player_id}"},
                 )
                 return
+            if needs_card_choice and chosen_card_id is None:
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": "This card requires you to choose a target card"},
+                )
+                return
+            if needs_card_choice and chosen_card_id not in valid_card_ids:
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": f"Invalid target card: {chosen_card_id}"},
+                )
+                return
 
             ctx = HookContext(
                 event=GameEvent.ON_PLAY,
                 actor_id=player_id,
                 card_id=card_id,
                 chosen_player_id=chosen_player_id,
+                chosen_card_id=chosen_card_id,
             )
             self.state = apply_effect(self.state, program, ctx)
             await self.connections.broadcast({"type": "effect_applied", "log_entry": f"Played {card_id}"})

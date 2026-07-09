@@ -37,7 +37,8 @@ class PlayMsg(BaseModel):
     type: Literal["play"] = "play"
     card_id: str
     placement: Placement
-    chosen_player_id: str | None = None  # for prompt_choice cards
+    chosen_player_id: str | None = None  # for prompt_choice cards (player axis)
+    chosen_card_id: str | None = None  # for cards that make the actor pick a card
 
 
 class CreateCardMsg(BaseModel):

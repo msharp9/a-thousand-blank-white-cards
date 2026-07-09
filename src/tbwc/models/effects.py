@@ -27,6 +27,41 @@ Target = Literal[
 _VALID_TARGETS: frozenset[str] = frozenset(get_args(Target))
 
 # ---------------------------------------------------------------------------
+# Card-target addresses
+# ---------------------------------------------------------------------------
+# A CardTarget is a SEPARATE axis from the player ``Target`` above: it addresses
+# CARDS (by zone), not players. Effects that manipulate cards (e.g. destroy a
+# card) resolve a CardTarget into a concrete list of card ids via
+# ``engine.reducers._resolve_card_targets``.
+#
+#   "this"        — the card currently being played (ctx.card_id). Guarded: if
+#                   there is no card in context this resolves to nothing.
+#   "chosen_card" — the actor picks a card at play time (requires
+#                   ctx.chosen_card_id; flips EffectProgram.requires_choice,
+#                   mirroring the player "chooser" convention).
+#   "all_in_play" — every card in every player's in-play zone
+#                   (state.cards_in_play()).
+#   "all_in_hand" — cards in a hand. FIRST-CUT DECISION: this resolves to the
+#                   ACTOR's own hand (state.get_player(ctx.actor_id).hand).
+#                   Whose-hand composition (e.g. "all cards in a chosen player's
+#                   hand") is a documented future extension — it would pair a
+#                   CardTarget with a companion player Target rather than
+#                   overloading this literal.
+CardTarget = Literal[
+    "this",
+    "chosen_card",
+    "all_in_play",
+    "all_in_hand",
+]
+
+# Valid CardTarget literals, derived from the Literal so it never drifts.
+_VALID_CARD_TARGETS: frozenset[str] = frozenset(get_args(CardTarget))
+
+# CardTargets that mean "the actor picks a card at play time" — their presence
+# flips EffectProgram.requires_choice, mirroring the player _CHOICE_TARGETS.
+_CHOICE_CARD_TARGETS: frozenset[str] = frozenset({"chosen_card"})
+
+# ---------------------------------------------------------------------------
 # Authoring vocabulary -> runtime Target mapping
 # ---------------------------------------------------------------------------
 # The card-authoring layer (models.card.CardCanonical.target and the agent's
@@ -145,7 +180,12 @@ class DrawCardsOp(BaseModel):
 
 class DestroyCardOp(BaseModel):
     op: Literal["destroy_card"] = "destroy_card"
-    card_id: str  # id of card to remove from target's hand
+    # Back-compat: the raw single card id to remove (from hand / in_play /
+    # center). Still honoured when ``card_target`` is not set.
+    card_id: str | None = None
+    # Preferred: a CardTarget axis resolved by the reducer. When set, it takes
+    # precedence over ``card_id`` and may resolve to MANY cards.
+    card_target: CardTarget | None = None
 
 
 class SetWinConditionOp(BaseModel):
@@ -188,4 +228,7 @@ Op = Annotated[
 # ---------------------------------------------------------------------------
 class EffectProgram(BaseModel):
     ops: list[Op] = Field(default_factory=list)
-    requires_choice: bool = False  # True when any op targets "chooser"
+    # True when any op needs a play-time choice from the actor: a player
+    # "chooser"/"target_player" target OR a "chosen_card" CardTarget. Normalised
+    # in agent.nodes._normalize_program_targets.
+    requires_choice: bool = False

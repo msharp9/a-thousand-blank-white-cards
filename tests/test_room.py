@@ -6,7 +6,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
-from tbwc.models.effects import AddPointsOp, EffectProgram
+from tbwc.models.effects import AddPointsOp, DestroyCardOp, EffectProgram
 from tbwc.models.ws_messages import CreateCardMsg, DrawMsg, PlayMsg, Placement, StartMsg
 from tbwc.rooms.room import Room
 
@@ -173,4 +173,67 @@ def test_play_chooser_card_with_invalid_choice_errors_cleanly() -> None:
     sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
     assert "error" in sent_types
     assert room.state.get_player("p2").score == 0
+    assert room.state.turn_index == 0
+
+
+# ── chosen_card (CardTarget axis) plumbing ──
+def _card_chooser_room() -> Room:
+    """Two-player room mid-game; p1 has a 'destroy a chosen card' card 'c1',
+    and target card 't1' sits in p1's in-play zone."""
+    room = _room_with_two_players()
+    room.state = room.state.model_copy(
+        update={
+            "phase": "playing",
+            "cards": {"c1": {"id": "c1", "title": "Zap", "description": "destroy a chosen card"}},
+        }
+    )
+    new_players = [p.model_copy(update={"in_play": ["t1"]}) if p.id == "p1" else p for p in room.state.players]
+    room.state = room.state.model_copy(update={"players": new_players})
+    return room
+
+
+def _card_chooser_result() -> dict:
+    program = EffectProgram(ops=[DestroyCardOp(card_target="chosen_card")], requires_choice=True)
+    return {"program": program, "snippet": None, "verdict": "ok"}
+
+
+def test_play_card_choice_with_valid_card_applies() -> None:
+    room = _card_chooser_room()
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    msg = PlayMsg(card_id="c1", placement=Placement(zone="center"), chosen_card_id="t1")
+    with patch("tbwc.agent.graph.interpret_card", return_value=_card_chooser_result()):
+        asyncio.run(room.handle_action("p1", msg))
+    # The chosen card was destroyed and the turn advanced.
+    assert "t1" not in room.state.get_player("p1").in_play
+    assert "t1" in room.state.discard
+    assert room.state.turn_index == 1
+
+
+def test_play_card_choice_without_card_errors_cleanly() -> None:
+    room = _card_chooser_room()
+    ws1 = AsyncMock()
+    room.connections.connect("p1", ws1)
+    room.connections.connect("p2", AsyncMock())
+    msg = PlayMsg(card_id="c1", placement=Placement(zone="center"), chosen_card_id=None)
+    with patch("tbwc.agent.graph.interpret_card", return_value=_card_chooser_result()):
+        asyncio.run(room.handle_action("p1", msg))
+    # Clean error, no destruction, turn NOT advanced (no ValueError bubbling to 500).
+    sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
+    assert "error" in sent_types
+    assert "t1" in room.state.get_player("p1").in_play
+    assert room.state.turn_index == 0
+
+
+def test_play_card_choice_with_invalid_card_errors_cleanly() -> None:
+    room = _card_chooser_room()
+    ws1 = AsyncMock()
+    room.connections.connect("p1", ws1)
+    room.connections.connect("p2", AsyncMock())
+    msg = PlayMsg(card_id="c1", placement=Placement(zone="center"), chosen_card_id="ghost_card")
+    with patch("tbwc.agent.graph.interpret_card", return_value=_card_chooser_result()):
+        asyncio.run(room.handle_action("p1", msg))
+    sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
+    assert "error" in sent_types
+    assert "t1" in room.state.get_player("p1").in_play
     assert room.state.turn_index == 0

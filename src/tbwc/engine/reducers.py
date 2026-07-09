@@ -12,6 +12,7 @@ from collections.abc import Callable
 from tbwc.engine.events import HookContext
 from tbwc.models.effects import (
     AddPointsOp,
+    CardTarget,
     ChangeDrawCountOp,
     CustomNoteOp,
     DestroyCardOp,
@@ -61,6 +62,35 @@ def _resolve_targets(target: Target, ctx: HookContext, state: GameState) -> list
             return [p.id for p in players if not p.hand]
         case _:
             raise ValueError(f"Unknown target: {target!r}")
+
+
+def _resolve_card_targets(card_target: CardTarget, ctx: HookContext, state: GameState) -> list[str]:
+    """Resolve a CardTarget address into a concrete list of card ids.
+
+    This is the CARD analogue of ``_resolve_targets`` (which resolves players).
+
+    - ``"this"``        -> ``[ctx.card_id]`` (the card being played). If there is
+                           no card in context, resolves to an empty list.
+    - ``"chosen_card"`` -> ``[ctx.chosen_card_id]``; raises ValueError when the
+                           actor made no choice, mirroring the "chooser" player
+                           behavior.
+    - ``"all_in_play"`` -> every card in every player's in-play zone.
+    - ``"all_in_hand"`` -> the ACTOR's own hand (first-cut decision). Whose-hand
+                           composition is a documented future extension.
+    """
+    match card_target:
+        case "this":
+            return [ctx.card_id] if ctx.card_id is not None else []
+        case "chosen_card":
+            if ctx.chosen_card_id is None:
+                raise ValueError("CardTarget 'chosen_card' requires ctx.chosen_card_id")
+            return [ctx.chosen_card_id]
+        case "all_in_play":
+            return state.cards_in_play()
+        case "all_in_hand":
+            return list(state.get_player(ctx.actor_id).hand)
+        case _:
+            raise ValueError(f"Unknown card target: {card_target!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -141,12 +171,45 @@ def _reduce_draw_cards(state: GameState, op: DrawCardsOp, ctx: HookContext) -> G
 
 
 def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) -> GameState:
+    """Remove one or more cards from wherever they live and send them to discard.
+
+    Resolution precedence (non-breaking migration):
+      - If ``op.card_target`` is set, resolve it via ``_resolve_card_targets``
+        (may yield MANY card ids).
+      - Otherwise fall back to the legacy single ``op.card_id``.
+
+    Each resolved id is scrubbed from every player's ``hand`` and ``in_play``
+    zones and from the shared ``center`` zone (house_rules), then appended to the
+    discard pile (once, no duplicates).
+    """
+    if op.card_target is not None:
+        card_ids = _resolve_card_targets(op.card_target, ctx, state)
+    elif op.card_id is not None:
+        card_ids = [op.card_id]
+    else:
+        card_ids = []
+
+    if not card_ids:
+        return state
+
+    targets = set(card_ids)
     new_players = [
-        p.model_copy(update={"hand": [c for c in p.hand if c != op.card_id]}) if op.card_id in p.hand else p
+        p.model_copy(
+            update={
+                "hand": [c for c in p.hand if c not in targets],
+                "in_play": [c for c in p.in_play if c not in targets],
+            }
+        )
+        if any(c in targets for c in (*p.hand, *p.in_play))
+        else p
         for p in state.players
     ]
-    discard = state.discard if op.card_id in state.discard else [*state.discard, op.card_id]
-    return state.model_copy(update={"players": new_players, "discard": discard})
+    house_rules = [c for c in state.house_rules if c not in targets]
+    discard = list(state.discard)
+    for cid in card_ids:
+        if cid not in discard:
+            discard.append(cid)
+    return state.model_copy(update={"players": new_players, "house_rules": house_rules, "discard": discard})
 
 
 def _reduce_set_win_condition(state: GameState, op: SetWinConditionOp, ctx: HookContext) -> GameState:

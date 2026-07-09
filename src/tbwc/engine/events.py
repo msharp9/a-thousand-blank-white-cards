@@ -35,6 +35,7 @@ class HookContext:
     actor_id: str  # player who triggered the event
     card_id: str | None = None  # card being played / destroyed
     chosen_player_id: str | None = None  # resolution of Target.chooser
+    chosen_card_id: str | None = None  # resolution of CardTarget.chosen_card
     amount: int | None = None  # points delta, draw count, etc.
     target_player_ids: list[str] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
