@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from tbwc.config import get_settings
 from tbwc.rooms.manager import room_manager
+from tbwc.ws import router as ws_router
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
         room_code, player_id = result
         return JoinRoomResponse(code=room_code, player_id=player_id)
+
+    application.include_router(ws_router)
 
     return application
 

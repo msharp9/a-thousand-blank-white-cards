@@ -1,0 +1,77 @@
+"""tbwc.ws — WebSocket endpoint /ws/{room_code} for a game room.
+
+Protocol: client connects, sends a 'join' envelope (with player_id from the REST
+join stored in localStorage; echoed on reconnect), then exchanges typed JSON.
+On disconnect the socket is unregistered but the seat is kept.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import TypeAdapter, ValidationError
+
+from tbwc.models.ws_messages import ClientMsg, JoinMsg
+from tbwc.rooms.manager import room_manager
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+_client_msg_adapter: TypeAdapter[ClientMsg] = TypeAdapter(ClientMsg)
+
+
+@router.websocket("/ws/{room_code}")
+async def ws_handler(websocket: WebSocket, room_code: str) -> None:
+    """WebSocket handler for a game room (join -> message loop -> disconnect)."""
+    code = room_code.upper()
+    room = room_manager.get(code)
+    if room is None:
+        await websocket.accept()
+        await websocket.send_json({"type": "error", "message": f"Room '{code}' not found"})
+        await websocket.close(code=4004)
+        return
+
+    await websocket.accept()
+
+    # First message MUST be a join.
+    try:
+        raw = await websocket.receive_text()
+        join_msg = _client_msg_adapter.validate_json(raw)
+    except ValidationError as exc:
+        await websocket.send_json({"type": "error", "message": f"Expected 'join' message: {exc}"})
+        await websocket.close(code=4000)
+        return
+
+    if not isinstance(join_msg, JoinMsg):
+        await websocket.send_json({"type": "error", "message": "First message must be type=join"})
+        await websocket.close(code=4000)
+        return
+
+    player_id = join_msg.player_id
+    if player_id is None or player_id not in room.get_player_ids():
+        await websocket.send_json(
+            {"type": "error", "message": "player_id not found in this room — join via POST /rooms/{code}/join first"}
+        )
+        await websocket.close(code=4001)
+        return
+
+    room.connections.connect(player_id, websocket)
+    logger.info("player %s connected to room %s", player_id, code)
+
+    # Replay full state (covers reconnect).
+    await room.connections.broadcast_state(room.snapshot())
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = _client_msg_adapter.validate_json(raw)
+            except ValidationError as exc:
+                await websocket.send_json({"type": "error", "message": str(exc)})
+                continue
+            await room.handle_action(player_id, msg)
+    except WebSocketDisconnect:
+        logger.info("player %s disconnected from room %s", player_id, code)
+        room.connections.disconnect(player_id)
