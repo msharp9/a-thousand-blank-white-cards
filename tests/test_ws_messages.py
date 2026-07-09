@@ -31,6 +31,25 @@ def test_client_msg_discriminates_play() -> None:
     assert msg.placement.zone == "center"
 
 
+def test_play_msg_carries_chosen_player_id() -> None:
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python(
+        {
+            "type": "play",
+            "card_id": "c1",
+            "placement": {"zone": "player", "target_player_id": "p2"},
+            "chosen_player_id": "p2",
+        }
+    )
+    assert isinstance(msg, PlayMsg)
+    assert msg.chosen_player_id == "p2"
+
+
+def test_play_msg_chosen_player_id_defaults_none() -> None:
+    msg = PlayMsg(card_id="c1", placement={"zone": "center"})
+    assert msg.chosen_player_id is None
+
+
 def test_state_msg_envelope() -> None:
     m = StateMsg(state={"players": []})
     assert m.type == "state"
