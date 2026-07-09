@@ -52,6 +52,66 @@ class HookRegistry:
         return self._handlers.get(hook_id)
 
 
+# --- snippet hook support (added by rbb.6) ---
+
+# Per-card snippet cache: source_card_id -> validated code (avoids re-parsing per fire).
+_SNIPPET_CACHE: dict[str, str] = {}
+
+
+def cache_snippet(card_id: str, code: str) -> None:
+    """Pre-validate a snippet's AST and cache it. Call once at registration time.
+
+    Raises via the runner's validation on unsafe code (execute_snippet re-checks too).
+    """
+    from tbwc.sandbox.validate import validate_snippet
+
+    result = validate_snippet(code)
+    if not result.ok:
+        raise ValueError(f"Snippet failed validation: {result.error}")
+    _SNIPPET_CACHE[card_id] = code
+
+
+def make_snippet_handler(card_id: str, code: str) -> HookHandler:
+    """Return a hook handler (state, ctx) -> state that runs `code` in the sandbox.
+
+    The handler serialises state+ctx to dicts, calls execute_snippet, and applies the
+    returned op diff via the engine (apply_snippet_diff). Failures are non-fatal: the
+    handler logs to the game state and returns it unchanged. Respects the
+    snippet_execution_enabled feature flag.
+
+    Performance: each fire spawns a subprocess (the security boundary). AST is cached
+    at registration via cache_snippet to avoid re-parsing; consider batching for
+    high-frequency events in future.
+    """
+    cache_snippet(card_id, code)
+
+    def _handler(state: Any, ctx: Any) -> Any:
+        import json
+
+        from tbwc.config import get_settings
+
+        if not get_settings().snippet_execution_enabled:
+            return state
+
+        from tbwc.sandbox.revalidate import DiffValidationError, apply_snippet_diff
+        from tbwc.sandbox.runner import SnippetExecutionError, execute_snippet
+
+        state_dict = json.loads(state.model_dump_json())
+        ctx_dict = {
+            "actor_id": getattr(ctx, "actor_id", None),
+            "event": str(getattr(ctx, "event", "")),
+            "card_id": getattr(ctx, "card_id", None),
+            "amount": getattr(ctx, "amount", None),
+        }
+        try:
+            raw_ops = execute_snippet(_SNIPPET_CACHE.get(card_id, code), state_dict, ctx_dict)
+            return apply_snippet_diff(state, raw_ops, ctx)
+        except (SnippetExecutionError, DiffValidationError) as exc:
+            return state.with_log(f"[hook error] {card_id}: {exc}")
+
+    return _handler
+
+
 # Module-level default registry used by the engine.
 _default_registry = HookRegistry()
 
