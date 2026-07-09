@@ -29,36 +29,37 @@ A `real_cards.json` record looks like:
 
 - `image_url` — where the card photo came from (for spot-checking).
 - `title` / `description` — the model's verbatim transcription of the card.
-- `human_canonical` — **starts `null`**; a human fills this in (see below), and
-  the reviewed, labelled record graduates into `eval_cards.json`.
+- `human_canonical` — the structured interpretation of the card's intended game
+  effect. Every record in `real_cards.json` is now annotated (bulk pass over the
+  full album); it is no longer `null`.
 
 The transcription is a *starting point*. Vision models mis-read handwriting,
-drop lines, and hallucinate. Every record needs human review before it counts as
-gold data.
+drop lines, and hallucinate. Records should still be spot-checked against the
+photo before being treated as fully trusted gold data.
 
 ## Filling in `human_canonical`
 
-For each card, a human replaces `null` with the canonical, agreed-upon
-interpretation of what the card *should* do in the game. Use this shape:
+The `human_canonical` shape, every enum value, and the judgement rules (e.g.
+prefer `target: "player"` over `self`, the `venue` axis for remote-vs-in-person
+play) are defined in **[`CANONICAL_SPEC.md`](./CANONICAL_SPEC.md)** — that file
+is the single source of truth. In brief:
 
 ```json
 "human_canonical": {
-  "timing": "on_play",        // when the effect fires (e.g. on_play, on_draw, continuous, end_of_turn)
-  "target": "self",           // who/what it affects (e.g. self, opponent, all_players, a_card)
-  "placement": "discard",     // where the card/tokens end up (e.g. discard, in_play, removed)
-  "trigger": "when played",   // the condition, in plain words, that activates the effect
-  "ops": [                    // structured operations the engine should perform...
-    {"op": "add_points", "who": "self", "amount": 5}
-  ]
-  // ...OR, when the card is too freeform for structured ops, use a code snippet:
-  // "snippet": "state.players[actor].score += 5"
+  "timing": "immediate",         // immediate | modifier
+  "target": "player",            // self | player | all | all_others | card | all_cards | none
+  "placement": "discard",        // discard | center | player | self | destroy
+  "trigger_event": "on_play",    // on_play | on_draw | on_turn_start | on_turn_end | on_score | null
+  "venue": "all",                // all | in_person | online
+  "magnitude_sign": "positive",  // positive | negative | neutral
+  "ops": [ {"op": "add_points", "args": {"target": "player", "amount": 5}} ]
+  // ...OR "snippet": "<one-sentence rule>"  (use ops OR snippet, never both)
 }
 ```
 
 Provide **either** `ops` (preferred, structured) **or** `snippet` (for cards that
-resist structured encoding) — not both. Keep `timing`, `target`, `placement`,
-and `trigger` filled in for every card; they describe intent even when `ops`
-can't fully capture it.
+resist structured encoding) — not both. See the spec for the full op vocabulary
+and the target/placement/venue decision rules.
 
 ## How to spot-check transcriptions
 

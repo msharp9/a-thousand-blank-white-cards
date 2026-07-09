@@ -116,9 +116,42 @@ def test_real_image_urls_unique() -> None:
 
 
 def test_real_cards_have_transcription_shape() -> None:
-    """Each raw card has the transcription fields; human_canonical is unlabelled."""
+    """Each raw card has the expected top-level fields."""
     for c in _load(REAL):
         assert set(c.keys()) == {"image_url", "title", "description", "human_canonical"}
         assert isinstance(c["title"], str)
         assert isinstance(c["description"], str)
-        assert c["human_canonical"] is None
+
+
+# --------------------------------------------------------------------------- #
+# real_cards.json human_canonical annotations (see data/eval/CANONICAL_SPEC.md).
+# --------------------------------------------------------------------------- #
+
+_REAL_TIMING = {"immediate", "modifier"}
+_REAL_TARGET = {"self", "player", "all", "all_others", "card", "all_cards", "none"}
+_REAL_PLACEMENT = {"discard", "center", "player", "self", "destroy"}
+_REAL_VENUE = {"all", "in_person", "online"}
+_REAL_SIGN = {"positive", "negative", "neutral"}
+_REAL_TRIGGER = {"on_play", "on_draw", "on_turn_start", "on_turn_end", "on_score", None}
+
+
+def test_real_every_card_is_annotated() -> None:
+    """Every real card has a fully-populated human_canonical (no nulls left)."""
+    for c in _load(REAL):
+        hc = c["human_canonical"]
+        assert hc is not None, f"unannotated card: {c['title']!r}"
+        assert hc["timing"] in _REAL_TIMING
+        assert hc["target"] in _REAL_TARGET
+        assert hc["placement"] in _REAL_PLACEMENT
+        assert hc["venue"] in _REAL_VENUE
+        assert hc["magnitude_sign"] in _REAL_SIGN
+        assert hc.get("trigger_event", None) in _REAL_TRIGGER
+        # exactly one of ops / snippet
+        assert bool(hc.get("ops")) != bool(hc.get("snippet")), f"ops XOR snippet violated: {c['title']!r}"
+
+
+def test_real_venue_distribution_is_sane() -> None:
+    """Venue tagging is populated: mostly 'all', with a real 'in_person' minority."""
+    venues = [c["human_canonical"]["venue"] for c in _load(REAL)]
+    assert venues.count("all") > venues.count("in_person")  # most cards work anywhere
+    assert venues.count("in_person") >= 10  # but physical cards are genuinely tagged

@@ -1,10 +1,8 @@
 {
   "album_id": "rWS9A",
   "album_url": "https://imgur.com/a/blank-white-cards-5-2012-5-2013-rWS9A",
-  "image_count": 700,
+  "image_count": 698,
   "image_urls": [
-    "https://i.imgur.com/OOrEAUa.jpeg",
-    "https://i.imgur.com/Lv4O6bG.jpeg",
     "https://i.imgur.com/nkYuawA.jpeg",
     "https://i.imgur.com/x0tWwLs.jpeg",
     "https://i.imgur.com/rD20LJq.jpeg",
@@ -703,5 +701,6 @@
     "https://i.imgur.com/nCjjJsu.jpeg",
     "https://i.imgur.com/CJTu6q3.jpeg",
     "https://i.imgur.com/3MWZ8xD.jpeg"
-  ]
+  ],
+  "note": " (2 non-card photos removed: album cover + AUTHOR LEGEND index card.)"
 }

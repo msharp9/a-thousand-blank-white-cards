@@ -49,6 +49,16 @@ class CardCanonical(BaseModel):
     placement: Literal["self", "player", "center"] = Field(
         description="Where the card is placed after play (self=in front of player, center=table center)."
     )
+    venue: Literal["all", "in_person", "online"] = Field(
+        default="all",
+        description=(
+            "Where the card can actually be played: 'all' = works remotely or in person "
+            "(the default, most cards); 'in_person' = requires physical presence/contact "
+            "(kiss/touch a player, share food, wear or pass an object, move around the room) "
+            "so it must be excluded from remote-game decks; 'online' = only makes sense "
+            "digitally (rare)."
+        ),
+    )
     trigger: str | None = Field(
         default=None,
         description="For modifiers: the event string that activates this card, e.g. 'on_draw'.",
