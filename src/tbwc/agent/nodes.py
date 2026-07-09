@@ -13,7 +13,7 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
-from tbwc.agent.llm import get_chat_model
+from tbwc.agent.llm import get_chat_model, with_structured_output
 from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM, JUDGE_SYSTEM
 from tbwc.agent.schemas import Interpretation, SnippetEffect, Verdict
 from tbwc.agent.state import InterpretState
@@ -223,7 +223,9 @@ def classify(state: InterpretState) -> dict:
         search_notes=search_notes,
     )
 
-    llm = get_chat_model(temperature=0).with_structured_output(Interpretation)
+    # Routed through with_structured_output helper so STRUCTURED_OUTPUT_METHOD
+    # (e.g. "json_schema" for gpt-oss-20b/Ollama) applies — see agent.llm.
+    llm = with_structured_output(get_chat_model(temperature=0), Interpretation)
     interpretation = llm.invoke(
         [
             {"role": "system", "content": INTERPRETER_SYSTEM},
@@ -298,7 +300,7 @@ def emit_ops(state: InterpretState, config: RunnableConfig | None = None) -> dic
         "applicable. Translate exactly — do not balance or modify."
     )
 
-    llm = get_chat_model(temperature=0).with_structured_output(EffectProgram)
+    llm = with_structured_output(get_chat_model(temperature=0), EffectProgram)
     program = llm.invoke(
         [
             {"role": "system", "content": INTERPRETER_SYSTEM},
@@ -348,7 +350,7 @@ def gen_snippet(state: InterpretState) -> dict:
         "effect faithfully. Remember: no imports, no forbidden calls."
     )
 
-    llm = get_chat_model(temperature=0.2).with_structured_output(SnippetEffect)
+    llm = with_structured_output(get_chat_model(temperature=0.2), SnippetEffect)
     snippet = llm.invoke(
         [
             {"role": "system", "content": _SNIPPET_SYSTEM},
@@ -447,7 +449,7 @@ def judge(state: InterpretState) -> dict:
         "Score each dimension: intent, timing, target, trigger, magnitude. Set ok=True only if ALL are True."
     )
 
-    llm = get_chat_model(temperature=0).with_structured_output(Verdict)
+    llm = with_structured_output(get_chat_model(temperature=0), Verdict)
     verdict = llm.invoke(
         [
             {"role": "system", "content": JUDGE_SYSTEM},

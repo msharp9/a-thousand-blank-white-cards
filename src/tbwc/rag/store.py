@@ -13,7 +13,7 @@ from typing import Any
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from tbwc.rag.embeddings import EMBEDDING_DIMENSIONS, embed_text
+from tbwc.rag.embeddings import embedding_dimensions, embed_text
 
 COLLECTION_NAME = "cards"
 
@@ -40,9 +40,12 @@ def init_store() -> QdrantClient:
     """
     global _client
     _client = QdrantClient(location=":memory:")
+    # Size the collection to the ACTIVE provider's embedding dimension. OpenAI
+    # text-embedding-3-small is 1536-dim, Ollama nomic-embed-text is 768-dim — a
+    # mismatch here makes every upsert fail, so derive it rather than hard-coding.
     _client.recreate_collection(
         collection_name=COLLECTION_NAME,
-        vectors_config=VectorParams(size=EMBEDDING_DIMENSIONS, distance=Distance.COSINE),
+        vectors_config=VectorParams(size=embedding_dimensions(), distance=Distance.COSINE),
     )
     return _client
 
