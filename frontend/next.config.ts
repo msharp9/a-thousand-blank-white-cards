@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // No rewrites for /ws — the browser connects directly to the backend wss:// URL
+  // (Vercel cannot proxy WebSocket upgrades on the free tier).
 };
 
 export default nextConfig;
