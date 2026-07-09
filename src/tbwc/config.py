@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     langchain_project: str = "tbwc"
     langchain_tracing_v2: bool = False
 
+    # LangSmith observability (newer LANGSMITH_* env var convention)
+    langsmith_tracing: bool = False
+    langsmith_api_key: str = ""
+    langsmith_project: str = "tbwc-dev"
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+
     # --- Tavily ---
     tavily_api_key: str = ""
 
