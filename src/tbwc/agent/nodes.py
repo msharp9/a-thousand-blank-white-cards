@@ -248,10 +248,30 @@ def route_after_classify(state: InterpretState) -> str:
 # ---------------------------------------------------------------------------
 
 
-def emit_ops(state: InterpretState) -> dict:
-    """Generate an EffectProgram (immediate ops) for immediate-mode cards.
+def _format_exemplars_fewshot(retrieved: list[dict]) -> str:
+    """Format up to 3 retrieved exemplars as few-shot guidance for emit_ops.
 
-    Reads: state["card_draft"], state["interpretation"]
+    Each exemplar shows the card text and its known canonical effect so the model
+    can mirror concrete patterns instead of inventing op shapes.
+    """
+    top = retrieved[:3]
+    if not top:
+        return ""
+    blocks = []
+    for i, ex in enumerate(top, 1):
+        blocks.append(
+            f"Example {i}:\n"
+            f"  Title: {ex.get('title', '?')}\n"
+            f"  Description: {ex.get('description', '?')}\n"
+            f"  Canonical effect: {ex.get('canonical', '?')}"
+        )
+    return "Here are similar example cards and their known-good effects:\n" + "\n".join(blocks) + "\n\n"
+
+
+def emit_ops(state: InterpretState) -> dict:
+    """Generate an EffectProgram for immediate-mode cards, using retrieved exemplars as few-shot.
+
+    Reads: state["card_draft"], state["interpretation"], state["retrieved"]
     Writes: state["program"] (EffectProgram)
 
     Uses ChatOpenAI.with_structured_output(EffectProgram) so the output is always
@@ -259,13 +279,16 @@ def emit_ops(state: InterpretState) -> dict:
     """
     draft = state["card_draft"]
     interp = state["interpretation"]
+    fewshot = _format_exemplars_fewshot(state.get("retrieved") or [])
 
     human_content = (
+        f"{fewshot}"
         f"Card title: {draft['title']}\n"
         f"Card description: {draft['description']}\n\n"
         f"Classification: {interp.model_dump_json()}\n\n"
         "Generate an EffectProgram: a list of immediate ops that faithfully "
-        "implements this card's effect. Translate exactly — do not balance or modify."
+        "implements this card's effect. Mirror the patterns in the examples above where "
+        "applicable. Translate exactly — do not balance or modify."
     )
 
     llm = get_chat_model(temperature=0).with_structured_output(EffectProgram)
