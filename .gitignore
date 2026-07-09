@@ -199,5 +199,6 @@ frontend/.next/
 
 # dmux worktree orchestration artifacts (local tooling, not project code)
 .dmux/
+.dmux-hooks/
 .claude/dmux/
 .claude/hooks/dmux-stop-hook.cjs
