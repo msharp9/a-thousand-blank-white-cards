@@ -268,7 +268,7 @@ def _format_exemplars_fewshot(retrieved: list[dict]) -> str:
     return "Here are similar example cards and their known-good effects:\n" + "\n".join(blocks) + "\n\n"
 
 
-def emit_ops(state: InterpretState) -> dict:
+def emit_ops(state: InterpretState, config: RunnableConfig | None = None) -> dict:
     """Generate an EffectProgram for immediate-mode cards, using retrieved exemplars as few-shot.
 
     Reads: state["card_draft"], state["interpretation"], state["retrieved"]
@@ -276,10 +276,17 @@ def emit_ops(state: InterpretState) -> dict:
 
     Uses ChatOpenAI.with_structured_output(EffectProgram) so the output is always
     a valid, typed EffectProgram matching the engine schema.
+
+    Config (under 'configurable'): few_shot_exemplars = True (default) | False.
+    When False, no retrieved exemplars are injected as few-shot guidance.
+    Backward compatible: callable with just state (defaults few-shot on).
     """
+    configurable = (config or {}).get("configurable", {}) if config else {}
+    use_few_shot = configurable.get("few_shot_exemplars", True)
     draft = state["card_draft"]
     interp = state["interpretation"]
-    fewshot = _format_exemplars_fewshot(state.get("retrieved") or [])
+    retrieved = state.get("retrieved") or [] if use_few_shot else []
+    fewshot = _format_exemplars_fewshot(retrieved)
 
     human_content = (
         f"{fewshot}"

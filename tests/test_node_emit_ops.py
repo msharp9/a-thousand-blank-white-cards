@@ -59,3 +59,21 @@ def test_emit_ops_injects_retrieved_exemplars(monkeypatch: pytest.MonkeyPatch) -
         human = fake_llm.with_structured_output.return_value.invoke.call_args.args[0][1]["content"]
         assert "Lose 3" in human
         assert "example" in human.lower()
+
+
+def test_emit_ops_fewshot_disabled_via_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    fake_llm = MagicMock()
+    fake_llm.with_structured_output.return_value.invoke.return_value = MagicMock()
+    with patch("tbwc.agent.nodes.get_chat_model", return_value=fake_llm):
+        from tbwc.agent.nodes import emit_ops
+
+        interp = Interpretation(placement="self", timing="immediate", mode="immediate", rationale="r")
+        state = {
+            "card_draft": {"title": "Zap", "description": "Lose 5."},
+            "interpretation": interp,
+            "retrieved": [{"title": "SHOULD_NOT_APPEAR", "description": "x", "canonical": "{}", "score": 0.9}],
+        }
+        emit_ops(state, {"configurable": {"few_shot_exemplars": False}})
+        human = fake_llm.with_structured_output.return_value.invoke.call_args.args[0][1]["content"]
+        assert "SHOULD_NOT_APPEAR" not in human
