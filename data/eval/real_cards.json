@@ -1,514 +1,4202 @@
 [
   {
-    "image_url": "https://i.imgur.com/fallback_001.jpg",
-    "title": "Gain 5 Points",
-    "description": "When you play this card, gain 5 points. Nice.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": 5}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/OOrEAUa.jpeg",
+    "title": "",
+    "description": "[Photo of several rubber-banded stacks of blank white cards on a table, not a single playable card. Partially visible text on top cards includes \"Gazelle of Glory\" and other illegible handwriting.]",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_002.jpg",
-    "title": "Mega Jackpot",
-    "description": "CONGRATULATIONS!!! You found the jackpot card. Gain 100 points immediately. Do a little dance.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": 100}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/Lv4O6bG.jpeg",
+    "title": "AUTHOR LEGEND",
+    "description": "[Index card listing author initials, not a playable card. Legend entries (names redacted/blacked out): AD- ED- PL- EG- JS- KB- KM- JK- EH- DB- BS- ZA- HT- AK- VP- RF- NG- NB- AW- AM-]",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_003.jpg",
-    "title": "Stubbed Your Toe",
-    "description": "Ouch! You stubbed your toe on the coffee table. Lose 3 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": -3}}
-      ],
-      "magnitude_sign": "negative"
-    }
+    "image_url": "https://i.imgur.com/nkYuawA.jpeg",
+    "title": "CEREAL KILLER",
+    "description": "[drawing of a cereal box labeled POPS, a bowl of cereal with a spoon, and a hand holding a gun] EAT A HANDFUL OF CEREAL IN ORDER TO GAIN 500 PTS (+500)",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_004.jpg",
-    "title": "Tax Season",
-    "description": "The taxman cometh. Every player loses 10 points. No exceptions, not even you.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "add_points", "args": {"target": "all", "amount": -10}}
-      ],
-      "magnitude_sign": "negative"
-    }
+    "image_url": "https://i.imgur.com/x0tWwLs.jpeg",
+    "title": "NEUTRALITY",
+    "description": "[drawing of a spiked object and a Swiss flag on a pole] TURN TO YOUR RIGHT AND TELL THAT PLAYER YOUR VIEWS ON GAY MARRIAGE, AND THEN THEY LOSE A TURN.",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_005.jpg",
-    "title": "Universal Basic Points",
-    "description": "Everyone gains 7 points. We're all winners here (sort of).",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "add_points", "args": {"target": "all", "amount": 7}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/rD20LJq.jpeg",
+    "title": "The Great CATsby !!!",
+    "description": "[drawing of a cat wearing a top hat and monocle] I SAY... FUCK OFF. I hate puns.",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_006.jpg",
-    "title": "Skip It",
-    "description": "The player to your left loses their next turn. Sorry, not sorry.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "player",
-      "placement": "player",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "skip_turn", "args": {"target": "player"}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/1nAPR1b.jpeg",
+    "title": "KLINGON",
+    "description": "[drawing of an airplane with two little square characters clinging to a rope hanging from it] WHOEVER THIS CARD IS PLAYED ON RECEIVES ALL BLANK CARDS in YOUR HAND",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_007.jpg",
-    "title": "Go Again!",
-    "description": "That was fun. Take another turn right now.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "extra_turn", "args": {"target": "self"}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/RCjtP3b.jpeg",
+    "title": "Heads up, Seven Up.",
+    "description": "[drawing of a kid at a desk with thumb up and a girl saying \"Nah\"] Your elementary school crush never picked you. Fuck your childhood. -800 pts.",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_008.jpg",
-    "title": "Backwards Day",
-    "description": "Reverse the direction of play. Whee!",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "reverse_order", "args": {}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/s87lZBy.jpeg",
+    "title": "BREAD STRIPE",
+    "description": "[drawing of a loaf of bread] IT'S BREAD! ...COOL! -300",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_009.jpg",
-    "title": "Draw Three",
-    "description": "Your hand is looking thin. Draw 3 cards.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "draw_cards", "args": {"target": "self", "count": 3}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/IWnYlvk.jpeg",
+    "title": "Ruby",
+    "description": "[drawing of a sparkling gem] -When played, all positive point values in front of you are tripled.",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_010.jpg",
-    "title": "Robin Hood",
-    "description": "Steal 8 points from the player with the most points and keep them for yourself.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "player",
-      "placement": "player",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "steal_points", "args": {"target": "player", "amount": 8}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/lkYLHpe.jpeg",
+    "title": "MOIST TOWELETTE",
+    "description": "[drawing of a stick figure saying \"OH GOD!\" with drips, and another figure on a diving board over water] GET WET TO A NICKELBACK SONG, LOSE 800 PTS",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_011.jpg",
-    "title": "Generous Gift",
-    "description": "You're feeling kind today. Give 10 of your points to another player of your choice.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "player",
-      "placement": "player",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": -10}},
-        {"op": "add_points", "args": {"target": "player", "amount": 10}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/aDZzGND.jpeg",
+    "title": "I mustache you a question!",
+    "description": "[drawing of a mustache] Draw a face w/ a mustache on your thumb & finger & sing/act out a song (Mary had a little lamb) +400 pts",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_012.jpg",
-    "title": "New Win Condition",
-    "description": "Forget 1000. The first player to reach 250 points wins the whole game.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "set_win_condition", "args": {"threshold": 250}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/YCNZnKY.jpeg",
+    "title": "SALT",
+    "description": "[drawing of a salt shaker] KEEP IN HAND FOREVER",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_013.jpg",
-    "title": "Burn It Down",
-    "description": "Destroy any one card currently in play. Poof. It's gone forever.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "center",
-      "placement": "center",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "destroy_card", "args": {"target": "center"}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/e02qtpY.jpeg",
+    "title": "DOME RIP",
+    "description": "[drawing of two stick figures, one throwing an object at the other's head] THROW THIS CARD at OPPONENT'S HEAD. MUST BE 8ft DISTANCE, NO DODGING. IF YOU GET HIT, -800",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_014.jpg",
-    "title": "Windfall",
-    "description": "You won the lottery! Gain 50 points and brag about it loudly.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": 50}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/R0TqlGV.jpeg",
+    "title": "Moon Fork",
+    "description": "[drawing of a fork flying and a crescent moon] +200",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_015.jpg",
-    "title": "Double Draw",
-    "description": "From now on, everyone draws 2 cards at the start of their turn instead of 1.",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": "on_turn_start",
-      "ops": [
-        {"op": "change_draw_count", "args": {"amount": 1}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/9phbNA3.jpeg",
+    "title": "BOBBY RYDELL AND THE PIPS",
+    "description": "[drawing of stick figures and a figure at a microphone] +1300 PTS",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_016.jpg",
-    "title": "Passive Income",
-    "description": "Keep this card in front of you. At the start of each of your turns, gain 3 points.",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_turn_start",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": 3}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/N0ZBzzu.jpeg",
+    "title": "It's bananas, B-A-N-A-N-A-S",
+    "description": "[drawing of a dancing banana with a face and a boombox] Dance for 5 seconds",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_017.jpg",
-    "title": "Cursed Amulet",
-    "description": "This card sticks to you. At the end of each of your turns, lose 2 points until someone destroys it.",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_turn_end",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": -2}}
-      ],
-      "magnitude_sign": "negative"
-    }
+    "image_url": "https://i.imgur.com/bNwaXR1.jpeg",
+    "title": "ULTIMATE BARGAIN",
+    "description": "[drawing of a box full of condoms with a small tag reading $1] YOU FIND USED CONDOMS AT SALVATION ARMY. +300",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_018.jpg",
-    "title": "Draw Tax",
-    "description": "Ongoing: whenever any player draws a card, that player loses 1 point.",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": "on_draw",
-      "ops": [
-        {"op": "add_points", "args": {"target": "player", "amount": -1}}
-      ],
-      "magnitude_sign": "negative"
-    }
+    "image_url": "https://i.imgur.com/ecU3BMO.jpeg",
+    "title": "SAD RAISIN",
+    "description": "[drawing of a sad raisin character with a face, arms and legs] YOU ARE OVERCOME WITH ENNUI -800",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_019.jpg",
-    "title": "Lucky Charm",
-    "description": "Place in front of you. Every time you play a card, gain 1 bonus point.",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": 1}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/s8ECOTR.jpeg",
+    "title": "POT O' GOLD",
+    "description": "[drawing of a rainbow with a cloud and a pot of gold] SWITCH ANY + or - ON ANY OF YOUR CARDS",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_020.jpg",
-    "title": "Victory Bonus",
-    "description": "Persistent. When the game ends, whoever holds this card gains 40 points before the final tally.",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_game_end",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": 40}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/knK9sVU.jpeg",
+    "title": "LIE",
+    "description": "[drawing of a stick figure with a long Pinocchio nose] TELL A BLATANT LIE ABOUT YOUR CHILDHOOD +500",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_021.jpg",
-    "title": "Score Doubler",
-    "description": "Keep this out. Whenever you score points from another card, this doubles them.",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_score",
-      "snippet": "When the holder gains points this turn, add the same amount again as a bonus.",
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/RUm96Qy.jpeg",
+    "title": "COOL BEANS",
+    "description": "[drawing of three beans with faces wearing sunglasses] +300",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_022.jpg",
-    "title": "Everybody Stand Up",
-    "description": "Everyone must physically stand up. The last person still seated loses 5 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": "on_play",
-      "snippet": "All players stand up; the last to stand loses 5 points. Enforced by the table, not the engine.",
-      "magnitude_sign": "negative"
-    }
+    "image_url": "https://i.imgur.com/e6Yh0eo.jpeg",
+    "title": "NICHOLAS CAGE",
+    "description": "[drawing of a face with drool coming from the mouth] LOSE 1000 PTS",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_023.jpg",
-    "title": "Compliment Circle",
-    "description": "Give the player on your right a genuine compliment. If it makes them smile, you both gain 5 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "player",
-      "placement": "player",
-      "trigger_event": "on_play",
-      "snippet": "Actor compliments the player to their right; if that player smiles, both gain 5 points. Judged by the table.",
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/g6w0tKx.jpeg",
+    "title": "FAN-TOM of THE Opera",
+    "description": "[drawing of an electric fan plugged in] PLUG THE FAN IN, TURN IT ON HIGH AND PLAY 3 ROUNDS WITH IT DIRECTLY IN THE SIDE OF Your face only +1500 points",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_024.jpg",
-    "title": "Do Your Best Impression",
-    "description": "Do your best impression of a farm animal. If nobody guesses which animal within 10 seconds, lose 4 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "snippet": "Actor mimics a farm animal; if no one guesses it in 10 seconds, actor loses 4 points.",
-      "magnitude_sign": "negative"
-    }
+    "image_url": "https://i.imgur.com/CxJ7BJB.jpeg",
+    "title": "FOREIGN AID",
+    "description": "[drawing of a parachute dropping a box marked with + signs] REVERSES ANY \"FAMINE\" CARD +500 FOR EVERYONE",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_025.jpg",
-    "title": "The Floor Is Lava",
-    "description": "For the rest of the game, anyone caught touching the floor with bare feet loses 2 points on the spot.",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": null,
-      "snippet": "Ongoing house rule: any player who touches the floor with bare feet loses 2 points, adjudicated by the table.",
-      "magnitude_sign": "negative"
-    }
+    "image_url": "https://i.imgur.com/pwLmiPl.jpeg",
+    "title": "NIP SLIP",
+    "description": "[drawing of a circle with a \"CENSORED\" banner across it] FLICK a NIPPLE +300",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_026.jpg",
-    "title": "One Does Not Simply",
-    "description": "One does not simply walk into Mordor. If you can quote the next line, gain 9 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "snippet": "Actor recites the next line of the movie quote; if correct, gain 9 points. Table adjudicates.",
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/7j8ggMT.jpeg",
+    "title": "STICKY FINGERS",
+    "description": "[drawing of a lollipop] STEAL ONE CARD FROM THE PLAYER OF YOUR CHOICE. (NO TAKE-BACKS)",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_027.jpg",
-    "title": "Rickrolled",
-    "description": "Never gonna give you up! Sing one line of the chorus or lose 6 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "custom_note", "args": {"note": "Actor must sing a line of the chorus; if they refuse, apply -6 points."}}
-      ],
-      "magnitude_sign": "negative"
-    }
+    "image_url": "https://i.imgur.com/Injg6nJ.jpeg",
+    "title": "J'Bryll Giggs",
+    "description": "[drawing of a stick figure on a swing] + 600 pts",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_028.jpg",
-    "title": "Blank White Card",
-    "description": "This card is intentionally left blank. It does absolutely nothing. Contemplate the void.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "custom_note", "args": {"note": "No mechanical effect; pure flavor card."}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/VMlRqbb.jpeg",
+    "title": "Orion's Belt",
+    "description": "[drawing of the Orion constellation] - undo the belt of a neighbor in a sensual way or lose all points.",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_029.jpg",
-    "title": "Motivational Poster",
-    "description": "Hang in there! This card just says something nice. No points change hands.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "custom_note", "args": {"note": "Flavor only; no game effect."}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/fouVGOn.jpeg",
+    "title": "MUFFIN TOP",
+    "description": "[drawing of a person] - 100 PTS FOR THE TERRIBLE SIGHT",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_030.jpg",
-    "title": "Great Depression",
-    "description": "The market crashed. Every player's score is cut in half, rounded down.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": "on_play",
-      "snippet": "Set each player's score to floor(score / 2).",
-      "magnitude_sign": "negative"
-    }
+    "image_url": "https://i.imgur.com/j5hhwPt.jpeg",
+    "title": "The Dark Lord Sauron",
+    "description": "[drawing of a stick figure] - Wipes out one player's played and held cards. (Pick up new cards)",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_031.jpg",
-    "title": "Point Vampire",
-    "description": "Steal 15 points from the player to your left. Muahaha.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "player",
-      "placement": "player",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "steal_points", "args": {"target": "player", "amount": 15}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/K6jTkNh.jpeg",
+    "title": "OLGA",
+    "description": "[drawing of a face with messy hair] - 800 points",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_032.jpg",
-    "title": "Slow Draw",
-    "description": "From now on everyone draws one fewer card each turn. Scarcity!",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": "on_turn_start",
-      "ops": [
-        {"op": "change_draw_count", "args": {"amount": -1}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/adKc0jy.jpeg",
+    "title": "INDIAN TRADE",
+    "description": "[drawing of beads and a Manhattan sign] Player to left: -1000 YOU: +1000",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_033.jpg",
-    "title": "Big Bonus Draw",
-    "description": "Feeling greedy? Draw 5 cards right now.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "draw_cards", "args": {"target": "self", "count": 5}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/B0bJiX7.jpeg",
+    "title": "ACCIDENTAL DEATH",
+    "description": "[drawing of a tree, sun, birds, and a fallen figure] -10",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_034.jpg",
-    "title": "Grand Finale",
-    "description": "MASSIVE PAYOUT. Gain 500 points. You basically win. Probably.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": 500}}
-      ],
-      "magnitude_sign": "positive"
-    }
+    "image_url": "https://i.imgur.com/dwXZBTH.jpeg",
+    "title": "WILLOW",
+    "description": "[drawing of a willow tree] ACT MELANCHOLY GAIN 300 PTS",
+    "human_canonical": null
   },
   {
-    "image_url": "https://i.imgur.com/fallback_035.jpg",
-    "title": "Time Out",
-    "description": "You've been naughty. Skip your own next turn as punishment.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "ops": [
-        {"op": "skip_turn", "args": {"target": "self"}}
-      ],
-      "magnitude_sign": "neutral"
-    }
+    "image_url": "https://i.imgur.com/BME5DBr.jpeg",
+    "title": "THE LETTER \"Q\"",
+    "description": "[drawing of the letter Q] Lose 1500 Points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/L0vfBA4.jpeg",
+    "title": "DENTIST APPT.",
+    "description": "[drawing of a toothbrush and tooth] -100 for every cavity you have",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ZmIUOMu.jpeg",
+    "title": "",
+    "description": "Eat a full sized 8' x 11' piece of paper. [drawing of a piece of paper] IF successfully completed +2000 points otherwise -1,000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/EMQ1nVM.jpeg",
+    "title": "MRSE",
+    "description": "[drawing of a germ/bacteria] EVERYONE LOSES 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XzqrclL.jpeg",
+    "title": "GRASSY FIELD",
+    "description": "[drawing of a grassy field with a tree] PLAY TWO MORE CARDS AND REPLACE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/DCNcBNE.jpeg",
+    "title": "HIGH NOON",
+    "description": "[drawing of a clock showing 12] SWITCH 2 CARDS IN FRONT OF YOU WITH 2 CARDS IN FRONT OF THE PLAYER TO YOUR RIGHT + RECYCLE THEIR EFFECTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hY7yAHx.jpeg",
+    "title": "Moaning Myrtle",
+    "description": "[drawing of a crying face] Prefects bathroom Floods Get a paper towel roll or lose 200.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/b3Febp8.jpeg",
+    "title": "Martyrdom",
+    "description": "[drawing of a train and a stick figure saying No] Die for something you believe in. -or- lose 500.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cnX2xXS.jpeg",
+    "title": "Flame in a Jar",
+    "description": "[drawing of a jar with a flame inside] + 60 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/AxSCYYl.jpeg",
+    "title": "PRUNE",
+    "description": "PLAY TO CENTER [drawing of a prune] THE NEXT PERSON to MAKE a PENIS JOKE LOSES 1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/9CQlYxe.jpeg",
+    "title": "Male G-spot",
+    "description": "[drawing of a stick figure] Anal orgasm +700 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/wWYYE9m.jpeg",
+    "title": "FORMAL",
+    "description": "[drawing of a necktie] DRAW YOUR NEXT BLANK CARD WITH YOUR NOT-DOMINANT HAND (OR LOSE 3000 PTS)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/UIgy8jX.jpeg",
+    "title": "TENT SEX",
+    "description": "[drawing of a tree and a tent] +1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RMZp3ae.jpeg",
+    "title": "Foamy Richard AND THE LOU ELLENS",
+    "description": "[drawing of a singer at a microphone and a band of stick figures] + 850 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/EB2JInh.jpeg",
+    "title": "Boob Job!",
+    "description": "[drawing of a woman] + 8008 pts (unless it was by Tara Reid's surgeon)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/demtPSX.jpeg",
+    "title": "Bad Detective",
+    "description": "[drawing of a face with a hat and pipe] You can no longer look at the person you're talking to. (For the rest of the game)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/9ZEo6CQ.jpeg",
+    "title": "Jonas Brothers",
+    "description": "[drawing of three figures] Shut up for a round. Seriously. shut up. if not -3000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7VybwhL.jpeg",
+    "title": "Wind-blown Dingo",
+    "description": "[drawing of a dingo sitting in the wind] . Share with the group what animal you would become if you could. For 600 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/JdDwVAp.jpeg",
+    "title": "Old Floppy",
+    "description": "[drawing of a floppy disk] Pretend to be a limp penis for 350 points. -or- No effect",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hnh9NMU.jpeg",
+    "title": "PORCUPINE",
+    "description": "[drawing of a porcupine] + 200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/U6JDieW.jpeg",
+    "title": "BALANCE BOOK ON HEAD FOR 1 ROUND",
+    "description": "[drawing of a book] —or— -800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ygR3lh1.jpeg",
+    "title": "MAMMOGRAM",
+    "description": "[drawing of a person being examined at a machine] — 330 points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RswsdZn.jpeg",
+    "title": "Stewing Beef",
+    "description": "[drawing of a pot stewing over a fire] Churn it. +20   Let it stew -50",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ePKJmMV.jpeg",
+    "title": "Cretan Bull",
+    "description": "[drawing of a bull] -500 pts -1000 pts for every mythological being in plain view.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/nCKZT27.jpeg",
+    "title": "RANDY NEWMAN SINGS ABOUT the SOUTH",
+    "description": "[drawing of a person at a piano with music notes] BAYOOOU LAJUN CHICKUNN... LOUISIANA -BARBECUE CHICKENN... -SWAMPY WATURRAH -GONNA HAVE... REAL GOOD TIME +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XaJqTUA.jpeg",
+    "title": "MALEVOLENT BEAVER",
+    "description": "[drawing of a beaver] GIVE AWAY a NEGATIVE POINT CARD (ALREADY PLAYED) -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ORCNbQH.jpeg",
+    "title": "Candy Corn",
+    "description": "[drawing of a piece of candy corn] -10 x the number of times you master- bate a week.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RwQK4fA.jpeg",
+    "title": "flight of the dodo's",
+    "description": "[drawing of a dodo bird] Flap to no avail. Look foolish.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/13RBzHt.jpeg",
+    "title": "FIRST TIME",
+    "description": "[drawing of a winged creature with text \"SLOWLY HONEY\"] REVERSES FAMINE AND + 400 PTS (RECLAIM CARDS FROM DISCARD PILE)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lY9VUo9.jpeg",
+    "title": "GARGOYLE JEFF",
+    "description": "[drawing of a person crouching on a chair] Your NEIGHBOR MUST SIT IN THE GARGOYLE POSITION FOR 2 ROUNDS, OR THEY LOSE 500 POINTS. + 1000 for both",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/A1AjWOT.jpeg",
+    "title": "Swaparoo",
+    "description": "[drawing of two crossing arrows] Trade your entire deck with the person of your choosing.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/CZ0iJ1O.jpeg",
+    "title": "A-mur-ica",
+    "description": "[drawing of an American flag] Sing the Star-spangled banner w/ all the correct words. Correct = +1000 pts Incorrect = +200 pts Nope = -500 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/R3zSxJG.jpeg",
+    "title": "Beastfucker",
+    "description": "[drawing of a person behind an animal] negates all bear related cards.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Ji0esqP.jpeg",
+    "title": "Draw Something",
+    "description": "[drawing of a pencil] Draw Something before end of game and hang it on the Fridge + 500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6BvMylL.jpeg",
+    "title": "COMMUNE",
+    "description": "[drawing of two huts with birds and a sun, a person on a path] HAVE YOU LOADED a DISHWASHER in the PAST WEEK? Yes: +500, NO:-500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/b44j8NF.jpeg",
+    "title": "LIFT THE VEIL",
+    "description": "[drawing of two figures, one lifting a veil, other saying \"OH GOD NO!\"] - 700 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/CXp0KMK.jpeg",
+    "title": "SPOOL of SOLDER",
+    "description": "[drawing of a spool of solder] +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/le74A8e.jpeg",
+    "title": "SWEET LEAF POCAHONTAS PUBES",
+    "description": "[drawing of a leaf and a scribble with text \"'mmm! tasty!\"] SUCK ON BOTH THUMBS FOR 1 ROUND OR LOSE 1000 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/JXcOWAK.jpeg",
+    "title": "Riptide Levinson and the Holy Trinity",
+    "description": "[drawing of a person at a microphone surrounded by three fish symbols] +500 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/dbRKXIW.jpeg",
+    "title": "Sexting a Substitute teacher",
+    "description": "[drawing of a shocked person holding a phone] HOLY SHIT! . Tell your Friends! + 800 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/wKWFNZ5.jpeg",
+    "title": "BOX KITE",
+    "description": "[drawing of a box kite] +300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rFGKcwd.jpeg",
+    "title": "YO-YO MA",
+    "description": "[drawing of a yo-yo] GIVE THE PERSON TO YOUR RIGHT THE MIDDLE FINGER TO GET 400 PTS, THEY LOSE 100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/NGcZlMp.jpeg",
+    "title": "Yankee Swap",
+    "description": "[drawing of two cards with arrows swapping places] You and a chosen opponent lay hands down and blindly swap 1 card.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hPjhh61.jpeg",
+    "title": "Illegality",
+    "description": "[drawing of a sombrero] In Depth, How would you transport illegal drugs across the boarder? +50",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/eKc4BiC.jpeg",
+    "title": "REDNECK",
+    "description": "[drawing of a pickup truck] -200 IF YOU HAVE DRIVEN a PICKUP in the PAST MONTH",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/DdSylF8.jpeg",
+    "title": "FEED ME, SEYMOUR",
+    "description": "[drawing of a Venus flytrap in a pot] FEED OPPONENT ANYTHING +1000 -or- -200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/MZVJj2a.jpeg",
+    "title": "BLENDER GENOCIDE",
+    "description": "[drawing of a blender with a ladder and stick figures] PUT ANY 10 PLAYED CARDS IN THE DISCARD PILE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/zP7CAlB.jpeg",
+    "title": "LOTR",
+    "description": "[drawing of Gollum holding a ring] GOLLUM STEALS YOUR RING, LOSE 300 POINTS (-300)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/GW9vQ1m.jpeg",
+    "title": "STOP",
+    "description": "[drawing of a hammer and a clock] REVERSE DIRECTION",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uqhSLYq.jpeg",
+    "title": "WHO NOSE",
+    "description": "[drawing of a nose] MUST KEEP FINGER ON LEFT NEIGHBOR's NOSE FOR 1 ROUND -or- -600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Av8PuRO.jpeg",
+    "title": "Almost Idiom",
+    "description": "[drawing of a stick figure] \"It's raining cats and logs?\" Good Try champ. +600.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/DtRFWp3.jpeg",
+    "title": "Murder of Crows",
+    "description": "[drawing of a flock of crows and two birds on the ground] Play next turn blindly.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/HZap2SL.jpeg",
+    "title": "POUR SOME SUGAR ON ME",
+    "description": "[drawing of a bear wearing a Pooh shirt] MAKE A PIECE OF TOAST AND SHARE WITH ALL PLAYERS, + 400 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/nuSl1FE.jpeg",
+    "title": "ShaqShrek",
+    "description": "[drawing of Shrek in a Lakers jersey holding a basketball] +500 pts. if ESPN is showing basketball right now. -200 if Shrek is on any channel.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uaxuBFz.jpeg",
+    "title": "TWIN DONGS",
+    "description": "[drawing of two elongated shapes] YOU AND ONE OTHER PERSON (OF YOUR CHOICE) RECEIVE 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kyWmVAx.jpeg",
+    "title": "INVERT",
+    "description": "[drawing of two curved arrows in a circle] Switch positive and negative values on one person's cards",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/NrydO3n.jpeg",
+    "title": "Big Daddy",
+    "description": "[drawing of a large stick figure next to a small one] give this card to the person most likely to father/mother a child first. they get -200 because of diapers",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/aNs71X1.jpeg",
+    "title": "SMALL BOAT",
+    "description": "[drawing of a small sailboat on water with a shark fin] +900 POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/wN8AJ8T.jpeg",
+    "title": "FIELD MOUSE",
+    "description": "[drawing of a mouse burrow in a grassy field with a flower] +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YesGSZu.jpeg",
+    "title": "NIGHT WALK",
+    "description": "[drawing of a night scene with stars, moon, houses and a person walking] +1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/0dl6Szi.jpeg",
+    "title": "\"I like you\"",
+    "description": "[drawing of a cell phone displaying \"i like you\"] Text a female someone you don't care about \"I like you\" + 400 -800 (if you don't",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XcbFmuR.jpeg",
+    "title": "HELEN KELLER",
+    "description": "[drawing of a stick figure] -800 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rmivEml.jpeg",
+    "title": "Objection!",
+    "description": "[drawing of a gavel and block] Undo all effects of last card played.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5egF69q.jpeg",
+    "title": "TIGGER WOODS",
+    "description": "[drawing of Tigger holding a golf club, bouncing on his spring tail] +900 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5UeP684.jpeg",
+    "title": "Long Torso",
+    "description": "[drawing of a stick figure with a long torso] Measure the longest torso in the room. -100 to whoever has the longest torso",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ccJncwv.jpeg",
+    "title": "BEVERAGE BONUS",
+    "description": "PLAY IMMEDIATELY (HOT ONLY) [drawing of a cup and saucer] KEEP IF YOU HAVE HOT BEVERAGE GIVE TO SOMEONE WHO DOES, OTHERWISE +600 NO BEVERAGES? -1000 for ALL",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/yfFvPRs.jpeg",
+    "title": "FAMINE",
+    "description": "[drawing of a potato] DISCARD ALL BUT 2 CARDS in YOUR HAND. YOU MAY NOT POSSES MORE THAN TWO CARDS FOR THE REST of the GAME",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/OoV3hdK.jpeg",
+    "title": "OWESOME OVA",
+    "description": "[small dot drawing] +200 EXTRA +300 WHEN PLAYED WITH SPERM",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WUxwAo7.jpeg",
+    "title": "SACRED SPERM",
+    "description": "[drawing of a sperm] +1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8aW7JN1.jpeg",
+    "title": "CANOE",
+    "description": "[drawing of a bird standing in a canoe on water] +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/wdNhEGl.jpeg",
+    "title": "FILM CANISTER",
+    "description": "[drawing of a film canister] DEVELOP THAT SHIT +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/NZQ2uKS.jpeg",
+    "title": "TIMOTHY",
+    "description": "[drawing of a small creature with big eyes] + 1000 PTS (IMMUNE TO MORNING WOOD)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/KonjZPX.jpeg",
+    "title": "Peeper",
+    "description": "[drawing of boxer shorts with penis hanging through the fly] Your penis fell through the fly in your boxers and you can't sneakily tuck it back in because you're on stage. - 500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/9leRVTI.jpeg",
+    "title": "Allegra D.",
+    "description": "[drawing of a small pill bottle] • Next person to sneeze +700 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mFBmeVn.jpeg",
+    "title": "FLEX",
+    "description": "[drawing of a flexing arm/bicep] FIND A FLASHLIGHT AND SHINE IT IN YOUR OWN EYES FOR 600 PTS OR LOSE A TURN",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/m1ucmZb.jpeg",
+    "title": "GEORGE MICHAEL",
+    "description": "[drawing of a stick figure dancing on a hill] DO YOUR BEST DANCE MOVE. +300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4mQZ9hW.jpeg",
+    "title": "A Sharp Poo",
+    "description": "[drawing of a pointed, steaming turd] (You know it hurts) -400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/UUF7u2k.jpeg",
+    "title": "IT'S BEER",
+    "description": "Red Stripe HOORAY BEER! + 600 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XzjCytQ.jpeg",
+    "title": "LOSE YOUR SKIN IN A STEAM EXPLOSION",
+    "description": "[drawing of a steam pipe/valve exploding steam at a stick figure] PAY 800 PTS FOR SKIN GRAFT",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/HNzj8Dn.jpeg",
+    "title": "LAP IT UP",
+    "description": "[drawing of a cup spilled on its side] EVERYONE HOLD UP 1-5 FINGERS AT THE SAME TIME. ANY MATCHING NUMBERS, PLAYERS MUST SIT ON EACH OTHER'S LAPS. FOR ONE ROUND.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/VHfzzbu.jpeg",
+    "title": "Nook™ of Eli",
+    "description": "[drawing of an e-reader tablet] Read a sentence out of a book once, then close your eyes and recite it for 500 pts or lose 1000.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Ub5pKwg.jpeg",
+    "title": "BEARD-O",
+    "description": "[drawing of a person with a large beard, urinating] +5 wisdom",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/sz3B495.jpeg",
+    "title": "WORM SEX",
+    "description": "[drawing of two worms crossing/mating] -100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/eh3UcvG.jpeg",
+    "title": "WILLY WONKA BRAND CONDOMS",
+    "description": "[drawing of a stick figure looking at a condom packet] \"The taste you can FEEL.\" + 700 pts if you eat a piece of chocolate",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4ISa7No.jpeg",
+    "title": "Pissed off Drunk",
+    "description": "[drawing of an angry person next to a keg labeled NATTY] - 500 pts. Why? Because fuck you, that's why",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/KDeRlME.jpeg",
+    "title": "HOSTILITY",
+    "description": "[drawing of a flower growing from the ground] GO FUCK YOURSELF +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7rpZTzh.jpeg",
+    "title": "WILLOW",
+    "description": "[drawing of a willow tree] + 700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ajhCQd5.jpeg",
+    "title": "JAMAICA ME CRAZY",
+    "description": "[drawing of the Jamaican flag] +500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5FC4R7q.jpeg",
+    "title": "\"YOU ARE THE FATHER\"",
+    "description": "[drawing of a Maury show scene with a labeled MAURY and stick figures above a crowd] MAURY -500 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/sjA5CCM.jpeg",
+    "title": "HOUSE ELF",
+    "description": "[drawing of a house elf figure with large ears] REMOVE SOCKS and WEAR on EARS for ONE ROUND for +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kbnWeOc.jpeg",
+    "title": "Justice",
+    "description": "[drawing of a gavel/mallet] •Add up current points. Person with highest score is turned negative. IF already neg., double neg.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ludv5Fk.jpeg",
+    "title": "Snake in trousers",
+    "description": "[drawing of open trousers with something dangling] Play one round with your shaft out - or - lose the game.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mVdSf1n.jpeg",
+    "title": "John Wilkes Booth",
+    "description": "[drawing of a stick figure pointing a gun at another stick figure wearing a top hat] Jump off the balcony and break your leg -or- lose 1000 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/l9DdqMH.jpeg",
+    "title": "fraudulance",
+    "description": "[drawing of a face wearing a mask] Change the target of one negative effect card on the field.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/L42rHal.jpeg",
+    "title": "MAPLE",
+    "description": "[drawing of a jug with a maple leaf label] EAT SOMETHING SWEET for +300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/QFvWWgZ.jpeg",
+    "title": "Stevie Wonder",
+    "description": "[drawing of a face with sunglasses] -600 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/A9LaEru.jpeg",
+    "title": "TANDEM OF TRIUMPH",
+    "description": "[drawing of two people on a tandem bicycle riding up a mountain with a flag on top] +1000 POINTS FOR YOU AND PLAYER TO RIGHT",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hCsx6e6.jpeg",
+    "title": "Stone cold steve Austin",
+    "description": "[drawing of an angry man's face] • Make the ugliest face you can for one round or lose 1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/LdcqpSH.jpeg",
+    "title": "The White House",
+    "description": "[drawing of a face with large ears labeled \"← Obama\"] • Name the presidents in order. 50 pts per president",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/gdJQvW9.jpeg",
+    "title": "MEN'S BEAR HOUSE",
+    "description": "[drawing of a bear wearing a shirt and tie] WEAR A TIE FOR 3 ROUNDS FOR 500 PTS OR LOSE 500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/khDwMp0.jpeg",
+    "title": "NYAN CAT ATTACKS",
+    "description": "[drawing of Nyan Cat with a pop-tart body] meow -400 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hfRTBSr.jpeg",
+    "title": "Seattle",
+    "description": "[drawing of the Space Needle labeled \"space needle\"] +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/NuqJI4i.jpeg",
+    "title": "SARDINES",
+    "description": "[drawing of an open sardine tin] EAT SOMETHING CONTAINING FISH -or- HUG EVERY PLAYER -or- LOSE 500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6kYYlCA.jpeg",
+    "title": "TIC-TAC-TOE",
+    "description": "[drawing of a tic-tac-toe grid filled with X's and O's] PLAY 3 CARDS on YOUR NEXT TURN (replace from deck)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YK4A0av.jpeg",
+    "title": "HAIRSPRAY",
+    "description": "[drawing of a spray can spraying] EAT 3 PIECES OF DOG FOOD FOR 400 PTS OR LOSE 800.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/98VpDef.jpeg",
+    "title": "CROSS - STITCH",
+    "description": "[drawing of a flower] CONSUME A DAIRY PRODUCT -OR- MAKE YOURSELF CRY, FOR 800 PTS, OR LOSE 2 TURNS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/nwkyPXz.jpeg",
+    "title": "Shuffed and Muffed",
+    "description": "[drawing of a can + a muffin] = Cunnilingus? +500 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Xb2gWuN.jpeg",
+    "title": "MDMA",
+    "description": "[small drawing of a pill in the center] Utter a ten word uncomprehensible sentence for 700 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Fppskmb.jpeg",
+    "title": "CLOWNING AROUND",
+    "description": "[drawing of a clown face] EVERYBODY LOSES THE EFFECTS OF THE CARDS IN THE MIDDLE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4QGc10G.jpeg",
+    "title": "Thumper",
+    "description": "[drawing of a rabbit] Receive 300 points if you hump an immediate neighbors shoulder. -or- give yourself a dead-leg.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6x5kYNf.jpeg",
+    "title": "Milk",
+    "description": "[drawing of a milk carton labeled \"MILK\" and a glass] Pour someone a glass of milk in 30 seconds or lose 1000 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/q0beM2S.jpeg",
+    "title": "The Pen is mightier...",
+    "description": "[drawing of a pen] Everybody rotates pens to the right.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/yCXaeJQ.jpeg",
+    "title": "Lock-Box",
+    "description": "[drawing of a locked box] + 100 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qvi7SVB.jpeg",
+    "title": "Gary the Communist",
+    "description": "[drawing of a stick figure waving] Distribute your cards evenly amongst the group and pick new cards.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Hif9tuu.jpeg",
+    "title": "Uncle Garth Goes to Summer Camp",
+    "description": "[drawing of a large figure and two smaller frightened figures] -20 years in jail -Lose two turns",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/FW3Sv9B.jpeg",
+    "title": "forced family game night",
+    "description": "[drawing of two stick figures at a table with a collapsing Jenga tower; one says \"Jenga!\" and the other says \"fuck you\"] Choose 3 people to gain 600 pts. [smiley face]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/LcC2NdC.jpeg",
+    "title": "ROAD TRIP!",
+    "description": "[drawing of a car] Everybody plays! Go around the table & name the states of the U.S. First to repeat or not come up w/ one loses 50 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/coVANZv.jpeg",
+    "title": "THE SHOt HEARD 'ROUND THE WORLD",
+    "description": "[drawing of a syringe over a tangled scribble] YOU + ONE OTHER PLAYER (OF YOUR CHOICE) LOSE A TURN",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7RVlpwq.jpeg",
+    "title": "Heroin",
+    "description": "[drawing of a person injecting their arm with a syringe] ·Get Hooked, lose 1200 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/wJS5WcG.jpeg",
+    "title": "Cupid Shuffle",
+    "description": "[drawing of two hearts with arrows between them] Everyone picks 1 positive card played on them and gives it to someone else.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Mwi7H7Q.jpeg",
+    "title": "SAND CRAWLER",
+    "description": "[drawing of a sandcrawler vehicle and two jawas] +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/j8CGZUK.jpeg",
+    "title": "How Much is that Doggy?",
+    "description": "[drawing of a stick-figure dog] + 600 and two woofs - or - + 200 You chose",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/HG9PXRZ.jpeg",
+    "title": "THAT WASN'T A JOLLY RANCHER",
+    "description": "[drawing of a face making a disgusted expression] - 1000 POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RVTaI29.jpeg",
+    "title": "TREE FORT",
+    "description": "[drawing of a treehouse with a ladder] +900",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/yTXI02a.jpeg",
+    "title": "Ass grabber",
+    "description": "[drawing of a hand reaching toward buttocks] Touch every players ass on their turn for one round for + 300 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/M7wuNiv.jpeg",
+    "title": "Brain Transfer",
+    "description": "[drawing of two heads connected by tubes transferring brains] Play the next round as another player if you do it without laughing + 600 if not -600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/QN2UDIz.jpeg",
+    "title": "Blood Flow",
+    "description": "[drawing] + 200 for every erection had during the day.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RSM3FG6.jpeg",
+    "title": "\"MUSTACHE\" -or- \"MOUSTACHE\"?",
+    "description": "[drawing of a balance scale] YOU CHOOSE. +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ThmJFp4.jpeg",
+    "title": "TAKING BACK (ICE CREAM) SUNDAY",
+    "description": "[drawing of a bowl of ice cream and a stick figure with a spoon] + 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/94EpCeL.jpeg",
+    "title": "CORN COB OF JUSTICE!",
+    "description": "[drawing of a hand holding a corn cob] + 700 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uLcLH09.jpeg",
+    "title": "GERBIL IN A MICROWAVE",
+    "description": "[drawing of a gerbil inside a microwave] SIT BACKWARDS IN THE CHAIR YOUR IN (WITH THE BACK BETWEEN YOUR LEGS) OR LOSE ((FOR THE REST OF THE GAME)) 500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lD7kQZ2.jpeg",
+    "title": "Cut the red Tape",
+    "description": "[drawing of scissors and a curved shape] +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/aEGqpwy.jpeg",
+    "title": "ELLEN DEGENERES AND THE DIP -CROWNS",
+    "description": "[drawing of a rabbit] + 400 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WolOvPz.jpeg",
+    "title": "Peter Rabbit",
+    "description": "[drawing of a rabbit under a hanging carrot] Any food (or beverage) related cards double in point value",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YSj89iT.jpeg",
+    "title": "Volcano",
+    "description": "[drawing of an erupting volcano] Everyone Loses 900 points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/id56Njf.jpeg",
+    "title": "OLD SPICE",
+    "description": "[drawing of a spice jar] PICK RANDOM SPICE JAR. IF PAST EXPIRATION DATE, YOU MUST SMELL NEIGHBORS ARMPIT -or- -200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/n2ThXJP.jpeg",
+    "title": "PIG",
+    "description": "[drawing of a pig standing in grass next to a flower] +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/yhPrSLZ.jpeg",
+    "title": "BACKPACKING WITH BEAR GRILLS",
+    "description": "[drawing of two stick figures, one climbing a cliff] KILL YOURSELF NOW - 500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/G5YAuCU.jpeg",
+    "title": "ELBOWS",
+    "description": "[drawing of a pen suspended between two pairs of elbows] Keep pen suspended between your elbow & the player to your rights elbow. both + 500 -or- - 500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/iM3vuZ8.jpeg",
+    "title": "Pheonix of Compassion",
+    "description": "[drawing of a phoenix with wings spread] +1000 points to you and left neighbor",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/AY58bmN.jpeg",
+    "title": "TOO MUCH TUPPERWARE!",
+    "description": "[drawing of a stick figure buried in a pile of tupperware] YOU HAVE ONE MINUTE TO LID and STACK 10 TUPPERWARE CONTAINERS SUCCEED: +900 FAIL: -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/w7uuQHG.jpeg",
+    "title": "HOUSEWIFE",
+    "description": "[drawing of a person with triangular dress] WEAR APRON FOR REST OF GAME -or- -1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/HtjHrst.jpeg",
+    "title": "Land Sharlc",
+    "description": "[drawing of a person crouching on a line/ground] +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qUu0MxH.jpeg",
+    "title": "CRAISINS",
+    "description": "[drawing of two craisins/raisins] -200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kaJfzgm.jpeg",
+    "title": "Granny Smith",
+    "description": "[drawing of an apple with a bite taken out, Apple logo style] - Eat an apple or lose -1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rzOjViY.jpeg",
+    "title": "Five High",
+    "description": "[drawing of two hands raised] High Five everyone give the person w/ the best high Five + 400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/iTUUj2K.jpeg",
+    "title": "DOOR PRIZE",
+    "description": "[drawing of a person and bicycle flying away from a car crash] LOSE a TURN",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rTVcLSE.jpeg",
+    "title": "P.O.T.U.S.",
+    "description": "[drawing of an American flag] NAME YOUR FAVORITE PRESIDENT FOR 400 PTS OR SING THE STAR SPANGLED BANNER",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RazYWI7.jpeg",
+    "title": "Eat A Bag of Dicks",
+    "description": "[drawing of two stick figures, one holding a phone, with a bag being thrown] You gain 500 points & a neighbor loses 500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/04HNc1G.jpeg",
+    "title": "RALPH LAUREN'S DILDO EMPORIUM",
+    "description": "[drawing of two boxes and two stick figures saying \"WOW, THAT'S A LOT OF DILDOS!\" and \"WOAH\"] - 400PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RTrz428.jpeg",
+    "title": "Submarine",
+    "description": "[drawing of a submarine periscope in water] Play the next round under the table + 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/0VnJJu8.jpeg",
+    "title": "Cluster Headache",
+    "description": "[drawing of a hammer and a nail being driven into a face] - Describe the most painful experience you've ever had. or lose 1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/2VhEZtS.jpeg",
+    "title": "CANDLE",
+    "description": "[drawing of a lit candle] +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RSceukh.jpeg",
+    "title": "CinderellaMan",
+    "description": "[drawing of a pumpkin carriage] You are poor and your parents have been dead for years. -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/e8g6gP5.jpeg",
+    "title": "Flinstoned Fred",
+    "description": "[drawing of a Flintstones-style foot-powered car] Move a car with No shoes on + 400 (Don't and lose 3 turns)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/loMI4ie.jpeg",
+    "title": "DEFORMITY",
+    "description": "[drawing of a stick figure with head on the side of its arm] DESCRIBE THE AVERAGE PERSON AT THE DMV + 50",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/oOQtlqk.jpeg",
+    "title": "I'LL GIVE YOU MY DIRTY LITTLE SECRET",
+    "description": "[drawing of two stick figures, one offering a gift] BLINDLY SWAP ONE CARD WITH THE PLAYER OF YOUR CHOICE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7z1BGFu.jpeg",
+    "title": "PILLAR OF TRUTH",
+    "description": "[drawing of a pillar/column] SHARE SOMETHING W/ THE GROUP THAT THEY DON'T KNOW ABOUT YOU ALREADY +1500PTS IF NO ONE KNEW IT, -1000 PTS IF YOU DON'T",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/SiCUld1.jpeg",
+    "title": "OIL WELL FIRE",
+    "description": "[drawing of a large fire/blowout] FETCH the BLOWOUT PREVENTER, CAP that SHIT. -200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/nzEIjIa.jpeg",
+    "title": "BEAR HUG",
+    "description": "[drawing of a bear with arms outstretched] GIVE SOMEONE A BEAR HUG, YOU BOTH GET 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/aDjVfJg.jpeg",
+    "title": "SPIDER ATTACK",
+    "description": "[drawing of a stick figure running from a spider] RUN for YOUR LIFE. -800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/pnHRfvc.jpeg",
+    "title": "Hurricane-Tornado-quake",
+    "description": "[drawing of a tornado, hurricane swirls, and earthquake cracks] Duck under the table for one round. + 500 if successful",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/V2JlBFb.jpeg",
+    "title": "VINO",
+    "description": "[drawing of a glass of wine] TAKE A STEP BACK FROM THE PLAYING SURFACE AND PLAY STANDING FOR ONE ROUND FOR 500PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/MDNxLuY.jpeg",
+    "title": "Skeet Shot!",
+    "description": "[drawing of a shotgun firing pellets] All birds on the table are instantly killed. All players enjoy a meal of fine poultry. + 300 everyone",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/CwkAgHx.jpeg",
+    "title": "POE",
+    "description": "[drawing of a face with scribbly hair and mustache] RECITE a BRIEF LINE of POETRY for +900 - or - LOSE 1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/iyfwINi.jpeg",
+    "title": "Egyptian Bank Thieves",
+    "description": "[drawing of three stick figures with masks and sacks of loot] +1000. Also negates all bank-related cards.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/HcEoyh9.jpeg",
+    "title": "JAO QUINN",
+    "description": "[drawing of a ninja stick figure with a sword] +300 TO YOU +200 TO THE PERSON TO YOUR RIGHT, +100 TO THE PERSON ON YOUR LEFT",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rebKLiP.jpeg",
+    "title": "BANANAS",
+    "description": "[drawing of a banana] EAT A BANANA -OR- -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/FQS8uW4.jpeg",
+    "title": "PUDDING POPS",
+    "description": "[drawing of a face with curly hair] DO YOUR BEST BILL COSBY IMITATION -or- -400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1vVPmbM.jpeg",
+    "title": "Fantasy",
+    "description": "[drawing of a man with a thought bubble containing a phallus, and an ice cream cone] Intentionally take time off to draw (lose next turn)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Lkp3r26.jpeg",
+    "title": "Cordiality",
+    "description": "[drawing of a stick figure kissing another's hand] kiss the hand of the person to your left for 400 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/2QUZoIF.jpeg",
+    "title": "THE WITCH KING",
+    "description": "[drawing of a wraith-like face] NAME 3 LOTR CHARACTERS AND LOSE 500pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/0CqWx6G.jpeg",
+    "title": "THIRSTY THURSDAY",
+    "description": "[drawing of a mug] GET EVERYONE A GLASS OF WATER OR LOSE 800 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uh0hPoR.jpeg",
+    "title": "WALL FLOWER",
+    "description": "[drawing of a stick figure against a wall] STAND WITH YOUR BODY FLAT AGAINST THE WALL FOR 1 ROUND 500 OR LOSE 500pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/byCWmIj.jpeg",
+    "title": "ICED TEA",
+    "description": "[drawing of a glass of iced tea with a straw] + 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/00fSdlH.jpeg",
+    "title": "HOT BOX",
+    "description": "[drawing of a steaming box] EVERYONE GETS 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/TBAvNNE.jpeg",
+    "title": "4 corners",
+    "description": "[arrows pointing to the four corners] This card is a 4x multiplier on any card on the field.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Ely3JrW.jpeg",
+    "title": "POST-APOCALYPTIC AUDITING",
+    "description": "[drawing of a person reading a book beside a burning building and mushroom cloud] YOUR JOB JUST GOT A LOT EASIER +1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1Jj9KYr.jpeg",
+    "title": "BUTTERFLY KISSES",
+    "description": "[drawing of two butterflies and hearts] GIVE YOUR NEIGHBOR A BUTTERFLY KISS -OR- -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4TN7EMe.jpeg",
+    "title": "END OF THE WORLD",
+    "description": "[drawing of a December 2012 calendar with the 21st circled] LOSE 800 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/j6wAAcO.jpeg",
+    "title": "Father O'Hara",
+    "description": "[drawing of a priest] \"I won't touch your kids\" •Grope a neighbor or lose 800 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/PuJPAkz.jpeg",
+    "title": "AMBROSE BURNSIDE",
+    "description": "[drawing of a stick figure with sideburns] Negates all indian or facial-hair related cards (+150)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ay9GBxZ.jpeg",
+    "title": "LLAMA SPITS",
+    "description": "[drawing of a llama spitting] - 200 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/QXxWPIG.jpeg",
+    "title": "Safe Sex",
+    "description": "[drawing of a condom] +200 For being responsible",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/DFEYurZ.jpeg",
+    "title": "The Scarlet Ringmaster",
+    "description": "[drawing of a ringmaster with a whip and hoop] •Go around the group clockwise, everybody names a color, first person to repeat a color lose 2000pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Pq9dydD.jpeg",
+    "title": "Cocaine",
+    "description": "[drawing of scattered powder] Snort the table or lose 500 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1t3TxeM.jpeg",
+    "title": "TWO TURTLE DOVES",
+    "description": "[drawing of two flying turtles] + 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/jdUmSFG.jpeg",
+    "title": "THUNDER THIGHS",
+    "description": "[drawing of a stick figure with lightning bolt legs] + 400 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/UVdnt9j.jpeg",
+    "title": "MOLASSES DISASTER",
+    "description": "[drawing of a MOLASSES vat spilling over stick figures] - 700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/HE4My2M.jpeg",
+    "title": "POLAR BEAR IN A SNOWSTORM",
+    "description": "[blank white space] + 1000 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/NKsg4Iu.jpeg",
+    "title": "YAO MING",
+    "description": "[drawing of a tall stick figure holding a basketball] +900 PTS LOSE NEXT TURN",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Oqon6Vj.jpeg",
+    "title": "TRAGIC ROAD TRIP",
+    "description": "[drawing of a car driving off a cliff with a dashed road line and a sun] +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/LgrXZZS.jpeg",
+    "title": "TV",
+    "description": "[drawing of a person in a chair watching a TV] THE ONLY THING ON IS \"AMERICA'S GOT TALENT\" LOSE 400 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6RSUBFU.jpeg",
+    "title": "Baby Panda",
+    "description": "[drawing of a baby panda] + 350 points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/93r4J6k.jpeg",
+    "title": "Ben Stine",
+    "description": "[drawing of a face] Got Red Eyes? Rub eyes 'till red and lose 50 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/pmhhsce.jpeg",
+    "title": "BOB ROSS",
+    "description": "[drawing of Bob Ross with a palette next to an easel] THE NEXT CARD YOU DRAW MUST BE A LANDSCAPE (NATURE)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/9F2PpOl.jpeg",
+    "title": "FRUIT TREE",
+    "description": "[drawing of a tree] EAT A PIECE of FRUIT -or- -1000 POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6KdZVG0.jpeg",
+    "title": "One night in Bangkok",
+    "description": "[drawing of a stick figure drinking] Act drunk and tell the person to your left that you have had feelings for them. (or lose 1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/W6dfQti.jpeg",
+    "title": "ZUCKERBERG",
+    "description": "[drawing of a thumbs up] \"SHARE\" ANY 1 OF YOUR CARDS WITH ANOTHER PLAYER.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Pmpx09Y.jpeg",
+    "title": "Polly Want a cracker?",
+    "description": "[drawing of a bird] Eat a Cracker gain 100 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/3mcayBI.jpeg",
+    "title": "Backwards",
+    "description": "[drawing of a stick figure sitting backwards on a chair] sit backwards in your seat for an entire round + 200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Id70103.jpeg",
+    "title": "TAKING CANDY FROM A BABY",
+    "description": "[drawing of a baby and a lollipop] TAKE ALL POSITIVE CARDS FROM ONE PLAYER AND GIVE THEM TO YOURSELF",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mqCvm5U.jpeg",
+    "title": "HANUKKAH",
+    "description": "[drawing of a menorah] LIGHT A CANDLE + 600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4lvDFAC.jpeg",
+    "title": "SPONTANEOUS HUMAN COMBUSTION",
+    "description": "[drawing of two people on fire] DANCE LIKE YOU'RE on FIRE for +900",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qCR4Pb8.jpeg",
+    "title": "MONGOLIAN SUNRISE",
+    "description": "[drawing of a sunrise over a horizon with a yurt and sheep] +800 POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ZIK5is7.jpeg",
+    "title": "DRUMS",
+    "description": "[drawing of a drum set] +400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/EBSqwOX.jpeg",
+    "title": "Grimace",
+    "description": "[drawing of a Grimace-like creature] - 100 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/blcSZVD.jpeg",
+    "title": "Nick Drake",
+    "description": "[drawing of a person with a guitar next to a tree] Commit suicide or lose a turn",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6LjzvDb.jpeg",
+    "title": "Old Mayonaise",
+    "description": "[drawing of a steaming jar of mayonnaise] -300 unless you eat a spoonfull of mayo. You pick the spoon.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/2lJbZf7.jpeg",
+    "title": "Cubism",
+    "description": "[drawing of a box with a ? on it] -300 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/yKPjZl7.jpeg",
+    "title": "Thundercats",
+    "description": "[drawing of a stick figure holding a sword] Ho!!! Choose two (2) players to lose 300 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/K1Sh7pb.jpeg",
+    "title": "FEET",
+    "description": "[drawing of a foot with stink lines] smell either of your neighbors feet. + 400 If they have smelly feet, -200 for them",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/OYZnhdR.jpeg",
+    "title": "Jaundice",
+    "description": "[drawing of an eye] Not enough iron! lose 50.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/tanGqrM.jpeg",
+    "title": "Speed Demon",
+    "description": "[drawing of a running stick figure] Do ten jumping jacks in FIVE Seconds. gain +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YO0ojfF.jpeg",
+    "title": "Vulpix used ember",
+    "description": "[drawing of a fox breathing fire at a small creature] rock, paper, scissor your neighbor. Winner gets 1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/o4qIguC.jpeg",
+    "title": "Boot Scoot Boogie",
+    "description": "[drawing of a face] DONT EVER DO THIS DANCE + 100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/vOgs2gZ.jpeg",
+    "title": "awkward Neighbor",
+    "description": "[drawing of two figures standing in bathroom stalls] The guy in the stall next to you, looked. — 600 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/X3EJNHN.jpeg",
+    "title": "Night Train",
+    "description": "[drawing of a train locomotive] — 300 if you've ever been part of a sex train. + 300 otherwise",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kCJHWQM.jpeg",
+    "title": "RAIN DEER",
+    "description": "[drawing of a deer with rain falling from it onto a small stick figure below] + 276 prs",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/xmaKOtw.jpeg",
+    "title": "CIRCUMCISION",
+    "description": "[drawing of a stick figure wearing a helmet] EAT COTTAGE CHEESE OR LOSE 2 TURNS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/0YpekoJ.jpeg",
+    "title": "AVOCADO",
+    "description": "[drawing of a whole avocado and a halved avocado] -900",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7lUVWYk.jpeg",
+    "title": "Blow Your Mind",
+    "description": "[drawing of a face with a bullet hole in the forehead and a gun pointed at it] Blow our minds (optional) For + 400 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ueBvEkD.jpeg",
+    "title": "Polite Canadian",
+    "description": "[drawing of a maple leaf] Don't you know, eh? + 300 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1Obfg8L.jpeg",
+    "title": "Color Me Maroon",
+    "description": "[drawing of a person with arrow labeled \"Adam Levine\"] + 100 for every Maroon 5 song you can name",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/zVLVse9.jpeg",
+    "title": "TERI GROSS v2.0",
+    "description": "[drawing of a face with messy hair] EVERYBODY MUST STEP OUTSIDE for at LEAST 5 min +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/MxQSvjL.jpeg",
+    "title": "HOT POTATO",
+    "description": "PASS TO LEFT NOW, DRAW AGAIN [drawing of a steaming potato] PASS LEFT ON YOUR TURN IF IN POSSESSION AT END OF GAME, YOU LOSE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4In3dQD.jpeg",
+    "title": "7 I DO",
+    "description": "[drawing of a snarling wolf/dog creature] Act like your favorite animal for 500 pts or lose 1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/OC6BvaQ.jpeg",
+    "title": "the LONG and WINDING ROAD",
+    "description": "[drawing of a winding road through mountains] +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/oN2kjKJ.jpeg",
+    "title": "CULTURED HOBO",
+    "description": "[drawing of a hobo with a cane looking at a flower] +300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/wcqrpn1.jpeg",
+    "title": "Stickman Brawl",
+    "description": "[drawing of stick figures fighting] Everyone throw cards in the middle face down. Take turns drawing starting with the person with this card until out.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1hwCoHy.jpeg",
+    "title": "Stranded on an Island",
+    "description": "[drawing of a stick figure on an island with a large flower] lose a turn",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ecxlvro.jpeg",
+    "title": "Easy Street",
+    "description": "[drawing of a street sign reading \"EASY ST\"] Gain 1000 pt, all other players lose 500 p",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/GWYHaIc.jpeg",
+    "title": "ONE of THESE THINGS is not LIKE the OTHERS",
+    "description": "[drawing of five figures in a row, one bent over is different from the smiling stick figures] SPOT IT. FOR 200 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cz2LX4j.jpeg",
+    "title": "Jos. A. Bank",
+    "description": "[drawing of golf clubs and a ball] +800 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/n7RY8D4.jpeg",
+    "title": "COMPETITIVE RIMMING",
+    "description": "[drawing of a face in profile] \"first one to the prostate wins\" -700PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5mwhGxQ.jpeg",
+    "title": "HOT, FRESH, ROASTED PEANUTS",
+    "description": "[drawing of two peanuts in shells] +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WaAyDjT.jpeg",
+    "title": "WALNUT",
+    "description": "[drawing of a walnut] +300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/LOefJ6o.jpeg",
+    "title": "Hotel Rwanda",
+    "description": "[drawing of a house with a \"V CANCY\" sign] lose a turn",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RqZODwO.jpeg",
+    "title": "NO MAIL TODAY",
+    "description": "[drawing of a figure slumped over a mailbox with \"sigh\"] EVERYONE HATES YOU +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/59f1baK.jpeg",
+    "title": "pants off Dance off",
+    "description": "[drawing of a dancing stick figure] remove pants and Bust a move +1000 or -1 million",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/wLEI7jC.jpeg",
+    "title": "BRAVE TOASTER",
+    "description": "[drawing of a steaming toaster with a power plug] + 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hhv20Jd.jpeg",
+    "title": "Samurai",
+    "description": "[drawing of a samurai raising a sword] +1300 pts. and choose two players to get 300 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/gnYCu2g.jpeg",
+    "title": "MR. ROGERS DOES COCAINE",
+    "description": "[drawing of a man pointing at three stick figures] - 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/OrlTajL.jpeg",
+    "title": "ANTI-AIRCRAFT",
+    "description": "[drawing of a gun on the ground firing a dotted trajectory at an exploding aircraft] +700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/xtjJ003.jpeg",
+    "title": "DESERT ISLAND",
+    "description": "[drawing of a palm tree on an island with waves] SING a BIT of YOUR FAVORITE SONG for +500 (or just a song you like)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/De5eeJ2.jpeg",
+    "title": "CIRCLE",
+    "description": "[drawing of a circle] SWITCH SEATS WITH PLAYER TO RIGHT (but not hands)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/noY43xy.jpeg",
+    "title": "OJ SIMPSON",
+    "description": "[drawing of a hand in a glove] NEGATES ALL MULTIPLIER CARDS FOREVER",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/eD4HYeV.jpeg",
+    "title": "CANDLE LIGHT",
+    "description": "[drawing of a lit candle] PICK ONE OTHER PLAYER TO BLINDLY EXCHANGE 2 CARDS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/s8yBe7p.jpeg",
+    "title": "BICYCLE TOUR",
+    "description": "[drawing of two people riding bicycles] EVERYONE PICKS A CARD FROM HAND OF PLAYER TO LEFT (NO LOOKING)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/KETXqtj.jpeg",
+    "title": "IED",
+    "description": "[drawing of an explosion with a body being thrown] - 800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cDCQwlC.jpeg",
+    "title": "Red Badge of Courage",
+    "description": "[drawing of a badge/shield] - furrow your brows \"angry face\" for one round.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/SOncTh0.jpeg",
+    "title": "Kansas City Shuffle",
+    "description": "[drawing of a person with a speech bubble saying: To the right to the right to the right to the fight] Not the cupid shuffle. - 200 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/dQY42Ug.jpeg",
+    "title": "PENN ISLAND",
+    "description": "[drawing of a palm tree on a small island in water] -100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/sIA7Xty.jpeg",
+    "title": "NUKE",
+    "description": "[drawing of a nuclear mushroom cloud explosion] CRACK A BONE IN YOUR BODY FOR 400 PTS -OR- LOSE 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1v4H0at.jpeg",
+    "title": "WEENIS",
+    "description": "[drawing of a hand holding the elbow skin of an arm] HOLD ON TO THE WEENIS OF THE PERSON ON YOUR LEFT FOR ONE ROUND, BOTH GET 800 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/igwyKDY.jpeg",
+    "title": "The SCISSOR SISTERS",
+    "description": "[drawing of a man singing at a microphone stand] -100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5MFpUMh.jpeg",
+    "title": "Pan's Labyrinth",
+    "description": "[drawing of a maze labeled \"enter\"] lose a turn.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/c187d9X.jpeg",
+    "title": "LEAD POISONING",
+    "description": "[drawing of a face with drool] + 1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uayMhJx.jpeg",
+    "title": "MISSING PIECE",
+    "description": "[drawing of a puzzle piece] YOU JUST DON'T FIT IN. -600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/BUnzRax.jpeg",
+    "title": "Mellow Dave",
+    "description": "[drawing of a man waving and saying \"Sup\"] +2000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/nQYzRsE.jpeg",
+    "title": "STEAMROLLER",
+    "description": "[drawing of a steamroller flattening a line of stick figures] EVERYONE LOSES 300 POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lteiV5L.jpeg",
+    "title": "HORNET NEST",
+    "description": "[drawing of a hornet nest hanging in a tree] CHALLENGE the PLAYER 2 to YOUR RIGHT to SPELL a WORD. THEY SUCCEED: +800 them THEY FAIL: +600 YOU",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/r05q814.jpeg",
+    "title": "RUB ONE OUT",
+    "description": "[drawings of an eraser, a paper clip, a folder, and a pencil] RUB THE PLAYER NEXT TO YOU FOR 600 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kdJy8y2.jpeg",
+    "title": "TRAIL MIX",
+    "description": "[drawing of scattered nuts, raisins, and pieces] +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/JapNUsc.jpeg",
+    "title": "Inverted Phallus",
+    "description": "[framed drawing of a skeletal figure] You have no dick for the rest of the round! -200 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/sZSZr3k.jpeg",
+    "title": "Elliott Smith",
+    "description": "[drawing of a knife and a face] +100 +25,000 if you kill yourself",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7Neh6gh.jpeg",
+    "title": "NANCY DREW",
+    "description": "[drawing of a stick figure wearing a deerstalker cap] CLOSE 1 EYE (THE SAME) FOR 1 ROUND OR LOSE 1000 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mQSq8Uw.jpeg",
+    "title": "Roger, Tango, Alpha",
+    "description": "[drawing of an angry face wearing a cap, with a hand pointing at it] Address everyone as Private for 1 round. +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5NKzbQk.jpeg",
+    "title": "LEMON PARTY",
+    "description": "[drawing of a lemon with legs wearing a party hat] I AM SO SORRY +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6jjzkTe.jpeg",
+    "title": "MARGARET HATCHER",
+    "description": "[scribbled drawing of a face] SIT ON OPPONENTS HAND FOR 1 ROUND +500 -or- -800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4hU3HAO.jpeg",
+    "title": "CHUBBS McGUBBS",
+    "description": "[drawing of a round-bodied stick figure] -400 PTS IF YOU FEEL LIKE YOU'RE OVERWEIGHT, IF NOT -200PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ohmYKmf.jpeg",
+    "title": "CRACKER",
+    "description": "[drawing of a cracker] EAT A CRACKER -OR- -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/yn3e2xR.jpeg",
+    "title": "PIZZA PARTY",
+    "description": "[drawing of a pizza cut into slices with toppings] SIT IN FRONT OF THE HEATER FOR 1 MINUTE AND SWEAT IT OUT +500 PTS OR -500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8sasyIJ.jpeg",
+    "title": "POT LUCK",
+    "description": "[drawing of a flower in a pot] +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Q2GFsSt.jpeg",
+    "title": "Kanye Glasses",
+    "description": "[drawing of shutter shades sunglasses] +100 for every Beyonce song that you can name (to bang to)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/e7uX3Bu.jpeg",
+    "title": "CIRQUE de SOLACE",
+    "description": "[drawing of a stick figure with curly hair] FOREVER ALONE -300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/9dXIUFD.jpeg",
+    "title": "BANANA SPLIT",
+    "description": "[drawing of a stick figure doing a split] EAT A BANANA -or- ATTEMPT TO DO A SPLIT -or- -800 DO BOTH +1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4XuU3JP.jpeg",
+    "title": "Forgiveness",
+    "description": "[drawing of an angel with a halo and wings] turn a negitive point card into positive points Forgive the person who gave it",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/y4vESay.jpeg",
+    "title": "Flight of the Concords",
+    "description": "[drawing of a banana and an apple] Gettin' lewd, with the food +300 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7sVtTvZ.jpeg",
+    "title": "Spontaneous Beastiality",
+    "description": "[drawing of a pig with a bone] +800 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/KjlnAPh.jpeg",
+    "title": "MUG",
+    "description": "[drawing of a mug and a tea bag] TURN on MUSIC, ENJOY CUP oP TEA +300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/fBNz8TO.jpeg",
+    "title": "FUN with HAIR",
+    "description": "[drawing of a face peeking over a line with a strand of hair being pulled] PULL OUT A STRAND OF YOUR OWN HAIR +400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/K0SRXEW.jpeg",
+    "title": "TEEWORLDS",
+    "description": "[drawing of a platform game level with characters and a flag] +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/w0bPyBK.jpeg",
+    "title": "Deli",
+    "description": "[drawing of a deli storefront labeled DELI with a door numbered 1] Turns all negative meat-related points positive.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/g1P5fMX.jpeg",
+    "title": "The Judge",
+    "description": "[drawing of a figure in a robe] Detract 300 points from one player. When The Warden is in plain view, also gain 1000 points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ui2k2U0.jpeg",
+    "title": "BLACK BANANA",
+    "description": "[drawing of a blackened banana] MAKE BREAD +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/oZEQbgZ.jpeg",
+    "title": "BALLS of STEEL",
+    "description": "[drawing of a smiling stick figure] RESIST ALL NEGATIVE ATTACKS FOR 3 ROUNDS and say cling cling when you are attacked",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/bV0MEB8.jpeg",
+    "title": "AL GORE",
+    "description": "[drawing of a face] REVERSE DIRECTION, STOP GLOBAL WARMING",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6r0cdsx.jpeg",
+    "title": "Not A Blank Card",
+    "description": "[drawing of a card] Play face down in the middle and announce you are playing a blank card on everyone. The first person to turn it over loses 400 points. BT",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/GhT0slf.jpeg",
+    "title": "CORNING MUG",
+    "description": "[drawing of a steaming mug of coffee] +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8Tu8SKU.jpeg",
+    "title": "TREBLE CLEF",
+    "description": "[drawing of a treble clef] +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/c0wuh3K.jpeg",
+    "title": "Legolas",
+    "description": "[drawing of a stick figure elf shooting a bow and arrow] • What do your elf eyes see? +400 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/sqzHq87.jpeg",
+    "title": "Reverend Howie Mandel",
+    "description": "[drawing of a bald man in a robe with a cross necklace holding a microphone] + 0 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/3H5nFk2.jpeg",
+    "title": "Spread Eagle",
+    "description": "[drawing of a person sitting on a stool with legs spread wide] Play with your legs wide open for 1 round +200pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/PqOsm28.jpeg",
+    "title": "ICING THE KICKER",
+    "description": "[drawing of a football and a kicking tee] NAME A FOOTBALL PLAYER AND THEIR TEAM FOR 800PTS, OTHERWISE INVENT A SPORT",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/IrhBP9R.jpeg",
+    "title": "BABY CARROT",
+    "description": "[drawing of a carrot person standing on a line] +50",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/t5PGJRf.jpeg",
+    "title": "WOLOLO",
+    "description": "[drawing of a robed figure with arms raised] CONVERT an ENEMY PLAYER'S CARD (already played cards only)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Dx0pLqP.jpeg",
+    "title": "MAKE A TOAST",
+    "description": "[drawing of two wine glasses clinking] -1000 for every piece of toast you've made -1000 for every piece of toast you've eaten",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/EOcLm97.jpeg",
+    "title": "Acorn",
+    "description": "[drawing of an acorn] grow an oak # 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/IJ9L2pm.jpeg",
+    "title": "Grotus",
+    "description": "[drawing of a face with mouth open and something coming out] Say something foul to an opponent.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Rf5hmu0.jpeg",
+    "title": "",
+    "description": "\"Jared's butthole looks like a rusty balloon knot\" said his mother [drawing of an angry stick figure with a speech bubble saying \"what the fuck\"] -700 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/CjB1i4T.jpeg",
+    "title": "FILTHY SHEPHERD",
+    "description": "[drawing of a shepherd in a top hat with sheep] STEAL ANY SHEEP IN PLAY AND GIVE THE VICTIM 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1hEDohj.jpeg",
+    "title": "Steaming Pile of shit",
+    "description": "[drawing of a steaming pile] - 700 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mBkYWdk.jpeg",
+    "title": "Puberty",
+    "description": "[drawing of a teenager] •Worst time of your life. -700pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lxoBCoW.jpeg",
+    "title": "Clown Car",
+    "description": "[drawing of a small car with a dashed line] •Sneak this card into an opponent's hand, they must play it immediately and then loce 2000 pts. (use whatever means necessary)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/JGMpxWM.jpeg",
+    "title": "SYPHILLIS",
+    "description": "[drawing of two stick figures] player must spell Syphillis backwards in 30 seconds +900",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/OgxeniD.jpeg",
+    "title": "CORAL",
+    "description": "[drawing of fish swimming above coral reef underwater] +500 for you and EVERY OTHER PLAYER IN CLOCKWISE DIRECTION",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/veBrh63.jpeg",
+    "title": "Vermut,",
+    "description": "[drawing of a glass of liquid] is German for Wormwood. Tell us a fun fact - for 400pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/quqEHcB.jpeg",
+    "title": "RHUBARB",
+    "description": "[drawing of a rhubarb stalk holding a scroll] RECITE a LINE of POETRY, EAT a VEGETABLE, + 1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/irJXPVm.jpeg",
+    "title": "CARROT TOP",
+    "description": "[drawing of a carrot top sprouting from the ground] -100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/AK7hZB9.jpeg",
+    "title": "CRACK PIPE",
+    "description": "[drawing of a crack pipe being lit] CRUSH ONE CHEERIO, OR SIMILAR CEREAL, AND SNORT IT, OR LOSE 1500 PTS (FOR 1500)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/klhSebf.jpeg",
+    "title": "Robbin' The Grave",
+    "description": "THE BRAVE SIR ROBIN [drawing of a long-haired bearded man in a robe] Steal someone's already played card (they get +100)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/SCfsYfw.jpeg",
+    "title": "Lucky 6 Ball?",
+    "description": "[drawing of a 6 ball] Describe one of your superstitions and how you cope with it.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YhfIJsz.jpeg",
+    "title": "FORK IT OVER! FORK YOU!",
+    "description": "[drawing of a fork] PLAY 1 ROUND w/ A FORK IN YOUR MOUTH FOR 600PTS OR LOSE 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7xA1e7k.jpeg",
+    "title": "Steal-A-cow",
+    "description": "[drawing of two arms/hands reaching for a cow] Steal Someone's cow",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kB5atGg.jpeg",
+    "title": "Pitching A Tent",
+    "description": "[drawing of a man standing] -100 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1aBMrSo.jpeg",
+    "title": "DELICIOUS BOWL OF SOUP",
+    "description": "[drawing of a steaming bowl of soup] HAPPY ONCE, HAPPY TWICE, HAPPY CHICKEN SOUP WITH RICE +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ovcCEHf.jpeg",
+    "title": "Giving Tree",
+    "description": "[drawing of a tree] + 700pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/BafTzEt.jpeg",
+    "title": "Fuck Load of Cutlery",
+    "description": "[drawing of two knives] Balance a spoon on your nose for 3 turns + 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/o2WrIDU.jpeg",
+    "title": "WILD STRAWBERRY",
+    "description": "[drawing of a strawberry-headed creature with an open mouth] - 500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/OEecT9d.jpeg",
+    "title": "Cotton-eye Joe",
+    "description": "[drawing of a stick figure wearing a top hat with large eyes] He should probably get that looked at. - 300 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/QRkDxby.jpeg",
+    "title": "BANANZA!",
+    "description": "[drawing of a face with a banana] Play 1 round with an unpeeled banana in your mouth +600pts or -300pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/79CYAyT.jpeg",
+    "title": "THE WASHINGTON MONUMENT",
+    "description": "[drawing of the Washington Monument flanked by flowers] + 100 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/yiF5v8e.jpeg",
+    "title": "Foxy Shazam",
+    "description": "[drawing of a lightning bolt] + [drawing of a lit cigarette] +800pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lVuOHN7.jpeg",
+    "title": "PYRO",
+    "description": "[drawing of a stick figure holding a flame] LIGHT SOMETHING on FIRE, +800 -or- LOSE 800 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/umQsSEU.jpeg",
+    "title": "Salty Dawg",
+    "description": "[drawing of two creatures, one licking the other's beard, with a speech bubble] Don't talk about this! IF Someone has a beard lick it! + 1000 iF no one Does -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/BMXTvkL.jpeg",
+    "title": "EYE BROW TO YOU",
+    "description": "[drawing of a face with raised eyebrows] Keep eyebrows raised for 1 round - +1000 -or- -1800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Ko12Lx2.jpeg",
+    "title": "KUM QUAT",
+    "description": "[small circled drawing] SHAKE EVERYONE'S HAND ON THEIR TURN IN ORDER TO RECEIVE 500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/eGnZvsz.jpeg",
+    "title": "GOOD TOUCH, BAD TOUCH",
+    "description": "[drawing of two stick figures] GIVE A NEGATIVE CARD IN FRONT OF YOU TO A NEIGHBOR AND TAKE A POSITIVE FROM THEM",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/UBNTvUe.jpeg",
+    "title": "The Finger",
+    "description": "[drawing of a hand giving the middle finger] -100 Points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/H92QY3x.jpeg",
+    "title": "Jesus Christ on a raft and a half.",
+    "description": "[drawing of a figure standing on a raft in the water] Delete the negative points of your left and right neighbors . you + 1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/BkXiN68.jpeg",
+    "title": "PEDO BEAR",
+    "description": "[drawing of a bear] - 1100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/VmdP1Zp.jpeg",
+    "title": "GARDISIL",
+    "description": "[drawing of a syringe] ONE LESS (-1 PT)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/K1MbnYq.jpeg",
+    "title": "A CHILD (S) LAUGHTER",
+    "description": "[drawing of a sad face and a laughing face separated by a line] . If this card is pronounced \"Child's laughter\" gain 800 pts If A is pronounced \"A child Slaughter\" lose 1000pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8MxsHyV.jpeg",
+    "title": "Pluto",
+    "description": "[drawing of a small planet amid scribbles] Choose one player to lose all points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/SDOBUX5.jpeg",
+    "title": "Sour Cream",
+    "description": "[drawing of a tub of sour cream] Hot potato effects Do not work for the person in possession of this card",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Gh4lXug.jpeg",
+    "title": "AFRO",
+    "description": "[drawing of a stick figure with a large afro] - 1500 for curly hair",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/MC0VVyD.jpeg",
+    "title": "Birds and Bees",
+    "description": "[drawing of a bird and a bee's dotted flight path] Explain sexual reproduction to the group for 600 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YFtTaMd.jpeg",
+    "title": "NO LEFT TURN",
+    "description": "[drawing of a no left turn sign] -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8FAmxdi.jpeg",
+    "title": "I DO NOT LIKE IT, SAM I AM.",
+    "description": "[drawing of green eggs and ham in a pan] TELL ANY OPPONENT SOMETHING YOU DO NOT LIKE ABOUT HIM/HER. -or- -1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cOGPKs2.jpeg",
+    "title": "THON-G",
+    "description": "[drawing of a thong] Mystery thong in your bed. Yours? - 600 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/h7CRoG0.jpeg",
+    "title": "Frost Tips",
+    "description": "When you bleach spots into your hair. Fuck you if you did this. -500 if you had these",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5ycHeRY.jpeg",
+    "title": "END OF DAYS",
+    "description": "[drawing of a sun rising over the horizon] + 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/awTpbtt.jpeg",
+    "title": "Friend Tank",
+    "description": "[drawing of a fuel gauge pointing to full, with E and F] No Friends -400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/AcPcA2n.jpeg",
+    "title": "DMT",
+    "description": "[drawing of a swirling spiral pattern] -The effects of DMT (or dimethyltriptamine) can induce a dream-like phantasmagoria. +1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/P8vbk85.jpeg",
+    "title": "Give A Lady A Boner",
+    "description": "[drawing of a woman's face with curly hair] +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/fz1fOOR.jpeg",
+    "title": "WHERE'S WALDO",
+    "description": "[drawing of a crowd of stick figures] + 100 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/esQR8Op.jpeg",
+    "title": "Raw Dog",
+    "description": "[drawing of a baby] You're a baby daddy -700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/PrjDICV.jpeg",
+    "title": "TECHNO CAT",
+    "description": "[drawing of a cat surrounded by the word UNTZ] -UNTZ- -UNTZ- -UNTZ- -UNTZ- -600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rCpKKGU.jpeg",
+    "title": "JACKSON POLLOCK",
+    "description": "[drawing of scribbled abstract lines] -600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RJPpG9r.jpeg",
+    "title": "Puppies",
+    "description": "[drawing of three puppies] Lick the person's face to your right or lose 300 points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/seTQgQ8.jpeg",
+    "title": "ARCHER",
+    "description": "[drawing of a stick figure shooting a bow and arrow] +300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/85mpghu.jpeg",
+    "title": "STAIRS",
+    "description": "THE FUN NEVER STOPS? [drawing of stick figures tumbling down stairs] RUN UP+DOWN STAIRS SAFELY -or- - 400 POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Q2slbX7.jpeg",
+    "title": "ANIMAL FARM",
+    "description": "[drawing of a pig] Lose 100 for every animal related card in front of you.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rmjlqLM.jpeg",
+    "title": "Basil Plant",
+    "description": "[drawing of a potted plant] Choose one player to lose a turn",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mJr2fdd.jpeg",
+    "title": "LONG ARM of JUSTICE",
+    "description": "[drawing of a long looping arm with a fist] -500 POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XoENND1.jpeg",
+    "title": "Keep Calm",
+    "description": "[drawing of a face with wild hair] Keep Calm or lose",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/OlS9NKY.jpeg",
+    "title": "GRASSY HILLOCK",
+    "description": "[drawing of a grassy hill with a small figure sitting on top] TAKE it EASY + 200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/y4tQXOE.jpeg",
+    "title": "White Tee",
+    "description": "[drawing of a white t-shirt] Name every state capital +25 for each capital w/state",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/oztHfEe.jpeg",
+    "title": "SALAMI",
+    "description": "[drawing of a salami sausage] -900 POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/HvBjeBE.jpeg",
+    "title": "Nutella",
+    "description": "[drawing of a jar of Nutella] -800 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/bpol481.jpeg",
+    "title": "TEAS & PEES",
+    "description": "[drawing of a stick figure holding a cup of tea and peeing] EVERYONE (cups of tea x # of pees) X-200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Cj8uE1D.jpeg",
+    "title": "Who turned out the Lights?",
+    "description": "[drawing of a light switch in a shaded/dark area] Play 1 round w/ your eyes closed. Fail -> lose 400 pts. Succeed -> gain 400 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Cu8NdnR.jpeg",
+    "title": "SKYRAIL",
+    "description": "[drawing of a cable car / gondola traveling down a wire from a tower over rocky terrain] +700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1D44nPs.jpeg",
+    "title": "The Cunning Linguist",
+    "description": "[drawing of a face with a large tongue sticking out] + 300 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hzU6iAb.jpeg",
+    "title": "The old switch-a-roo",
+    "description": "[drawing of two cards with an arrow swapping between them] Swap a blank card for a non-blank card w/ someone at the table",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/AAbsA1i.jpeg",
+    "title": "SLAP JACK",
+    "description": "[drawings of Jacks (J), hearts, and diamonds] LAST PERSON TO SLAP THIS CARD -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/pDbljhY.jpeg",
+    "title": "HAPPINESS IS A WARM GUN",
+    "description": "[drawing of a stick figure with a gun in its mouth] IF YOU COULD CHOOSE HOW TO DIE, HOW WOULD IT GO? TELL THE GROUP FOR 500 PTS OR ELSE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/s6AXPDg.jpeg",
+    "title": "PROTECTIFICATION",
+    "description": "[drawing of a shield with a cross] PROTECTS USER FROM NEGATIVE CARDS FOR 2 TURNS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/MZyXHzF.jpeg",
+    "title": "Loose Butthole !",
+    "description": "[drawing of a faucet dripping and a shocked stick figure] Lose 100 points for every finger that will comfortably fit in your anus.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/o4WIUip.jpeg",
+    "title": "MONGOLIAN SUNRISE",
+    "description": "[drawing of a sunrise, a yurt, and sheep] +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YpgSmP5.jpeg",
+    "title": "Grip and Rip",
+    "description": "[drawing of a fist] Pay your right neighbor a complement + 200 (For both)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YOM5ZZe.jpeg",
+    "title": "HUMDINGER",
+    "description": "[drawing of a bird] HUM A SONG, 1st PERSON TO GUESS WINS 1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Q6IkWDj.jpeg",
+    "title": "Boot Polish",
+    "description": "[drawings of polish tin, brush, applicator, and a boot] +3 Style Points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/QPxO8Zj.jpeg",
+    "title": "Sweater Fever",
+    "description": "[drawing of a smiling face wearing a scarf] +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/vWoXL1F.jpeg",
+    "title": "FACE",
+    "description": "[drawing of a face making a silly expression] MAKE THE STUPIDEST FACE YOU CAN. IF ANYONE LAUGHS, +1000 TO YOU. OTHERWISE, +300 TO EVERYONE ELSE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/txctkVA.jpeg",
+    "title": "Make everyone Happy!",
+    "description": "[drawings of several smiling faces and one frowning face walking away] LEAVE!",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Q116tw2.jpeg",
+    "title": "OWL",
+    "description": "[drawing of an owl's face] IF you thought these were breasts -200 (be honest)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/vamyNhI.jpeg",
+    "title": "BUCKET HEAD",
+    "description": "[drawing of a face with a bucket on its head, speech bubble saying \"Shred.\"] Place nearest bucket on head for 1 round. +300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8e7VSjt.jpeg",
+    "title": "Totem Spirit",
+    "description": "[drawing of a dreamcatcher] .fuck you (or craziest) . Describe your last dream. For 300 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uUu9JJ0.jpeg",
+    "title": "DAIRY FARM",
+    "description": "[drawing of a cow in a field] GIVE YOURSELF A MILK MUSTACHE FOR 500 PTS OR LOSE 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WMMDyOG.jpeg",
+    "title": "Trading Spouses",
+    "description": "[drawing of two hands of cards] Swap your whole hand with the person sitting opposite you.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7cd5WVe.jpeg",
+    "title": "PENAL FRACTURE",
+    "description": "[drawing of a bent penis] NEGATES VIAGRA",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kGBmUOy.jpeg",
+    "title": "BASTARD",
+    "description": "[drawing of a thumbs up] LOSE 100 PTS FOR EVERY CARD IN FRONT OF YOU (CONTINUOUS)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/s4761cN.jpeg",
+    "title": "JEHOVAH'S WITNESS",
+    "description": "[drawing of a door] MAKE SURE ALL DOORS ARE LOCKED +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1Bji4TZ.jpeg",
+    "title": "Fiberglass Insulation",
+    "description": "[drawing of a stick figure under insulation with X eyes] . Get mesotheliama - 700 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/c654utQ.jpeg",
+    "title": "Cantankerous Water",
+    "description": "[drawing of a watering can pouring water on wood] Outs any friendly fire.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6fiAbUD.jpeg",
+    "title": "THIERRY ENNUI",
+    "description": "[drawing of a hockey rink with stick figure players and a puck] -100 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/MjA9jZ8.jpeg",
+    "title": "Blackbeard",
+    "description": "[drawing of a stick figure pirate with a beard and sword] . Steal one previously used card",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8qqUPdk.jpeg",
+    "title": "POCAHONTAS",
+    "description": "[drawing of a stick figure with feathers in hair holding an arrow] + 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/33VCOar.jpeg",
+    "title": "DIME BAG",
+    "description": "[drawing of a dime coin] EAT A PIECE OF PAPER THE SIZE OF A DIME -OR- LOSE 800 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/TEjs4Ir.jpeg",
+    "title": "MASTURBATORY GLANCES",
+    "description": "[drawing of two stick figures exchanging a glance] + 500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/VjpNQ1j.jpeg",
+    "title": "ROBIN HOOD",
+    "description": "[drawing of an arrow] WEAR A HAT FOR THE NEXT 2 ROUNDS -or- -600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/yLM6WMl.jpeg",
+    "title": "Texaco Pete",
+    "description": "[drawing of a person performing oral sex through a hole] + 200 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Bm0zorp.jpeg",
+    "title": "JELLYFISHING",
+    "description": "[drawing of a hand net and a jellyfish] +300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/p2EXWaw.jpeg",
+    "title": "Pac Man",
+    "description": "[drawing of a ghost, Pac-Man, and two dots] eat something that resembles the Dot + 400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/0Ttwixw.jpeg",
+    "title": "CORN DOG EDDIE",
+    "description": "[drawing of a boy] -900",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/S1HBdrm.jpeg",
+    "title": "Hot Air Balloon",
+    "description": "[drawing of a hot air balloon] Pretend to be stoned for 2 rounds for + 1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/EExUMK2.jpeg",
+    "title": "CACTUS",
+    "description": "[drawing of a cactus, sun, and a donkey in a desert] THIS CARD IS A DISAPPOINTMENT. TALK ABOUT SOMETHING THAT SADDENS YOU. -200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/i5WIF3v.jpeg",
+    "title": "DIABETES",
+    "description": "[drawing of a glucose meter] TYPE I: IF YOU'RE CURRENTLY IN THE NEGATIVE, +500 PTS TYPE II: IF IN THE POSITIVE, -500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WPMg8jE.jpeg",
+    "title": "Lupus Fiasco",
+    "description": "[drawing of two stick figures] •Every time a person swears - 100 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/FfWtkP3.jpeg",
+    "title": "NACHO ARSONIST",
+    "description": "[drawing of a nacho holding a torch beside a burning figure] -100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/E7WjDBV.jpeg",
+    "title": "CHERRY PIE / ICE CREAM",
+    "description": "[drawing of a slice of pie on a plate] +600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/0DTfk83.jpeg",
+    "title": "H2O (Hug two others)",
+    "description": "[drawing of two stick figures] - All receive 400 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ekOs73Y.jpeg",
+    "title": "IDYLLIC CHILDHOOD",
+    "description": "[drawing of a tree and a tent] +1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cX42Lkk.jpeg",
+    "title": "POISON the BOSS",
+    "description": "[drawing of a standing stick figure and a fallen figure] BLINDLY DRAW CARD FROM ENEMY HAND and PLAY IMMEDIATELY",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7lGeUvl.jpeg",
+    "title": "REFINISH a FLOOR",
+    "description": "[drawing of a room with windows and a floor sander] + 800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/xHVcGjT.jpeg",
+    "title": "Cuckold",
+    "description": "[drawing of two stick figures] Grab the crotch of the person to your left. or lose 900 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qXJ0dGr.jpeg",
+    "title": "Kissy Kissy",
+    "description": "[drawing of lips] Mauh! Give a kiss to the person on your left. 600pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/fcV75iG.jpeg",
+    "title": "The Human Pretzel",
+    "description": "[drawing of a pretzel] Everyone INTERLOCKS LEGS AND ARMS FOR 1 ROUND +250pts for EVERYONE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kamMuvy.jpeg",
+    "title": "DQ",
+    "description": "[drawing of a soft-serve ice cream cup] GET DIARRHEA +1000 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hves5MC.jpeg",
+    "title": "factory fitness",
+    "description": "[drawing of a stick figure boxing a punching bag] - Lose 5 pounds! Yay! - 600 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mQbxHuk.jpeg",
+    "title": "Rim job",
+    "description": "[drawing of buttocks] - 700 points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/TI3WmAF.jpeg",
+    "title": "PENNY LOAFERS",
+    "description": "[drawing of a loafer shoe] +200 PTS GRAMPS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Umrfx7m.jpeg",
+    "title": "BUNDT PAN",
+    "description": "[drawing of a bundt pan] -400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/jk9rfyJ.jpeg",
+    "title": "BICYCLE",
+    "description": "[drawing of a bicycle] +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uTn70uh.jpeg",
+    "title": "MICHAEL CAINE: MASTER of DISGUISE",
+    "description": "[drawing of a face with mustache] WEAR SOMETHING on FACE/HEAD for +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/jCRwZYI.jpeg",
+    "title": "Dream Catcher",
+    "description": "[drawing of a dream catcher] Share a dream or make one up - no effect",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/BzorlaL.jpeg",
+    "title": "RUSSEL BRAND",
+    "description": "[drawing of a face with curly hair] BE WITTY. BUTCHER a CLASSIC SONG. + 800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/bdIue9r.jpeg",
+    "title": "CHOLULA",
+    "description": "[drawing of a hot sauce bottle with arms and legs] EAT SOMETHING SPICY +700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/BqUhM5I.jpeg",
+    "title": "TEETER TOTS",
+    "description": "[drawing of tater tots] STAND ON 1 FOOT (WITHOUT SWITCHING LEGS) FOR 1 ROUND -or - 400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/xbsdlPM.jpeg",
+    "title": "MUSHROOMS",
+    "description": "[drawing of two mushrooms] +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/M3T6jrV.jpeg",
+    "title": "Swing Low, Sweet Chariot",
+    "description": "[drawing of an axe] 'Everybody discards one drawn card from their hand and places it on a pile. At the end of the game the cards are redistributed and played.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/xSUkuvz.jpeg",
+    "title": "HONEST TEA",
+    "description": "[drawing of a bottle of Honest Tea] +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/BXmzG3g.jpeg",
+    "title": "I for an eye",
+    "description": "[drawing of two stick figures, one holding an \"I\" and one holding an eye] Pinch the player to your left",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cKBihxV.jpeg",
+    "title": "TAJ MAHAL",
+    "description": "[drawing of a stick figure with shoes] ANYONE WEARING SHOES, -300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/2ZiSAJ0.jpeg",
+    "title": "BEE",
+    "description": "[drawing of a bee with a flight path] +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uZ4RwIi.jpeg",
+    "title": "LEMON",
+    "description": "[drawing of a lemon] SKIP NEXT PLAYER'S TURN +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/KSfbCiQ.jpeg",
+    "title": "Wash with Soap",
+    "description": "[drawing of a bar of soap with bubbles] - Say 5 of the filthiest words you can imagine",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qcHQR27.jpeg",
+    "title": "HEISENBERG",
+    "description": "[drawing of a man in a hat with sunglasses and goatee] ACT CRYPTIC and SOCIALLY AWKWARD +1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5JZst2V.jpeg",
+    "title": "TEA FARM",
+    "description": "[drawing of mountains and a person farming rows of crops] +500 if you have TEA LOSE a TURN, OTHERWISE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/xWUjDUJ.jpeg",
+    "title": "Tamponderosa",
+    "description": "[drawing of a plate with tampons] Found tampon in entrée, -600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/phOUpQ7.jpeg",
+    "title": "Peyote",
+    "description": "[drawing of a cross-eyed figure with a pipe] •Experience mescaline for the first time. Go cross-eyed for 2 turns -or- lose 600 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/xu5Q5WQ.jpeg",
+    "title": "THE CASK OF ARMADILLO",
+    "description": "[drawing of a book/wall] DESCRIBE YOUR THOUGHTS ON POE & NAME 2 OF HIS WORKS -or- -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/tIIJAYZ.jpeg",
+    "title": "HENRY CLAY",
+    "description": "[drawing of a campaign button reading \"2012 VOTE CLAY\"] LOSE A TURN, BUT KEEP UP THE GOOD WORK!",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/gbvXLRC.jpeg",
+    "title": "NIC CAGE'S NEXT BLOCKBUSTER",
+    "description": "[drawing of a flying pig] NAME a MOVIE YOU LOVE +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7ZVnpl3.jpeg",
+    "title": "CUP HOLDER",
+    "description": "[drawing of a cup] IF PERSON TO RIGHT HAS BEV, FEED THEM A SIP FROM THEIR CUP FOR +400. IF NOT, -100. IF THEY RESIST, THEY LOSE 1000.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/s2nHl7n.jpeg",
+    "title": "LIBRARIAN'S DAUGHTER",
+    "description": "ESTHER [drawing of a person] -1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qM5Ur0h.jpeg",
+    "title": "SCOOBY-DOOBIE DON'T",
+    "description": "[drawing of the Mystery Machine van] NAME ALL THE CHARACTERS FROM SCOOBY-DOO FOR 500 or LOSE 200 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/sUC0jzP.jpeg",
+    "title": "INTERRUPTING COW",
+    "description": "[drawing of a cow saying \"MOO\"] INTERRUPT EVERY (FOR 1 ROUND) PLAYER ON THEIR TURN BY YELLING \"MOO\" FOR 400 PTS OR LOSE 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kTp3eMZ.jpeg",
+    "title": "JACK ASS OF THE YEAR",
+    "description": "[drawing of a donkey-headed stick figure] - 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/VRQLGsC.jpeg",
+    "title": "Captain Henry Morgan",
+    "description": "[drawing of a pirate] • Say hello to the most badass pirate the world has ever seen. Erase all neg. cards played on you + double pos.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/nmkrOYO.jpeg",
+    "title": "Boogie Picker",
+    "description": "[drawing of a face picking its nose] Pick your own nose for 200 pts or pick a friends nose for 500 pts and take 1 of their cards. otherwise lose 700 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/oTCaEc3.jpeg",
+    "title": "Righteous Ram",
+    "description": "[drawing of a ram with rays around it] +200 (also negates the Diddler after he's played.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/LSpGfFk.jpeg",
+    "title": "PYONGYANG",
+    "description": "[drawing of a person standing on ground] -300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Y9e2BUT.jpeg",
+    "title": "Fish + Chips (minus the fish)",
+    "description": "[drawing of a fish crossed out + a container of chips] Eat an entire bag of chips -> 800 Don't -> -800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/sFkPerh.jpeg",
+    "title": "Above the inFluence",
+    "description": "[drawing of an arrow pointing up inside a circle] You're just doin' You + 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/UQpLmkv.jpeg",
+    "title": "QUEEN",
+    "description": "[drawing of a person singing into a microphone] SING QUEEN LYRIC FOR +700 -or- LOSE THE NEXT TWO TURNS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7IetIUQ.jpeg",
+    "title": "Maelstrom",
+    "description": "[drawing of a boat next to a whirlpool] • All played cards and cards in your hand are put together. ie, the group starts afresh. (and redeal)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/eIyaK9q.jpeg",
+    "title": "HIDE AND GO SEEK",
+    "description": "woo hoo [drawing of a person on a motorcycle] GO HIDE IN ANOTHER ROOM FOR 1 ROUND FOR 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rnvd1vR.jpeg",
+    "title": "Incest",
+    "description": "[drawing of a person] -1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kV7Xnxu.jpeg",
+    "title": "Shootin' Blanks",
+    "description": "Pooff [drawing of a gun firing] Find 3 Blank cards in the deck, replace them with 3 of yours, draw them or loose 900",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/TXXJJik.jpeg",
+    "title": "MINK",
+    "description": "[drawing of a mink among cattails] +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4U71WuX.jpeg",
+    "title": "Chairman of Civil Rights",
+    "description": "[scribble; drawing of a person on a podium speaking to two small figures] -10 wisdom",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/B9MJEOZ.jpeg",
+    "title": "PREMATURE GRINTER BATION",
+    "description": "OH GOD NO! [drawing of drops] -500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XywGKFy.jpeg",
+    "title": "Sandbag Johnson and the Furious Five.",
+    "description": "[drawing of six stick figures on a stage] Open for Nickelback. +700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/GFKT1sT.jpeg",
+    "title": "Dingo Ate my Baby",
+    "description": "[drawing of a landmass labeled NOT AUSTRALIA] Play the next round upside down. +200 pts. Lose otherwise.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6PvFbqh.jpeg",
+    "title": "THERMOSTAT",
+    "description": "[drawing of the shape of Florida] NAME A STATE YOU'D LIKE TO VISIT AND WHY FOR 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/gQygyht.jpeg",
+    "title": "Dunkin'",
+    "description": "[drawing of a cup of coffee] eat some coffee grounds + 600 nothing if you don't",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/npCSdb2.jpeg",
+    "title": "Fat Blunts",
+    "description": "[drawing of two fat people] EMILY BLUNT <- JAMES BLUNT -> -100 pts for every 50 pounds you weigh.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/KYQ79yH.jpeg",
+    "title": "Puma Shoes",
+    "description": "[drawing of a leaping puma] Smell your neighbors Feet For + 800 or - 100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/VhpYbnN.jpeg",
+    "title": "JUGS",
+    "description": "[drawing of a milk jug labeled MILK] +900 when matched with cow with cow -900 otherwise",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6MFar5H.jpeg",
+    "title": "HERE COMES THE SUN",
+    "description": "[drawing of a sun with a face] -400 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/a3dJeB4.jpeg",
+    "title": "CORK SCREW",
+    "description": "[drawing of a corkscrew spiral arrow] SIT BACKWARDS, FACING AWAY FROM TABLE FOR 2 ROUNDS OR LOSE 2 TURNS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8Uzmj9O.jpeg",
+    "title": "TALK ON SOMEONE'S SHOULDER",
+    "description": "[drawing of three stick figures] TALK TO YOUR NEIGHBOR FOR THE REST OF THE GAME ON HIS SHOULDER +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/CJf4ExG.jpeg",
+    "title": "Cummin' 'round the Mountain.",
+    "description": "[drawing of a mountain with a person looking up] +700 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/HLucpBT.jpeg",
+    "title": "Beach Tits",
+    "description": "[drawing of a woman in a striped bikini wearing sunglasses] + 100 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Bu9RFQO.jpeg",
+    "title": "ALMOND JOY",
+    "description": "[drawing of an almond] toss almond into each players mouth (only get 1 try) +300 for every score",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/nIg7TI2.jpeg",
+    "title": "DRAWING A BLANK",
+    "description": "[drawing of a blank rectangle] SWAP ALL BLANK CARDS WITH PLAYER TO LEFT",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/zOHvfjU.jpeg",
+    "title": "POP-TART",
+    "description": "[drawing of a pop-tart with a face, arms and legs] LOSE YOUR WEIGHT (lbs) in POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/6b0Rcgq.jpeg",
+    "title": "SELL VOICE FOR LEGS",
+    "description": "[drawing of a mermaid] Player can't talk for next 2 rounds -X=1500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WqoPKtm.jpeg",
+    "title": "RAINBOW ROAD",
+    "description": "[drawing of a winding road/track] YOU DRIFTED FAST AROUND the TRACK BUT DROVE the CAR INTO the BLACK.. 8th PLACE -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/euz8xqN.jpeg",
+    "title": "Ms. PEACOCK IN THE OBSERVATORY WITH THE ROPE",
+    "description": "CLUE! - 200 PTS, SHITTY GAME",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/RaXpFuZ.jpeg",
+    "title": "Lupus?",
+    "description": "[drawing of a canine/dog face] You have canine lupus. It's not all bad, +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/vPkHxA1.jpeg",
+    "title": "Oops! Cherry Popped!",
+    "description": "[drawing of a startled stick figure] - 700 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/P8z9OmE.jpeg",
+    "title": "Back to Earth",
+    "description": "[downward arrow to a drawing of Earth] Drug Test! -300 to any user.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/zNRrhap.jpeg",
+    "title": "JONI MITCHELL",
+    "description": "[drawing of a girl with long hair] SIWG THE HIGHEST NOTE YOU CAN REACH FOR 10 SEC -or- -600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/P9qRJDq.jpeg",
+    "title": "HAVE a DRINK with TOMMY LEE JONES",
+    "description": "[drawing of two people sitting at a bar] +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/M0LXzNB.jpeg",
+    "title": "MARSH-MALONE",
+    "description": "[drawing of a marshmallow] TAKE YOUR AGE ÷5, EAT THAT MANY MARSHMALLOWS FOR 800 PTS, or LOSE 500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/oe5h5M6.jpeg",
+    "title": "Bubble Tea",
+    "description": "[drawing of a bubble tea cup with straw and tapioca pearls] + 600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/nZBjcAo.jpeg",
+    "title": "Marvin Gaye",
+    "description": "[drawing of a piano with music notes] •Seduce and/or grope the person to your right. For 800 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/z0KT6d4.jpeg",
+    "title": "NICE GESTURE NORM",
+    "description": "\"Howdy\" [drawing of a man waving] SAY SOMETHING NICE ABOUT SOMEONE +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/3iRuk2q.jpeg",
+    "title": "DOUBLE PEN",
+    "description": "[drawing of a pen box and two pens] YOU AND ONE OTHER PERSON (OF YOUR CHOICE) GET 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/UncChIN.jpeg",
+    "title": "Lewis + Bark ?",
+    "description": "[drawing of a person and a bird in a canoe] Jourey to the bottom of the deck and replace it with one card in your hand",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/VQTHi8t.jpeg",
+    "title": "Hatfield-Perdue Family Reunion",
+    "description": "[drawing of stick figures around a house/tent] •Out a family member, lose 1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uLWBnxo.jpeg",
+    "title": "Mr. Creamy",
+    "description": "[drawing of an ice cream cone with a face and arms] •close hold your nostrils shut for 3 turns. or lose 800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/zTE5gZF.jpeg",
+    "title": "LIPS OF AN ANGLE",
+    "description": "[drawing of a right angle with arrows] TOUCH THE LIPS OF EVERY PLAYER WITH YOUR ELBOW -or- -1200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WQo8Yqh.jpeg",
+    "title": "007",
+    "description": "[drawing of a man in a tuxedo holding a martini, saying \"HEY THERE\", with a woman to the right] PET THE PERSON TO YOUR RIGHT AS YOU TELL THEM YOU'LL LOVE THEM FOREVER (+400)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/VPhNVoH.jpeg",
+    "title": "Earthquake",
+    "description": "[drawing of a face peeking above wavy ground lines] Swap one card with the person to your right,",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/0PAIViw.jpeg",
+    "title": "DAVE - BRUBECK'S LATE WIFE BARRY REYNOLDS",
+    "description": "[drawing of a stick figure in a top hat] NAME A DAVE BRUBECK SONG -OR- LOSE 300 PtS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/yZIhn7p.jpeg",
+    "title": "HONEST TO PETE",
+    "description": "[drawing of a smiley face] NAME A PETERSON AND SOMETHING TERRIBLE THEY DID FOR 300 PtS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7Vh2WQz.jpeg",
+    "title": "PIKACHU, I CHOOSE YOU!",
+    "description": "NAHT LOSE 100 PTS [drawing of a hand and a crossed-out Pokeball]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/2QZMtKJ.jpeg",
+    "title": "BUSINESS DEAL !",
+    "description": "+ 200 FOR EVERYONE [drawing of a handshake]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/fld6TI9.jpeg",
+    "title": "DOOBIE BROTHERS",
+    "description": "+ 4/20 PTS TO YOU + THE PERSON YOU GIVE IT TO [drawing of a joint]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/aEDdJfT.jpeg",
+    "title": "Dirty Trousers",
+    "description": "Do wash -lose 600 [drawing of stinky pants]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/o1qiC4x.jpeg",
+    "title": "Electrical Outlet",
+    "description": "-500 pants [drawing of an electrical outlet with a face and scissors]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1sCuYvb.jpeg",
+    "title": "Glowing Cock of Liberty",
+    "description": "+ 1200 pts [drawing of a rooster inside a glowing star]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5v1Jh9j.jpeg",
+    "title": "German Beer Wench",
+    "description": "get me a beer - 300 [drawing of a stick figure holding a beer]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/EfvpsuO.jpeg",
+    "title": "ROSIE O'DONNEL",
+    "description": "LOSE 900 PTS. [drawing of a smiling woman]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/TlNkptY.jpeg",
+    "title": "SCARY MOVIE",
+    "description": "SHARE WITH EVERYONE THE LAST MOVIE TO GIVE YOU A NIGHTMARE [drawing of a figure lying on a bed]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/9Abg4lo.jpeg",
+    "title": "Vampire Weekday",
+    "description": "-600 for being lame [drawing of a vampire stick figure and a bat]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ckt5CkR.jpeg",
+    "title": "Dirty Randy",
+    "description": "-1200 pts [drawing of a scruffy man with a goatee]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YLo2AU5.jpeg",
+    "title": "Macy Gray",
+    "description": "Try to say goodbye, but choke.. - 500 pts. [drawing of a woman's face with wild hair]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ojo5R2R.jpeg",
+    "title": "Massage Pac-Man's Balls Thoroughly.",
+    "description": "Join an alliance with another player - gain each other's bonuses. 1 turn [drawing of Pac-Man with a hand]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lwzaaw7.jpeg",
+    "title": "IT'S PEANUT BUTTER JELLY TIME",
+    "description": "+ 200 points [drawing of a dancing banana]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/aOFNNbY.jpeg",
+    "title": "Rough up an old man on a park bench",
+    "description": "The oldest person in the room loses 500 points. [drawing of an old man by a park bench]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/DWKfWI6.jpeg",
+    "title": "BLANKETY SKANK",
+    "description": "HE (OR SHE) WHO CURRENTLY HOLDS THE MOST BLANKS TRADES THEIR NON-BLANK CARDS FOR BLANKS [drawing of an empty square]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/3C9hD4o.jpeg",
+    "title": "SANDMAN",
+    "description": "GUESS TIME W/O LOOKING. IF WITHIN 15 MIN, + 800 [drawing of a hooded figure with a sword]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/QjUHHIz.jpeg",
+    "title": "MACK the KNIFE",
+    "description": "+200 [drawing of a knife with legs]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/haMUGbU.jpeg",
+    "title": "SCISSOR ME TIMBERS",
+    "description": "-200 TO YOU AND THE PERSON TO YOUR LEFT [drawing of two scissoring stick figures]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/IzkeEQZ.jpeg",
+    "title": "RECYCLING",
+    "description": "REVERSE DIRECTION + 800 [drawing of recycling arrows]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/SBPtsuT.jpeg",
+    "title": "FONDLE THE BEARD",
+    "description": "Fondle the fullest beard in the room for the next 2 turns +400 points [drawing of a bearded man in a top hat]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qUwkOon.jpeg",
+    "title": "FERDINAND",
+    "description": "NAME 5 FRANZ FERDINAND SONGS -or- TELL US ALL YOU KNOW ABOUT THE REAL GUY [drawing of two stick figures]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/sHGdrvC.jpeg",
+    "title": "Sloppy Pussy",
+    "description": "-meow 5 times or lose 800 pts. [drawing of a cat next to a food bowl]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ecb2a61.jpeg",
+    "title": "Dimebag Steve",
+    "description": "Draws in all Drug-related cards. +1000 per card. [drawing of a smiling man holding up a bag]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lEgDFZx.jpeg",
+    "title": "Great Balls o' Fire",
+    "description": "Go rub hand sanitizer on your coin purse for 800 pts. [drawing of a stick figure and a hand on fire]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/S4YTYpN.jpeg",
+    "title": "FRUMPTILDA",
+    "description": "[drawing of a person] I DON'T KNOW. SORRY. +100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/I8e5mav.jpeg",
+    "title": "RADIATOR",
+    "description": "[drawing of concentric circles] CLOSE ONE EYE FOR ONE ROUND OR LOSE A TURN",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ZKd6Ukm.jpeg",
+    "title": "FROGGER",
+    "description": "[drawing of a frog crossing a road with cars] BREATHE THROUGH YOUR MOUTH for the NEXT ROUND +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Q0BQuI1.jpeg",
+    "title": "Tickle me Elmo",
+    "description": "[drawing of a hand] give card to opponent if they can tickle another opponent until laughter +300 for them",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XvanLHL.jpeg",
+    "title": "RIDING A MUSTACHE",
+    "description": "YEE-HAW [drawing of a stick figure riding a mustache] + 500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/N3lf8xB.jpeg",
+    "title": "EGG",
+    "description": "[drawing of an egg] play carefully with an egg in your hand For 5 rounds. or minus -555",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rJHbQce.jpeg",
+    "title": "SIRI",
+    "description": "\"Go FUCK YOURSELF\" [drawing of a smartphone] -500 PTS -200 ADDITIONAL PTS IF YOU OWN AN APPLE PRODUCT",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4ayfemv.jpeg",
+    "title": "SKIRMISHER",
+    "description": "[drawing of a stick figure with shield and spear] +100 -or- KILL ENEMY ARCHER",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/gtIRR1e.jpeg",
+    "title": "SACK TAP",
+    "description": "[drawing of a fist and a hand flicking] PLAY IMMEDIATELY TO COUNTERACT MAELSTROM (REPLACE)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uw3k0R9.jpeg",
+    "title": "RUDE",
+    "description": "[drawing of stick figures around a table] FACE AWAY FROM THE TABLE FOR ONE ROUND FOR 500 PTS OR LOSE 700 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5k32Syd.jpeg",
+    "title": "Surprise!",
+    "description": "[drawing of a person jumping out of a cake and two stick figures reacting] You're an asshole. -900 pts,",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5YFATdf.jpeg",
+    "title": "Professor Watson",
+    "description": "[drawing of a man holding a cup of tea] Quite... sss . Speak with an English accent for 1 round for 800pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/q8viV7t.jpeg",
+    "title": "Vietnam",
+    "description": "[drawing of stick figures and a face] Name 10 North Vietnamse leaders and lose 100 points for each you cannot name",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/o8bP0y3.jpeg",
+    "title": "WEST MINSTER- BARBIE + KEN - CARRIAGE SHOW",
+    "description": "[drawing] + 1000 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hksQR5v.jpeg",
+    "title": "Penis Nipples (Don't read out loud)",
+    "description": "[two drawings] Play the Penis Game with someone, without telling them, iF they lose/Don't play +700, iF you lose -800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ysnCnsj.jpeg",
+    "title": "HOT DOG",
+    "description": "[drawing of a hot dog] DID YOUR MOST RECENT MEAL INCLUDE MEAT? Yes: +200 ; No: -200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/JdWdGEI.jpeg",
+    "title": "UNDER WHERE?",
+    "description": "[drawing of a stick figure and a table with a question mark] NAME A COLOR, IF ANYONE IS WEARING THAT COLOR UNDERWEAR, YOU AND THEM + 500 each",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Xa68b8w.jpeg",
+    "title": "QWOP",
+    "description": "YOU ARE TERRIBLY UNCOORDINATED [drawing of musical staff with notes shaped like stick figures] - 500 POINTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8mt6kHN.jpeg",
+    "title": "You've been T-bagged",
+    "description": "[drawing of a tea bag being dipped into a large mug] - 500 pts. (+500 iF you admit to liking it)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/y8Kmnw0.jpeg",
+    "title": "LEAKY BLUMPKIN",
+    "description": "[drawing] -400 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/JXhDdKB.jpeg",
+    "title": "BROKEN GLASS",
+    "description": "[drawing of a broken wine glass] DESTROY SOMETHING +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/L16cewK.jpeg",
+    "title": "Here's A Puppy",
+    "description": "[drawing of a puppy face] + 700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Wy6QSfZ.jpeg",
+    "title": "BOX of SURPRISE",
+    "description": "[drawing of a person holding a box] + 1",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1hpRYP2.jpeg",
+    "title": "Sam Cobra",
+    "description": "[drawing of a man holding a knife] recount a childhood memory +600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/bszZl7r.jpeg",
+    "title": "SEX-ARMY KNIFE",
+    "description": "[drawing of a swiss army knife] SHARE AN IDEA/INVENTION WITH THE GROUP FOR 300 PTS OR LOSE 100 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/jBxkYQu.jpeg",
+    "title": "THE UNDERDOG",
+    "description": "[drawing of a dog with an arrow pointing up at it] PUT A SPOON IN YOUR MOUTH FOR ONE ROUND OR LOSE 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/3XMWNGB.jpeg",
+    "title": "Snatch Blast",
+    "description": "[drawing of a hand] +800pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/UuQLSZM.jpeg",
+    "title": "MOTHER OF PEARL",
+    "description": "[drawing of a clam shell with a pearl] + 1000 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/fQd35di.jpeg",
+    "title": "Blank Bank",
+    "description": "[drawing of a bank building labeled \"Blank Bank\"] Get Rid of all Blank Cards",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cffrGfL.jpeg",
+    "title": "T-Shirt Giveaway!",
+    "description": "[drawing of a t-shirt] Give someone the shirt you're wearing. - If they accept + put it on 100 pts - If they don't, die alone -100 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/E8SGGyT.jpeg",
+    "title": "RING AROUND THE ROSARY",
+    "description": "[drawing of a sad face] EVERYONE PICK ONE (PLAYED) CARD TO GIVE TO YOUR LEFT NEIGHBOR",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WT8JLCQ.jpeg",
+    "title": "BOOTY PIPE",
+    "description": "[drawing of a butt-shaped bagpipe with music notes] RECOUNT THE STORY OF THE LAST TIME YOU POOPED YOUR PANTS, THEN LOSE 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/J1fDBCi.jpeg",
+    "title": "Hide and go -fuck-yourself",
+    "description": "[drawing of a smiling face] -1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qul5XWz.jpeg",
+    "title": "EXOTIC VEGETABLE",
+    "description": "[drawing of a vegetable with a face] -600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cTzhzl3.jpeg",
+    "title": "Prefontaine",
+    "description": "[drawing of a stick figure running] Run a lap around the house or lose 500 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/r1VTbWN.jpeg",
+    "title": "SPanish Inquisitorial Squad",
+    "description": "[drawing of two stick figures] Pose three dirty questions to the group. Each one answered + 500.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Tmks8Qr.jpeg",
+    "title": "IRONMAN",
+    "description": "[drawing of a dumbbell] DO TWENTY (20) PUSHUPS AND THIRTY (30) CRUNCHES OR LOSE 1000 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rrOo3T8.jpeg",
+    "title": "OW - D",
+    "description": "[drawing of a storm cloud with lightning bolts] + 100 PTS DO NOT PICK THIS CARD IN EPILOGUE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/k8IEn2M.jpeg",
+    "title": "Water Polo",
+    "description": "[drawing of a pool with two figures] •Name 6 flamboyant, gay. males (preferably famous) +800 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/y3xqSkL.jpeg",
+    "title": "RAWDOG",
+    "description": "[drawing of a chafed object] IT BURNS! WELCOME TO CHAFE -TOWN! -300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/LnZuvpT.jpeg",
+    "title": "Sneaky Bastard",
+    "description": "(Don't read out loud!) [drawing of a snake-like creature] Take a card from someones face up cards to play, if they protest smack them in the face, you Bastard.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5WbEOhl.jpeg",
+    "title": "Sharpshooter",
+    "description": "[drawing of a stick figure in a crosshair scope] Choose one player to lose all points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XYcdsNZ.jpeg",
+    "title": "SMOKE POT IN YOUR BATHROOM",
+    "description": "[drawing of a person smoking] HAVE REAL TALK: +300 OTHERWISE: -100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/xrqx32P.jpeg",
+    "title": "NUTELLA TOAST",
+    "description": "[drawing of a piece of toast with nutella] MAKE YOURSELF BURP OR LOSE 400 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8ecbew5.jpeg",
+    "title": "Elmo's Fire",
+    "description": "[drawing of Elmo's face with flames] Name your favorite character from Sensame street + 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/feBtfLL.jpeg",
+    "title": "Bicurious Vance",
+    "description": "[drawing of a person with two thought bubbles] • +2000 for everyone of his brothers in play. (Crusty Dan, Dirty Randy, Dimebag St...",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/QgMLM74.jpeg",
+    "title": "noun-icide",
+    "description": "[drawing of a steaming mug] loose 100pt For every noun card in front of you",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qbaQ5ci.jpeg",
+    "title": "Counter Attack!",
+    "description": "[drawing of two stick figures fighting] When a negative card is played against you, the opposing player loses double. (replace card)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/AW6fgY5.jpeg",
+    "title": "WHOOPI PIE (GOLDBERG)",
+    "description": "[drawing of a face] + 200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/VcPztUe.jpeg",
+    "title": "BREAKFAST",
+    "description": "[drawing of a plate of breakfast food with eggs and bacon] DELICIOUS. +400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/vCXzUbV.jpeg",
+    "title": "FLY PAPER",
+    "description": "[drawing of fly paper strip hanging with flies stuck to it] TELL THE PERSON TO YOUR LEFT ABOUT YOUR DAY AND GET 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ZJyyqTm.jpeg",
+    "title": "Ursa major",
+    "description": "[drawing of the Big Dipper / Ursa Major constellation of dots] Resurrect Bear Hug and double the points.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/olNkLCu.jpeg",
+    "title": "Battleship",
+    "description": "[drawing of two boats with flags on water] -choose two people to rock, paper, scissor. winner gets 1000pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XTX2ZzZ.jpeg",
+    "title": "Better Call Saul",
+    "description": "[drawing of a person with a headset giving a thumbs up, and a figure with a raised hand] +200 if you've ever been arrested. Otherwise, call a random person in your contacts & ask for Saul when they answer.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/oJGIvVA.jpeg",
+    "title": "CAT-NIPS",
+    "description": "[drawing of a cat paw and a drop] LIGHTLY CLAW SOMEONE'S NIPPLES YOU BOTH GET 300PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/3aIUVvA.jpeg",
+    "title": "I WORK AT AMAZON",
+    "description": "[drawing of a man with glasses and a tie] I HATE APPLE + A 25,000 SINGING BONUS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ae1NMMK.jpeg",
+    "title": "Peach Bottom and the Fuzz",
+    "description": "[drawing of a peach, music notes, and a microphone] + 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Hmc9YDp.jpeg",
+    "title": "Starry Night",
+    "description": "[drawing of scattered stars] + 500 for every 10 stars counted outside.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/G8MPVkr.jpeg",
+    "title": "MOUNTAIN DEW",
+    "description": "[drawing of a sun with sunglasses, ocean waves, beach umbrella and chair] DIP YOUR FINGERS IN A GLASS OF WATER AND LICK THEM FOR 500 PTS, OR LOSE 1000 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Lt21XQp.jpeg",
+    "title": "Cavity Search",
+    "description": "[drawing of two figures, one bending over] I Don't see anything - 300 For being too intimate",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/KWrLuy3.jpeg",
+    "title": "PLACE WHERE the SIDEWALK ENDS",
+    "description": "[drawing of buildings, a stick figure, and a sidewalk ending at a cliff] CANCEL ANY NEGATIVE POINT CARD",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/tQYoDlt.jpeg",
+    "title": "Tsunami",
+    "description": "[drawing of waves, birds, and palm trees] Seismicity is through the roof, get fucked. Everybody discards 1 card.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/4Q8GV49.jpeg",
+    "title": "HIT BY A CAR",
+    "description": "[drawing of a car hitting a stick figure] TELL THE PERSON TO YOUR RIGHT THE LAST TIME YOU MOVED YOUR BOWELS IN ORDER TO GET 600 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/h76HOWc.jpeg",
+    "title": "SOBRIETY",
+    "description": "[drawing of a bottle half full] RECITE ALPHABET BACKWARDS, +600 -or- LOSE 1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cd4G35I.jpeg",
+    "title": "Morning Wood",
+    "description": "[drawing of trees in a forest] -Draws in all nature and animal related cards and steals all pos. and neg. pts. and effects.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/CaIU3dE.jpeg",
+    "title": "HARRIET BEECHER'S TOE",
+    "description": "[drawing of a big toe] +300 TO EVERYONE",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/JL6oXMH.jpeg",
+    "title": "Hand Ball on team penis",
+    "description": "[drawing of a hand] Recount your last experience masturbating. or lose 200.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/GRYyr1s.jpeg",
+    "title": "SPANISH GUITAR",
+    "description": "[drawing of a guitar] [scribbled out text] CREATE a BRIEF LYRIC that FAILS MISERABLY at BEING POETICALLY BEAUTIFUL, +1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/8oFTKwd.jpeg",
+    "title": "Kill Santa",
+    "description": "[drawing of a dead Santa with X eyes] Everyone bean dips you (or tri if girl)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/p56nkiO.jpeg",
+    "title": "Red Stripe",
+    "description": "[drawing of a bottle with stripes] Boo someone in the circle then cheer someone else (in red stripe Fasion) + 200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/KfLBqkL.jpeg",
+    "title": "Silly Walk",
+    "description": "[drawing of a stick figure walking with music notes] walk silly + 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/rdaNVlG.jpeg",
+    "title": "Blinded",
+    "description": "[drawing of a face with sunglasses] Play the following round with your eyes closed or lose the ability to use your hands.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Z3ELQgf.jpeg",
+    "title": "PAGODA",
+    "description": "[drawing of a pagoda building with trees] THIS CARD HAS NO EFFECT.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/89E6RmH.jpeg",
+    "title": "Dildo Baggins",
+    "description": "[drawing of a dildo with feet] -300 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/FxYmmxc.jpeg",
+    "title": "MATCH",
+    "description": "[drawing of a match] STRIKE A MATCH FOR + 600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ZvnMDhc.jpeg",
+    "title": "Vertigo",
+    "description": "-Stand up and spin around for ten seconds or lose 800 pts. [drawing of a dizzy stick figure surrounded by spirals]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/HiPXBVK.jpeg",
+    "title": "PONY 2012",
+    "description": "EVERYONE TAKE 1 CARD (PLAYED) FROM THE OPPONENT OF YOUR CHOICE [drawing of a stick figure riding a horse]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/EkZvakm.jpeg",
+    "title": "Circle of life",
+    "description": "-Sing the opening song in \"the Lion King\" for 800 [drawing of a circle]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mvFduy8.jpeg",
+    "title": "James Dean",
+    "description": "• Describe a badass secnario. + 700 pts. [drawing of a man in sunglasses with a cigarette riding a tricycle]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/u2e5pw4.jpeg",
+    "title": "GRAIN SILO",
+    "description": "+100 [drawing of a grain silo with a small figure beside it]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/YghKtVK.jpeg",
+    "title": "BEATLE-MANIA",
+    "description": "ACT OUT THE TITLE OF A BEATLES SONG (NO TALKING) YOU & 1st GUESSER: +500 -or- -800 [drawing of a face with round sunglasses and long hair]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/gYUF3tL.jpeg",
+    "title": "GO EXTINCT",
+    "description": "-500 [drawing of a dodo-like bird]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ospZ1c3.jpeg",
+    "title": "Frodo Baggins",
+    "description": "You destroy evil Forever, but everyone hates you for being a whinny bitch -100 [drawing of hairy feet and a ring]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lcZqcTE.jpeg",
+    "title": "Lit Cigarrette",
+    "description": "+ 50 points [drawing of a lit cigarette with smoke]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/jag3dAM.jpeg",
+    "title": "WINE TASTING",
+    "description": "+ 300 PTS [drawing of a bottle pouring into a wine glass]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/PKcJ6O0.jpeg",
+    "title": "Grape Vine",
+    "description": "• Play the telephone game, if the last person's sentence is different. they lose 800. [drawing of a vine]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/hqJIEkH.jpeg",
+    "title": "SAMBAS",
+    "description": "WEAR SHOES ON YOUR HANDS for a ROUND + 1000 [drawing of a shoe]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qxHCqf1.jpeg",
+    "title": "GULLS",
+    "description": "+100 [drawing of seagulls flying over a boat on the water with the sun]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Yqp3R9l.jpeg",
+    "title": "UNO",
+    "description": "PLAY to CENTER FIRST PERSON to HOLD ONLY ONE CARD MUST IMMEDIATELY SAY \"UNO\" IF THEY DON'T, THEY LOSE EVERYTHING. [drawing of an Ace playing card]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Fb27i10.jpeg",
+    "title": "Touch your sefl",
+    "description": "grab your groin +2000 or -2000 [drawing of a stick figure touching itself]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/P4lUFDR.jpeg",
+    "title": "BYOB",
+    "description": "Play the rest of the game w/ no shirt or lose 300 pts [drawing of a shirtless man]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/AGE6Q38.jpeg",
+    "title": "DALAI LAMA",
+    "description": "Sit cross-legged Indian-style in your chair for 2 rounds -or- -1500 [drawing of a face]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Fuadaqo.jpeg",
+    "title": "Bukkake",
+    "description": "-800 pts. [drawing of a stick figure surrounded by penises with drops flying]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/9Kc0hsQ.jpeg",
+    "title": "Cleaver",
+    "description": "-800 pts. [drawing of a meat cleaver]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/1R6NAic.jpeg",
+    "title": "VIAGRA",
+    "description": "+1000 PTS [drawing of a penis]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/azgsRQs.jpeg",
+    "title": "POMEGRANATE",
+    "description": "-800 POINTS [drawing of a pomegranate]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lNwYQJU.jpeg",
+    "title": "Blow Job Face",
+    "description": "Maintain blow job face for the next round [drawing of a face with puckered mouth]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mLyi1lt.jpeg",
+    "title": "Fucking Ficken",
+    "description": "The person to your left gets to kick you straight in the ass. Fuck you -400 [drawing of a person kicking a soccer ball at a goal]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/XXyyvbA.jpeg",
+    "title": "BUNK BEDS TO HAVE MORE ROOM FOR ACTIVITIES",
+    "description": "+ 100 points [drawing of bunk beds]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/JcH3n8s.jpeg",
+    "title": "Punch you in the Cooter",
+    "description": "lose a turn, and 100 pts [drawing of a small figure punching a larger figure in the crotch]",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/UffayKX.jpeg",
+    "title": "Conflict Resolution",
+    "description": "[drawing of a smiling face] • The owner of this card chooses two people to swap three cards of the owner's choosing.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/IHwZ0H7.jpeg",
+    "title": "GET WOOD",
+    "description": "[drawing of a wooden door and a person at a \"WOOD STORE\" stand marked 5¢] -200 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7kyBU5B.jpeg",
+    "title": "This Little Piggy",
+    "description": "[drawing of a pig] This card is played in the middle of the field. It can not be removed from play or countered. - The player with the smallest hand receives this card. If owned at the end, lose 600",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cgjFYgE.jpeg",
+    "title": "NEWSPAPER",
+    "description": "[drawing of a person reading a newspaper] + 400",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/k2JjIhp.jpeg",
+    "title": "VOWELS",
+    "description": "[drawing of the letters A E I O U Y?] if your name begins with a vowel, +800 if not, -300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7ydajWJ.jpeg",
+    "title": "PEPSI",
+    "description": "[drawing of a Pepsi can] + 200 IF YOU HAVE A COLD BEVERAGE +800 IF YOU HAVE A PEPSI",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/0bhuHJu.jpeg",
+    "title": "Morgan Freeman's left arm",
+    "description": "[drawing of a severed dripping arm] - 400 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Hp8MdgN.jpeg",
+    "title": "SINATRA",
+    "description": "[drawing of two stick figures] MAKE YOUR BEST SEDUCTION FACE AT YOUR NEIGHBOR +800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Ras9dzs.jpeg",
+    "title": "GREGARIUS AND THE FUNKS",
+    "description": "[drawing of a face] \"da fuq?\" + 300 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/fQ7TJa0.jpeg",
+    "title": "PHONEME",
+    "description": "[drawing of a face in profile making a sound] MAKE YOUR FAVORITE BASIC SOUND +700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WqwDGep.jpeg",
+    "title": "HOLY BUNCHES OF GOATS",
+    "description": "[drawing of a cereal box with a goat, labeled GM] PUT A HANDFUL OF CEREAL INTO YOUR MOUTH & THEN \"BAHH\" LIKE A GOAT -or- -800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/7GIhtsT.jpeg",
+    "title": "Korean War Veteran",
+    "description": "[drawing of a man's face] Show just the image of this man to the group, then ask how ugly he is on a scale of 1-10. Even #'s get +1000/odds -1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qeBZz5h.jpeg",
+    "title": "Langston Hughes",
+    "description": "[drawing of a smiling face with a crown on a stand] What the absolute fuck. - 600 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/btoxe04.jpeg",
+    "title": "HEART BREAKER",
+    "description": "[drawing of a broken heart] SAY SOMETHING MEAN TO THE PLAYER ON YOUR LEFT. -100 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/H9bsTQs.jpeg",
+    "title": "TREEBEARD",
+    "description": "[drawing of a stick figure] + 400 PTS TO EVERYONE BUT ONE PERSON",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/BablKgk.jpeg",
+    "title": "Fuck You",
+    "description": "[drawing of a hand with middle finger raised] Eat another piece of fruit",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/kEpjXDA.jpeg",
+    "title": "GREASED LIGHTNING",
+    "description": "[drawing of a lightning bolt and an oil can dripping] LOSE 1500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/WPsNMws.jpeg",
+    "title": "C cup",
+    "description": "[drawing of breasts] Grab your neighbors chest and lick one nipple. +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/ne7HIQ4.jpeg",
+    "title": "CHILD BIRTH",
+    "description": "[drawing of a swaddled baby] IF FEMALE, SUBTRACT 1000 PTS FOR EVERY OVARY. IF MALE, ADD 1000 PTS FOR EVERY TESTICLE. (CANNOT BE REVERSED)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/siDArgg.jpeg",
+    "title": "Pass gas",
+    "description": "[drawing of buttocks passing a large cloud of gas] Push out a fart and gain 200 or lose 2000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/vujtNjX.jpeg",
+    "title": "Suns Out, Thumbs Out",
+    "description": "[drawing of two thumbs-up hands, one with an arrow labeled \"baby wrist\"] Thumb wrestle an enemy +400 to winner",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/mj7EC6l.jpeg",
+    "title": "Et tu Brutus?",
+    "description": "4H [drawing of a dagger, a laurel wreath, a smoking pipe, and a radiant letter A] Quote a classic literary work for 600 points. 3/4 of the table must name the book.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/b2l3PnQ.jpeg",
+    "title": "Chin Scratch",
+    "description": "[drawing of two stick figures, one with a beard] Scratch who ever has the hairiest chin for 7 sec and give yourself +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Dw3qJgH.jpeg",
+    "title": "LIGHTHOUSE",
+    "description": "[drawing of a lighthouse in the water with a boat and setting sun] + 800",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/EVJlJuk.jpeg",
+    "title": "NICKELBACK",
+    "description": "[drawing of a band with guitarist, singer and drummer] -1100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/e1lP20O.jpeg",
+    "title": "IT'S GETTING HOT IN HERE...",
+    "description": "[drawing of a stick figure taking off clothes] SO TAKE OFF ALL YOUR CLOTHES (+900) OR DONT (-100)",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/QsB5rEI.jpeg",
+    "title": "BLANK CHECK",
+    "description": "[drawing of a check] ± 0-1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/VmiSOSG.jpeg",
+    "title": "Steep Easy",
+    "description": "[drawing of a tea bag and a steaming mug] He who receives this card must brew a pot of tea for the group.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/aLNCcIw.jpeg",
+    "title": "Bendy",
+    "description": "[drawing of a bendy stick figure] Touch your Feet without bending your Knees + 200 success - 200 Failure",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/IOFptr1.jpeg",
+    "title": "BUTTER",
+    "description": "[drawing of a stick of butter] (SORRY) +500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/eSZB4As.jpeg",
+    "title": "Meat Taco",
+    "description": "[drawing of a taco] Smell a sweaty crotch. -300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/D5nPsOt.jpeg",
+    "title": "Aqua Man",
+    "description": "[drawing of a glass of water] Drink 5 glasses of water within 1 round + 1000pts or - 700 pts",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/QrMn9Q5.jpeg",
+    "title": "A Clue! A Blue's Clue!",
+    "description": "[drawing of a paw print] Lose 200 points for violating a trademarked image owned by Clemson Univ.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/tfzcvdG.jpeg",
+    "title": "OLD MAN WITH ORANGE",
+    "description": "[drawing of a stick figure holding an orange, standing on ground] + 100",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/C7gXpuT.jpeg",
+    "title": "OWL",
+    "description": "[drawing of an owl face with big eyes] Do your best owl impression + 200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/9SSaNat.jpeg",
+    "title": "Tigress golden Lotus crouching dragon hidden Jungle mistress dog.",
+    "description": "[drawing of a stick figure with arms raised] + 700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/qsSCq1F.jpeg",
+    "title": "Mikayla Maroney",
+    "description": "[drawing of a girl with ponytail] make the face for 1 round +200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/pf3aZ7o.jpeg",
+    "title": "INSTANT COFFEE",
+    "description": "[drawing of a jar of instant coffee] TOO LAZY TO BREW -1000",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/5eJEb8y.jpeg",
+    "title": "BACKWARDS BILL",
+    "description": "[drawing of a figure standing on ground] - 300",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/2kRKmPZ.jpeg",
+    "title": "CAMPGROUND HOST",
+    "description": "[drawing of a face with a piece of straw in mouth] EAT SOMETHING STARCHY AND STEAL SOMEONE'S PLAYED CARD",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/fJeb9A6.jpeg",
+    "title": "Light",
+    "description": "[drawing of a lamp glowing] Brighten your neighbors day ± 600 for both of you",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Z9EgtPY.jpeg",
+    "title": "The suit is black",
+    "description": "NAHT + 100 points",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/cOKIvlb.jpeg",
+    "title": "Duct Tape",
+    "description": "[drawing of a roll of tape] stick this on to one already played card to double its effects.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/uH1khM8.jpeg",
+    "title": "Turd Ferguson",
+    "description": "[drawing of a face wearing a hat with speech bubble \"that's not my name\"] Don't address anyone by their actual name for the rest of the round.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/JDHQVht.jpeg",
+    "title": "LEAKY FAUCET",
+    "description": "[drawing of a dripping faucet] Take a sip of the closest drink to you + 700",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/Uya8MNa.jpeg",
+    "title": "Gandalf tells Harry to use the force.",
+    "description": "[drawing of a rocket/spaceship approaching an exploding planet] Holy. Shit. + 1000 pts.",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/lQIzZlw.jpeg",
+    "title": "FURRY HAT",
+    "description": "[drawing of a furry hat] I DON'T KNOW. -500",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/nCjjJsu.jpeg",
+    "title": "TOM WAITS' HAT",
+    "description": "[drawing of a hat] + 200",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/CJTu6q3.jpeg",
+    "title": "ASS-ID JAZ",
+    "description": "[drawing of scribbles and a hand making a symbol] PLAY WITH BOTH HANDS IN THE \"SHOCKER\" SYMBOL FOR ONE ROUND FOR 500 or LOSE 500 PTS",
+    "human_canonical": null
+  },
+  {
+    "image_url": "https://i.imgur.com/3MWZ8xD.jpeg",
+    "title": "ORANGE SLICE",
+    "description": "[drawing of an orange slice] +200",
+    "human_canonical": null
   }
 ]

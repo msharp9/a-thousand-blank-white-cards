@@ -1,0 +1,640 @@
+[
+  {
+    "title": "Gain 5 Points",
+    "description": "When you play this card, gain 5 points. Nice.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 5
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Mega Jackpot",
+    "description": "CONGRATULATIONS!!! You found the jackpot card. Gain 100 points immediately. Do a little dance.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 100
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Stubbed Your Toe",
+    "description": "Ouch! You stubbed your toe on the coffee table. Lose 3 points.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": -3
+          }
+        }
+      ],
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "title": "Tax Season",
+    "description": "The taxman cometh. Every player loses 10 points. No exceptions, not even you.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "all",
+            "amount": -10
+          }
+        }
+      ],
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "title": "Universal Basic Points",
+    "description": "Everyone gains 7 points. We're all winners here (sort of).",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "all",
+            "amount": 7
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Skip It",
+    "description": "The player to your left loses their next turn. Sorry, not sorry.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "player",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "skip_turn",
+          "args": {
+            "target": "player"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Go Again!",
+    "description": "That was fun. Take another turn right now.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "extra_turn",
+          "args": {
+            "target": "self"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Backwards Day",
+    "description": "Reverse the direction of play. Whee!",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "reverse_order",
+          "args": {}
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Draw Three",
+    "description": "Your hand is looking thin. Draw 3 cards.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "count": 3
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Robin Hood",
+    "description": "Steal 8 points from the player with the most points and keep them for yourself.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "player",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "target": "player",
+            "amount": 8
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Generous Gift",
+    "description": "You're feeling kind today. Give 10 of your points to another player of your choice.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "player",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": -10
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "player",
+            "amount": 10
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "New Win Condition",
+    "description": "Forget 1000. The first player to reach 250 points wins the whole game.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "threshold": 250
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Burn It Down",
+    "description": "Destroy any one card currently in play. Poof. It's gone forever.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "center",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "destroy_card",
+          "args": {
+            "target": "center"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Windfall",
+    "description": "You won the lottery! Gain 50 points and brag about it loudly.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 50
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Double Draw",
+    "description": "From now on, everyone draws 2 cards at the start of their turn instead of 1.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_turn_start",
+      "ops": [
+        {
+          "op": "change_draw_count",
+          "args": {
+            "amount": 1
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Passive Income",
+    "description": "Keep this card in front of you. At the start of each of your turns, gain 3 points.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_turn_start",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 3
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Cursed Amulet",
+    "description": "This card sticks to you. At the end of each of your turns, lose 2 points until someone destroys it.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_turn_end",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": -2
+          }
+        }
+      ],
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "title": "Draw Tax",
+    "description": "Ongoing: whenever any player draws a card, that player loses 1 point.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_draw",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "player",
+            "amount": -1
+          }
+        }
+      ],
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "title": "Lucky Charm",
+    "description": "Place in front of you. Every time you play a card, gain 1 bonus point.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Victory Bonus",
+    "description": "Persistent. When the game ends, whoever holds this card gains 40 points before the final tally.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_game_end",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 40
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Score Doubler",
+    "description": "Keep this out. Whenever you score points from another card, this doubles them.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_score",
+      "snippet": "When the holder gains points this turn, add the same amount again as a bonus.",
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Everybody Stand Up",
+    "description": "Everyone must physically stand up. The last person still seated loses 5 points.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "snippet": "All players stand up; the last to stand loses 5 points. Enforced by the table, not the engine.",
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "title": "Compliment Circle",
+    "description": "Give the player on your right a genuine compliment. If it makes them smile, you both gain 5 points.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "player",
+      "trigger_event": "on_play",
+      "snippet": "Actor compliments the player to their right; if that player smiles, both gain 5 points. Judged by the table.",
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Do Your Best Impression",
+    "description": "Do your best impression of a farm animal. If nobody guesses which animal within 10 seconds, lose 4 points.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "snippet": "Actor mimics a farm animal; if no one guesses it in 10 seconds, actor loses 4 points.",
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "title": "The Floor Is Lava",
+    "description": "For the rest of the game, anyone caught touching the floor with bare feet loses 2 points on the spot.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": null,
+      "snippet": "Ongoing house rule: any player who touches the floor with bare feet loses 2 points, adjudicated by the table.",
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "title": "One Does Not Simply",
+    "description": "One does not simply walk into Mordor. If you can quote the next line, gain 9 points.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "snippet": "Actor recites the next line of the movie quote; if correct, gain 9 points. Table adjudicates.",
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Rickrolled",
+    "description": "Never gonna give you up! Sing one line of the chorus or lose 6 points.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Actor must sing a line of the chorus; if they refuse, apply -6 points."
+          }
+        }
+      ],
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "title": "Blank White Card",
+    "description": "This card is intentionally left blank. It does absolutely nothing. Contemplate the void.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "No mechanical effect; pure flavor card."
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Motivational Poster",
+    "description": "Hang in there! This card just says something nice. No points change hands.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Flavor only; no game effect."
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Great Depression",
+    "description": "The market crashed. Every player's score is cut in half, rounded down.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "snippet": "Set each player's score to floor(score / 2).",
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "title": "Point Vampire",
+    "description": "Steal 15 points from the player to your left. Muahaha.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "player",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "target": "player",
+            "amount": 15
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Slow Draw",
+    "description": "From now on everyone draws one fewer card each turn. Scarcity!",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_turn_start",
+      "ops": [
+        {
+          "op": "change_draw_count",
+          "args": {
+            "amount": -1
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Big Bonus Draw",
+    "description": "Feeling greedy? Draw 5 cards right now.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "count": 5
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "title": "Grand Finale",
+    "description": "MASSIVE PAYOUT. Gain 500 points. You basically win. Probably.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 500
+          }
+        }
+      ],
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "title": "Time Out",
+    "description": "You've been naughty. Skip your own next turn as punishment.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "trigger_event": "on_play",
+      "ops": [
+        {
+          "op": "skip_turn",
+          "args": {
+            "target": "self"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral"
+    }
+  }
+]

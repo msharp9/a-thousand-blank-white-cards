@@ -33,7 +33,7 @@ def render_conclusions_md(report: EvalRunReport) -> str:
     lines = [
         "# Eval Conclusions — TBWC Card Interpretation",
         "",
-        f"Evaluated **{n}** real cards from `data/eval/real_cards.json`.",
+        f"Evaluated **{n}** hand-annotated gold cards from `data/eval/eval_cards.json`.",
         "",
         "## Per-dimension scores",
         "",

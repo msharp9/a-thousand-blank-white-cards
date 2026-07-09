@@ -90,8 +90,8 @@ dense baseline rather than erroring.
 
 The A/B driver is [`src/tbwc/evals/retriever_ab.py`](./retriever_ab.py). It:
 
-- Loads the **35-card real testset** from
-  [`data/eval/real_cards.json`](../../../data/eval/real_cards.json) via the Phase 5
+- Loads the **35-card hand-annotated gold testset** from
+  [`data/eval/eval_cards.json`](../../../data/eval/eval_cards.json) via the Phase 5
   harness (`load_eval_items`).
 - Runs the **same agent graph** twice — once with `retriever_mode="dense"`, once with
   `retriever_mode="advanced"` — invoking `graph.invoke` per card and normalizing the
@@ -230,7 +230,7 @@ uv run python -m tbwc.evals.improvement_ab
 
 Useful flags (both scripts):
 
-- `--data PATH` — use a different testset (defaults to `data/eval/real_cards.json`).
+- `--data PATH` — use a different testset (defaults to `data/eval/eval_cards.json`).
 - `--limit N` — evaluate only the first `N` cards (handy for a quick smoke run that
   keeps API cost/latency down).
 - `--retriever-mode {dense,advanced}` — *(improvement_ab only)* which retriever to hold

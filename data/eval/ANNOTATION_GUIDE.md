@@ -4,16 +4,23 @@ This directory holds an evaluation corpus of **real** (human-made) cards from th
 party game *1000 Blank White Cards*, used to measure how well the interpretation
 agent turns free-text cards into game effects.
 
-## What `real_cards.json`
+## Two corpora: `real_cards.json` and `eval_cards.json`
 
-`real_cards.json` is a JSON array produced by the one-off script
-[`transcribe_imgur.py`](./transcribe_imgur.py), which runs an OpenAI vision model
-over photographs of physical cards (sourced from an Imgur album) and transcribes
-the text verbatim. Each element looks like:
+- **`real_cards.json`** — the full Imgur album transcribed verbatim (~700 cards).
+  Photos were downloaded to `images/` (see [`download_images.py`](./download_images.py))
+  and transcribed by a vision model. Each record has a real `image_url`, a
+  verbatim `title` + `description`, and `human_canonical: null`. This is the raw
+  pool to draw annotation candidates from.
+- **`eval_cards.json`** — the hand-annotated **gold** set (~35 cards) that the
+  eval harness actually scores against. Each record has a filled-in
+  `human_canonical` label. It has **no `image_url`**: its entries were authored
+  for coverage/diversity rather than transcribed from a specific photo.
+
+A `real_cards.json` record looks like:
 
 ```json
 {
-  "image_url": "https://i.imgur.com/....jpg",
+  "image_url": "https://i.imgur.com/....jpeg",
   "title": "Gain 5 Points",
   "description": "Whenever you play this card, gain 5 points.",
   "human_canonical": null
@@ -22,7 +29,8 @@ the text verbatim. Each element looks like:
 
 - `image_url` — where the card photo came from (for spot-checking).
 - `title` / `description` — the model's verbatim transcription of the card.
-- `human_canonical` — **starts `null`**; a human fills this in (see below).
+- `human_canonical` — **starts `null`**; a human fills this in (see below), and
+  the reviewed, labelled record graduates into `eval_cards.json`.
 
 The transcription is a *starting point*. Vision models mis-read handwriting,
 drop lines, and hallucinate. Every record needs human review before it counts as

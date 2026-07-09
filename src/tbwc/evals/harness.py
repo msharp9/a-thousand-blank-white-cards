@@ -18,7 +18,10 @@ from typing import Any
 from tbwc.evals.eval_core import EvalItem, EvalRunReport, run_eval
 from tbwc.evals.scorers import ALL_SCORERS
 
-DEFAULT_DATA = Path(__file__).resolve().parents[3] / "data" / "eval" / "real_cards.json"
+# The scored testset is the hand-annotated gold corpus (has human_canonical
+# labels). It lives in eval_cards.json; real_cards.json is the larger raw
+# transcription of the full photo album (human_canonical is null there).
+DEFAULT_DATA = Path(__file__).resolve().parents[3] / "data" / "eval" / "eval_cards.json"
 
 
 def load_eval_items(data_path: Path, limit: int | None = None) -> list[EvalItem]:
