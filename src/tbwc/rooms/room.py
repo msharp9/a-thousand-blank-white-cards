@@ -18,6 +18,7 @@ from tbwc.engine.apply import apply_effect
 from tbwc.engine.events import GameEvent, HookContext
 from tbwc.models.game_state import GameState, Player
 from tbwc.rooms.connections import ConnectionManager
+from tbwc.rooms.epilogue import EpilogueManager
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class Room:
         self.state: GameState = GameState(room_code=code)
         self.connections: ConnectionManager = ConnectionManager()
         self._lock: asyncio.Lock = asyncio.Lock()
+        self._epilogue: EpilogueManager | None = None
 
     # ── player management ──
     def add_player(self, player_id: str, name: str) -> None:
@@ -178,8 +180,31 @@ class Room:
             {"type": "preview_result", "program": None, "snippet": msg.description, "verdict": "ok"},
         )
 
+    async def start_epilogue(self) -> None:
+        """Begin the epilogue phase: gather created cards and open voting."""
+        cards = list(self.state.cards.values())
+        # normalise to dicts with an 'id' key
+        card_dicts = [c if isinstance(c, dict) else c.model_dump() for c in cards]
+        self._epilogue = EpilogueManager(player_ids=self.get_player_ids())
+        self.state = self.state.model_copy(update={"phase": "epilogue"})
+        await self._epilogue.start(card_dicts, self.connections)
+        await self._broadcast_state()
+
     async def _handle_epilogue_vote(self, player_id: str, msg) -> None:
-        pass  # handled in the epilogue-flow bead
+        if self._epilogue is None:
+            await self.connections.send(player_id, {"type": "error", "message": "No epilogue in progress"})
+            return
+        all_in = self._epilogue.record_vote(player_id, msg.card_id, msg.keep)
+        if all_in:
+            result = await self._epilogue.tally_and_persist()
+            self.state = self.state.model_copy(update={"phase": "ended"})
+            await self._broadcast_state()
+            await self.connections.broadcast(
+                {
+                    "type": "effect_applied",
+                    "log_entry": f"Epilogue complete. Kept: {len(result.kept)} cards.",
+                }
+            )
 
     # ── helpers ──
     def snapshot(self) -> dict:
