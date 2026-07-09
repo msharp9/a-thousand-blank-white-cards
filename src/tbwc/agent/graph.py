@@ -64,3 +64,15 @@ def build_graph() -> StateGraph:
 
 # Compiled graph imported by the rooms API and eval harness.
 graph = build_graph().compile()
+
+
+def interpret_card(title: str, description: str) -> dict:
+    """Synchronous entry point: run the interpretation graph on one card.
+
+    Returns a plain dict: {"program": EffectProgram | None, "snippet": <SnippetEffect|None>,
+    "verdict": "ok" | "invalid" | "needs_choice"}. Safe to call inside asyncio.to_thread.
+    """
+    final = graph.invoke({"card_draft": {"title": title, "description": description}, "attempts": 0})
+    verdict_obj = final.get("verdict")
+    verdict = "ok" if (verdict_obj is not None and getattr(verdict_obj, "ok", False)) else "invalid"
+    return {"program": final.get("program"), "snippet": final.get("snippet"), "verdict": verdict}

@@ -3,8 +3,9 @@
 Room owns an immutable GameState (replaced on each mutation) and serialises all
 handle_action calls with an asyncio.Lock so concurrent WebSocket messages cannot
 corrupt turn order. Draw/play require the active player's turn; card creation and
-preview are allowed off-turn. Agent interpretation (asyncio.to_thread) is wired in
-a later bead — the play/create handlers here are minimal, engine-backed stubs.
+preview are allowed off-turn. Play and create_card run the agent interpretation
+graph via asyncio.to_thread (with a "brewing" broadcast), applying resulting
+effects through the engine.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ import asyncio
 import logging
 import uuid
 
+from tbwc.engine.apply import apply_effect
+from tbwc.engine.events import GameEvent, HookContext
 from tbwc.models.game_state import GameState, Player
 from tbwc.rooms.connections import ConnectionManager
 
@@ -90,7 +93,38 @@ class Room:
         await self._broadcast_state()
 
     async def _handle_play(self, player_id: str, msg) -> None:
-        # Minimal: advance the turn. Real effect application + agent interpret arrive in a later bead.
+        """Interpret the played card via the agent (in a thread), apply its effect, advance turn."""
+        from tbwc.agent.graph import interpret_card
+
+        card_id = msg.card_id
+        card = self.state.cards.get(card_id)
+        if card is None:
+            await self.connections.send(player_id, {"type": "error", "message": f"Card {card_id} not found"})
+            return
+
+        await self.connections.broadcast({"type": "brewing", "card_id": card_id})
+
+        title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
+        description = card["description"] if isinstance(card, dict) else getattr(card, "description", "")
+        result = await asyncio.to_thread(interpret_card, title, description)
+
+        await self.connections.broadcast(
+            {
+                "type": "card_interpreted",
+                "card_id": card_id,
+                "program": str(result.get("program")) if result.get("program") is not None else None,
+                "snippet": getattr(result.get("snippet"), "code", None),
+                "verdict": result["verdict"],
+            }
+        )
+
+        program = result.get("program")
+        if result["verdict"] == "ok" and program is not None:
+            ctx = HookContext(event=GameEvent.ON_PLAY, actor_id=player_id, card_id=card_id)
+            self.state = apply_effect(self.state, program, ctx)
+            await self.connections.broadcast({"type": "effect_applied", "log_entry": f"Played {card_id}"})
+
+        # advance turn
         n = len(self.state.players)
         if n:
             self.state = self.state.model_copy(
@@ -99,6 +133,9 @@ class Room:
         await self._broadcast_state()
 
     async def _handle_create_card(self, player_id: str, msg) -> None:
+        """Author a new card and interpret it immediately (allowed off-turn)."""
+        from tbwc.agent.graph import interpret_card
+
         card_id = str(uuid.uuid4())
         new_cards = {
             **self.state.cards,
@@ -110,6 +147,29 @@ class Room:
             },
         }
         self.state = self.state.model_copy(update={"cards": new_cards})
+
+        await self.connections.broadcast({"type": "brewing", "card_id": card_id})
+        result = await asyncio.to_thread(interpret_card, msg.title, msg.description)
+
+        # store interpretation summary on the card
+        card = {
+            **self.state.cards[card_id],
+            "program": str(result.get("program")) if result.get("program") is not None else None,
+            "snippet": getattr(result.get("snippet"), "code", None),
+            "verdict": result["verdict"],
+        }
+        merged = {**self.state.cards, card_id: card}
+        self.state = self.state.model_copy(update={"cards": merged})
+
+        await self.connections.broadcast(
+            {
+                "type": "card_interpreted",
+                "card_id": card_id,
+                "program": card["program"],
+                "snippet": card["snippet"],
+                "verdict": card["verdict"],
+            }
+        )
         await self._broadcast_state()
 
     async def _handle_preview_card(self, player_id: str, msg) -> None:
