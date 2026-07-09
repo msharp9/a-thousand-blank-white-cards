@@ -20,6 +20,22 @@ def test_unknown_room_errors_and_closes(client: TestClient) -> None:
         assert "not found" in msg["message"]
 
 
+def test_unknown_room_closes_with_4004(client: TestClient) -> None:
+    """A WS connect to a room this worker doesn't have fails cleanly (no crash).
+
+    This is the exact failure surface of the multi-worker hazard: if REST join
+    landed on a different worker, the WS worker won't find the room. The handler
+    must send a clean error envelope and close with 4004 rather than raise.
+    """
+    from starlette.websockets import WebSocketDisconnect
+
+    with client.websocket_connect("/ws/GHOST1") as ws:
+        assert ws.receive_json()["type"] == "error"
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_text()
+        assert exc.value.code == 4004
+
+
 def test_join_with_valid_player_replays_state(client: TestClient) -> None:
     code = client.post("/rooms").json()["code"]
     pid = client.post(f"/rooms/{code}/join", json={"name": "Alice"}).json()["player_id"]
