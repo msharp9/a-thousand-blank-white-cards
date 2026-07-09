@@ -26,3 +26,27 @@ repos:
         types: [python]
         pass_filenames: false
         always_run: true
+
+      - id: frontend-lint
+        name: frontend eslint
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        files: ^frontend/
+        types_or: [ts, tsx, javascript, jsx]
+        pass_filenames: false
+
+      - id: frontend-typecheck
+        name: frontend tsc
+        entry: bash -c 'cd frontend && npm run typecheck'
+        language: system
+        files: ^frontend/
+        types_or: [ts, tsx]
+        pass_filenames: false
+
+      - id: frontend-format
+        name: frontend prettier
+        entry: bash -c 'cd frontend && npm run format:check'
+        language: system
+        files: ^frontend/
+        types_or: [ts, tsx, javascript, jsx, css, json, markdown]
+        pass_filenames: false

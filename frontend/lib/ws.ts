@@ -10,7 +10,11 @@ export interface GameSocketState {
   gameState: GameStateSnapshot | null;
   log: string[];
   brewing: string | null;
-  previewResult: { program?: string | null; snippet?: string | null; verdict: string } | null;
+  previewResult: {
+    program?: string | null;
+    snippet?: string | null;
+    verdict: string;
+  } | null;
   error: string | null;
   connected: boolean;
   send: (msg: ClientMsg) => void;
@@ -21,7 +25,8 @@ export function useGameSocket(code: string, name: string): GameSocketState {
   const [gameState, setGameState] = useState<GameStateSnapshot | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [brewing, setBrewing] = useState<string | null>(null);
-  const [previewResult, setPreviewResult] = useState<GameSocketState["previewResult"]>(null);
+  const [previewResult, setPreviewResult] =
+    useState<GameSocketState["previewResult"]>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
 
@@ -70,7 +75,11 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             setBrewing(null);
             break;
           case "preview_result":
-            setPreviewResult({ program: msg.program, snippet: msg.snippet, verdict: msg.verdict });
+            setPreviewResult({
+              program: msg.program,
+              snippet: msg.snippet,
+              verdict: msg.verdict,
+            });
             break;
           case "error":
             setError(msg.message);

@@ -11,10 +11,18 @@ import type { ClientMsg } from "@/lib/types";
 interface BlankDrawPromptProps {
   blankCardId: string;
   send: (msg: ClientMsg) => void;
-  previewResult: { program?: string | null; snippet?: string | null; verdict: string } | null;
+  previewResult: {
+    program?: string | null;
+    snippet?: string | null;
+    verdict: string;
+  } | null;
 }
 
-export function BlankDrawPrompt({ blankCardId, send, previewResult }: BlankDrawPromptProps) {
+export function BlankDrawPrompt({
+  blankCardId,
+  send,
+  previewResult,
+}: BlankDrawPromptProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [previewing, setPreviewing] = useState(false);
@@ -26,12 +34,20 @@ export function BlankDrawPrompt({ blankCardId, send, previewResult }: BlankDrawP
   function handlePreview() {
     if (!title.trim() || !description.trim()) return;
     setPreviewing(true);
-    send({ type: "preview_card", title: title.trim(), description: description.trim() });
+    send({
+      type: "preview_card",
+      title: title.trim(),
+      description: description.trim(),
+    });
   }
 
   function handleSubmit() {
     if (!title.trim() || !description.trim()) return;
-    send({ type: "create_card", title: title.trim(), description: description.trim() });
+    send({
+      type: "create_card",
+      title: title.trim(),
+      description: description.trim(),
+    });
     setTitle("");
     setDescription("");
   }
@@ -40,9 +56,15 @@ export function BlankDrawPrompt({ blankCardId, send, previewResult }: BlankDrawP
     <div className="flex flex-col gap-3 rounded-lg border-2 border-primary bg-primary/5 p-4">
       <div className="flex items-center gap-2">
         <Badge>Blank draw!</Badge>
-        <p className="text-sm font-medium">You drew a blank card — create it now to continue.</p>
+        <p className="text-sm font-medium">
+          You drew a blank card — create it now to continue.
+        </p>
       </div>
-      <Input placeholder="Card title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <Input
+        placeholder="Card title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+      />
       <Textarea
         placeholder="Describe the rule…"
         value={description}
@@ -57,20 +79,31 @@ export function BlankDrawPrompt({ blankCardId, send, previewResult }: BlankDrawP
       {previewResult && !previewing && (
         <div className="rounded border bg-muted/20 p-2 text-xs">
           <span className="font-medium">Preview verdict: </span>
-          <Badge variant={previewResult.verdict === "ok" ? "default" : "destructive"}>
+          <Badge
+            variant={previewResult.verdict === "ok" ? "default" : "destructive"}
+          >
             {previewResult.verdict}
           </Badge>
         </div>
       )}
       <div className="flex gap-2">
-        <Button variant="outline" onClick={handlePreview} disabled={!title.trim() || !description.trim()}>
+        <Button
+          variant="outline"
+          onClick={handlePreview}
+          disabled={!title.trim() || !description.trim()}
+        >
           Preview
         </Button>
-        <Button onClick={handleSubmit} disabled={!title.trim() || !description.trim()}>
+        <Button
+          onClick={handleSubmit}
+          disabled={!title.trim() || !description.trim()}
+        >
           Play this card
         </Button>
       </div>
-      <p className="text-[10px] text-muted-foreground">Card id: {blankCardId}</p>
+      <p className="text-[10px] text-muted-foreground">
+        Card id: {blankCardId}
+      </p>
     </div>
   );
 }

@@ -9,8 +9,11 @@ interface GameTableProps {
 
 export function GameTable({ gameState, myPlayerId }: GameTableProps) {
   const { players, turn_index, direction } = gameState;
-  const activePlayer = players.length ? players[turn_index % players.length] : undefined;
-  const directionLabel = direction === 1 ? "→ clockwise" : "← counter-clockwise";
+  const activePlayer = players.length
+    ? players[turn_index % players.length]
+    : undefined;
+  const directionLabel =
+    direction === 1 ? "→ clockwise" : "← counter-clockwise";
 
   return (
     <div className="flex flex-col gap-3">
@@ -32,7 +35,15 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
   );
 }
 
-function PlayerTile({ player, isActive, isMe }: { player: PlayerSnapshot; isActive: boolean; isMe: boolean }) {
+function PlayerTile({
+  player,
+  isActive,
+  isMe,
+}: {
+  player: PlayerSnapshot;
+  isActive: boolean;
+  isMe: boolean;
+}) {
   return (
     <div
       className={cn(
@@ -43,12 +54,20 @@ function PlayerTile({ player, isActive, isMe }: { player: PlayerSnapshot; isActi
     >
       <div className="flex items-center gap-1">
         <span className="text-sm font-semibold">{player.name}</span>
-        {isMe && <Badge variant="secondary" className="text-[10px]">you</Badge>}
+        {isMe && (
+          <Badge variant="secondary" className="text-[10px]">
+            you
+          </Badge>
+        )}
       </div>
       <span className="text-2xl font-bold tabular-nums">{player.score}</span>
-      <span className="text-[10px] text-muted-foreground">{player.hand.length} cards</span>
+      <span className="text-[10px] text-muted-foreground">
+        {player.hand.length} cards
+      </span>
       {isActive && <Badge className="text-[10px]">active</Badge>}
-      {!player.connected && <span className="text-[10px] text-muted-foreground">offline</span>}
+      {!player.connected && (
+        <span className="text-[10px] text-muted-foreground">offline</span>
+      )}
     </div>
   );
 }

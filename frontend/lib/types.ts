@@ -16,9 +16,21 @@ export type PlayMsg = {
   placement: Placement;
   chosen_player_id?: string;
 };
-export type CreateCardMsg = { type: "create_card"; title: string; description: string };
-export type PreviewCardMsg = { type: "preview_card"; title: string; description: string };
-export type EpilogueVoteMsg = { type: "epilogue_vote"; card_id: string; keep: boolean };
+export type CreateCardMsg = {
+  type: "create_card";
+  title: string;
+  description: string;
+};
+export type PreviewCardMsg = {
+  type: "preview_card";
+  title: string;
+  description: string;
+};
+export type EpilogueVoteMsg = {
+  type: "epilogue_vote";
+  card_id: string;
+  keep: boolean;
+};
 
 export type ClientMsg =
   | JoinMsg

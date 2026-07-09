@@ -21,11 +21,18 @@ export function EffectLog({ log, brewing, className }: EffectLogProps) {
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Effect Log</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Effect Log
+      </p>
       <ScrollArea className="h-40 w-full rounded-lg border bg-muted/20 p-2">
-        {isEmpty && <p className="text-xs italic text-muted-foreground">No events yet.</p>}
+        {isEmpty && (
+          <p className="text-xs italic text-muted-foreground">No events yet.</p>
+        )}
         {log.map((entry, i) => (
-          <div key={i} className="border-b border-border/40 py-0.5 text-xs last:border-0">
+          <div
+            key={i}
+            className="border-b border-border/40 py-0.5 text-xs last:border-0"
+          >
             {entry}
           </div>
         ))}

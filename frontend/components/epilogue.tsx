@@ -22,7 +22,8 @@ export function EpilogueView({ cards, send }: EpilogueProps) {
     send({ type: "epilogue_vote", card_id: cardId, keep: choice === "keep" });
   }
 
-  const allVoted = cards.length > 0 && cards.every((c) => votes[c.id] !== undefined);
+  const allVoted =
+    cards.length > 0 && cards.every((c) => votes[c.id] !== undefined);
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -56,7 +57,10 @@ export function EpilogueView({ cards, send }: EpilogueProps) {
                 </Button>
               </div>
               {choice && (
-                <Badge variant={choice === "keep" ? "default" : "destructive"} className={cn("ml-auto")}>
+                <Badge
+                  variant={choice === "keep" ? "default" : "destructive"}
+                  className={cn("ml-auto")}
+                >
                   {choice}
                 </Badge>
               )}

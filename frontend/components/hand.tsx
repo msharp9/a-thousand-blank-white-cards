@@ -24,7 +24,9 @@ interface HandProps {
 export function Hand({ cards, canPlay, otherPlayers, send }: HandProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zone, setZone] = useState<Placement["zone"]>("self");
-  const [targetPlayerId, setTargetPlayerId] = useState<string | undefined>(undefined);
+  const [targetPlayerId, setTargetPlayerId] = useState<string | undefined>(
+    undefined,
+  );
 
   function playSelected() {
     if (!selectedId) return;
@@ -38,9 +40,13 @@ export function Hand({ cards, canPlay, otherPlayers, send }: HandProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Your hand</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Your hand
+      </p>
       {cards.length === 0 ? (
-        <p className="text-xs italic text-muted-foreground">No cards in hand.</p>
+        <p className="text-xs italic text-muted-foreground">
+          No cards in hand.
+        </p>
       ) : (
         <div className="flex flex-wrap gap-2">
           {cards.map((card) => (
@@ -49,7 +55,11 @@ export function Hand({ cards, canPlay, otherPlayers, send }: HandProps) {
               card={card}
               selectable={canPlay}
               onClick={() => setSelectedId(card.id)}
-              className={selectedId === card.id ? "border-primary ring-2 ring-primary/30" : undefined}
+              className={
+                selectedId === card.id
+                  ? "border-primary ring-2 ring-primary/30"
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -57,7 +67,10 @@ export function Hand({ cards, canPlay, otherPlayers, send }: HandProps) {
 
       {canPlay && selectedId && (
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={zone} onValueChange={(v) => setZone(v as Placement["zone"])}>
+          <Select
+            value={zone}
+            onValueChange={(v) => setZone(v as Placement["zone"])}
+          >
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Placement" />
             </SelectTrigger>
@@ -71,7 +84,9 @@ export function Hand({ cards, canPlay, otherPlayers, send }: HandProps) {
           {zone === "player" && (
             <Select
               value={targetPlayerId ?? null}
-              onValueChange={(v) => setTargetPlayerId((v as string | null) ?? undefined)}
+              onValueChange={(v) =>
+                setTargetPlayerId((v as string | null) ?? undefined)
+              }
             >
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Pick player" />
@@ -86,7 +101,10 @@ export function Hand({ cards, canPlay, otherPlayers, send }: HandProps) {
             </Select>
           )}
 
-          <Button onClick={playSelected} disabled={zone === "player" && !targetPlayerId}>
+          <Button
+            onClick={playSelected}
+            disabled={zone === "player" && !targetPlayerId}
+          >
             Play
           </Button>
         </div>

@@ -11,22 +11,35 @@ interface CardProps {
   className?: string;
 }
 
-export function CardTile({ card, brewing, selectable, onClick, className }: CardProps) {
+export function CardTile({
+  card,
+  brewing,
+  selectable,
+  onClick,
+  className,
+}: CardProps) {
   return (
     <div
       className={cn(
         "relative flex min-h-[96px] w-40 flex-col gap-1 rounded-lg border bg-card p-3 shadow-sm",
-        selectable && "cursor-pointer transition-all hover:border-primary hover:shadow-md",
+        selectable &&
+          "cursor-pointer transition-all hover:border-primary hover:shadow-md",
         brewing && "opacity-70",
         className,
       )}
       onClick={selectable ? onClick : undefined}
       role={selectable ? "button" : undefined}
       tabIndex={selectable ? 0 : undefined}
-      onKeyDown={selectable && onClick ? (e) => e.key === "Enter" && onClick() : undefined}
+      onKeyDown={
+        selectable && onClick
+          ? (e) => e.key === "Enter" && onClick()
+          : undefined
+      }
     >
       <p className="text-sm font-semibold leading-tight">{card.title}</p>
-      <p className="line-clamp-4 text-xs leading-snug text-muted-foreground">{card.description}</p>
+      <p className="line-clamp-4 text-xs leading-snug text-muted-foreground">
+        {card.description}
+      </p>
       {card.verdict && card.verdict !== "ok" && (
         <Badge variant="destructive" className="mt-auto text-[10px]">
           {card.verdict}
