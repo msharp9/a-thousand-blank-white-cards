@@ -179,6 +179,9 @@ plan/
 # ...and keep the eval corpus tooling and annotations
 !data/eval/
 !data/eval/**
+# ...but never track caches under the eval dir
+data/eval/**/__pycache__/
+data/eval/**/*.pyc
 
 # Models
 models/
