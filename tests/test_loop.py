@@ -81,6 +81,21 @@ def test_skip_predicate_registry() -> None:
     assert out.turn_index == 2
 
 
+def test_skip_predicate_unknown_name_no_extra_skip() -> None:
+    # skip_predicate names a predicate that is NOT registered -> pred_fn is None,
+    # so no extra skip happens.
+    st = _state(turn_index=0, direction=1, skip_predicate="not_registered")
+    out = advance_turn(st)
+    assert out.turn_index == 1  # plain advance to p2
+
+
+def test_skip_predicate_returning_false_no_extra_skip() -> None:
+    register_skip_predicate("never_skip", lambda player, state: False)
+    st = _state(turn_index=0, direction=1, skip_predicate="never_skip")
+    out = advance_turn(st)
+    assert out.turn_index == 1  # predicate False -> no extra skip
+
+
 def test_run_turn_fires_events() -> None:
     spy = SpyBus()
 

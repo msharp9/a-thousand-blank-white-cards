@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from tbwc.engine.events import EventBus, GameEvent, HookContext
+from tbwc.engine.hooks import HookRegistry, RegisteredHook
+from tbwc.models.game_state import GameState, Player
 
 
 def test_game_event_is_str_enum() -> None:
@@ -28,8 +30,45 @@ def test_with_amount_is_immutable() -> None:
 
 
 def test_event_bus_exists() -> None:
-    # emit() late-imports fire_hooks from tbwc.engine.hooks, which does not
-    # exist yet (a later bead). We only assert the bus is constructible and
-    # that emit raises ImportError (not some other failure) until hooks lands.
     bus = EventBus()
     assert bus is not None
+
+
+def test_event_bus_routes_to_custom_registry() -> None:
+    """A bus built with a custom registry routes emits to that registry."""
+    reg = HookRegistry()
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")])
+    log: list[str] = []
+    hook = RegisteredHook(
+        source_card_id="c1",
+        event=str(GameEvent.ON_TURN_START),
+        scope="player",
+        owner_id="p1",
+    )
+    reg.register(hook, lambda s, ctx: (log.append("fired"), s)[1])
+
+    bus = EventBus(registry=reg)
+    ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
+    bus.emit(GameEvent.ON_TURN_START, state, ctx)
+
+    assert log == ["fired"]  # routed to the custom registry
+
+
+def test_event_bus_default_registry_does_not_see_custom_hooks() -> None:
+    """A default bus (no registry) does not fire hooks from a separate registry."""
+    reg = HookRegistry()
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")])
+    log: list[str] = []
+    hook = RegisteredHook(
+        source_card_id="c1",
+        event=str(GameEvent.ON_TURN_START),
+        scope="player",
+        owner_id="p1",
+    )
+    reg.register(hook, lambda s, ctx: (log.append("fired"), s)[1])
+
+    bus = EventBus()  # default registry
+    ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
+    bus.emit(GameEvent.ON_TURN_START, state, ctx)
+
+    assert log == []

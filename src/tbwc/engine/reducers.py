@@ -98,17 +98,12 @@ def _reduce_set_points(state: GameState, op: SetPointsOp, ctx: HookContext) -> G
 # ---------------------------------------------------------------------------
 def _reduce_skip_turn(state: GameState, op: SkipTurnOp, ctx: HookContext) -> GameState:
     ids = _resolve_targets(op.target, ctx, state)
-    new = state.model_copy()
-    # Rebind to a fresh set so the original state's set is never mutated.
-    new._skip_next = set(state._skip_next) | set(ids)
-    return new
+    return state.copy_with_turn_flags(skip_next=set(state._skip_next) | set(ids))
 
 
 def _reduce_extra_turn(state: GameState, op: ExtraTurnOp, ctx: HookContext) -> GameState:
     ids = _resolve_targets(op.target, ctx, state)
-    new = state.model_copy()
-    new._extra_turn = set(state._extra_turn) | set(ids)
-    return new
+    return state.copy_with_turn_flags(extra_turn=set(state._extra_turn) | set(ids))
 
 
 def _reduce_reverse_order(state: GameState, op: ReverseOrderOp, ctx: HookContext) -> GameState:

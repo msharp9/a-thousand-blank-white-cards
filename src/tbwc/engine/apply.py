@@ -30,10 +30,12 @@ def apply_effect(
     score_ops = {"add_points", "subtract_points", "set_points", "steal_points"}
 
     for op in program.ops:
-        before_scores = {p.id: p.score for p in state.players}
+        is_score_op = op.op in score_ops
+        # Only snapshot scores for scoring ops — the diff is unused otherwise.
+        before_scores = {p.id: p.score for p in state.players} if is_score_op else {}
         state = apply_op(state, op, ctx)
 
-        if op.op in score_ops:
+        if is_score_op:
             changed_pids = [pid for pid in before_scores if before_scores[pid] != state.get_player(pid).score]
             if changed_pids:
                 score_ctx = HookContext(
