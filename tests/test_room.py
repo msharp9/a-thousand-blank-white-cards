@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from tbwc.models.ws_messages import CreateCardMsg, DrawMsg, StartMsg
 from tbwc.rooms.room import Room
@@ -67,5 +67,7 @@ def test_create_card_off_turn_allowed() -> None:
     room = _room_with_two_players()
     room.state = room.state.model_copy(update={"phase": "playing"})
     room.connections.connect("p2", AsyncMock())
-    asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do something")))
+    fake_result = {"program": None, "snippet": None, "verdict": "invalid"}
+    with patch("tbwc.agent.graph.interpret_card", return_value=fake_result):
+        asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do something")))
     assert len(room.state.cards) == 1
