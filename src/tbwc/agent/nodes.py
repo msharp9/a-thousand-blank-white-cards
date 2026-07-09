@@ -6,6 +6,8 @@ Later beads append more nodes (retrieve, classify, emit_ops, judge, …) to this
 
 from __future__ import annotations
 
+import functools
+import logging
 import re
 
 from tbwc.agent.llm import get_chat_model
@@ -15,6 +17,8 @@ from tbwc.agent.state import InterpretState
 from tbwc.models.effects import EffectProgram
 from tbwc.rag.retrievers import dense_retriever
 from tbwc.sandbox.validate import validate_snippet as ast_validate
+
+logger = logging.getLogger(__name__)
 
 
 def reason(state: InterpretState) -> dict:
@@ -102,23 +106,51 @@ def should_search(state: InterpretState) -> str:
 
 
 # ---------------------------------------------------------------------------
-# search node  (STUB — Tavily integration wired in a later phase)
+# search node  (Tavily-backed)
 # ---------------------------------------------------------------------------
 
 
+@functools.lru_cache(maxsize=1)
+def _get_tavily_tool():
+    """Lazily construct a TavilySearch tool (needs TAVILY_API_KEY)."""
+    from langchain_tavily import TavilySearch
+
+    return TavilySearch(max_results=5)
+
+
 def search(state: InterpretState) -> dict:
-    """Perform a web search for additional context about the card.
+    """Web-search for external context about references in the card.
 
-    STUB: returns a no-op note so the graph proceeds to 'classify'. A later phase
-    replaces this body with a Tavily API call.
-
-    Reads: state["card_draft"], state["search_notes"]
-    Writes: state["search_notes"] — appends a stub notice.
+    Uses Tavily to resolve ambiguous pop-culture / game-name references. Appends a
+    short results summary to search_notes (kept as a single string). Non-fatal:
+    on any failure (missing TAVILY_API_KEY, network error) it appends a notice and
+    continues so the graph can still classify.
     """
-    # TODO(phase4): call the Tavily search API here
+    draft = state["card_draft"]
     existing = state.get("search_notes") or ""
-    stub_note = " [web_search_results: none — search stub not yet implemented]"
-    return {"search_notes": existing + stub_note}
+    query = f"{draft['title']} {draft['description']}"[:200].strip() + " card game rules meaning"
+
+    try:
+        tool = _get_tavily_tool()
+        results = tool.invoke({"query": query})
+        notes: list[str] = []
+        if isinstance(results, list):
+            for r in results:
+                if isinstance(r, dict) and "content" in r:
+                    notes.append(str(r["content"])[:500])
+                elif isinstance(r, str):
+                    notes.append(r[:500])
+        elif isinstance(results, str):
+            notes = [results[:2000]]
+        elif isinstance(results, dict) and "results" in results:
+            for r in results["results"]:
+                if isinstance(r, dict) and "content" in r:
+                    notes.append(str(r["content"])[:500])
+        summary = " | ".join(notes) if notes else "no results"
+        return {"search_notes": existing + f" [web_search_results: {summary}]"}
+    except Exception as exc:
+        logger.warning("search node failed (non-fatal): %s", exc)
+        return {"search_notes": existing + " [web_search_results: unavailable]"}
 
 
 # ---------------------------------------------------------------------------
