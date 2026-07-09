@@ -9,8 +9,8 @@ from __future__ import annotations
 import re
 
 from tbwc.agent.llm import get_chat_model
-from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM
-from tbwc.agent.schemas import Interpretation, SnippetEffect
+from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM, JUDGE_SYSTEM
+from tbwc.agent.schemas import Interpretation, SnippetEffect, Verdict
 from tbwc.agent.state import InterpretState
 from tbwc.models.effects import EffectProgram
 from tbwc.rag.retrievers import dense_retriever
@@ -298,3 +298,60 @@ def route_after_validate(state: InterpretState) -> str:
     if "[validate_error:" in notes and attempts < MAX_ATTEMPTS:
         return "gen_snippet"
     return "judge"
+
+
+# ---------------------------------------------------------------------------
+# judge node + edge function
+# ---------------------------------------------------------------------------
+
+
+def judge(state: InterpretState) -> dict:
+    """Score the interpretation against the original card text.
+
+    Reads: state["card_draft"], state["interpretation"], state["program"], state["snippet"]
+    Writes: state["verdict"] (Verdict)
+
+    Uses ChatOpenAI.with_structured_output(Verdict) for a typed multi-dimensional verdict.
+    """
+    draft = state["card_draft"]
+    interp = state.get("interpretation")
+    program = state.get("program")
+    snippet = state.get("snippet")
+
+    if program is not None:
+        effect_summary = f"EffectProgram: {program}"
+    elif snippet is not None:
+        effect_summary = f"SnippetEffect:\n  code: {snippet.code}\n  explanation: {snippet.explanation}"
+    else:
+        effect_summary = "No effect produced."
+
+    human_content = (
+        f"Original card:\n"
+        f"  Title: {draft['title']}\n"
+        f"  Description: {draft['description']}\n\n"
+        f"Interpretation:\n"
+        f"  {interp.model_dump_json() if interp else 'none'}\n\n"
+        f"Generated effect:\n"
+        f"  {effect_summary}\n\n"
+        "Score each dimension: intent, timing, target, trigger, magnitude. Set ok=True only if ALL are True."
+    )
+
+    llm = get_chat_model(temperature=0).with_structured_output(Verdict)
+    verdict = llm.invoke(
+        [
+            {"role": "system", "content": JUDGE_SYSTEM},
+            {"role": "human", "content": human_content},
+        ]
+    )
+    return {"verdict": verdict}
+
+
+def route_after_judge(state: InterpretState) -> str:
+    """Conditional edge: END if verdict.ok or attempts >= MAX_ATTEMPTS; else 'classify'."""
+    from langgraph.graph import END
+
+    verdict = state.get("verdict")
+    attempts = state.get("attempts", 0)
+    if (verdict is not None and verdict.ok) or attempts >= MAX_ATTEMPTS:
+        return END
+    return "classify"
