@@ -83,6 +83,24 @@ def upsert_card(
     client.upsert(collection_name=COLLECTION_NAME, points=[point])
 
 
+def list_all_cards(limit: int = 10_000) -> list[dict[str, Any]]:
+    """Return every stored card payload (seed + prior-game kept cards).
+
+    Uses Qdrant's scroll API, which reads stored payloads directly — no query
+    embedding is computed, so this works offline (no OpenAI call). Raises
+    RuntimeError if the store was never initialised, letting callers fall back
+    to another card source.
+    """
+    client = _require_client()
+    records, _ = client.scroll(
+        collection_name=COLLECTION_NAME,
+        limit=limit,
+        with_payload=True,
+        with_vectors=False,
+    )
+    return [dict(record.payload or {}) for record in records]
+
+
 def search(query_text: str, k: int = 4) -> list[dict[str, Any]]:
     """Embed query_text and return the top-k most similar card payloads.
 

@@ -22,6 +22,20 @@ def test_upsert_and_search(monkeypatch: pytest.MonkeyPatch) -> None:
         assert "score" in hits[0]
 
 
+def test_list_all_cards_returns_every_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    fake_vector = [0.1] * 1536
+    with patch("tbwc.rag.store.embed_text", return_value=fake_vector):
+        from tbwc.rag.store import init_store, list_all_cards, upsert_card
+
+        init_store()
+        upsert_card("c1", "One", "first", "{}", "seed")
+        upsert_card("c2", "Two", "second", "{}", "player")
+        cards = list_all_cards()
+        assert {c["card_id"] for c in cards} == {"c1", "c2"}
+        assert {c["source"] for c in cards} == {"seed", "player"}
+
+
 def test_require_client_raises_before_init() -> None:
     import tbwc.rag.store as mod
 

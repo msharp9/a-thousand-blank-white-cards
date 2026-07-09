@@ -59,8 +59,51 @@ def test_draw_on_turn_draws_and_broadcasts() -> None:
 def test_start_sets_phase_playing() -> None:
     room = _room_with_two_players()
     room.connections.connect("p1", AsyncMock())
+
+    import tbwc.rag.store as store
+
+    store._client = None  # force the offline seed-file fallback
     asyncio.run(room.handle_action("p1", StartMsg()))
     assert room.state.phase == "playing"
+
+
+def test_start_builds_deck_of_at_least_30_and_deals_hands() -> None:
+    room = _room_with_two_players()
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+
+    # Force the offline path: no RAG store initialised -> seed-file fallback.
+    import tbwc.rag.store as store
+
+    store._client = None
+    asyncio.run(room.handle_action("p1", StartMsg()))
+
+    assert room.state.phase == "playing"
+    assert len(room.state.deck) >= 30
+    # Starting hands were dealt from the top of the deck.
+    assert len(room.state.get_player("p1").hand) == 5
+    assert len(room.state.get_player("p2").hand) == 5
+    # Every dealt/deck card id resolves in the registry.
+    for p in room.state.players:
+        assert all(cid in room.state.cards for cid in p.hand)
+    assert all(cid in room.state.cards for cid in room.state.deck)
+
+
+def test_draw_works_after_start() -> None:
+    room = _room_with_two_players()
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+
+    import tbwc.rag.store as store
+
+    store._client = None
+    asyncio.run(room.handle_action("p1", StartMsg()))
+
+    deck_before = len(room.state.deck)
+    hand_before = len(room.state.get_player("p1").hand)
+    asyncio.run(room.handle_action("p1", DrawMsg()))  # p1 is the active player
+    assert len(room.state.deck) == deck_before - 1
+    assert len(room.state.get_player("p1").hand) == hand_before + 1
 
 
 def test_create_card_off_turn_allowed() -> None:

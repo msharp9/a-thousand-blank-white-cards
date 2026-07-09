@@ -41,6 +41,26 @@ def test_missing_file_returns_zero(tmp_path: Path) -> None:
     assert load_seed_cards(tmp_path / "nonexistent.json") == 0
 
 
+def test_read_seed_cards_assigns_ids(tmp_path: Path) -> None:
+    sample = [
+        {"id": "keep", "title": "A", "description": "a"},
+        {"title": "B", "description": "b"},  # no id -> generated
+    ]
+    seed_file = tmp_path / "seed_cards.json"
+    seed_file.write_text(json.dumps(sample))
+    from tbwc.rag.seed import read_seed_cards
+
+    cards = read_seed_cards(seed_file)
+    assert cards[0]["id"] == "keep"
+    assert cards[1]["id"] == "seed-001"
+
+
+def test_read_seed_cards_missing_returns_empty(tmp_path: Path) -> None:
+    from tbwc.rag.seed import read_seed_cards
+
+    assert read_seed_cards(tmp_path / "nope.json") == []
+
+
 def test_real_seed_file_shape() -> None:
     # Sanity: the real data file parses and every entry has title+description.
     from tbwc.rag.seed import DEFAULT_SEED_PATH

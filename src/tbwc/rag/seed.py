@@ -23,6 +23,25 @@ def _canonical_to_str(value: object) -> str:
     return json.dumps(value)
 
 
+def read_seed_cards(seed_path: Path | None = None) -> list[dict]:
+    """Read and parse the seed-cards JSON file (offline — no store, no network).
+
+    Returns the raw list of card dicts, each guaranteed an 'id' (generating a
+    'seed-NNN' id when the source omits one). A missing file logs a warning and
+    returns an empty list. This is the offline card source used by deck building
+    when the RAG store is unavailable.
+    """
+    path = seed_path or DEFAULT_SEED_PATH
+    if not path.exists():
+        logger.warning("Seed cards file not found at %s — skipping", path)
+        return []
+
+    cards: list[dict] = json.loads(path.read_text())
+    for index, card in enumerate(cards):
+        card.setdefault("id", f"seed-{index:03d}")
+    return cards
+
+
 def load_seed_cards(seed_path: Path | None = None) -> int:
     """Initialise the RAG store and upsert all seed cards.
 
@@ -31,16 +50,15 @@ def load_seed_cards(seed_path: Path | None = None) -> int:
     dict is JSON-serialised to a string (canonical is stored as payload).
     """
     path = seed_path or DEFAULT_SEED_PATH
-    if not path.exists():
-        logger.warning("Seed cards file not found at %s — skipping", path)
+    cards = read_seed_cards(path)
+    if not cards:
         return 0
 
     init_store()
 
-    cards: list[dict] = json.loads(path.read_text())
     count = 0
-    for index, card in enumerate(cards):
-        card_id = card.get("id") or f"seed-{index:03d}"
+    for card in cards:
+        card_id = card["id"]
         try:
             upsert_card(
                 card_id=card_id,

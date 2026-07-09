@@ -18,9 +18,13 @@ from tbwc.engine.apply import apply_effect
 from tbwc.engine.events import GameEvent, HookContext
 from tbwc.models.game_state import GameState, Player
 from tbwc.rooms.connections import ConnectionManager
+from tbwc.rooms.deck import MIN_DECK, build_deck
 from tbwc.rooms.epilogue import EpilogueManager
 
 logger = logging.getLogger(__name__)
+
+# Cards dealt to each player's hand when the game starts.
+STARTING_HAND_SIZE = 5
 
 
 class Room:
@@ -80,7 +84,36 @@ class Room:
 
     # ── per-action handlers (engine-backed minimal versions; agent interpret in a later bead) ──
     async def _handle_start(self, player_id: str) -> None:
-        self.state = self.state.model_copy(update={"phase": "playing"})
+        """Build a shuffled deck (>=30 cards), deal starting hands, begin play.
+
+        Deck building never requires a live external service: it collects seed +
+        prior-game cards from the RAG corpus when available and falls back to the
+        offline seed-data file otherwise. Runs in a thread since collection may
+        touch the (in-memory) store.
+        """
+        # Build enough that the deck still holds >= MIN_DECK after dealing hands.
+        players = list(self.state.players)
+        dealt = STARTING_HAND_SIZE * len(players)
+        cards, deck = await asyncio.to_thread(build_deck, min_deck=MIN_DECK + dealt)
+
+        # Deal starting hands off the top of the shuffled deck.
+        hands: dict[str, list[str]] = {p.id: list(p.hand) for p in players}
+        for _ in range(STARTING_HAND_SIZE):
+            for p in players:
+                if not deck:
+                    break
+                hands[p.id].append(deck.pop(0))
+
+        new_players = [p.model_copy(update={"hand": hands[p.id]}) for p in players]
+        merged_cards = {**cards, **self.state.cards}
+        self.state = self.state.model_copy(
+            update={
+                "phase": "playing",
+                "cards": merged_cards,
+                "deck": deck,
+                "players": new_players,
+            }
+        )
         await self._broadcast_state()
 
     async def _handle_draw(self, player_id: str) -> None:
