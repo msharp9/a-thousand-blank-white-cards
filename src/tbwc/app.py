@@ -49,6 +49,17 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
         load_seed_cards()
     except Exception:  # pragma: no cover - startup best-effort; missing key/network
         logger.exception("Seed card loading failed at startup")
+
+    # startup: log LangSmith tracing status
+    _settings = get_settings()
+    if _settings.langsmith_tracing:
+        logger.info(
+            "LangSmith tracing ENABLED project=%s endpoint=%s",
+            _settings.langsmith_project,
+            _settings.langsmith_endpoint,
+        )
+    else:
+        logger.warning("LangSmith tracing DISABLED — set LANGSMITH_TRACING=true to enable")
     yield
     # shutdown
 
