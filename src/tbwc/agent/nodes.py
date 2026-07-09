@@ -14,6 +14,7 @@ from tbwc.agent.schemas import Interpretation, SnippetEffect
 from tbwc.agent.state import InterpretState
 from tbwc.models.effects import EffectProgram
 from tbwc.rag.retrievers import dense_retriever
+from tbwc.sandbox.validate import validate_snippet as ast_validate
 
 
 def reason(state: InterpretState) -> dict:
@@ -259,3 +260,41 @@ def gen_snippet(state: InterpretState) -> dict:
         ]
     )
     return {"snippet": snippet}
+
+
+# ---------------------------------------------------------------------------
+# validate_snippet node + edge function
+# ---------------------------------------------------------------------------
+
+MAX_ATTEMPTS = 3  # shared with the judge loop
+
+
+def validate_snippet_node(state: InterpretState) -> dict:
+    """Run the AST allowlist check on the generated snippet.
+
+    Reads: state["snippet"]
+    Writes: state["search_notes"] — appends a validation error on failure so
+            gen_snippet can see why its code was rejected when it retries.
+
+    On success: passes through (returns {}). On failure: appends the error.
+    """
+    snippet = state.get("snippet")
+    if snippet is None:
+        existing = state.get("search_notes") or ""
+        return {"search_notes": existing + " [validate_error: no snippet generated]"}
+
+    result = ast_validate(snippet.code)
+    if result.ok:
+        return {}
+
+    existing = state.get("search_notes") or ""
+    return {"search_notes": existing + f" [validate_error: {result.error}]"}
+
+
+def route_after_validate(state: InterpretState) -> str:
+    """Conditional edge: retry gen_snippet on validation failure (under MAX_ATTEMPTS), else judge."""
+    notes = state.get("search_notes") or ""
+    attempts = state.get("attempts", 0)
+    if "[validate_error:" in notes and attempts < MAX_ATTEMPTS:
+        return "gen_snippet"
+    return "judge"
