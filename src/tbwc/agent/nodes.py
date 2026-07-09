@@ -9,7 +9,8 @@ from __future__ import annotations
 import re
 
 from tbwc.agent.llm import get_chat_model
-from tbwc.agent.prompts import INTERPRETER_SYSTEM
+from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM
+from tbwc.agent.schemas import Interpretation
 from tbwc.agent.state import InterpretState
 from tbwc.rag.retrievers import dense_retriever
 
@@ -116,3 +117,62 @@ def search(state: InterpretState) -> dict:
     existing = state.get("search_notes") or ""
     stub_note = " [web_search_results: none — search stub not yet implemented]"
     return {"search_notes": existing + stub_note}
+
+
+# ---------------------------------------------------------------------------
+# classify node + edge function
+# ---------------------------------------------------------------------------
+
+
+def _format_exemplars(retrieved: list[dict]) -> str:
+    """Format retrieved exemplars as readable text for the classify prompt."""
+    if not retrieved:
+        return "No similar cards found."
+    lines = []
+    for i, ex in enumerate(retrieved, 1):
+        lines.append(
+            f"{i}. Title: {ex.get('title', '?')}\n"
+            f"   Description: {ex.get('description', '?')}\n"
+            f"   Canonical: {ex.get('canonical', '?')}\n"
+            f"   Score: {ex.get('score', 0):.2f}"
+        )
+    return "\n".join(lines)
+
+
+def classify(state: InterpretState) -> dict:
+    """Classify the card's effect into a structured Interpretation.
+
+    Reads: state["card_draft"], state["retrieved"], state["search_notes"]
+    Writes: state["interpretation"] (Interpretation), state["attempts"] (incremented).
+
+    Uses ChatOpenAI.with_structured_output(Interpretation) for typed output.
+    """
+    draft = state["card_draft"]
+    retrieved = state.get("retrieved") or []
+    search_notes = state.get("search_notes") or "none"
+
+    human_content = CLASSIFY_TEMPLATE.format(
+        title=draft["title"],
+        description=draft["description"],
+        exemplars=_format_exemplars(retrieved),
+        search_notes=search_notes,
+    )
+
+    llm = get_chat_model(temperature=0).with_structured_output(Interpretation)
+    interpretation = llm.invoke(
+        [
+            {"role": "system", "content": INTERPRETER_SYSTEM},
+            {"role": "human", "content": human_content},
+        ]
+    )
+    return {"interpretation": interpretation, "attempts": state.get("attempts", 0) + 1}
+
+
+def route_after_classify(state: InterpretState) -> str:
+    """Conditional edge: route to emit_ops (immediate) or gen_snippet (snippet)."""
+    interp = state.get("interpretation")
+    if interp is None:
+        return "gen_snippet"  # safe fallback
+    if interp.mode == "immediate":
+        return "emit_ops"
+    return "gen_snippet"
