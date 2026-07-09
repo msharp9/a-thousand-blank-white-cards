@@ -6,6 +6,8 @@ rooms API and the eval harness via `from tbwc.agent.graph import graph`.
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 from langgraph.graph import END, START, StateGraph
 
 from tbwc.agent.nodes import (
@@ -26,9 +28,18 @@ from tbwc.agent.nodes import (
 from tbwc.agent.state import InterpretState
 
 
+class AgentConfig(TypedDict, total=False):
+    """Configurable keys accepted by the interpretation graph."""
+
+    retriever_mode: str  # "dense" | "advanced"
+
+
 def build_graph() -> StateGraph:
     """Build (but do not compile) the interpretation StateGraph."""
-    builder = StateGraph(InterpretState)
+    try:
+        builder = StateGraph(InterpretState, config_schema=AgentConfig)
+    except TypeError:
+        builder = StateGraph(InterpretState)
 
     builder.add_node("reason", reason)
     builder.add_node("retrieve", retrieve)

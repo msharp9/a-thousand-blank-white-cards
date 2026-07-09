@@ -9,13 +9,16 @@ from __future__ import annotations
 import functools
 import logging
 import re
+from typing import Any
+
+from langchain_core.runnables import RunnableConfig
 
 from tbwc.agent.llm import get_chat_model
 from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM, JUDGE_SYSTEM
 from tbwc.agent.schemas import Interpretation, SnippetEffect, Verdict
 from tbwc.agent.state import InterpretState
 from tbwc.models.effects import EffectProgram
-from tbwc.rag.retrievers import dense_retriever
+from tbwc.rag.retrievers import advanced_retriever, dense_retriever
 from tbwc.sandbox.validate import validate_snippet as ast_validate
 
 logger = logging.getLogger(__name__)
@@ -51,19 +54,47 @@ def reason(state: InterpretState) -> dict:
 
 _retriever = dense_retriever()
 
+_RETRIEVER_CACHE: dict[str, Any] = {}
 
-def retrieve(state: InterpretState) -> dict:
+
+def _get_retriever(mode: str):
+    """Return (and cache) the retriever callable for the given mode ('dense'|'advanced').
+
+    The 'dense' mode always returns the module-level ``_retriever`` so tests (and
+    callers) can patch ``tbwc.agent.nodes._retriever`` and have it take effect at
+    call time. The 'advanced' retriever is constructed lazily and cached.
+    """
+    if mode == "advanced":
+        if "advanced" not in _RETRIEVER_CACHE:
+            _RETRIEVER_CACHE["advanced"] = advanced_retriever()
+        return _RETRIEVER_CACHE["advanced"]
+    return _retriever  # dense: always the (patchable) module-level retriever
+
+
+def _clear_retriever_cache() -> None:
+    """Test helper: reset the module-level retriever cache."""
+    _RETRIEVER_CACHE.clear()
+
+
+def retrieve(state: InterpretState, config: RunnableConfig | None = None) -> dict:
     """Search the RAG store for exemplar cards similar to the card being interpreted.
 
     Reads: state["card_draft"], state["search_notes"]
     Writes: state["retrieved"] (list of exemplar dicts from the RAG search)
 
+    Config (under 'configurable'): retriever_mode = "dense" (default) | "advanced".
+    Backward compatible: callable with just state (defaults to dense).
+
     Uses search_notes (intent summary) as the query if available, else falls back
     to "title\\ndescription".
     """
+    configurable = (config or {}).get("configurable", {}) if config else {}
+    mode = configurable.get("retriever_mode", "dense")
+    retriever = _get_retriever(mode)
+
     draft = state["card_draft"]
     query = state.get("search_notes") or f"{draft['title']}\n{draft['description']}"
-    exemplars = _retriever(query, k=4)
+    exemplars = retriever(query, k=4)
     return {"retrieved": exemplars}
 
 
