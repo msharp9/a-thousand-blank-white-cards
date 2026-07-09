@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: tbwc-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        value: tbwc-prod
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: CORS_ORIGINS
+        sync: false
