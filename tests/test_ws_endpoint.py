@@ -46,3 +46,28 @@ def test_first_message_must_be_join(client: TestClient) -> None:
         msg = ws.receive_json()
         assert msg["type"] == "error"
         assert "join" in msg["message"].lower()
+
+
+def test_two_players_stay_connected_with_distinct_ids(client: TestClient) -> None:
+    """Two players with distinct player_ids can both connect and stay connected.
+
+    Regression test for the bug where a shared client-side player_id caused the
+    second connection to evict the first (server closes the older socket, 4009).
+    With distinct ids (as the per-room/per-tab client scoping now produces), both
+    sockets stay open and both receive their state replay.
+    """
+    code = client.post("/rooms").json()["code"]
+    pid1 = client.post(f"/rooms/{code}/join", json={"name": "Alice"}).json()["player_id"]
+    pid2 = client.post(f"/rooms/{code}/join", json={"name": "Bob"}).json()["player_id"]
+    assert pid1 != pid2
+
+    with client.websocket_connect(f"/ws/{code}") as ws1:
+        ws1.send_json({"type": "join", "player_id": pid1, "name": "Alice"})
+        assert ws1.receive_json()["type"] == "state"
+
+        with client.websocket_connect(f"/ws/{code}") as ws2:
+            ws2.send_json({"type": "join", "player_id": pid2, "name": "Bob"})
+            # Bob connecting broadcasts state to all sockets; both must receive it,
+            # proving ws1 was NOT evicted by ws2 connecting.
+            assert ws2.receive_json()["type"] == "state"
+            assert ws1.receive_json()["type"] == "state"

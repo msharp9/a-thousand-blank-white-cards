@@ -37,7 +37,7 @@ export default function LandingPage() {
       });
       if (!joinRes.ok) throw new Error("Failed to join room");
       const { player_id } = await joinRes.json();
-      storePlayerId(player_id);
+      storePlayerId(code, player_id);
       persistName();
       router.push(`/room/${code}`);
     } catch (e) {
@@ -60,7 +60,7 @@ export default function LandingPage() {
       });
       if (!joinRes.ok) throw new Error(joinRes.status === 404 ? "Room not found" : "Failed to join");
       const { player_id } = await joinRes.json();
-      storePlayerId(player_id);
+      storePlayerId(code, player_id);
       persistName();
       router.push(`/room/${code}`);
     } catch (e) {

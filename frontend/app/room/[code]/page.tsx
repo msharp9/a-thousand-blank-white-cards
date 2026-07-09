@@ -12,7 +12,7 @@ import { Hand } from "@/components/hand";
 import { HouseRulesZone } from "@/components/house-rules-zone";
 import { SetupPhase } from "@/components/setup-phase";
 import type { CardSnapshot } from "@/lib/types";
-import { useGameSocket } from "@/lib/ws";
+import { getPlayerId, useGameSocket } from "@/lib/ws";
 
 export default function RoomPage() {
   const params = useParams();
@@ -31,8 +31,8 @@ export default function RoomPage() {
       setName(storedName);
       setNameSet(true);
     }
-    setMyPlayerId(localStorage.getItem("tbwc_player_id"));
-  }, []);
+    setMyPlayerId(getPlayerId(code));
+  }, [code]);
 
   const { gameState, log, brewing, previewResult, error, connected, send } = useGameSocket(
     nameSet ? code : "",
@@ -41,9 +41,9 @@ export default function RoomPage() {
 
   // Keep myPlayerId fresh (the WS join may store it after connect).
   useEffect(() => {
-    const id = localStorage.getItem("tbwc_player_id");
+    const id = getPlayerId(code);
     if (id && id !== myPlayerId) setMyPlayerId(id);
-  }, [connected, gameState, myPlayerId]);
+  }, [code, connected, gameState, myPlayerId]);
 
   const phase = gameState?.phase ?? "lobby";
 
