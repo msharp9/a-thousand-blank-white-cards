@@ -112,7 +112,9 @@ See [`src/tbwc/evals/RETRIEVER_ANALYSIS.md`](src/tbwc/evals/RETRIEVER_ANALYSIS.m
 
 ## Docs & links
 
+- [Project write-up](docs/WRITEUP.md) — problem, solution, architecture diagrams, eval results, and Demo Day notes (rubric tasks 1–7).
 - [Retriever analysis](src/tbwc/evals/RETRIEVER_ANALYSIS.md) — eval findings.
+- [Loom demo script](docs/loom-script.md) — timed ≤10-minute demo walkthrough.
 - [Deployment docs](docs/deploy/) — Render, Vercel, LangSmith, and smoke checklist.
 </content>
 </invoke>
