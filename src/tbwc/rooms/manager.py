@@ -23,7 +23,19 @@ def _generate_code() -> str:
 
 
 class RoomManager:
-    """In-memory registry of all active rooms (cleared on server restart)."""
+    """In-memory registry of all active rooms (cleared on server restart).
+
+    WARNING (multi-worker-unsafe / follow-up bead): this registry is PROCESS-LOCAL.
+    Rooms live only in the memory of the worker that created them. With more than
+    one worker (e.g. `uvicorn --workers N`, gunicorn, or multiple containers), the
+    REST join (POST /rooms/{code}/join) and the WS connect (/ws/{code}) can be
+    routed to DIFFERENT workers: the worker handling the WS connect may not have
+    the room in its `_rooms` dict, so a valid player is rejected as "room not
+    found" / "player_id not found". This is fine for single-worker dev but MUST be
+    replaced with shared/out-of-process state (e.g. Redis pub/sub, a sticky-session
+    load balancer, or a single-writer coordinator) before running multi-worker.
+    Out of scope for this bug fix — flagged here so a follow-up bead can be filed.
+    """
 
     def __init__(self) -> None:
         self._rooms: dict[str, Room] = {}

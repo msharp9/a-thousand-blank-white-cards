@@ -3,8 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClientMsg, GameStateSnapshot, ServerMsg } from "./types";
 
-const PLAYER_ID_KEY = "tbwc_player_id";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
+
+// Player identity is scoped per-room AND per-tab.
+//
+// We use sessionStorage (not localStorage) keyed by room code so that:
+//   - a reload of the SAME tab keeps its player_id -> reconnects to the same
+//     seat (sessionStorage survives reload within a tab);
+//   - a SECOND tab (even in the same browser) has its own sessionStorage, so it
+//     gets no stored id and is assigned a distinct seat by the REST join.
+//
+// The previous scheme stored a single global localStorage["tbwc_player_id"],
+// which every tab shared — so a 2nd tab reused player 1's id and got evicted as
+// a duplicate socket (server closes the older socket with code 4009). That is
+// the bug this scoping fixes.
+function playerIdKey(code: string): string {
+  return `tbwc_player_id:${code.toUpperCase()}`;
+}
 
 export interface GameSocketState {
   gameState: GameStateSnapshot | null;
@@ -49,7 +64,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
         }
         setConnected(true);
         setError(null);
-        const storedId = localStorage.getItem(PLAYER_ID_KEY);
+        const storedId = sessionStorage.getItem(playerIdKey(code));
         ws.send(JSON.stringify({ type: "join", player_id: storedId, name }));
       };
 
@@ -104,10 +119,14 @@ export function useGameSocket(code: string, name: string): GameSocketState {
   return { gameState, log, brewing, previewResult, error, connected, send };
 }
 
-export function storePlayerId(playerId: string): void {
-  localStorage.setItem(PLAYER_ID_KEY, playerId);
+export function storePlayerId(code: string, playerId: string): void {
+  sessionStorage.setItem(playerIdKey(code), playerId);
 }
 
-export function clearPlayerId(): void {
-  localStorage.removeItem(PLAYER_ID_KEY);
+export function getPlayerId(code: string): string | null {
+  return sessionStorage.getItem(playerIdKey(code));
+}
+
+export function clearPlayerId(code: string): void {
+  sessionStorage.removeItem(playerIdKey(code));
 }
