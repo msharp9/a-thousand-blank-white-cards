@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Union, get_args
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,71 @@ Target = Literal[
     "player_with_least_points",
     "player_with_empty_hand",
 ]
+
+# The set of valid runtime Target literals (derived from the Literal above so it
+# never drifts). Used by map_authoring_target for passthrough detection.
+_VALID_TARGETS: frozenset[str] = frozenset(get_args(Target))
+
+# ---------------------------------------------------------------------------
+# Authoring vocabulary -> runtime Target mapping
+# ---------------------------------------------------------------------------
+# The card-authoring layer (models.card.CardCanonical.target and the agent's
+# Interpretation.placement) uses a small, human-friendly vocabulary that is an
+# ALIAS layer on top of the richer runtime Target set. This table is the ONE
+# canonical place that translation lives; see bead rjp for the taxonomy.
+#
+# Authoring vocab:  self | player | all | center
+# Plus defensive synonyms the LLM/authors sometimes emit.
+#
+# NOTE on "center": center is NOT a player target — it describes WHERE a card
+# sits (the shared table area), not WHO it affects. It therefore has no valid
+# runtime Target and is deliberately absent from this table. Callers dealing
+# with placement must handle "center" separately and must never feed it to
+# map_authoring_target as a player target (it will raise / fall back).
+_AUTHORING_TARGET_ALIASES: dict[str, Target] = {
+    "self": "self",
+    # "a player you pick" — the actor chooses at play time.
+    "player": "chooser",
+    "opponent": "chooser",
+    "all": "all",
+    "all_players": "all",
+    "everyone": "all",
+    # everyone except the actor
+    "all_others": "all_others",
+    "others": "all_others",
+}
+
+
+def map_authoring_target(raw: str, *, default: Target | None = None) -> Target:
+    """Map an authoring/synonym target string onto a valid runtime ``Target``.
+
+    Translation precedence:
+      1. Already-valid runtime Target -> passed through unchanged.
+      2. Known authoring alias / synonym -> its runtime Target (see table above).
+      3. Unknown value -> raise ValueError, unless ``default`` is provided, in
+         which case ``default`` is returned (documented safe fallback, e.g.
+         "chooser" so the actor can still pick a valid player at play time).
+
+    The lookup is case-insensitive and tolerant of surrounding whitespace.
+
+    IMPORTANT: "center" is a *placement* concept, not a player target, so it is
+    NOT in the alias table. Passing "center" here is treated as an unknown value
+    (raises, or returns ``default``). Callers that need to route placement must
+    special-case "center" before calling this function.
+    """
+    key = raw.strip().lower()
+    if key in _VALID_TARGETS:
+        return key  # type: ignore[return-value]  # narrowed by membership check
+    if key in _AUTHORING_TARGET_ALIASES:
+        return _AUTHORING_TARGET_ALIASES[key]
+    if default is not None:
+        return default
+    raise ValueError(
+        f"Cannot map authoring target {raw!r} onto a runtime Target. "
+        f"Valid runtime targets: {sorted(_VALID_TARGETS)}; "
+        f"known aliases: {sorted(_AUTHORING_TARGET_ALIASES)}. "
+        "Note: 'center' is a placement, not a player target."
+    )
 
 
 # ---------------------------------------------------------------------------
