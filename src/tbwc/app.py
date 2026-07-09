@@ -6,6 +6,7 @@ REST game routes and /ws are mounted by later phases.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -14,17 +15,24 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from tbwc.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup → yield → shutdown.
 
     Later phases will:
-      - initialise the Qdrant collection
       - warm up the LangGraph agent
       - open the room registry
     """
     # startup
+    try:
+        from tbwc.rag.seed import load_seed_cards
+
+        load_seed_cards()
+    except Exception:  # pragma: no cover - startup best-effort; missing key/network
+        logger.exception("Seed card loading failed at startup")
     yield
     # shutdown
 
