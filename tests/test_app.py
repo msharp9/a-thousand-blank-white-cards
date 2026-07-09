@@ -59,3 +59,14 @@ def test_startup_succeeds_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
     with TestClient(create_app()) as c:
         assert c.get("/health").status_code == 200
     get_settings.cache_clear()
+
+
+def test_startup_succeeds_without_openai_key_for_ollama(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """provider=ollama: startup must NOT require OPENAI_API_KEY."""
+    monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    get_settings.cache_clear()
+    with TestClient(create_app()) as c:
+        assert c.get("/health").status_code == 200
+    get_settings.cache_clear()

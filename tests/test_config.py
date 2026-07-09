@@ -54,6 +54,36 @@ def test_require_openai_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> Non
     get_settings.cache_clear()
 
 
+def test_ollama_provider_skips_key_requirement(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """provider=ollama makes require_openai_api_key a no-op (returns placeholder)."""
+    get_settings.cache_clear()
+    monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    assert require_openai_api_key() == "ollama"  # no RuntimeError raised
+    get_settings.cache_clear()
+
+
+def test_provider_aware_accessors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """chat/embedding model, base_url and dimensions follow the active provider."""
+    get_settings.cache_clear()
+    openai_s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert not openai_s.is_ollama
+    assert openai_s.chat_model == "gpt-5.4-mini"
+    assert openai_s.embedding_model == "text-embedding-3-small"
+    assert openai_s.llm_base_url is None
+    assert openai_s.embedding_dimensions == 1536
+
+    ollama_s = Settings(_env_file=None, llm_provider="ollama")  # type: ignore[call-arg]
+    assert ollama_s.is_ollama
+    assert ollama_s.chat_model == "gpt-oss-20b"
+    assert ollama_s.embedding_model == "nomic-embed-text"
+    assert ollama_s.llm_base_url == "http://localhost:11434/v1"
+    assert ollama_s.embedding_dimensions == 768
+    assert ollama_s.llm_api_key == "ollama"  # placeholder, no real key required
+    get_settings.cache_clear()
+
+
 def test_key_from_env_file_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A key defined only in a .env file (not the process env) is honoured."""
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)

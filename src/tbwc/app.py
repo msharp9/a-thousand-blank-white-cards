@@ -43,7 +43,8 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
       - open the room registry
     """
     # startup: fail fast with an actionable message if the OpenAI key is missing.
-    # (OpenAI is currently required; skip this gate if an Ollama/local backend is added.)
+    # require_openai_api_key() is a no-op when llm_provider == "ollama" (the local
+    # OpenAI-compatible backend ignores the key), so this gate only fires for OpenAI.
     require_openai_api_key()
 
     # startup: warn loudly if a multi-worker deployment is configured — the
