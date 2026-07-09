@@ -1,8 +1,9 @@
 """tbwc.engine.hooks — RegisteredHook, HookRegistry, and the fire_hooks ordering algorithm.
 
 Persistent effects are hooks: callables that fire when a named event occurs.
-Ordering: hooks registered FIRST fire LAST (outermost); center-scoped hooks
-fire outermost of all; an `uncounterable` source card ends the chain early.
+Ordering: hooks fire in REGISTRATION order (first-registered fires first,
+last-registered fires last/outermost); center-scoped hooks fire outermost of
+all; an `uncounterable` source card ends the chain early.
 """
 
 from __future__ import annotations
@@ -75,9 +76,10 @@ def fire_hooks(
 
     1. Partition hooks into player-scoped and center-scoped.
     2. Player hooks fire first, center hooks fire last (outermost/override).
-    3. Within each group, REVERSE registration order (newest first).
+    3. Within each group, fire in REGISTRATION order (first-registered fires
+       first; last-registered fires last/outermost, getting the final say).
     4. If a fired hook's source card has properties.uncounterable == True,
-       stop the chain (its result is final).
+       stop the chain immediately (later hooks — even center — do NOT fire).
     """
     reg = registry or _default_registry
     matching = reg.hooks_for_event(event)
@@ -86,7 +88,7 @@ def fire_hooks(
 
     player_hooks = [h for h in matching if h.scope == "player"]
     center_hooks = [h for h in matching if h.scope == "center"]
-    ordered = list(reversed(player_hooks)) + list(reversed(center_hooks))
+    ordered = player_hooks + center_hooks
 
     for hook in ordered:
         handler = reg.get_handler(hook.id)

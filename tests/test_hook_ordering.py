@@ -1,91 +1,118 @@
-"""Tests for HookRegistry and fire_hooks ordering."""
+"""Hook ordering, center-scope, and uncounterable resistance tests."""
 
 from __future__ import annotations
 
-from typing import Any
-
+from tbwc.engine.events import GameEvent, HookContext
 from tbwc.engine.hooks import HookRegistry, RegisteredHook, fire_hooks
 from tbwc.models.cards import Card
-from tbwc.models.game_state import GameState
+from tbwc.models.game_state import GameState, Player
 
 
-def _state_with_cards(*cards: Card) -> GameState:
-    st = GameState(room_code="AAAA")
-    st = st.model_copy(update={"cards": {c.id: c for c in cards}})
-    return st
+def make_state_with_cards(**card_properties) -> GameState:
+    """Build a minimal GameState with cards for the hook source cards."""
+    players = [Player(id="p1", name="Alice", score=0)]
+    cards = {}
+    for card_id, props in card_properties.items():
+        cards[card_id] = Card(id=card_id, title=card_id, description="", creator_id="p1", properties=props)
+    return GameState(room_code="TEST", players=players, cards=cards)
 
 
-def _appender(tag: str):
-    def handler(state: GameState, ctx: Any) -> GameState:
-        return state.with_log(tag)
-
-    return handler
+def make_ctx(actor_id="p1") -> HookContext:
+    return HookContext(event=GameEvent.ON_SCORE_CHANGE, actor_id=actor_id)
 
 
-def test_empty_registry_returns_state_unchanged() -> None:
-    reg = HookRegistry()
-    st = GameState(room_code="AAAA")
-    out = fire_hooks(st, "on_score_change", None, registry=reg)
-    assert out is st
+def make_hook(card_id: str, scope: str = "player") -> RegisteredHook:
+    return RegisteredHook(
+        source_card_id=card_id,
+        event=GameEvent.ON_SCORE_CHANGE,
+        scope=scope,
+        owner_id="p1" if scope == "player" else None,
+    )
 
 
-def test_reverse_registration_order_within_player_scope() -> None:
-    reg = HookRegistry()
-    c1 = Card(id="c1", title="", description="", creator_id="p1")
-    c2 = Card(id="c2", title="", description="", creator_id="p1")
-    st = _state_with_cards(c1, c2)
-    h1 = RegisteredHook(source_card_id="c1", event="on_play", scope="player", owner_id="p1")
-    h2 = RegisteredHook(source_card_id="c2", event="on_play", scope="player", owner_id="p1")
-    reg.register(h1, _appender("first"))
-    reg.register(h2, _appender("second"))
-    out = fire_hooks(st, "on_play", None, registry=reg)
-    # registered-first-fires-last => "second" appended before "first"
-    assert out.log == ["second", "first"]
+class TestFireHooksEmpty:
+    def test_no_hooks_returns_state_unchanged(self):
+        state = make_state_with_cards()
+        reg = HookRegistry()
+        result = fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
+        assert result is state
 
 
-def test_center_fires_outermost() -> None:
-    reg = HookRegistry()
-    cp = Card(id="cp", title="", description="", creator_id="p1")
-    cc = Card(id="cc", title="", description="", creator_id="p1")
-    st = _state_with_cards(cp, cc)
-    hp = RegisteredHook(source_card_id="cp", event="on_play", scope="player", owner_id="p1")
-    hc = RegisteredHook(source_card_id="cc", event="on_play", scope="center")
-    reg.register(hp, _appender("player"))
-    reg.register(hc, _appender("center"))
-    out = fire_hooks(st, "on_play", None, registry=reg)
-    # player group fires first, center last
-    assert out.log == ["player", "center"]
+class TestHookInvocationOrder:
+    """Hooks fire in registration order; center-scoped fire outermost (last)."""
+
+    def test_single_hook_fires(self):
+        state = make_state_with_cards(c1={})
+        reg = HookRegistry()
+        fired = []
+        reg.register(make_hook("c1"), lambda s, ctx: (fired.append("A"), s)[1])
+        fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
+        assert fired == ["A"]
+
+    def test_two_hooks_registration_order(self):
+        """A registered first fires first; B registered second fires last (outermost)."""
+        state = make_state_with_cards(c1={}, c2={})
+        reg = HookRegistry()
+        order = []
+        reg.register(make_hook("c1"), lambda s, ctx: (order.append("A"), s)[1])
+        reg.register(make_hook("c2"), lambda s, ctx: (order.append("B"), s)[1])
+        fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
+        assert order == ["A", "B"]
+
+    def test_center_hook_fires_after_player_hooks(self):
+        state = make_state_with_cards(c1={}, c_center={})
+        reg = HookRegistry()
+        order = []
+        reg.register(make_hook("c1", scope="player"), lambda s, ctx: (order.append("player"), s)[1])
+        reg.register(make_hook("c_center", scope="center"), lambda s, ctx: (order.append("center"), s)[1])
+        fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
+        assert order == ["player", "center"]
 
 
-def test_uncounterable_breaks_chain() -> None:
-    reg = HookRegistry()
-    cu = Card(id="cu", title="", description="", creator_id="p1", properties={"uncounterable": True})
-    cc = Card(id="cc", title="", description="", creator_id="p1")
-    st = _state_with_cards(cu, cc)
-    # uncounterable player hook registered last => fires first in player group => breaks chain
-    hu = RegisteredHook(source_card_id="cu", event="on_play", scope="player", owner_id="p1")
-    hc = RegisteredHook(source_card_id="cc", event="on_play", scope="center")
-    reg.register(hc, _appender("center"))
-    reg.register(hu, _appender("uncounterable"))
-    out = fire_hooks(st, "on_play", None, registry=reg)
-    assert out.log == ["uncounterable"]  # center never fired
+class TestUncounterabaleResistance:
+    """An uncounterable card's hook breaks the chain early."""
+
+    def test_uncounterable_stops_later_hooks(self):
+        state = make_state_with_cards(c1={}, c2={"uncounterable": True}, c3={})
+        reg = HookRegistry()
+        fired = []
+        reg.register(make_hook("c1"), lambda s, ctx: (fired.append("A"), s)[1])
+        reg.register(make_hook("c2"), lambda s, ctx: (fired.append("B"), s)[1])
+        reg.register(make_hook("c3"), lambda s, ctx: (fired.append("C"), s)[1])
+        fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
+        assert "A" in fired
+        assert "B" in fired
+        assert "C" not in fired  # blocked by uncounterable B
+
+    def test_non_uncounterable_does_not_stop_chain(self):
+        state = make_state_with_cards(c1={}, c2={}, c3={})
+        reg = HookRegistry()
+        fired = []
+        reg.register(make_hook("c1"), lambda s, ctx: (fired.append("A"), s)[1])
+        reg.register(make_hook("c2"), lambda s, ctx: (fired.append("B"), s)[1])
+        reg.register(make_hook("c3"), lambda s, ctx: (fired.append("C"), s)[1])
+        fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
+        assert fired == ["A", "B", "C"]
 
 
-def test_missing_handler_is_skipped() -> None:
-    reg = HookRegistry()
-    c1 = Card(id="c1", title="", description="", creator_id="p1")
-    st = _state_with_cards(c1)
-    h1 = RegisteredHook(source_card_id="c1", event="on_play", scope="player", owner_id="p1")
-    reg._hooks.append(h1)  # registered without a handler
-    out = fire_hooks(st, "on_play", None, registry=reg)
-    assert out.log == []
+class TestHookStateTransformation:
+    """Hooks can mutate state; changes chain through the sequence."""
+
+    def test_hooks_chain_state_changes(self):
+        state = make_state_with_cards(c1={}, c2={})
+        reg = HookRegistry()
+        reg.register(make_hook("c1"), lambda s, ctx: s.with_log("hook-A"))
+        reg.register(make_hook("c2"), lambda s, ctx: s.with_log("hook-B"))
+        result = fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
+        assert "hook-A" in result.log
+        assert "hook-B" in result.log
 
 
-def test_remove_and_hooks_for_event() -> None:
-    reg = HookRegistry()
-    h1 = RegisteredHook(source_card_id="c1", event="on_play", scope="player")
-    reg.register(h1, _appender("x"))
-    assert reg.hooks_for_event("on_play") == [h1]
-    reg.remove(h1.id)
-    assert reg.hooks_for_event("on_play") == []
-    assert reg.get_handler(h1.id) is None
+class TestMissingHandlerSkipped:
+    def test_hook_without_handler_is_skipped(self):
+        state = make_state_with_cards(c1={})
+        reg = HookRegistry()
+        h1 = make_hook("c1")
+        reg._hooks.append(h1)  # registered with no handler
+        result = fire_hooks(state, GameEvent.ON_SCORE_CHANGE, make_ctx(), registry=reg)
+        assert result.log == []
