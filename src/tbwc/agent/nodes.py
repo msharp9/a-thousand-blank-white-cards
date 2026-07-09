@@ -17,7 +17,7 @@ from tbwc.agent.llm import get_chat_model, with_structured_output
 from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM, JUDGE_SYSTEM
 from tbwc.agent.schemas import Interpretation, SnippetEffect, Verdict
 from tbwc.agent.state import InterpretState
-from tbwc.models.effects import EffectProgram
+from tbwc.models.effects import EffectProgram, map_authoring_target
 from tbwc.rag.retrievers import advanced_retriever, dense_retriever
 from tbwc.sandbox.validate import validate_snippet as ast_validate
 
@@ -249,6 +249,51 @@ def route_after_classify(state: InterpretState) -> str:
 # emit_ops node
 # ---------------------------------------------------------------------------
 
+# Op fields that hold a runtime Target. Ops absent from this map (ReverseOrderOp,
+# ChangeDrawCountOp, DestroyCardOp, SetWinConditionOp, CustomNoteOp) carry no
+# target and are left untouched. Kept as data so the walk is purely defensive
+# and driven by which fields an op actually has (checked via hasattr).
+_TARGET_FIELDS: tuple[str, ...] = ("target", "from_target", "to_target")
+
+# Targets that mean "the actor picks a player at play time" — their presence
+# flips EffectProgram.requires_choice, mirroring the existing convention.
+_CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
+
+
+def _normalize_program_targets(program: EffectProgram) -> EffectProgram:
+    """Defensively coerce every op target onto a valid runtime Target.
+
+    LLM structured output can leak authoring vocabulary ("player") or stray
+    synonyms ("opponent", "all_players") into an EffectProgram. This walks each
+    op's target/from_target/to_target fields (only those that exist — Op is a
+    discriminated union and most ops have no target) and runs each value through
+    ``map_authoring_target`` with a "chooser" safe default so unknown junk still
+    resolves to a valid, play-time-choosable target rather than crashing the
+    engine. Ops are rebuilt immutably via model_copy.
+
+    Also sets ``requires_choice=True`` if any op ends up targeting a
+    choice-requiring target ("chooser"/"target_player").
+    """
+    if not isinstance(program, EffectProgram):
+        return program  # defensive: nothing to normalize on non-programs
+    new_ops = []
+    requires_choice = program.requires_choice
+    for op in program.ops:
+        updates: dict[str, str] = {}
+        for field in _TARGET_FIELDS:
+            if not hasattr(op, field):
+                continue
+            current = getattr(op, field)
+            if not isinstance(current, str):
+                continue
+            mapped = map_authoring_target(current, default="chooser")
+            if mapped in _CHOICE_TARGETS:
+                requires_choice = True
+            if mapped != current:
+                updates[field] = mapped
+        new_ops.append(op.model_copy(update=updates) if updates else op)
+    return program.model_copy(update={"ops": new_ops, "requires_choice": requires_choice})
+
 
 def _format_exemplars_fewshot(retrieved: list[dict]) -> str:
     """Format up to 3 retrieved exemplars as few-shot guidance for emit_ops.
@@ -297,7 +342,13 @@ def emit_ops(state: InterpretState, config: RunnableConfig | None = None) -> dic
         f"Classification: {interp.model_dump_json()}\n\n"
         "Generate an EffectProgram: a list of immediate ops that faithfully "
         "implements this card's effect. Mirror the patterns in the examples above where "
-        "applicable. Translate exactly — do not balance or modify."
+        "applicable. Translate exactly — do not balance or modify.\n\n"
+        "TARGET VOCABULARY (runtime): each op's target/from_target/to_target must be "
+        "one of: self, left_neighbor, right_neighbor, all, all_others, chooser, "
+        "player_with_most_points, player_with_least_points, player_with_empty_hand. "
+        "When the card targets 'a player you pick' / a chosen opponent, use 'chooser' "
+        "(the actor picks at play time) — NOT the authoring word 'player'. "
+        "'center' is a placement, not a target: never use it as an op target."
     )
 
     llm = with_structured_output(get_chat_model(temperature=0), EffectProgram)
@@ -307,6 +358,10 @@ def emit_ops(state: InterpretState, config: RunnableConfig | None = None) -> dic
             {"role": "human", "content": human_content},
         ]
     )
+    # Defensive normalization: correct any authoring-vocabulary or synonym target
+    # leakage ("player" -> "chooser", etc.) to a valid runtime Target and set
+    # requires_choice if any op ends up needing a play-time player choice.
+    program = _normalize_program_targets(program)
     return {"program": program}
 
 

@@ -17,9 +17,11 @@ class Interpretation(BaseModel):
 
     placement: Literal["self", "player", "center"] = Field(
         description=(
-            "Where the card is placed after being played. 'self' = in front of the "
-            "player who played it; 'player' = targets a specific other player; "
-            "'center' = shared/table area."
+            "Where the card is placed after being played (human authoring vocabulary). "
+            "'self' = in front of the player who played it; 'player' = targets a "
+            "specific other player the actor chooses (maps to the runtime 'chooser' "
+            "target — the actor picks at play time); 'center' = shared/table area "
+            "(a placement, NOT a player target)."
         )
     )
     timing: Literal["immediate", "modifier"] = Field(

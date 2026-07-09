@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from tbwc.models.effects import AddPointsOp, EffectProgram, StealPointsOp
+from tbwc.models.effects import AddPointsOp, EffectProgram, StealPointsOp, map_authoring_target
 
 
 def test_discriminates_add_points() -> None:
@@ -32,3 +32,67 @@ def test_empty_program_defaults() -> None:
     prog = EffectProgram()
     assert prog.ops == []
     assert prog.requires_choice is False
+
+
+# ---------------------------------------------------------------------------
+# map_authoring_target
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # authoring vocabulary
+        ("self", "self"),
+        ("player", "chooser"),
+        ("all", "all"),
+        # defensive synonyms
+        ("opponent", "chooser"),
+        ("all_players", "all"),
+        ("everyone", "all"),
+        ("others", "all_others"),
+        # case / whitespace tolerance
+        ("Player", "chooser"),
+        ("  ALL  ", "all"),
+    ],
+)
+def test_map_authoring_target_aliases(raw: str, expected: str) -> None:
+    assert map_authoring_target(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "runtime",
+    [
+        "self",
+        "left_neighbor",
+        "right_neighbor",
+        "all",
+        "all_others",
+        "chooser",
+        "target_player",
+        "player_with_most_points",
+        "player_with_least_points",
+        "player_with_empty_hand",
+    ],
+)
+def test_map_authoring_target_passthrough(runtime: str) -> None:
+    """Already-valid runtime Targets pass through unchanged."""
+    assert map_authoring_target(runtime) == runtime
+
+
+def test_map_authoring_target_center_is_not_a_target() -> None:
+    """'center' is a placement, not a player target — it must not map."""
+    with pytest.raises(ValueError, match="center"):
+        map_authoring_target("center")
+
+
+def test_map_authoring_target_unknown_raises() -> None:
+    with pytest.raises(ValueError, match="Cannot map authoring target"):
+        map_authoring_target("banana")
+
+
+def test_map_authoring_target_unknown_default() -> None:
+    """A documented safe default is returned instead of raising when provided."""
+    assert map_authoring_target("banana", default="chooser") == "chooser"
+    # center also falls back to the default rather than raising
+    assert map_authoring_target("center", default="chooser") == "chooser"
