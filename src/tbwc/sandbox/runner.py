@@ -35,6 +35,11 @@ def execute_snippet(
     Raises SnippetExecutionError on AST-validation failure, timeout, crash, or
     error JSON from the child.
     """
+    from tbwc.config import get_settings
+
+    if not get_settings().snippet_execution_enabled:
+        return [{"op": "custom_note", "note": "snippet execution disabled by feature flag"}]
+
     result_check = validate_snippet(code)
     if not result_check.ok:
         raise SnippetExecutionError(f"Snippet failed validation: {result_check.error}")
