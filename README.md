@@ -4,31 +4,44 @@ A digital, AI-refereed implementation of the party game **1000 Blank White Cards
 
 ## What it is
 
-1000 Blank White Cards is a party game with no fixed rules: players write free-text cards ("Gain 5 points", "Everyone swaps hands", "Draw a cat, +2 to anyone who compliments it") and play them to make up the game collaboratively. This project brings that to a realtime web app where an **AI referee** — a LangGraph agent backed by retrieval-augmented generation (RAG) — reads each hand-written card, interprets its intent, and turns it into executable game effects. Multiple players join a shared room over WebSockets and play together in the browser.
+[1000 Blank White Cards](https://en.wikipedia.org/wiki/1000_Blank_White_Cards) is a party game with no fixed rules: players write free-text cards ("Gain 5 points", "Everyone swaps hands", "Draw a cat, +2 to anyone who compliments it") and play them to make up the game collaboratively. This project brings that to a realtime web app where an **AI referee** — a LangGraph agent backed by retrieval-augmented generation (RAG) — reads each hand-written card, interprets its intent, and turns it into executable game effects. Multiple players join a shared room over WebSockets and play together in the browser.
+
+## How to play
+
+You're a rules author, not just a player. Every card is one you (or someone at the table) invented — a scribble like *"Steal 8 points from whoever's winning"* or *"Everyone must stand up; the last one seated loses 5"* — and an **AI referee** reads it, works out what it means, and makes it happen. The fantasy: dream up any rule you want and watch the game bend around it, instantly, with no arguing.
+
+**Turn flow.** On your turn you:
+
+1. **Draw** a card from the deck (or grab a blank one).
+2. **Create** a new card by writing free text, and/or **play** a card from your hand.
+3. The referee **resolves** it — interpreting the text into a game effect (gain/lose points, skip a turn, reverse the order, steal, rewrite the win condition…) and updating everyone's board in realtime.
+
+Play passes around the table. Anyone can invent a card that changes the rules — including how you win — so the game you finish is never the game you started.
+
+**Winning.** There's no fixed target: a card sets (or *re-sets*) the win condition. It might be *"first to 1000 points"*, *"lowest score wins"*, or something a player made up thirty seconds ago. When a win condition is met, that game ends — and the best cards can be kept for next time.
+
+**Example cards**
+
+| Card | What it says | What the referee does |
+| --- | --- | --- |
+| **Windfall** | "Gain 5 points." | +5 points to you, immediately. |
+| **Tax Season** | "Every player loses 10 points. No exceptions." | −10 points to all players. |
+| **Backwards Day** | "Reverse the direction of play." | Flips turn order for the rest of the game. |
+| **Robin Hood** | "Steal 8 points from the player with the most points." | Moves 8 points from the current leader to you. |
+| **New Rules** | "Forget 1000 — first player to reach 250 wins." | Rewrites the win condition to *first to 250*. |
+
+**A short exchange**
+
+> **Ana** plays **Windfall** → *Ana +5 (now 5).*
+> **Ben** writes and plays a blank card: *"Anyone who laughs loses 3 points."* The referee reads it, applies it as a persistent rule — *watch out.*
+> **Ana** plays **Robin Hood**, targeting Ben (who's leading) → *steals 8 from Ben to Ana.*
+> **Ben**, rattled, plays **New Rules**: *"Lowest score wins."* → the whole game inverts. Now everyone's racing to give points *away*.
+
+That's the loop: draw, invent, play, watch the rules mutate. The referee keeps it fair and fast so the table can keep being ridiculous.
 
 ## Architecture
 
-- **Backend** — FastAPI app (`src/tbwc/`) exposing REST endpoints for rooms and a `/ws/{room_code}` WebSocket for realtime play. Key packages:
-  - `models/` — Pydantic domain models (cards, players, game state).
-  - `engine/` — deterministic game engine that applies interpreted effects to state.
-  - `agent/` — LangGraph agent that interprets free-text cards into structured effects.
-  - `rag/` — retrieval over a card corpus (Qdrant vector store) to ground interpretation.
-  - `sandbox/` — guarded execution of generated snippets (toggle via `SNIPPET_EXECUTION_ENABLED`).
-  - `rooms/` — in-memory room/session management.
-  - `evals/` — offline evaluation harness and A/B experiments.
-- **Frontend** — Next.js 16 app in `frontend/` that talks to the REST + WebSocket API.
-- **External services** — OpenAI (chat + embeddings), Tavily (agent web search), Qdrant (vector store), LangSmith (optional tracing/observability).
-
-```mermaid
-flowchart LR
-  UI[Next.js frontend] -- REST + WS --> API[FastAPI backend]
-  API --> Engine[Game engine]
-  API --> Agent[LangGraph agent]
-  Agent --> RAG[RAG / Qdrant]
-  Agent --> OpenAI[(OpenAI)]
-  Agent --> Tavily[(Tavily)]
-  API -.traces.-> LangSmith[(LangSmith)]
-```
+The backend is a FastAPI app (`src/tbwc/`) with a deterministic game engine, a LangGraph interpretation agent, RAG over a card corpus, and a sandboxed snippet executor; the frontend is a Next.js 16 app in `frontend/`. See the [project write-up](docs/WRITEUP.md#repository-layout) for the full component breakdown and diagrams.
 
 ## Quickstart — Backend
 
