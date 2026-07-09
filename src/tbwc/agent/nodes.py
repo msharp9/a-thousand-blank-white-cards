@@ -96,3 +96,23 @@ def should_search(state: InterpretState) -> str:
     if "[web_search=yes]" in notes:
         return "search"
     return "classify"
+
+
+# ---------------------------------------------------------------------------
+# search node  (STUB — Tavily integration wired in a later phase)
+# ---------------------------------------------------------------------------
+
+
+def search(state: InterpretState) -> dict:
+    """Perform a web search for additional context about the card.
+
+    STUB: returns a no-op note so the graph proceeds to 'classify'. A later phase
+    replaces this body with a Tavily API call.
+
+    Reads: state["card_draft"], state["search_notes"]
+    Writes: state["search_notes"] — appends a stub notice.
+    """
+    # TODO(phase4): call the Tavily search API here
+    existing = state.get("search_notes") or ""
+    stub_note = " [web_search_results: none — search stub not yet implemented]"
+    return {"search_notes": existing + stub_note}
