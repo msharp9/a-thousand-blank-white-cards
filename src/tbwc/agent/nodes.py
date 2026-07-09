@@ -239,7 +239,10 @@ def gen_snippet(state: InterpretState) -> dict:
     """Generate a Python def apply(state, ctx) body for snippet-mode cards.
 
     Reads: state["card_draft"], state["interpretation"]
-    Writes: state["snippet"] (SnippetEffect)
+    Writes: state["snippet"] (SnippetEffect), state["snippet_attempts"] (incremented).
+
+    snippet_attempts strictly increases on every call so the
+    gen_snippet<->validate_snippet retry loop is guaranteed to terminate.
     """
     draft = state["card_draft"]
     interp = state.get("interpretation")
@@ -259,7 +262,7 @@ def gen_snippet(state: InterpretState) -> dict:
             {"role": "human", "content": human_content},
         ]
     )
-    return {"snippet": snippet}
+    return {"snippet": snippet, "snippet_attempts": state.get("snippet_attempts", 0) + 1}
 
 
 # ---------------------------------------------------------------------------
@@ -273,31 +276,46 @@ def validate_snippet_node(state: InterpretState) -> dict:
     """Run the AST allowlist check on the generated snippet.
 
     Reads: state["snippet"]
-    Writes: state["search_notes"] — appends a validation error on failure so
-            gen_snippet can see why its code was rejected when it retries.
+    Writes: state["snippet_valid"] (bool). On failure also appends a
+            "[validate_error: ...]" note to search_notes so gen_snippet can see
+            why its code was rejected when it retries.
 
-    On success: passes through (returns {}). On failure: appends the error.
+    Routing depends on the dedicated snippet_valid flag, not the search_notes
+    substring, so a later VALID snippet is never re-routed by a prior error.
+    On success: returns {"snippet_valid": True} and does NOT touch search_notes.
     """
     snippet = state.get("snippet")
     if snippet is None:
         existing = state.get("search_notes") or ""
-        return {"search_notes": existing + " [validate_error: no snippet generated]"}
+        return {
+            "snippet_valid": False,
+            "search_notes": existing + " [validate_error: no snippet generated]",
+        }
 
     result = ast_validate(snippet.code)
     if result.ok:
-        return {}
+        return {"snippet_valid": True}
 
     existing = state.get("search_notes") or ""
-    return {"search_notes": existing + f" [validate_error: {result.error}]"}
+    return {
+        "snippet_valid": False,
+        "search_notes": existing + f" [validate_error: {result.error}]",
+    }
 
 
 def route_after_validate(state: InterpretState) -> str:
-    """Conditional edge: retry gen_snippet on validation failure (under MAX_ATTEMPTS), else judge."""
-    notes = state.get("search_notes") or ""
-    attempts = state.get("attempts", 0)
-    if "[validate_error:" in notes and attempts < MAX_ATTEMPTS:
-        return "gen_snippet"
-    return "judge"
+    """Conditional edge: regenerate on failure (under MAX_ATTEMPTS), else judge.
+
+    Routes on the dedicated snippet_valid flag and the monotonically increasing
+    snippet_attempts counter, so the loop always terminates: a valid snippet goes
+    straight to judge, and after MAX_ATTEMPTS we give up regenerating and let judge
+    score the best-effort (or absent) snippet.
+    """
+    if state.get("snippet_valid"):
+        return "judge"
+    if state.get("snippet_attempts", 0) >= MAX_ATTEMPTS:
+        return "judge"
+    return "gen_snippet"
 
 
 # ---------------------------------------------------------------------------

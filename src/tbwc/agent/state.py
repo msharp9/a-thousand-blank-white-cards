@@ -31,6 +31,12 @@ class InterpretState(TypedDict, total=False):
         snippet: SnippetEffect from the gen_snippet node (mode="snippet" path).
         verdict: Verdict from the judge node.
         attempts: How many times the classify->emit/gen->judge loop has run.
+        snippet_attempts: How many times gen_snippet has run within the
+            gen_snippet<->validate_snippet retry sub-loop. Strictly increases each
+            cycle so route_after_validate can bound the loop at MAX_ATTEMPTS.
+        snippet_valid: Whether the most recent snippet passed AST validation.
+            route_after_validate routes on this dedicated flag (not a search_notes
+            substring) so a later valid snippet is never mis-routed by a prior error.
     """
 
     card_draft: CardDraft
@@ -41,3 +47,5 @@ class InterpretState(TypedDict, total=False):
     snippet: Any  # tbwc.agent.schemas.SnippetEffect at runtime
     verdict: Any  # tbwc.agent.schemas.Verdict at runtime
     attempts: int
+    snippet_attempts: int
+    snippet_valid: bool

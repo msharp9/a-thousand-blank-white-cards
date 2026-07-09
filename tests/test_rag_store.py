@@ -28,3 +28,25 @@ def test_require_client_raises_before_init() -> None:
     mod._client = None
     with pytest.raises(RuntimeError, match="not initialised"):
         mod.search("anything")
+
+
+def test_stable_point_id_is_deterministic() -> None:
+    from tbwc.rag.store import _stable_point_id
+
+    first = _stable_point_id("c1")
+    assert first == _stable_point_id("c1")
+    assert 0 <= first < 2**63
+    assert _stable_point_id("c1") != _stable_point_id("c2")
+
+
+def test_reupsert_same_card_id_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    fake_vector = [0.1] * 1536
+    with patch("tbwc.rag.store.embed_text", return_value=fake_vector):
+        from tbwc.rag.store import COLLECTION_NAME, init_store, upsert_card
+
+        client = init_store()
+        upsert_card("c1", "Extra Turn", "Take an extra turn.", '{"type":"extra_turn"}', "seed")
+        upsert_card("c1", "Extra Turn", "Take an extra turn (v2).", '{"type":"extra_turn"}', "seed")
+        # Re-seeding the same card_id must overwrite the same point, not duplicate it.
+        assert client.count(COLLECTION_NAME).count == 1

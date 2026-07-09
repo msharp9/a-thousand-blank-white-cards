@@ -7,6 +7,7 @@ canonical effect and provenance travel as payload, not embedded.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from qdrant_client import QdrantClient
@@ -15,6 +16,17 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 from tbwc.rag.embeddings import EMBEDDING_DIMENSIONS, embed_text
 
 COLLECTION_NAME = "cards"
+
+
+def _stable_point_id(card_id: str) -> int:
+    """Derive a deterministic uint64 Qdrant point id from a card_id.
+
+    Python's built-in str hash is per-process randomized (PYTHONHASHSEED), so it
+    would produce a different id each run and re-seeding the same card_id would
+    create duplicate points. blake2b is stable across processes.
+    """
+    return int.from_bytes(hashlib.blake2b(card_id.encode(), digest_size=8).digest(), "big") % (2**63)
+
 
 # Module-level singleton — init_store() must be called before any other function.
 _client: QdrantClient | None = None
@@ -56,7 +68,7 @@ def upsert_card(
     client = _require_client()
     text = f"{title}\n{description}"
     vector = embed_text(text)
-    point_id = abs(hash(card_id)) % (2**63)  # Qdrant needs a uint64 id
+    point_id = _stable_point_id(card_id)  # Qdrant needs a stable uint64 id
     point = PointStruct(
         id=point_id,
         vector=vector,
