@@ -38,8 +38,9 @@ def test_cors_headers_present(client: TestClient) -> None:
     assert response.headers.get("access-control-allow-origin") in (origin, "*")
 
 
-def test_startup_fails_without_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_startup_fails_without_openai_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """Startup (lifespan) fails fast with a clear message when the key is unset."""
+    monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     get_settings.cache_clear()
     app = create_app()

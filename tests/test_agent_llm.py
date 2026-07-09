@@ -50,7 +50,8 @@ def test_explicit_model_and_temperature(monkeypatch: pytest.MonkeyPatch) -> None
         MockLLM.assert_called_once_with(model="gpt-x", temperature=0.7, openai_api_key="test-key")
 
 
-def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with patch("tbwc.agent.llm.ChatOpenAI") as MockLLM:
         from tbwc.agent.llm import get_chat_model

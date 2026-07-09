@@ -35,9 +35,10 @@ def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
 
 
-def test_require_openai_api_key_missing_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_require_openai_api_key_missing_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """An unset key produces a clear, actionable error."""
     get_settings.cache_clear()
+    monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(RuntimeError) as exc:
         require_openai_api_key()

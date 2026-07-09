@@ -59,10 +59,14 @@ def test_embed_text_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
     mod.get_embeddings.cache_clear()
 
 
-def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     import tbwc.rag.embeddings as mod
 
+    from tbwc.config import get_settings
+
+    get_settings.cache_clear()
     mod.get_embeddings.cache_clear()
     with patch("tbwc.rag.embeddings.OpenAIEmbeddings") as MockEmb:
         with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
