@@ -176,6 +176,9 @@ plan/
 !data/seed_cards_gold.json
 !data/seed_cards_fillers.json
 !data/seed_cards.json
+# ...and keep the eval corpus tooling and annotations
+!data/eval/
+!data/eval/**
 
 # Models
 models/
