@@ -11,6 +11,37 @@ This document covers the seven rubric sections for the milestone deliverable
 
 ---
 
+## Repository layout
+
+A component-level map of the codebase (relocated here from the README, which now
+links to this section).
+
+- **Backend** — FastAPI app (`src/tbwc/`) exposing REST endpoints for rooms and a `/ws/{room_code}` WebSocket for realtime play. Key packages:
+  - `models/` — Pydantic domain models (cards, players, game state).
+  - `engine/` — deterministic game engine that applies interpreted effects to state.
+  - `agent/` — LangGraph agent that interprets free-text cards into structured effects.
+  - `rag/` — retrieval over a card corpus (Qdrant vector store) to ground interpretation.
+  - `sandbox/` — guarded execution of generated snippets (toggle via `SNIPPET_EXECUTION_ENABLED`).
+  - `rooms/` — in-memory room/session management.
+  - `evals/` — offline evaluation harness and A/B experiments.
+- **Frontend** — Next.js 16 app in `frontend/` that talks to the REST + WebSocket API.
+- **External services** — OpenAI (chat + embeddings), Tavily (agent web search), Qdrant (vector store), LangSmith (optional tracing/observability).
+
+```mermaid
+flowchart LR
+  UI[Next.js frontend] -- REST + WS --> API[FastAPI backend]
+  API --> Engine[Game engine]
+  API --> Agent[LangGraph agent]
+  Agent --> RAG[RAG / Qdrant]
+  Agent --> OpenAI[(OpenAI)]
+  Agent --> Tavily[(Tavily)]
+  API -.traces.-> LangSmith[(LangSmith)]
+```
+
+(A deeper infrastructure diagram appears in [Task 2](#task-2--solution-infra--agent-workflow).)
+
+---
+
 ## Task 1 — Problem & Audience
 
 **Problem (one sentence):** In *1000 Blank White Cards*, players invent cards with
