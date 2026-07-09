@@ -12,6 +12,7 @@ from tbwc.agent.llm import get_chat_model
 from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM
 from tbwc.agent.schemas import Interpretation
 from tbwc.agent.state import InterpretState
+from tbwc.models.effects import EffectProgram
 from tbwc.rag.retrievers import dense_retriever
 
 
@@ -176,3 +177,38 @@ def route_after_classify(state: InterpretState) -> str:
     if interp.mode == "immediate":
         return "emit_ops"
     return "gen_snippet"
+
+
+# ---------------------------------------------------------------------------
+# emit_ops node
+# ---------------------------------------------------------------------------
+
+
+def emit_ops(state: InterpretState) -> dict:
+    """Generate an EffectProgram (immediate ops) for immediate-mode cards.
+
+    Reads: state["card_draft"], state["interpretation"]
+    Writes: state["program"] (EffectProgram)
+
+    Uses ChatOpenAI.with_structured_output(EffectProgram) so the output is always
+    a valid, typed EffectProgram matching the engine schema.
+    """
+    draft = state["card_draft"]
+    interp = state["interpretation"]
+
+    human_content = (
+        f"Card title: {draft['title']}\n"
+        f"Card description: {draft['description']}\n\n"
+        f"Classification: {interp.model_dump_json()}\n\n"
+        "Generate an EffectProgram: a list of immediate ops that faithfully "
+        "implements this card's effect. Translate exactly — do not balance or modify."
+    )
+
+    llm = get_chat_model(temperature=0).with_structured_output(EffectProgram)
+    program = llm.invoke(
+        [
+            {"role": "system", "content": INTERPRETER_SYSTEM},
+            {"role": "human", "content": human_content},
+        ]
+    )
+    return {"program": program}
