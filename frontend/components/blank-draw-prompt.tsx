@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,10 +26,15 @@ export function BlankDrawPrompt({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [previewing, setPreviewing] = useState(false);
+  const [lastResult, setLastResult] = useState(previewResult);
 
-  useEffect(() => {
+  // Stop the spinner when a new preview result arrives. Adjusting state during
+  // render (rather than in an effect) is React's recommended pattern for
+  // reacting to a changed prop and avoids a cascading re-render.
+  if (previewResult !== lastResult) {
+    setLastResult(previewResult);
     if (previewResult) setPreviewing(false);
-  }, [previewResult]);
+  }
 
   function handlePreview() {
     if (!title.trim() || !description.trim()) return;
