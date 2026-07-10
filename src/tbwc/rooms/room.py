@@ -26,9 +26,11 @@ import logging
 import uuid
 
 from tbwc.engine.apply import apply_effect
+from tbwc.engine.compile import compile_card
 from tbwc.engine.events import GameEvent, HookContext
 from tbwc.engine.loop import advance_turn
 from tbwc.engine.scoring import evaluate_win_condition
+from tbwc.models.effects import CustomNoteOp, EffectProgram
 from tbwc.models.game_state import GameState, Player
 from tbwc.rooms.connections import ConnectionManager
 from tbwc.rooms.deck import MIN_DECK, build_deck
@@ -263,34 +265,90 @@ class Room:
             return "in_play"
         return "discard"
 
+    async def _resolve_program(self, card_id: str, card) -> EffectProgram:
+        """Return the EffectProgram to apply for a played card — NEVER None.
+
+        Resolution order (the deterministic basic game must not depend on the LLM):
+
+        1. **Compiled ops** — if the card carries structured ops (a gold/simple
+           card, or a blank authored with a canonical), ``compile_card`` turns
+           them into a runtime program. This path is fully deterministic and
+           never calls the agent; the simple seed deck lives entirely here.
+        2. **LLM interpretation (best-effort)** — for free-text cards with no
+           compilable ops (most authored blanks), we ask the agent to interpret
+           the title/description. This runs in a thread and is broadcast as
+           ``brewing``/``card_interpreted`` for UI feedback. If it yields a valid
+           program we use it.
+        3. **Deterministic fallback** — if neither produced ops (no canonical AND
+           the LLM was unavailable / returned nothing / an invalid verdict), we
+           return a single ``CustomNoteOp`` so the play still resolves with a log
+           line instead of silently doing nothing. A play NEVER silently no-ops.
+        """
+        title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
+        description = card["description"] if isinstance(card, dict) else getattr(card, "description", "")
+
+        # 1. Deterministic compiled path — no LLM.
+        compiled = compile_card(card if isinstance(card, dict) else card.model_dump())
+        if compiled is not None and compiled.ops:
+            return compiled
+
+        # 2. Best-effort LLM interpretation for free-text cards.
+        from tbwc.agent.graph import interpret_card
+
+        await self.connections.broadcast({"type": "brewing", "card_id": card_id})
+        try:
+            result = await asyncio.to_thread(interpret_card, title, description)
+        except Exception:
+            logger.exception("interpret_card failed for %s; using deterministic fallback", card_id)
+            result = {"verdict": "error", "program": None, "snippet": None}
+
+        await self.connections.broadcast(
+            {
+                "type": "card_interpreted",
+                "card_id": card_id,
+                "program": str(result.get("program")) if result.get("program") is not None else None,
+                "snippet": getattr(result.get("snippet"), "code", None),
+                "verdict": result.get("verdict", "error"),
+            }
+        )
+
+        program = result.get("program")
+        if result.get("verdict") == "ok" and program is not None and getattr(program, "ops", None):
+            return program
+
+        # 3. Deterministic fallback — never a silent no-op.
+        note = title or "Card"
+        return EffectProgram(ops=[CustomNoteOp(note=f"Played {note} (no mechanical effect)")])
+
     async def _handle_play(self, player_id: str, msg) -> None:
-        """Interpret the played card via the agent (in a thread), apply its effect, advance turn.
+        """Resolve the played card to an EffectProgram, apply it, advance turn.
 
         Blank cards are AUTHORED ON PLAY. When the played card is blank, the
         client's FIRST play for that card_id carries the authored ``title`` and
         ``description``. We PERSIST those onto the card (clearing the blank flag,
-        setting creator_id=player_id) BEFORE interpreting — this ordering matters
+        setting creator_id=player_id) BEFORE resolving — this ordering matters
         because a card that needs a target replies with prompt_choice and the
         follow-up play re-runs this handler with only card_id + the choice (no
         title/description). By the time that follow-up arrives the card is already
-        a real, authored card in state.cards, so re-interpretation sees the
-        authored text and behaves exactly like a normal card.
-        """
-        from tbwc.agent.graph import interpret_card
+        a real, authored card in state.cards, so re-resolution behaves identically.
 
+        Resolution (see :meth:`_resolve_program`) prefers the deterministic
+        compiled-ops path and falls back to the LLM then to a CustomNoteOp, so a
+        play always resolves to a program and never silently no-ops.
+        """
         card_id = msg.card_id
         card = self.state.cards.get(card_id)
         if card is None:
             await self.connections.send(player_id, {"type": "error", "message": f"Card {card_id} not found"})
             return
 
-        # Author-on-play: a blank must be filled in before it can be interpreted.
+        # Author-on-play: a blank must be filled in before it can be resolved.
         if self._is_blank(card):
             title = (getattr(msg, "title", None) or "").strip()
             description = (getattr(msg, "description", None) or "").strip()
             if not title or not description:
                 # Guard: a blank reached play with no authored content (shouldn't
-                # happen from the UI). Don't interpret an empty card — the turn
+                # happen from the UI). Don't resolve an empty card — the turn
                 # is not consumed, so the player can retry with content.
                 await self.connections.send(
                     player_id,
@@ -303,25 +361,11 @@ class Room:
             self.state = self.state.model_copy(update={"cards": merged})
             card = authored
 
-        await self.connections.broadcast({"type": "brewing", "card_id": card_id})
-
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
-        description = card["description"] if isinstance(card, dict) else getattr(card, "description", "")
-        result = await asyncio.to_thread(interpret_card, title, description)
+        program = await self._resolve_program(card_id, card)
 
-        await self.connections.broadcast(
-            {
-                "type": "card_interpreted",
-                "card_id": card_id,
-                "program": str(result.get("program")) if result.get("program") is not None else None,
-                "snippet": getattr(result.get("snippet"), "code", None),
-                "verdict": result["verdict"],
-            }
-        )
-
-        program = result.get("program")
-        if result["verdict"] == "ok" and program is not None:
-            # Cards whose interpreted program targets "chooser"/"target_player"
+        if program is not None and program.ops:
+            # Cards whose program targets "chooser"/"target_player"
             # need a chosen_player_id; those with a "chosen_card" CardTarget need
             # a chosen_card_id. Validate BEFORE applying so a missing/bogus choice
             # yields a clean error rather than a 500 out of the reducers'
