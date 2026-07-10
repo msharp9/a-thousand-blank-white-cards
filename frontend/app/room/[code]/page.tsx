@@ -114,12 +114,16 @@ export default function RoomPage() {
 
   // Resolve helpers.
   const me = gameState?.players.find((p) => p.id === myPlayerId);
+  // A spectator joined after the game started: they observe but can't act, so
+  // all play/pass/author controls are hidden and a banner is shown instead.
+  const isSpectator = Boolean(me?.spectator);
   const isActive = useMemo(() => {
     if (!gameState || !gameState.players.length || !myPlayerId) return false;
+    if (me?.spectator) return false;
     const active =
       gameState.players[gameState.turn_index % gameState.players.length];
     return active?.id === myPlayerId;
-  }, [gameState, myPlayerId]);
+  }, [gameState, myPlayerId, me]);
 
   const myHandCards: CardSnapshot[] = useMemo(() => {
     if (!gameState || !me) return [];
@@ -198,6 +202,11 @@ export default function RoomPage() {
         <span className="text-xs text-muted-foreground">
           {connected ? "Connected" : "Reconnecting…"}
         </span>
+        {isSpectator && (
+          <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            Spectating
+          </span>
+        )}
         <span className="ml-auto text-xs capitalize text-muted-foreground">
           {phase}
         </span>
@@ -228,6 +237,7 @@ export default function RoomPage() {
             send={send}
             previewResult={previewResult}
             isHost={isHost}
+            isSpectator={isSpectator}
           />
         )}
 
@@ -238,20 +248,29 @@ export default function RoomPage() {
               centerCards={houseRuleCards}
               brewingCardId={brewing}
             />
-            <div className="flex items-center justify-between">
-              <Button variant="outline" onClick={() => setDialogOpen(true)}>
-                Author a card
-              </Button>
-              {isActive && (
-                <Button
-                  variant="secondary"
-                  onClick={() => send({ type: "pass" })}
-                >
-                  Pass
-                </Button>
-              )}
-            </div>
-            <Hand cards={myHandCards} canPlay={isActive} send={send} />
+            {isSpectator ? (
+              <p className="text-sm italic text-muted-foreground">
+                You joined after the game started — you are spectating and
+                cannot play or author cards.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <Button variant="outline" onClick={() => setDialogOpen(true)}>
+                    Author a card
+                  </Button>
+                  {isActive && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => send({ type: "pass" })}
+                    >
+                      Pass
+                    </Button>
+                  )}
+                </div>
+                <Hand cards={myHandCards} canPlay={isActive} send={send} />
+              </>
+            )}
             <EffectLog log={log} brewing={brewing} />
           </div>
         )}

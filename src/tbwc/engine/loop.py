@@ -98,6 +98,16 @@ def advance_turn(state: GameState) -> GameState:
                 skip_set.discard(candidate.id)
                 next_idx = (next_idx + state.direction) % n
 
+    # Spectators (joined after the game started) NEVER take a turn: keep
+    # stepping past any spectator we'd otherwise land on. Bounded by ``n`` so a
+    # degenerate all-spectator state can't spin forever (it just leaves the
+    # index put). Game start seats turn_index on a non-spectator, so as long as
+    # one non-spectator remains this always lands on a real player.
+    guard = 0
+    while players[next_idx].spectator and guard < n:
+        next_idx = (next_idx + state.direction) % n
+        guard += 1
+
     return state.copy_with_turn_flags(turn_index=next_idx, skip_next=skip_set)
 
 

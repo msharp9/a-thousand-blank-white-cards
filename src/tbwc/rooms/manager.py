@@ -61,8 +61,15 @@ class RoomManager:
         """Return the Room for this code, or None if it doesn't exist."""
         return self._store.get(code.upper())
 
-    def join(self, code: str, name: str) -> tuple[str, str] | None:
-        """Add a player to the room. Returns (room_code, player_id) or None if missing.
+    def join(self, code: str, name: str) -> tuple[str, str, bool] | None:
+        """Add a player to the room. Returns (room_code, player_id, spectator) or None.
+
+        Join policy lives here: a joiner arriving while the room is still in the
+        ``lobby`` phase becomes a normal player; a joiner arriving after the game
+        has started (any non-lobby phase — setup/playing/epilogue/ended) becomes a
+        SPECTATOR. Spectators still get a valid ``player_id`` so they can open the
+        WebSocket and receive state broadcasts, but they take no turn and cannot
+        author or play cards.
 
         player_id is an opaque UUID token the client stores and echoes back on reconnect.
         """
@@ -70,9 +77,16 @@ class RoomManager:
         if room is None:
             return None
         player_id = str(uuid.uuid4())
-        room.add_player(player_id=player_id, name=name)
-        logger.info("player %s ('%s') joined room %s", player_id, name, code)
-        return code, player_id
+        spectator = room.state.phase != "lobby"
+        room.add_player(player_id=player_id, name=name, spectator=spectator)
+        logger.info(
+            "%s %s ('%s') joined room %s",
+            "spectator" if spectator else "player",
+            player_id,
+            name,
+            code,
+        )
+        return code, player_id, spectator
 
     def _unique_code(self) -> str:
         for _ in range(20):

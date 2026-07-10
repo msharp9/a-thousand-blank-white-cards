@@ -11,8 +11,9 @@ def test_create_and_join() -> None:
     assert len(code) == 6
     result = rm.join(code, "Alice")
     assert result is not None
-    room_code, pid = result
+    room_code, pid, spectator = result
     assert room_code == code
+    assert spectator is False
     assert len(pid) > 0
     room = rm.get(code)
     assert room is not None

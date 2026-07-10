@@ -66,6 +66,10 @@ export type PlayerSnapshot = {
   score: number;
   hand: string[];
   connected: boolean;
+  // True for a late joiner seated as a spectator (joined after the game left
+  // the lobby). Spectators appear on the table but take no turn and cannot
+  // author or play cards. Mirrors Player.spectator on the backend.
+  spectator: boolean;
 };
 
 export type GameStateSnapshot = {

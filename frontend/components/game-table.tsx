@@ -29,7 +29,7 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
           <PlayerTile
             key={player.id}
             player={player}
-            isActive={player.id === activePlayer?.id}
+            isActive={!player.spectator && player.id === activePlayer?.id}
             isMe={player.id === myPlayerId}
           />
         ))}
@@ -62,10 +62,15 @@ function PlayerTile({
             you
           </Badge>
         )}
+        {player.spectator && (
+          <Badge variant="outline" className="text-[10px]">
+            spectator
+          </Badge>
+        )}
       </div>
       <span className="text-2xl font-bold tabular-nums">{player.score}</span>
       <span className="text-[10px] text-muted-foreground">
-        {player.hand.length} cards
+        {player.spectator ? "watching" : `${player.hand.length} cards`}
       </span>
       {isActive && <Badge className="text-[10px]">active</Badge>}
       {!player.connected && (

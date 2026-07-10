@@ -9,10 +9,11 @@ def evaluate_win_condition(state: GameState) -> list[str]:
     """Return list of winner player ids given the current win_condition.
 
     Returns [] if no winner yet. Multiple ids = a tie. Only considers
-    connected players.
+    connected, non-spectator players — spectators joined after the game
+    started, hold no score, and can never win.
     """
     wc = state.win_condition
-    active = [p for p in state.players if p.connected]
+    active = [p for p in state.players if p.connected and not p.spectator]
     if not active:
         return []
 
