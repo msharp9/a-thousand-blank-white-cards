@@ -131,6 +131,14 @@ class Room:
                     player_id, {"type": "error", "message": "Draw a card before ending your turn"}
                 )
                 return
+            # Pass is only allowed when the player has nothing playable. If they
+            # hold a playable card (any blank, or a card with an effect), they
+            # must play it rather than pass.
+            if not self._can_pass(player_id):
+                await self.connections.send(
+                    player_id, {"type": "error", "message": "You have a playable card — you cannot pass"}
+                )
+                return
             await self._handle_pass(player_id)
         elif mtype == "play":
             if not self._is_active_player(player_id):
@@ -297,6 +305,38 @@ class Room:
         if isinstance(card, dict):
             return bool(card.get("blank"))
         return bool(getattr(card, "blank", False))
+
+    def _card_is_playable(self, card) -> bool:
+        """True if a card in hand can meaningfully be played.
+
+        A card is playable if it is a blank (blanks are ALWAYS playable — they're
+        authored on play), OR it compiles to a non-empty program, OR it carries
+        free text the LLM could interpret. In practice nearly every card is
+        playable; the only truly inert card is an empty, canonical-less,
+        description-less entry. This deliberately errs toward "playable" so we
+        never force a pass when the player actually has options.
+        """
+        if self._is_blank(card):
+            return True
+        card_dict = card if isinstance(card, dict) else card.model_dump()
+        program = compile_card(card_dict)
+        if program is not None and program.ops:
+            return True
+        # A free-text card (description present) can still be interpreted/played.
+        description = card_dict.get("description") or ""
+        return bool(description.strip())
+
+    def _can_pass(self, player_id: str) -> bool:
+        """True if the active player may end their turn WITHOUT playing.
+
+        Pass is only offered when the player holds NO playable card — if they can
+        play something (including any blank), they must. Non-active players and
+        spectators can never pass.
+        """
+        if not self._is_active_player(player_id) or self._is_spectator(player_id):
+            return False
+        hand = self.state.get_player(player_id).hand
+        return not any(self._card_is_playable(self.state.cards.get(cid, {})) for cid in hand)
 
     def _play_destination(self, card) -> str:
         """Return the zone a played card lands in: "center" | "in_play" | "discard".
@@ -592,12 +632,18 @@ class Room:
         """JSON-serialisable snapshot of the current GameState.
 
         Augmented with per-turn transient flags the GameState model doesn't
-        carry: ``has_drawn`` (whether the active player has taken their draw
-        step this turn) so the client can gate the Draw vs Play/End-turn
-        controls in the draw→play→end model.
+        carry:
+        - ``has_drawn`` — whether the active player has taken their draw step
+          this turn (client gates Draw vs Play/End-turn).
+        - ``can_pass`` — whether the active player may end their turn without
+          playing (only true when they hold NO playable card). The client hides
+          the Pass button unless this is true, so pass is never offered while a
+          play is possible (e.g. while holding a blank).
         """
         snap = self.state.model_dump()
         snap["has_drawn"] = self._has_drawn
+        active_id = self.state.active_player().id if self.state.players else None
+        snap["can_pass"] = self._can_pass(active_id) if active_id is not None else False
         return snap
 
     async def _log_and_broadcast(self, log_entry: str) -> None:
