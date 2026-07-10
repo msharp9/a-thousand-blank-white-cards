@@ -1,0 +1,394 @@
+[
+  {
+    "title": "Gain 5 Points",
+    "description": "You feel great about yourself. Gain 5 points immediately.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 5, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Gain 10 Points",
+    "description": "A windfall! Gain 10 points and try not to gloat.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 10, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Gain 2 Points",
+    "description": "A modest reward. Gain 2 points. Every little bit helps.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 2, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Gain 7 Points",
+    "description": "Lucky number seven. Gain 7 points immediately.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 7, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Jackpot",
+    "description": "The stars align. Gain 15 points in one glorious moment.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 15, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Lose 3 Points",
+    "description": "Oops. Lose 3 points. It happens to the best of us.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": -3, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Lose 5 Points",
+    "description": "A costly mistake. Lose 5 points and learn nothing.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "subtract_points", "args": {"amount": 5, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Costly Blunder",
+    "description": "That did not go as planned. Lose 8 points.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "subtract_points", "args": {"amount": 8, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Give 5 Points to Any Player",
+    "description": "Pick another player. They gain 5 points. Bask in their gratitude.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 5, "target": "player"}}
+      ]
+    }
+  },
+  {
+    "title": "Give 3 Points to Any Player",
+    "description": "Choose a player and hand them 3 points. Generosity has its rewards.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 3, "target": "player"}}
+      ]
+    }
+  },
+  {
+    "title": "Steal 3 Points",
+    "description": "Take 3 points from any player of your choice. They had too many anyway.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "steal_points", "args": {"amount": 3, "from": "player", "to": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Steal 5 Points",
+    "description": "Snatch 5 points from a player of your choosing. Finders keepers.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "steal_points", "args": {"amount": 5, "from": "player", "to": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Rob the Leader",
+    "description": "Whoever is winning has it coming. Steal 5 points from the player with the most points.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "steal_points", "args": {"amount": 5, "from": "player_with_most_points", "to": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Great Heist",
+    "description": "Pull off the big score. Steal 8 points from the player with the most points.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "steal_points", "args": {"amount": 8, "from": "player_with_most_points", "to": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Tax the Rich",
+    "description": "The player with the most points loses 4 points. Fair is fair.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "subtract_points", "args": {"amount": 4, "target": "player_with_most_points"}}
+      ]
+    }
+  },
+  {
+    "title": "Cut Down the Leader",
+    "description": "Tall poppy syndrome. The player with the most points loses 6 points.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "subtract_points", "args": {"amount": 6, "target": "player_with_most_points"}}
+      ]
+    }
+  },
+  {
+    "title": "Charity for the Underdog",
+    "description": "The player with the fewest points gains 5 points. Everybody deserves a chance.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 5, "target": "player_with_least_points"}}
+      ]
+    }
+  },
+  {
+    "title": "Boost the Trailer",
+    "description": "The player with the fewest points gains 3 points. Onward and upward.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 3, "target": "player_with_least_points"}}
+      ]
+    }
+  },
+  {
+    "title": "Everyone Else Loses 2",
+    "description": "Misery loves company. Every other player loses 2 points.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {"op": "subtract_points", "args": {"amount": 2, "target": "all_others"}}
+      ]
+    }
+  },
+  {
+    "title": "Everyone Else Loses 4",
+    "description": "A bad day for everyone but you. Every other player loses 4 points.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {"op": "subtract_points", "args": {"amount": 4, "target": "all_others"}}
+      ]
+    }
+  },
+  {
+    "title": "Everyone Else Gains 1",
+    "description": "You are feeling charitable. Every other player gains 1 point.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 1, "target": "all_others"}}
+      ]
+    }
+  },
+  {
+    "title": "Everybody Gains 2",
+    "description": "A rising tide lifts all boats. Every player, including you, gains 2 points.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 2, "target": "all"}}
+      ]
+    }
+  },
+  {
+    "title": "Everybody Loses 3",
+    "description": "Universal setback. Every player, including you, loses 3 points.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {"op": "subtract_points", "args": {"amount": 3, "target": "all"}}
+      ]
+    }
+  },
+  {
+    "title": "Back to Zero",
+    "description": "A fresh start, whether you like it or not. Set your points to 0.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "set_points", "args": {"amount": 0, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Nice Round Number",
+    "description": "Tidy up your score. Set your points to exactly 10.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "set_points", "args": {"amount": 10, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Humble the Champion",
+    "description": "Knock the leader down a peg. Set the player with the most points to 0.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "set_points", "args": {"amount": 0, "target": "player_with_most_points"}}
+      ]
+    }
+  },
+  {
+    "title": "Modest Gift",
+    "description": "Hand a chosen player a single point. It's the thought that counts.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 1, "target": "player"}}
+      ]
+    }
+  },
+  {
+    "title": "Petty Theft",
+    "description": "Swipe 2 points from any player. Small crimes add up.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "venue": "all",
+      "ops": [
+        {"op": "steal_points", "args": {"amount": 2, "from": "player", "to": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Worth 10 Points If You Keep It",
+    "description": "Keep this card in your hand until the game ends. If you still hold it, gain 10 points.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 10, "target": "self"}}
+      ]
+    }
+  },
+  {
+    "title": "Worth 5 Points If Still In Hand",
+    "description": "A slow burn. If this card is still in your hand when the game ends, gain 5 points.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "self",
+      "placement": "self",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 5, "target": "self"}}
+      ]
+    }
+  }
+]
