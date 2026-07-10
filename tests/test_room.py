@@ -59,6 +59,24 @@ def test_manual_draw_action_is_rejected() -> None:
     assert room.state.get_player("p1").hand == []
 
 
+def test_effect_log_persists_in_state_for_refresh() -> None:
+    # Every effect_applied broadcast must ALSO be appended to state.log so a
+    # client that refreshes/reconnects can rehydrate its log from the snapshot
+    # (the frontend seeds its log from msg.state.log). A pass is the simplest
+    # log-producing action.
+    room = _room_with_two_players()
+    room.state = room.state.model_copy(update={"deck": ["c1", "c2"], "phase": "playing"})
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+
+    assert room.state.log == []
+    asyncio.run(room.handle_action("p1", PassMsg()))
+    # The pass line is captured in the persistent snapshot log, and the snapshot
+    # exposes it so a rejoining client rebuilds history.
+    assert any("passed" in line for line in room.state.log)
+    assert room.snapshot()["log"] == room.state.log
+
+
 def test_start_sets_phase_playing() -> None:
     room = _room_with_two_players()
     room.connections.connect("p1", AsyncMock())

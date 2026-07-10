@@ -109,6 +109,11 @@ export function useGameSocket(code: string, name: string): GameSocketState {
         switch (msg.type) {
           case "state":
             setGameState(msg.state);
+            // Hydrate the effect log from the authoritative state snapshot so a
+            // refresh/reconnect restores full history. The backend keeps
+            // state.log in sync with every effect_applied it broadcasts, so
+            // replacing here is idempotent with the live appends below.
+            setLog(msg.state.log ?? []);
             break;
           case "effect_applied":
             setLog((prev) => [...prev, msg.log_entry]);
