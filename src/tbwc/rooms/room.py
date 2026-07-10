@@ -358,6 +358,30 @@ class Room:
                 return p.name
         return player_id
 
+    def _card_title(self, card) -> str:
+        """A card's display title (falls back to a generic label)."""
+        if isinstance(card, dict):
+            return card.get("title") or "a card"
+        return getattr(card, "title", None) or "a card"
+
+    def _describe_play(self, player_id: str, card, before: dict[str, int]) -> str:
+        """Build a human-readable play log line with the resulting score deltas.
+
+        e.g. "Alice played Gain 5 Points (Alice +5)" or, for a multi-target
+        card, "Bob played Everyone Else Loses 2 (Alice -2, Carol -2)". Replaces
+        the old raw ``Played <card_id>`` line so players can actually follow what
+        happened.
+        """
+        deltas = []
+        for p in self.state.players:
+            change = p.score - before.get(p.id, p.score)
+            if change:
+                deltas.append(f"{p.name} {'+' if change > 0 else ''}{change}")
+        line = f"{self._name(player_id)} played {self._card_title(card)}"
+        if deltas:
+            line += f" ({', '.join(deltas)})"
+        return line
+
     async def _handle_pass(self, player_id: str) -> None:
         """Active player ends their turn without playing a card."""
         await self._log_and_broadcast(f"{self._name(player_id)} passed")
@@ -638,8 +662,9 @@ class Room:
                 chosen_player_id=chosen_player_id,
                 chosen_card_id=chosen_card_id,
             )
+            before = {p.id: p.score for p in self.state.players}
             self.state = apply_effect(self.state, program, ctx)
-            await self._log_and_broadcast(f"Played {card_id}")
+            await self._log_and_broadcast(self._describe_play(player_id, card, before))
 
         # Terminal apply path: the play is committed (all rejection / pending
         # early-returns above have already returned, so the card is NOT removed
