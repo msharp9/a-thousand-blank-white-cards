@@ -22,6 +22,7 @@ export function CardTile({
     <div
       className={cn(
         "relative flex min-h-[96px] w-40 flex-col gap-1 rounded-lg border bg-card p-3 shadow-sm",
+        card.blank && "border-dashed border-muted-foreground/50 bg-muted/20",
         selectable &&
           "cursor-pointer transition-all hover:border-primary hover:shadow-md",
         brewing && "opacity-70",
@@ -36,10 +37,23 @@ export function CardTile({
           : undefined
       }
     >
-      <p className="text-sm font-semibold leading-tight">{card.title}</p>
-      <p className="line-clamp-4 text-xs leading-snug text-muted-foreground">
-        {card.description}
-      </p>
+      {card.blank ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
+          <p className="text-sm font-semibold leading-tight text-muted-foreground">
+            Blank card
+          </p>
+          <p className="text-xs leading-snug text-muted-foreground">
+            Click to fill in &amp; play
+          </p>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm font-semibold leading-tight">{card.title}</p>
+          <p className="line-clamp-4 text-xs leading-snug text-muted-foreground">
+            {card.description}
+          </p>
+        </>
+      )}
       {card.verdict && card.verdict !== "ok" && (
         <Badge variant="destructive" className="mt-auto text-[10px]">
           {card.verdict}

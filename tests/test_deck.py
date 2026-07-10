@@ -6,7 +6,7 @@ import random
 
 import pytest
 
-from tbwc.rooms.deck import MIN_DECK, build_deck, collect_cards
+from tbwc.rooms.deck import BLANK_CARD_RATIO, MIN_DECK, build_deck, collect_cards
 
 
 def _fake_source(n: int):
@@ -42,11 +42,41 @@ def test_build_deck_meets_minimum_with_small_source() -> None:
 
 
 def test_build_deck_no_padding_when_source_large_enough() -> None:
+    # 40 real cards already exceed MIN_DECK, so no duplicate padding is needed —
+    # but blanks are ALWAYS seeded on top (num_blanks = round(MIN_DECK * ratio)),
+    # so the deck is 40 real + num_blanks blank cards.
     rng = random.Random(1)
+    num_blanks = round(MIN_DECK * BLANK_CARD_RATIO)
     cards, deck = build_deck(card_source=_fake_source(40), rng=rng)
-    assert len(deck) == 40
-    assert len(cards) == 40
-    assert "#" not in "".join(deck)  # no padded copies were needed
+    assert len(deck) == 40 + num_blanks
+    assert len(cards) == 40 + num_blanks
+    # No padded copies were needed (padding only duplicates real cards as <id>#N).
+    assert not any("#" in cid for cid in deck)
+
+
+def test_build_deck_seeds_blank_cards() -> None:
+    # Blanks are seeded ON TOP of the real cards and count toward the deck. Each
+    # is a real registry entry flagged blank with empty title/description.
+    num_blanks = round(MIN_DECK * BLANK_CARD_RATIO)
+    cards, deck = build_deck(card_source=_fake_source(40), rng=random.Random(1))
+    blank_ids = [cid for cid in deck if cards[cid].get("blank")]
+    assert len(blank_ids) == num_blanks
+    for cid in blank_ids:
+        card = cards[cid]
+        assert card["title"] == ""
+        assert card["description"] == ""
+        assert card["creator_id"] == "blank"
+        assert cid.startswith("blank-")
+
+
+def test_build_deck_blanks_count_toward_min_deck_padding() -> None:
+    # A tiny source (2 real cards) plus blanks may still fall short of MIN_DECK;
+    # the remainder is padded with duplicate copies of the REAL cards only —
+    # blanks are never duplicated (no 'blank-*#N' ids).
+    cards, deck = build_deck(card_source=_fake_source(2), rng=random.Random(1))
+    assert len(deck) >= MIN_DECK
+    assert all(cid in cards for cid in deck)
+    assert not any(cid.startswith("blank-") and "#" in cid for cid in deck)
 
 
 def test_build_deck_is_deterministic_with_seeded_rng() -> None:

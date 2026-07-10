@@ -21,6 +21,12 @@ export type PlayMsg = {
   placement?: Placement;
   chosen_player_id?: string;
   chosen_card_id?: string;
+  // Author-on-play: when the played card is BLANK, the first play carries the
+  // authored title+description. The backend fills in and persists the card
+  // before interpreting; a prompt_choice follow-up omits these (the card is
+  // already real by then).
+  title?: string;
+  description?: string;
 };
 export type CreateCardMsg = {
   type: "create_card";
@@ -58,6 +64,10 @@ export type CardSnapshot = {
   program?: string | null;
   snippet?: string | null;
   verdict?: string;
+  // True while this is an un-authored blank card (empty title/description). The
+  // game seeds blanks into the deck; a blank sits in hand as blank and is
+  // authored when played. Cleared once the player fills it in on play.
+  blank?: boolean;
 };
 
 export type PlayerSnapshot = {

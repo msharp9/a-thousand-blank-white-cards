@@ -234,8 +234,25 @@ class Room:
         await self._broadcast_state()
         await self.connections.broadcast({"type": "effect_applied", "log_entry": log_line})
 
+    def _is_blank(self, card) -> bool:
+        """True if ``card`` is an un-authored blank (blank flag still set)."""
+        if isinstance(card, dict):
+            return bool(card.get("blank"))
+        return bool(getattr(card, "blank", False))
+
     async def _handle_play(self, player_id: str, msg) -> None:
-        """Interpret the played card via the agent (in a thread), apply its effect, advance turn."""
+        """Interpret the played card via the agent (in a thread), apply its effect, advance turn.
+
+        Blank cards are AUTHORED ON PLAY. When the played card is blank, the
+        client's FIRST play for that card_id carries the authored ``title`` and
+        ``description``. We PERSIST those onto the card (clearing the blank flag,
+        setting creator_id=player_id) BEFORE interpreting — this ordering matters
+        because a card that needs a target replies with prompt_choice and the
+        follow-up play re-runs this handler with only card_id + the choice (no
+        title/description). By the time that follow-up arrives the card is already
+        a real, authored card in state.cards, so re-interpretation sees the
+        authored text and behaves exactly like a normal card.
+        """
         from tbwc.agent.graph import interpret_card
 
         card_id = msg.card_id
@@ -243,6 +260,25 @@ class Room:
         if card is None:
             await self.connections.send(player_id, {"type": "error", "message": f"Card {card_id} not found"})
             return
+
+        # Author-on-play: a blank must be filled in before it can be interpreted.
+        if self._is_blank(card):
+            title = (getattr(msg, "title", None) or "").strip()
+            description = (getattr(msg, "description", None) or "").strip()
+            if not title or not description:
+                # Guard: a blank reached play with no authored content (shouldn't
+                # happen from the UI). Don't interpret an empty card — the turn
+                # is not consumed, so the player can retry with content.
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": "A blank card must be given a title and description to play"},
+                )
+                return
+            authored = {**card, "title": title, "description": description, "creator_id": player_id}
+            authored.pop("blank", None)
+            merged = {**self.state.cards, card_id: authored}
+            self.state = self.state.model_copy(update={"cards": merged})
+            card = authored
 
         await self.connections.broadcast({"type": "brewing", "card_id": card_id})
 
