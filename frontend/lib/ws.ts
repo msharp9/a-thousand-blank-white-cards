@@ -21,6 +21,21 @@ function playerIdKey(code: string): string {
   return `tbwc_player_id:${code.toUpperCase()}`;
 }
 
+// Fallback text for a hard-rejection close code when the server did not send an
+// `error` message first. Mirrors the close codes in src/tbwc/ws.py.
+function closeCodeMessage(code: number): string {
+  switch (code) {
+    case 4001:
+      return "Could not join this room — please return to the lobby and rejoin.";
+    case 4004:
+      return "Room not found.";
+    case 4009:
+      return "This seat was opened in another tab.";
+    default:
+      return "Connection rejected by the server.";
+  }
+}
+
 export interface GameSocketState {
   gameState: GameStateSnapshot | null;
   log: string[];
@@ -104,15 +119,28 @@ export function useGameSocket(code: string, name: string): GameSocketState {
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (evt) => {
         setConnected(false);
-        if (!cancelled) {
-          retryTimeout = setTimeout(connect, 2000);
+        if (cancelled) return;
+        // Application-level close codes (4xxx) are hard rejections from our
+        // server that retrying can never fix: 4000 bad first message, 4001
+        // unknown/null player_id, 4004 room not found, 4009 seat replaced by a
+        // newer connection. Stop the reconnect loop and surface an error
+        // instead of spinning forever. Transient drops (1006 abnormal close,
+        // etc.) fall through and reconnect after a short delay.
+        if (evt.code >= 4000) {
+          // Keep the server's own error message if it sent one before closing;
+          // otherwise fall back to a code-specific message.
+          setError((prev) => prev ?? closeCodeMessage(evt.code));
+          return;
         }
+        retryTimeout = setTimeout(connect, 2000);
       };
 
       ws.onerror = () => {
-        setError("WebSocket error — reconnecting…");
+        // onerror typically precedes a transient (1006) close; don't clobber a
+        // more specific error already delivered via an `error` message.
+        setError((prev) => prev ?? "Connection error — reconnecting…");
       };
     }
 

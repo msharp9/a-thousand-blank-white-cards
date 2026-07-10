@@ -12,7 +12,9 @@ import { Hand } from "@/components/hand";
 import { HouseRulesZone } from "@/components/house-rules-zone";
 import { SetupPhase } from "@/components/setup-phase";
 import type { CardSnapshot } from "@/lib/types";
-import { getPlayerId, useGameSocket } from "@/lib/ws";
+import { getPlayerId, storePlayerId, useGameSocket } from "@/lib/ws";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export default function RoomPage() {
   const params = useParams();
@@ -43,6 +45,8 @@ export default function RoomPage() {
   const [nameSet, setNameSet] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [adoptedStoredName, setAdoptedStoredName] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   // Once the stored name hydrates in, adopt it and skip the name gate.
   // Adjusting state during render is React's recommended alternative to a
@@ -52,6 +56,36 @@ export default function RoomPage() {
     setName(storedName);
     setNameSet(true);
   }
+
+  // Direct-paste entry: unlike the landing page, a user opening /room/{code}
+  // directly never did the REST join, so there is no player_id in
+  // sessionStorage and the WS join would be rejected. Do the same POST the
+  // landing page does (persist name + store player_id) before opening the WS.
+  const handleJoin = useCallback(async () => {
+    const trimmed = name.trim();
+    if (!trimmed || joining) return;
+    setJoining(true);
+    setJoinError(null);
+    try {
+      const joinRes = await fetch(`${API_URL}/rooms/${code}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (!joinRes.ok)
+        throw new Error(
+          joinRes.status === 404 ? "Room not found" : "Failed to join",
+        );
+      const { player_id } = await joinRes.json();
+      storePlayerId(code, player_id);
+      localStorage.setItem("tbwc_player_name", trimmed);
+      setNameSet(true);
+    } catch (e) {
+      setJoinError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setJoining(false);
+    }
+  }, [code, name, joining]);
 
   const { gameState, log, brewing, previewResult, error, connected, send } =
     useGameSocket(nameSet ? code : "", name);
@@ -111,12 +145,25 @@ export default function RoomPage() {
           placeholder="Your name"
           maxLength={24}
           className="max-w-xs"
-          onKeyDown={(e) =>
-            e.key === "Enter" && name.trim() && setNameSet(true)
-          }
+          onKeyDown={(e) => e.key === "Enter" && handleJoin()}
         />
-        <Button disabled={!name.trim()} onClick={() => setNameSet(true)}>
-          Enter
+        <Button disabled={!name.trim() || joining} onClick={handleJoin}>
+          {joining ? "Joining…" : "Enter"}
+        </Button>
+        {joinError && <p className="text-sm text-destructive">{joinError}</p>}
+      </main>
+    );
+  }
+
+  // Surface a genuine join/WS error before the "Connecting" spinner so a hard
+  // rejection (e.g. server closes with 4001) is shown instead of spinning
+  // forever.
+  if (error) {
+    return (
+      <main className="flex h-dvh flex-col items-center justify-center gap-4 text-destructive">
+        <p>{error}</p>
+        <Button variant="outline" onClick={() => router.push("/")}>
+          Back to lobby
         </Button>
       </main>
     );
@@ -126,17 +173,6 @@ export default function RoomPage() {
     return (
       <main className="flex h-dvh items-center justify-center text-muted-foreground">
         Connecting to room {code}…
-      </main>
-    );
-  }
-
-  if (error) {
-    return (
-      <main className="flex h-dvh flex-col items-center justify-center gap-4 text-destructive">
-        <p>{error}</p>
-        <Button variant="outline" onClick={() => router.push("/")}>
-          Back to lobby
-        </Button>
       </main>
     );
   }
