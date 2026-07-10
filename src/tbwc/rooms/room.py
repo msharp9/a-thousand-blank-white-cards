@@ -43,9 +43,9 @@ STARTING_HAND_SIZE = 5
 class Room:
     """One game session. Thread-safe via asyncio.Lock."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, mode: str = "both") -> None:
         self.code = code
-        self.state: GameState = GameState(room_code=code)
+        self.state: GameState = GameState(room_code=code, mode=mode)
         self.connections: ConnectionManager = ConnectionManager()
         self._lock: asyncio.Lock = asyncio.Lock()
         self._epilogue: EpilogueManager | None = None

@@ -50,10 +50,10 @@ class RoomManager:
     def __init__(self, store: RoomStore | None = None) -> None:
         self._store: RoomStore = store if store is not None else InMemoryRoomStore()
 
-    def create_room(self) -> str:
+    def create_room(self, mode: str = "both") -> str:
         """Create a new Room and return its 6-char join code."""
         code = self._unique_code()
-        self._store.put(code, Room(code))
+        self._store.put(code, Room(code, mode=mode))
         logger.info("room %s created (%d active rooms)", code, self._store.count())
         return code
 

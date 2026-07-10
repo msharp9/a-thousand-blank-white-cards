@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -71,6 +72,12 @@ with a full `state` snapshot. All messages are JSON objects with a `type` field.
 Close codes: `4000` bad handshake, `4001` unknown `player_id`, `4004` room not
 found, `4009` connection replaced by a newer socket for the same player.
 """
+
+
+class CreateRoomRequest(BaseModel):
+    # Room mode chosen by the host at creation. Optional so old clients that
+    # POST /rooms with no body still work (defaults to "both").
+    mode: Literal["online", "in_person", "both"] = "both"
 
 
 class CreateRoomResponse(BaseModel):
@@ -165,9 +172,14 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @application.post("/rooms", response_model=CreateRoomResponse, tags=["rooms"])
-    async def create_room() -> CreateRoomResponse:
-        """Create a new game room. Returns a 6-char join code."""
-        code = room_manager.create_room()
+    async def create_room(body: CreateRoomRequest | None = None) -> CreateRoomResponse:
+        """Create a new game room. Returns a 6-char join code.
+
+        The request body is optional: a POST with no body defaults the room mode
+        to "both" so older clients keep working.
+        """
+        mode = body.mode if body else "both"
+        code = room_manager.create_room(mode=mode)
         return CreateRoomResponse(code=code)
 
     @application.post("/rooms/{code}/join", response_model=JoinRoomResponse, tags=["rooms"])

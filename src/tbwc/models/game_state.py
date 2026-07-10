@@ -60,6 +60,10 @@ class GameState(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     room_code: str
+    # Room mode chosen at creation: "online", "in_person", or "both". A later
+    # bead uses it to filter the deck by card venue; here it just rides in every
+    # snapshot via model_dump().
+    mode: Literal["online", "in_person", "both"] = "both"
     players: list[Player] = Field(default_factory=list)
 
     # Card registry grows during play as new cards are invented
