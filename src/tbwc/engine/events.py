@@ -22,6 +22,7 @@ class GameEvent(StrEnum):
     ON_DRAW_STEP = "on_draw_step"
     ON_DESTROY_ATTEMPT = "on_destroy_attempt"
     ON_WIN_CHECK = "on_win_check"
+    ON_GAME_END = "on_game_end"
 
 
 @dataclass

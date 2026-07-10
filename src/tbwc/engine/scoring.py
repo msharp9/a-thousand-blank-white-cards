@@ -2,7 +2,71 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from tbwc.engine.apply import apply_effect
+from tbwc.engine.compile import compile_card
+from tbwc.engine.events import GameEvent, HookContext
 from tbwc.models.game_state import GameState
+
+
+def _as_card_dict(card: Any) -> dict | None:
+    """Coerce a registry card entry into a plain dict, or None if it can't be."""
+    if isinstance(card, dict):
+        return card
+    dump = getattr(card, "model_dump", None)
+    if callable(dump):
+        return dump()
+    return None
+
+
+def _game_end_trigger(card: dict) -> bool:
+    """True if this card carries an ``on_game_end`` trigger.
+
+    The trigger may live at the top level (``card["trigger"]``) or nested inside
+    the canonical annotation (``card["canonical"]["trigger"]``).
+    """
+    if card.get("trigger") == GameEvent.ON_GAME_END:
+        return True
+    canonical = card.get("canonical")
+    if isinstance(canonical, dict) and canonical.get("trigger") == GameEvent.ON_GAME_END:
+        return True
+    return False
+
+
+def resolve_end_of_game(state: GameState, cards: dict | None = None) -> GameState:
+    """Apply every ``on_game_end`` card's ops before the winner is decided.
+
+    For each non-spectator player, every card id in that player's ``hand`` or
+    ``in_play`` zone is looked up in the registry (``cards`` if given, else
+    ``state.cards``). A card whose canonical (or top-level) ``trigger`` is
+    ``on_game_end`` — e.g. "Worth 10 Points If You Keep It" — has its ops
+    compiled and applied with the holder as the actor, so ``target="self"`` ops
+    credit the right player.
+
+    Pure and immutable: the input ``state`` is never mutated. This computes the
+    score adjustments only; setting ``winner_ids`` is left to the caller (which
+    runs ``evaluate_win_condition`` next). Cards with no canonical/trigger, and
+    cards that compile to ``None``, are skipped.
+    """
+    registry = cards if cards is not None else state.cards
+
+    for player in state.turn_players():
+        for card_id in (*player.hand, *player.in_play):
+            card = _as_card_dict(registry.get(card_id))
+            if card is None or not _game_end_trigger(card):
+                continue
+            program = compile_card(card)
+            if program is None:
+                continue
+            ctx = HookContext(
+                event=GameEvent.ON_GAME_END,
+                actor_id=player.id,
+                card_id=card_id,
+            )
+            state = apply_effect(state, program, ctx)
+
+    return state
 
 
 def evaluate_win_condition(state: GameState) -> list[str]:
