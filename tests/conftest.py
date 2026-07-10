@@ -14,9 +14,35 @@ just stop the *file* from bleeding in. See bd a-thousand-blank-white-cards-9n4.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from tbwc.config import Settings, get_settings
+from tbwc.models.ws_messages import CreateCardMsg, StartMsg
+
+
+def drive_to_playing(room, player_ids, cards_each: int = 5) -> None:
+    """Drive a room through the two-step start flow to ``phase="playing"``.
+
+    The new start flow is: lobby -> (StartMsg) -> setup, where each
+    non-spectator authors ``cards_each`` cards, then -> (StartMsg) -> playing.
+    Only the ``player_ids`` passed in author cards (pass real, non-spectator
+    ids). The first id acts as the host that sends both StartMsgs.
+    """
+    # lobby -> setup
+    asyncio.run(room.handle_action(player_ids[0], StartMsg()))
+    # each player authors the required number of cards during setup
+    for pid in player_ids:
+        for i in range(cards_each):
+            asyncio.run(
+                room.handle_action(
+                    pid,
+                    CreateCardMsg(title=f"{pid}-card-{i}", description="gain 1 point"),
+                )
+            )
+    # host starts again -> playing
+    asyncio.run(room.handle_action(player_ids[0], StartMsg()))
 
 
 @pytest.fixture(autouse=True)

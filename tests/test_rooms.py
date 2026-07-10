@@ -6,7 +6,9 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
-from tbwc.models.ws_messages import CreateCardMsg, DrawMsg, PassMsg, PlayMsg, Placement, StartMsg
+from conftest import drive_to_playing
+
+from tbwc.models.ws_messages import CreateCardMsg, DrawMsg, PassMsg, PlayMsg, Placement
 from tbwc.rooms.connections import ConnectionManager
 from tbwc.rooms.manager import RoomManager
 from tbwc.rooms.room import Room
@@ -136,7 +138,9 @@ class TestRoomTurnEnforcement:
     def test_start_sets_phase_playing(self) -> None:
         room = _room_two_players()
         room.connections.connect("p1", AsyncMock())
-        asyncio.run(room.handle_action("p1", StartMsg()))
+        room.connections.connect("p2", AsyncMock())
+        # Full two-step flow: lobby -> setup (author 5 each) -> playing.
+        drive_to_playing(room, ["p1", "p2"])
         assert room.state.phase == "playing"
 
     def test_create_card_off_turn_allowed(self) -> None:

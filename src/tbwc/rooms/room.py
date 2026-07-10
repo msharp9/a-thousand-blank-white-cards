@@ -35,7 +35,12 @@ from tbwc.engine.scoring import evaluate_win_condition
 from tbwc.models.effects import CustomNoteOp, EffectProgram
 from tbwc.models.game_state import GameState, Player
 from tbwc.rooms.connections import ConnectionManager
-from tbwc.rooms.deck import MIN_DECK, build_deck
+from tbwc.rooms.deck import (
+    BLANKS_PER_PLAYER,
+    PREMADE_POOL_SIZE,
+    build_premade_pool,
+    finalize_deck,
+)
 from tbwc.rooms.epilogue import EpilogueManager
 
 logger = logging.getLogger(__name__)
@@ -43,16 +48,23 @@ logger = logging.getLogger(__name__)
 # Cards dealt to each player's hand when the game starts.
 STARTING_HAND_SIZE = 5
 
+# Cards each player must author during the setup phase before the game can start.
+CARDS_TO_AUTHOR = BLANKS_PER_PLAYER
+
 
 class Room:
     """One game session. Thread-safe via asyncio.Lock."""
 
-    def __init__(self, code: str, mode: str = "both") -> None:
+    def __init__(self, code: str, mode: str = "both", *, simple: bool = True) -> None:
         self.code = code
         self.state: GameState = GameState(room_code=code, mode=mode)
         self.connections: ConnectionManager = ConnectionManager()
         self._lock: asyncio.Lock = asyncio.Lock()
         self._epilogue: EpilogueManager | None = None
+        # Whether to seed the pre-made pool from the deterministic point-only
+        # simple deck (the basic no-AI game). Kept as an attribute so tests and
+        # future modes can flip it; defaults True for the basic game.
+        self._simple = simple
         # Per-turn bookkeeping for the draw→play→end model. Reset at the start of
         # every turn (see _start_turn). ``_has_drawn`` gates play/pass so a turn
         # follows draw-first; ``_deck_exhausted`` latches once the last card is
@@ -157,22 +169,93 @@ class Room:
         else:
             await self.connections.send(player_id, {"type": "error", "message": f"Unknown message type: {mtype}"})
 
-    # ── per-action handlers (engine-backed minimal versions; agent interpret in a later bead) ──
-    async def _handle_start(self, player_id: str) -> None:
-        """Build a shuffled deck (>=30 cards), deal starting hands, begin play.
+    # ── setup helpers ──
+    def _authored_count(self, player_id: str) -> int:
+        """Number of cards ``player_id`` has authored this game (setup step 3)."""
+        return sum(
+            1
+            for c in self.state.cards.values()
+            if (c.get("creator_id") if isinstance(c, dict) else getattr(c, "creator_id", None)) == player_id
+        )
 
-        Deck building never requires a live external service: it collects seed +
-        prior-game cards from the RAG corpus when available and falls back to the
-        offline seed-data file otherwise. Runs in a thread since collection may
-        touch the (in-memory) store.
+    def _setup_progress(self) -> dict[str, int]:
+        """Map non-spectator player id -> authored-card count, for the client."""
+        return {p.id: self._authored_count(p.id) for p in self.state.turn_players()}
+
+    # ── per-action handlers ──
+    async def _handle_start(self, player_id: str) -> None:
+        """Phase-aware game start (deck building happens in two steps).
+
+        - From the **lobby**: build the shared PRE-MADE pool into ``state.cards``
+          and enter ``phase="setup"``. Nothing is dealt yet. The pool is visible
+          in the snapshot so every player can see the pre-made cards while
+          authoring their own (step 3 of the game — build synergies).
+        - From **setup**: gate on every non-spectator having authored
+          ``CARDS_TO_AUTHOR`` cards; then finalise the deck (pre-made + authored
+          + ``BLANKS_PER_PLAYER`` blanks per player), shuffle, deal
+          ``STARTING_HAND_SIZE`` to each real player, enter ``phase="playing"``
+          and begin the first turn.
+
+        Deck building never requires a live external service; it runs in a thread
+        since collection may touch the (in-memory) RAG store.
         """
-        # Only real players are dealt to — spectators (late joiners) get no hand.
-        # In practice ``start`` fires from the lobby, where there are no
-        # spectators yet, but filtering keeps dealing correct regardless.
+        if self.state.phase == "lobby":
+            await self._enter_setup()
+        elif self.state.phase == "setup":
+            await self._start_playing(player_id)
+        else:
+            await self.connections.send(player_id, {"type": "error", "message": "Game already started"})
+
+    async def _enter_setup(self) -> None:
+        """lobby → setup: seed the pre-made pool and open card authoring."""
+        cards, pool = await asyncio.to_thread(
+            build_premade_pool,
+            count=PREMADE_POOL_SIZE,
+            venue_mode=self.state.mode,
+            simple=self._simple,
+        )
+        # Pre-made cards live in the registry AND (as ids) in the deck so the
+        # setup UI can render "the deck so far". They're re-shuffled with the
+        # authored + blank cards at finalisation.
+        merged_cards = {**cards, **self.state.cards}
+        self.state = self.state.model_copy(update={"phase": "setup", "cards": merged_cards, "deck": list(pool)})
+        await self._broadcast_state()
+
+    async def _start_playing(self, player_id: str) -> None:
+        """setup → playing: gate on authoring, finalise deck, deal, begin play."""
         players = list(self.state.players)
         dealt_to = [p for p in players if not p.spectator]
-        dealt = STARTING_HAND_SIZE * len(dealt_to)
-        cards, deck = await asyncio.to_thread(build_deck, min_deck=MIN_DECK + dealt)
+
+        # Gate: every real player must have authored the required number of cards.
+        behind = [p for p in dealt_to if self._authored_count(p.id) < CARDS_TO_AUTHOR]
+        if behind:
+            names = ", ".join(self._name(p.id) for p in behind)
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": f"Waiting on {names} to author {CARDS_TO_AUTHOR} cards"},
+            )
+            return
+
+        # The pre-made pool ids are the current deck; authored cards are the
+        # non-blank, non-premade registry entries created by players.
+        premade_ids = list(self.state.deck)
+        premade_set = set(premade_ids)
+        authored_ids = [
+            cid
+            for cid, c in self.state.cards.items()
+            if cid not in premade_set
+            and not (c.get("blank") if isinstance(c, dict) else getattr(c, "blank", False))
+            and (c.get("creator_id") if isinstance(c, dict) else getattr(c, "creator_id", None))
+            in {p.id for p in dealt_to}
+        ]
+
+        blank_cards, deck = await asyncio.to_thread(
+            finalize_deck,
+            premade_ids,
+            authored_ids,
+            len(dealt_to),
+            blanks_per_player=BLANKS_PER_PLAYER,
+        )
 
         # Deal starting hands off the top of the shuffled deck.
         hands: dict[str, list[str]] = {p.id: list(p.hand) for p in dealt_to}
@@ -183,7 +266,7 @@ class Room:
                 hands[p.id].append(deck.pop(0))
 
         new_players = [p.model_copy(update={"hand": hands[p.id]}) if p.id in hands else p for p in players]
-        merged_cards = {**cards, **self.state.cards}
+        merged_cards = {**self.state.cards, **blank_cards}
         self.state = self.state.model_copy(
             update={
                 "phase": "playing",
@@ -559,9 +642,14 @@ class Room:
         await self._advance_turn()
 
     async def _handle_create_card(self, player_id: str, msg) -> None:
-        """Author a new card and interpret it immediately (allowed off-turn)."""
-        from tbwc.agent.graph import interpret_card
+        """Author a new card (allowed off-turn / during setup).
 
+        During ``setup`` we DO NOT call the LLM: authored cards are interpreted
+        deterministically (via ``compile_card``) or best-effort at play time, so
+        setup authoring stays fast and never depends on a live service. The card
+        is simply registered with its ``creator_id`` (which drives
+        ``setup_progress`` and the start gate) and broadcast.
+        """
         card_id = str(uuid.uuid4())
         new_cards = {
             **self.state.cards,
@@ -573,6 +661,12 @@ class Room:
             },
         }
         self.state = self.state.model_copy(update={"cards": new_cards})
+
+        if self.state.phase == "setup":
+            await self._broadcast_state()
+            return
+
+        from tbwc.agent.graph import interpret_card
 
         await self.connections.broadcast({"type": "brewing", "card_id": card_id})
         result = await asyncio.to_thread(interpret_card, msg.title, msg.description)
@@ -639,11 +733,16 @@ class Room:
           playing (only true when they hold NO playable card). The client hides
           the Pass button unless this is true, so pass is never offered while a
           play is possible (e.g. while holding a blank).
+        - ``setup_progress`` — {player_id: authored_count} during setup, so the
+          client can show "3/5 authored" for everyone and the host knows when
+          starting is unblocked.
         """
         snap = self.state.model_dump()
         snap["has_drawn"] = self._has_drawn
         active_id = self.state.active_player().id if self.state.players else None
         snap["can_pass"] = self._can_pass(active_id) if active_id is not None else False
+        snap["setup_progress"] = self._setup_progress()
+        snap["cards_to_author"] = CARDS_TO_AUTHOR
         return snap
 
     async def _log_and_broadcast(self, log_entry: str) -> None:

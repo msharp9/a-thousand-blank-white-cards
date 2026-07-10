@@ -22,6 +22,7 @@ import json
 import logging
 import random
 from collections.abc import Callable
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +180,25 @@ def _default_card_source() -> list[dict]:
     return read_seed_cards()
 
 
+# Number of pre-made cards seeded into the deck during setup (the shared pool
+# every player sees while authoring, before their created + blank cards join).
+PREMADE_POOL_SIZE = 30
+
+# How many blank cards are shuffled into the deck per player during setup
+# finalisation, and how many cards each player authors / is dealt.
+BLANKS_PER_PLAYER = 5
+
+# Deterministic simple deck of point-only cards — used for a no-AI basic game.
+SIMPLE_SEED_PATH = Path("data/seed_cards_simple.json")
+
+
+def _simple_card_source() -> list[dict]:
+    """Card source for the deterministic simple game: the point-only seed deck."""
+    from tbwc.rag.seed import read_seed_cards
+
+    return read_seed_cards(SIMPLE_SEED_PATH)
+
+
 def build_deck(
     *,
     card_source: CardSource | None = None,
@@ -241,3 +261,100 @@ def build_deck(
         num_blanks,
     )
     return cards, deck
+
+
+def build_premade_pool(
+    *,
+    count: int = PREMADE_POOL_SIZE,
+    card_source: CardSource | None = None,
+    rng: random.Random | None = None,
+    venue_mode: str = "both",
+    simple: bool = False,
+) -> tuple[dict[str, dict], list[str]]:
+    """Build the shared PRE-MADE card pool shown during setup (NO blanks).
+
+    Returns ``(cards, pool_ids)`` — a registry of ``count`` pre-made cards and
+    their shuffled ids. This is step 3 of the game: "shuffle ``count`` pre-made
+    cards". Players see this pool while authoring their own cards (so they can
+    build synergies), before their created cards and blanks join the deck at
+    :func:`finalize_deck`.
+
+    - ``simple=True`` draws from the deterministic point-only simple deck
+      (``data/seed_cards_simple.json``) for a no-AI game; otherwise the default
+      source (RAG corpus, falling back to the full offline seed file) is used.
+    - ``venue_mode`` filters out venue-incompatible cards (see
+      :func:`venue_allowed`).
+    - If the (venue-filtered) source yields fewer than ``count`` distinct cards,
+      the pool is padded with distinct copies (``<id>#N``) — mirroring
+      :func:`build_deck` — so the pool always has exactly ``count`` cards.
+
+    Raises ValueError if the source yields no cards at all.
+    """
+    rng = rng or random.Random()
+    source = card_source or (_simple_card_source if simple else None)
+    collected = collect_cards(source, venue_mode)
+    if not collected:
+        raise ValueError("no cards available to build the pre-made pool (empty card source)")
+
+    cards: dict[str, dict] = {}
+    pool: list[str] = []
+    # Take up to `count` distinct real cards first.
+    for card in collected:
+        if len(pool) >= count:
+            break
+        cards[card["id"]] = card
+        pool.append(card["id"])
+
+    # Pad with distinct copies of the real cards if the source was too small.
+    copy_index = 2
+    while len(pool) < count:
+        for base in collected:
+            if len(pool) >= count:
+                break
+            copy_id = f"{base['id']}#{copy_index}"
+            cards[copy_id] = {**base, "id": copy_id}
+            pool.append(copy_id)
+        copy_index += 1
+
+    rng.shuffle(pool)
+    logger.info("built pre-made pool of %d cards (simple=%s, venue_mode=%s)", len(pool), simple, venue_mode)
+    return cards, pool
+
+
+def build_blanks(count: int, *, start: int = 0) -> dict[str, dict]:
+    """Return ``count`` blank card dicts keyed by id (``blank-<start>`` …)."""
+    return {(b := _make_blank_card(n))["id"]: b for n in range(start, start + count)}
+
+
+def finalize_deck(
+    premade_ids: list[str],
+    authored_ids: list[str],
+    num_players: int,
+    *,
+    blanks_per_player: int = BLANKS_PER_PLAYER,
+    rng: random.Random | None = None,
+) -> tuple[dict[str, dict], list[str]]:
+    """Assemble the final draw deck at the end of setup and shuffle it.
+
+    Composition (per the rules): the pre-made pool + every player-authored card
+    + ``blanks_per_player`` blank cards PER player, all shuffled together. With
+    30 pre-made cards this yields 30 + 5·players authored + 5·players blanks
+    (e.g. 2 players → 30+10+10 = 50; 6 players → 30+30+30 = 90).
+
+    Returns ``(blank_cards, deck_ids)`` — the newly-created blank card dicts (to
+    merge into the registry; pre-made and authored cards already live there) and
+    the shuffled deck of all ids. Deterministic given ``rng``.
+    """
+    rng = rng or random.Random()
+    num_blanks = blanks_per_player * num_players
+    blank_cards = build_blanks(num_blanks)
+    deck = [*premade_ids, *authored_ids, *blank_cards.keys()]
+    rng.shuffle(deck)
+    logger.info(
+        "finalized deck: %d premade + %d authored + %d blanks = %d cards",
+        len(premade_ids),
+        len(authored_ids),
+        num_blanks,
+        len(deck),
+    )
+    return blank_cards, deck

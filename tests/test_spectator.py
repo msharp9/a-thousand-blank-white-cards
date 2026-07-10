@@ -14,7 +14,9 @@ from unittest.mock import AsyncMock, patch
 from tbwc.engine.loop import advance_turn
 from tbwc.engine.scoring import evaluate_win_condition
 from tbwc.models.game_state import GameState, Player, WinCondition
-from tbwc.models.ws_messages import CreateCardMsg, PassMsg, PlayMsg, StartMsg
+from conftest import drive_to_playing
+
+from tbwc.models.ws_messages import CreateCardMsg, PassMsg, PlayMsg
 from tbwc.rooms.manager import RoomManager
 from tbwc.rooms.room import Room
 
@@ -112,7 +114,9 @@ def _room_two_players_and_start() -> Room:
     import tbwc.rag.store as store
 
     store._client = None  # offline seed-file fallback
-    asyncio.run(room.handle_action("p1", StartMsg()))
+    # Drive the full two-step start flow (lobby -> setup -> playing): each real
+    # player authors the required cards, then the host starts the game.
+    drive_to_playing(room, ["p1", "p2"])
     return room
 
 

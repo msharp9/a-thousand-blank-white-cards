@@ -9,8 +9,12 @@ import pytest
 from tbwc.rooms.deck import (
     BLANK_CARD_RATIO,
     MIN_DECK,
+    PREMADE_POOL_SIZE,
+    build_blanks,
     build_deck,
+    build_premade_pool,
     collect_cards,
+    finalize_deck,
     venue_allowed,
 )
 
@@ -279,3 +283,79 @@ def test_default_source_prefers_rag_when_populated() -> None:
     with patch("tbwc.rag.store.list_all_cards", return_value=rag_cards):
         result = _default_card_source()
     assert result == rag_cards
+
+
+# --------------------------------------------------------------------------
+# Pre-made pool + deck finalisation (setup two-step start flow, bd 70n.8/9)
+# --------------------------------------------------------------------------
+
+
+def test_build_premade_pool_simple_has_30_cards_no_blanks() -> None:
+    # The simple (point-only) seed deck yields exactly PREMADE_POOL_SIZE pool ids
+    # with no blank cards, and every id resolves in the registry.
+    cards, pool = build_premade_pool(count=30, simple=True, rng=random.Random(0))
+    assert len(pool) == PREMADE_POOL_SIZE == 30
+    assert not any("blank" in cid for cid in pool)
+    assert all(cid in cards for cid in pool)
+
+
+def test_build_premade_pool_is_deterministic_with_seeded_rng() -> None:
+    p1 = build_premade_pool(count=30, simple=True, rng=random.Random(3))[1]
+    p2 = build_premade_pool(count=30, simple=True, rng=random.Random(3))[1]
+    assert p1 == p2
+
+
+def test_build_premade_pool_pads_small_source_with_copies() -> None:
+    # Only 4 real cards but count=30: pad with distinct '<id>#N' copies.
+    cards, pool = build_premade_pool(count=30, card_source=_fake_source(4), rng=random.Random(1))
+    assert len(pool) == 30
+    assert all(cid in cards for cid in pool)
+    assert any("#" in cid for cid in pool)  # padding copies were needed
+
+
+def test_build_premade_pool_venue_mode_online_excludes_in_person() -> None:
+    cards, pool = build_premade_pool(
+        count=10,
+        card_source=_mixed_venue_source(),
+        rng=random.Random(1),
+        venue_mode="online",
+    )
+    assert all(c.get("venue", "all") != "in_person" for c in cards.values())
+
+
+def test_build_premade_pool_empty_source_raises() -> None:
+    with pytest.raises(ValueError, match="no cards available"):
+        build_premade_pool(card_source=lambda: [])
+
+
+def test_finalize_deck_composition_for_two_players() -> None:
+    premade = [f"pm{i}" for i in range(30)]
+    authored = [f"au{i}" for i in range(10)]
+    blank_cards, deck = finalize_deck(premade, authored, 2, rng=random.Random(0))
+    # 30 premade + 10 authored + 5 blanks/player * 2 = 50.
+    assert len(deck) == 50
+    # Exactly 10 new blank cards returned.
+    assert len(blank_cards) == 10
+    for card in blank_cards.values():
+        assert card["blank"] is True
+    # Every deck id resolves either as premade, authored, or a new blank.
+    known = set(premade) | set(authored) | set(blank_cards)
+    assert set(deck) == known
+
+
+def test_finalize_deck_is_deterministic_with_seeded_rng() -> None:
+    premade = [f"pm{i}" for i in range(30)]
+    authored = [f"au{i}" for i in range(10)]
+    d1 = finalize_deck(premade, authored, 2, rng=random.Random(9))[1]
+    d2 = finalize_deck(premade, authored, 2, rng=random.Random(9))[1]
+    assert d1 == d2
+
+
+def test_build_blanks_returns_distinct_blank_ids() -> None:
+    blanks = build_blanks(5)
+    assert set(blanks) == {f"blank-{i}" for i in range(5)}
+    for cid, card in blanks.items():
+        assert card["id"] == cid
+        assert card["blank"] is True
+        assert card["title"] == ""
+        assert card["description"] == ""

@@ -6,6 +6,8 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
+from conftest import drive_to_playing
+
 from tbwc.models.effects import AddPointsOp, DestroyCardOp, EffectProgram
 from tbwc.models.ws_messages import CreateCardMsg, DrawMsg, PassMsg, PlayMsg, Placement, StartMsg
 from tbwc.rooms.room import Room
@@ -106,7 +108,9 @@ def test_effect_log_persists_in_state_for_refresh() -> None:
     assert room.snapshot()["log"] == room.state.log
 
 
-def test_start_sets_phase_playing() -> None:
+def test_start_sets_phase_setup() -> None:
+    # A single StartMsg from the lobby now lands in the SETUP phase (card
+    # authoring), not straight into "playing".
     room = _room_with_two_players()
     room.connections.connect("p1", AsyncMock())
 
@@ -114,6 +118,20 @@ def test_start_sets_phase_playing() -> None:
 
     store._client = None  # force the offline seed-file fallback
     asyncio.run(room.handle_action("p1", StartMsg()))
+    assert room.state.phase == "setup"
+
+
+def test_start_sets_phase_playing() -> None:
+    # Driving the full two-step flow (start -> author 5 each -> start) reaches
+    # phase="playing".
+    room = _room_with_two_players()
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+
+    import tbwc.rag.store as store
+
+    store._client = None  # force the offline seed-file fallback
+    drive_to_playing(room, ["p1", "p2"])
     assert room.state.phase == "playing"
 
 
@@ -126,10 +144,14 @@ def test_start_builds_deck_of_at_least_30_and_deals_hands() -> None:
     import tbwc.rag.store as store
 
     store._client = None
-    asyncio.run(room.handle_action("p1", StartMsg()))
+    drive_to_playing(room, ["p1", "p2"])
 
     assert room.state.phase == "playing"
-    assert len(room.state.deck) >= 30
+    # Deck was finalised: 30 premade + 10 authored + 10 blanks = 50, minus the
+    # 10 cards dealt (5 each) = 40 left in the deck.
+    total_hands = sum(len(p.hand) for p in room.state.players)
+    assert len(room.state.deck) + total_hands == 50
+    assert len(room.state.deck) == 40
     # Starting hands were dealt from the top of the deck. There is no auto-draw
     # at turn start, so both players hold exactly the dealt STARTING_HAND_SIZE;
     # the first player must send an explicit `draw` to take their turn's card.
@@ -152,7 +174,7 @@ def test_first_player_not_auto_drawn_then_explicit_draw_adds_cards() -> None:
     import tbwc.rag.store as store
 
     store._client = None
-    asyncio.run(room.handle_action("p1", StartMsg()))
+    drive_to_playing(room, ["p1", "p2"])
 
     # Both players hold only the dealt hand; the active player has not drawn yet.
     assert len(room.state.get_player("p1").hand) == 5
