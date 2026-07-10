@@ -3,9 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { storePlayerId } from "@/lib/ws";
+import type { Mode } from "@/lib/types";
+
+const MODE_OPTIONS: { value: Mode; label: string }[] = [
+  { value: "both", label: "Both" },
+  { value: "online", label: "Online" },
+  { value: "in_person", label: "In-person" },
+];
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -13,6 +21,7 @@ export default function LandingPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [joinCode, setJoinCode] = useState("");
+  const [mode, setMode] = useState<Mode>("both");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -27,7 +36,11 @@ export default function LandingPage() {
     setLoading(true);
     setError(null);
     try {
-      const createRes = await fetch(`${API_URL}/rooms`, { method: "POST" });
+      const createRes = await fetch(`${API_URL}/rooms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
       if (!createRes.ok) throw new Error("Failed to create room");
       const { code } = await createRes.json();
       const joinRes = await fetch(`${API_URL}/rooms/${code}/join`, {
@@ -93,6 +106,26 @@ export default function LandingPage() {
             onChange={(e) => setName(e.target.value)}
             maxLength={24}
           />
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-muted-foreground">
+              Game mode
+            </span>
+            <ButtonGroup className="w-full">
+              {MODE_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  variant={mode === opt.value ? "default" : "outline"}
+                  className="flex-1"
+                  aria-pressed={mode === opt.value}
+                  onClick={() => setMode(opt.value)}
+                  disabled={loading}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </ButtonGroup>
+          </div>
           <Button onClick={handleCreate} disabled={!nameValid || loading}>
             Create room
           </Button>

@@ -1,5 +1,9 @@
 // TypeScript mirrors of the backend WS envelopes (tbwc/models/ws_messages.py).
 
+// Room play mode chosen by the host on create. Mirrors the backend's
+// POST /rooms body ({"mode": ...}); the backend defaults to "both" when omitted.
+export type Mode = "online" | "in_person" | "both";
+
 // ─── client → server ──────────────────────────────────────────────────────
 
 export type Placement = {
