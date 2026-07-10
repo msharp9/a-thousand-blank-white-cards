@@ -124,16 +124,17 @@ class TestRoomTurnEnforcement:
         assert room.state.get_player("p2").hand == ["c2"]
         assert room.state.deck == []
 
-    def test_pass_on_empty_deck_ends_game(self) -> None:
+    def test_pass_on_empty_deck_opens_epilogue(self) -> None:
         room = _room_two_players()
         # Model "the last card was already drawn earlier this game": deck empty
-        # and exhaustion latched, so p1 passing ends their turn and the game.
+        # and exhaustion latched, so p1 passing ends their turn and the game,
+        # which now resolves end-of-game and opens the epilogue vote.
         room.state = room.state.model_copy(update={"deck": [], "phase": "playing"})
         room._deck_exhausted = True
         ws1 = AsyncMock()
         room.connections.connect("p1", ws1)
         asyncio.run(room.handle_action("p1", PassMsg()))
-        assert room.state.phase == "ended"
+        assert room.state.phase == "epilogue"
 
     def test_start_sets_phase_playing(self) -> None:
         room = _room_two_players()

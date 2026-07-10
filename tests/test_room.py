@@ -440,8 +440,10 @@ def test_pass_on_empty_deck_ends_game_with_winner() -> None:
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", ws2)
     asyncio.run(room.handle_action("p1", PassMsg()))
-    # Turn ends on an exhausted deck -> game ends, p2 (highest score) wins.
-    assert room.state.phase == "ended"
+    # Turn ends on an exhausted deck -> end-of-game resolves, winners are
+    # computed, and the epilogue vote opens (phase="epilogue"). p2 (highest
+    # score) is the winner.
+    assert room.state.phase == "epilogue"
     assert room.state.winner_ids == ["p2"]
     # Both players received the final state broadcast (nobody stuck).
     ws1.send_text.assert_called()
@@ -481,8 +483,9 @@ def test_deck_exhaustion_end_to_end_via_pass() -> None:
     )
     asyncio.run(room.handle_action("p1", DrawMsg()))  # draws 'last', latches exhaustion
     assert room.state.get_player("p1").hand == ["last"]
-    asyncio.run(room.handle_action("p1", PassMsg()))  # ends turn -> game ends
-    assert room.state.phase == "ended"
+    asyncio.run(room.handle_action("p1", PassMsg()))  # ends turn -> end-of-game
+    # End-of-game opens the epilogue with winners already computed.
+    assert room.state.phase == "epilogue"
     assert room.state.winner_ids == ["p1"]  # p1 has 5, p2 has 0
 
 

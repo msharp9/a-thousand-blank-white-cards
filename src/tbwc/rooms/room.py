@@ -31,7 +31,7 @@ from tbwc.engine.apply import apply_effect
 from tbwc.engine.compile import compile_card
 from tbwc.engine.events import GameEvent, HookContext
 from tbwc.engine.loop import advance_turn
-from tbwc.engine.scoring import evaluate_win_condition
+from tbwc.engine.scoring import evaluate_win_condition, resolve_end_of_game
 from tbwc.models.effects import CustomNoteOp, EffectProgram
 from tbwc.models.game_state import GameState, Player
 from tbwc.rooms.connections import ConnectionManager
@@ -364,24 +364,38 @@ class Room:
         await self._advance_turn()
 
     async def _end_game(self) -> None:
-        """Transition to phase='ended', compute winners, and broadcast to everyone.
+        """Resolve end-of-game scoring, compute winners, then open the epilogue.
 
-        Chosen approach: go straight to ``ended`` with computed winners rather
-        than the epilogue voting flow (start_epilogue requires the separate
-        EpilogueManager concern). ``evaluate_win_condition`` honours the state's
-        win_condition (default highest_points). The winners are stored on the
-        state (winner_ids) AND logged so all connected players — not just the
-        active one — see the result on the broadcast.
+        Sequence (the deck was exhausted and the drawer finished their turn):
+
+        1. ``resolve_end_of_game`` applies any kept-in-hand / in-play end-of-game
+           card effects (e.g. "worth 10 points if you keep it") so final scores
+           reflect what players held at the buzzer.
+        2. ``evaluate_win_condition`` computes ``winner_ids`` from those final
+           scores (default: highest points). Winners are stored on the state and
+           logged so ALL connected players see the result.
+        3. We then open the EPILOGUE (players vote which authored cards to keep
+           for future games) rather than jumping straight to ``ended`` —
+           ``_handle_epilogue_vote`` transitions to ``ended`` once voting
+           completes. This finally wires the previously-orphaned epilogue into
+           the natural end of a game.
         """
+        self.state = resolve_end_of_game(self.state)
         winners = evaluate_win_condition(self.state)
         if winners:
             names = [self.state.get_player(w).name for w in winners]
             log_line = f"Game over! Winner(s): {', '.join(names)}"
         else:
             log_line = "Game over! No winner."
-        self.state = self.state.model_copy(update={"phase": "ended", "winner_ids": winners}).with_log(log_line)
-        await self._broadcast_state()
-        await self.connections.broadcast({"type": "effect_applied", "log_entry": log_line})
+        self.state = self.state.model_copy(update={"winner_ids": winners})
+        await self._log_and_broadcast(log_line)
+        # Open the epilogue vote. If there are no real players to vote (e.g. an
+        # all-spectator remnant), fall straight through to ``ended``.
+        if self.state.turn_players():
+            await self.start_epilogue()
+        else:
+            self.state = self.state.model_copy(update={"phase": "ended"})
+            await self._broadcast_state()
 
     def _is_blank(self, card) -> bool:
         """True if ``card`` is an un-authored blank (blank flag still set)."""
