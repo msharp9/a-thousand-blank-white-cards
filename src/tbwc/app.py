@@ -1,7 +1,11 @@
 """tbwc.app — FastAPI application factory.
 
 Exposes `app` (the ASGI application) and `create_app()` for testing.
-REST game routes and /ws are mounted by later phases.
+`create_app()` mounts the REST routes (GET /health, POST /rooms,
+POST /rooms/{code}/join) and includes the WebSocket router that serves live
+gameplay at /ws/{room_code}. FastAPI/OpenAPI does not document WebSocket routes,
+so the /ws protocol is described in the app's OpenAPI `description` (rendered at
+the top of /docs) and in the project README.
 """
 
 from __future__ import annotations
@@ -19,6 +23,54 @@ from tbwc.rooms.manager import check_single_worker, room_manager
 from tbwc.ws import router as ws_router
 
 logger = logging.getLogger(__name__)
+
+
+# Rendered at the top of /docs. WebSocket routes are never included in the
+# OpenAPI schema by FastAPI, so the live-gameplay /ws protocol is documented here.
+WS_PROTOCOL_DESCRIPTION = """\
+AI-assisted party card game server.
+
+## WebSocket API — live gameplay
+
+Realtime play happens over a WebSocket, which is **not** listed among the REST
+routes below because FastAPI/OpenAPI does not document WebSocket endpoints.
+
+**Endpoint:** `ws://<host>/ws/{room_code}` (use `wss://` in production).
+
+**Handshake.** Create a room with `POST /rooms`, register a player with
+`POST /rooms/{code}/join` (returns a `player_id`), then open the socket. The
+**first message must be a `join`** envelope carrying that `player_id`; any other
+first message closes the socket. On connect (and reconnect) the server replies
+with a full `state` snapshot. All messages are JSON objects with a `type` field.
+
+### Client → server messages
+
+| type | fields | purpose |
+| --- | --- | --- |
+| `join` | `player_id` (null on first join), `name` | Authenticate the socket into the room; must be the first message. |
+| `start` | — | Build/shuffle the deck, deal starting hands, begin play. |
+| `draw` | — | Draw the top card into your hand (active player only). |
+| `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?` | Play a card; the AI referee interprets it and applies the effect (active player only). |
+| `create_card` | `title`, `description` | Author a new card and interpret it immediately (allowed off-turn). |
+| `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state. |
+| `epilogue_vote` | `card_id`, `keep` | Vote to keep/discard a card during the epilogue phase. |
+
+### Server → client messages
+
+| type | fields | meaning |
+| --- | --- | --- |
+| `state` | `state` | Full game-state snapshot (sent on connect and after every mutation). |
+| `brewing` | `card_id` | The referee is interpreting a card (in-flight indicator). |
+| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict` | Result of interpreting a played/created card. |
+| `effect_applied` | `log_entry` | An effect was applied; human-readable log line. |
+| `preview_result` | `program`, `snippet`, `verdict` | Reply to `preview_card`. |
+| `prompt_choice` | `card_id`, `prompt`, `choices` | Server asks the active player to pick a target. |
+| `epilogue` | `cards` | Epilogue phase opened with the cards created this game. |
+| `error` | `message` | An error (bad message, not your turn, room not found, …). |
+
+Close codes: `4000` bad handshake, `4001` unknown `player_id`, `4004` room not
+found, `4009` connection replaced by a newer socket for the same player.
+"""
 
 
 class CreateRoomResponse(BaseModel):
@@ -78,9 +130,20 @@ def create_app() -> FastAPI:
 
     application = FastAPI(
         title="1000 Blank White Cards",
-        description="AI-assisted party card game server.",
+        description=WS_PROTOCOL_DESCRIPTION,
         version="0.1.0",
         lifespan=lifespan,
+        openapi_tags=[
+            {"name": "meta", "description": "Liveness/health probes."},
+            {"name": "rooms", "description": "Create rooms and register players (REST)."},
+            {
+                "name": "websocket",
+                "description": (
+                    "Live gameplay over `ws://<host>/ws/{room_code}`. Not shown as a "
+                    "route (OpenAPI omits WebSocket endpoints) — see the description above."
+                ),
+            },
+        ],
     )
 
     application.add_middleware(
