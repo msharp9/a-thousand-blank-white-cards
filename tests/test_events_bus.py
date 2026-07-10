@@ -21,14 +21,6 @@ def test_hook_context_constructs() -> None:
     assert ctx.extra == {}
 
 
-def test_with_amount_is_immutable() -> None:
-    ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1")
-    new = ctx.with_amount(10)
-    assert new.amount == 10
-    assert ctx.amount is None
-    assert new is not ctx
-
-
 def test_event_bus_exists() -> None:
     bus = EventBus()
     assert bus is not None

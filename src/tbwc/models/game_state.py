@@ -81,9 +81,6 @@ class GameState(BaseModel):
 
     win_condition: WinCondition = Field(default_factory=WinCondition)
 
-    # Hook registry: list of RegisteredHook ids (actual objects in HookRegistry)
-    persistent_effects: list[str] = Field(default_factory=list)
-
     # House rules == the CENTER zone: ids of CENTER-scoped cards currently in
     # effect / placed in the shared table center. Read via center_cards().
     house_rules: list[str] = Field(default_factory=list)

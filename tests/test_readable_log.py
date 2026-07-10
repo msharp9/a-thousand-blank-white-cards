@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-from tbwc.models.effects import AddPointsOp, EffectProgram
+from tbwc.models.effects import EffectProgram
 from tbwc.models.ws_messages import PlayMsg
 from tbwc.rooms.room import Room
 

@@ -7,7 +7,7 @@ tbwc.engine.hooks (late-imported to avoid a circular dependency).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -20,7 +20,6 @@ class GameEvent(StrEnum):
     ON_TURN_START = "on_turn_start"
     ON_TURN_END = "on_turn_end"
     ON_DRAW_STEP = "on_draw_step"
-    ON_DESTROY_ATTEMPT = "on_destroy_attempt"
     ON_WIN_CHECK = "on_win_check"
     ON_GAME_END = "on_game_end"
 
@@ -40,10 +39,6 @@ class HookContext:
     amount: int | None = None  # points delta, draw count, etc.
     target_player_ids: list[str] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
-
-    def with_amount(self, amount: int) -> HookContext:
-        """Return a shallow copy with amount updated."""
-        return replace(self, amount=amount)
 
 
 class EventBus:
