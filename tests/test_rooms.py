@@ -45,8 +45,9 @@ class TestRoomManager:
         code = mgr.create_room()
         result = mgr.join(code, "Alice")
         assert result is not None
-        returned_code, player_id = result
+        returned_code, player_id, spectator = result
         assert returned_code == code
+        assert spectator is False  # room still in lobby -> normal player
         # UUID-ish: 36 chars, 4 dashes, hex groups
         assert len(player_id) == 36
         assert player_id.count("-") == 4
@@ -75,8 +76,8 @@ class TestRoomManager:
     def test_join_multiple_players_distinct_ids(self) -> None:
         mgr = RoomManager()
         code = mgr.create_room()
-        _, id1 = mgr.join(code, "Alice")
-        _, id2 = mgr.join(code, "Bob")
+        _, id1, _ = mgr.join(code, "Alice")
+        _, id2, _ = mgr.join(code, "Bob")
         assert id1 != id2
         assert mgr.get(code).get_player_ids() == [id1, id2]
 

@@ -17,6 +17,7 @@ interface SetupPhaseProps {
     verdict: string;
   } | null;
   isHost?: boolean;
+  isSpectator?: boolean;
 }
 
 const TARGET_AUTHORED = 5;
@@ -27,6 +28,7 @@ export function SetupPhase({
   send,
   previewResult,
   isHost,
+  isSpectator,
 }: SetupPhaseProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -38,6 +40,20 @@ export function SetupPhase({
     (c) => c.creator_id === myPlayerId || c.author_id === myPlayerId,
   );
   const remaining = Math.max(0, TARGET_AUTHORED - myAuthored.length);
+
+  // A spectator joined after the game started (setup counts as started): they
+  // cannot author cards, so show a watch-only notice instead of the setup UI.
+  if (isSpectator) {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+        <h2 className="text-xl font-bold">Setup in progress</h2>
+        <p className="text-sm italic text-muted-foreground">
+          You joined after the game started — you are spectating and cannot
+          author cards.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">

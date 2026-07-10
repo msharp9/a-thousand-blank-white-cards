@@ -30,6 +30,12 @@ class Player(BaseModel):
     # Cards played and persisting "in front of" this player (the in-play zone).
     in_play: list[str] = Field(default_factory=list)  # card ids
     connected: bool = True
+    # A spectator joined AFTER the game left the lobby. They still live in
+    # `players` (so the WS layer, connection manager and snapshot keep working
+    # over a single list — no parallel `spectators` collection to thread
+    # through every layer), but they take no turn, are never dealt/auto-drawn
+    # to, cannot author or play cards, and are excluded from win scoring.
+    spectator: bool = False
 
 
 class GameState(BaseModel):
@@ -92,8 +98,24 @@ class GameState(BaseModel):
     _skip_next: set[str] = PrivateAttr(default_factory=set)
     _extra_turn: set[str] = PrivateAttr(default_factory=set)
 
+    def turn_players(self) -> list[Player]:
+        """Players who participate in the turn rotation (non-spectators).
+
+        Spectators join after the game leaves the lobby; they live in
+        ``players`` so they still receive state and appear on the table, but
+        they never take a turn. ``turn_index`` always points at a
+        non-spectator (guaranteed by game start and ``advance_turn``), so
+        ``active_player`` can still index ``players`` directly — this helper
+        exists for callers (scoring, tests) that need the participating set.
+        """
+        return [p for p in self.players if not p.spectator]
+
     def active_player(self) -> Player:
-        """Return the player whose turn it currently is."""
+        """Return the player whose turn it currently is.
+
+        ``turn_index`` is maintained (by game start and ``advance_turn``) to
+        always reference a non-spectator, so this indexes ``players`` directly.
+        """
         return self.players[self.turn_index % len(self.players)]
 
     def get_player(self, player_id: str) -> Player:

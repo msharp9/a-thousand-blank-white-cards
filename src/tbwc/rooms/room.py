@@ -51,13 +51,24 @@ class Room:
         self._epilogue: EpilogueManager | None = None
 
     # ── player management ──
-    def add_player(self, player_id: str, name: str) -> None:
-        """Append a player to the immutable GameState (reassigns self.state)."""
-        new_players = [*self.state.players, Player(id=player_id, name=name)]
+    def add_player(self, player_id: str, name: str, spectator: bool = False) -> None:
+        """Append a player to the immutable GameState (reassigns self.state).
+
+        ``spectator=True`` flags a late joiner (game already left the lobby):
+        they still live in ``players`` so they receive state and appear on the
+        table, but they are excluded from the turn rotation, dealing, card
+        authoring and win scoring. The join *policy* (who becomes a spectator)
+        lives in :meth:`RoomManager.join`, which decides the flag from the
+        room's phase; this method just records it.
+        """
+        new_players = [*self.state.players, Player(id=player_id, name=name, spectator=spectator)]
         self.state = self.state.model_copy(update={"players": new_players})
 
     def get_player_ids(self) -> list[str]:
         return [p.id for p in self.state.players]
+
+    def _is_spectator(self, player_id: str) -> bool:
+        return any(p.id == player_id and p.spectator for p in self.state.players)
 
     # ── turn helpers ──
     def _is_active_player(self, player_id: str) -> bool:
@@ -74,6 +85,15 @@ class Room:
 
     async def _dispatch(self, player_id: str, msg) -> None:
         mtype = msg.type
+        # Spectators (joined after the game started) may observe but not act:
+        # reject every game-mutating / authoring message. They still receive all
+        # broadcasts (state, brewing, effect_applied, …) over their socket.
+        # epilogue_vote is intentionally allowed through — spectators created no
+        # cards, so a stray vote is harmless and the epilogue guard handles it —
+        # but every write/authoring path is gated here.
+        if self._is_spectator(player_id) and mtype in {"start", "pass", "play", "create_card", "preview_card"}:
+            await self.connections.send(player_id, {"type": "error", "message": "Spectators cannot take game actions"})
+            return
         if mtype == "start":
             await self._handle_start(player_id)
         elif mtype == "pass":
@@ -104,20 +124,23 @@ class Room:
         offline seed-data file otherwise. Runs in a thread since collection may
         touch the (in-memory) store.
         """
-        # Build enough that the deck still holds >= MIN_DECK after dealing hands.
+        # Only real players are dealt to — spectators (late joiners) get no hand.
+        # In practice ``start`` fires from the lobby, where there are no
+        # spectators yet, but filtering keeps dealing correct regardless.
         players = list(self.state.players)
-        dealt = STARTING_HAND_SIZE * len(players)
+        dealt_to = [p for p in players if not p.spectator]
+        dealt = STARTING_HAND_SIZE * len(dealt_to)
         cards, deck = await asyncio.to_thread(build_deck, min_deck=MIN_DECK + dealt)
 
         # Deal starting hands off the top of the shuffled deck.
-        hands: dict[str, list[str]] = {p.id: list(p.hand) for p in players}
+        hands: dict[str, list[str]] = {p.id: list(p.hand) for p in dealt_to}
         for _ in range(STARTING_HAND_SIZE):
-            for p in players:
+            for p in dealt_to:
                 if not deck:
                     break
                 hands[p.id].append(deck.pop(0))
 
-        new_players = [p.model_copy(update={"hand": hands[p.id]}) for p in players]
+        new_players = [p.model_copy(update={"hand": hands[p.id]}) if p.id in hands else p for p in players]
         merged_cards = {**cards, **self.state.cards}
         self.state = self.state.model_copy(
             update={
@@ -379,7 +402,9 @@ class Room:
         cards = list(self.state.cards.values())
         # normalise to dicts with an 'id' key
         card_dicts = [c if isinstance(c, dict) else c.model_dump() for c in cards]
-        self._epilogue = EpilogueManager(player_ids=self.get_player_ids())
+        # Only real players vote in the epilogue; spectators authored no cards
+        # and must not be counted as expected voters (which would stall the tally).
+        self._epilogue = EpilogueManager(player_ids=[p.id for p in self.state.turn_players()])
         self.state = self.state.model_copy(update={"phase": "epilogue"})
         await self._epilogue.start(card_dicts, self.connections)
         await self._broadcast_state()
