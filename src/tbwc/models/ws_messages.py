@@ -24,14 +24,35 @@ class StartMsg(BaseModel):
     type: Literal["start"] = "start"
 
 
+class DrawMsg(BaseModel):
+    """The active player draws their card(s) for the turn.
+
+    Turn model: draw → play → end turn. Drawing is the FIRST step of a turn and
+    is EXPLICIT (no auto-draw). A player draws once per turn; playing or passing
+    before drawing is rejected while the deck still has cards. Drawing the last
+    card of the deck arms end-of-game: the drawer finishes their turn, then the
+    game ends on the next advance.
+    """
+
+    type: Literal["draw"] = "draw"
+
+
 class PassMsg(BaseModel):
     """The active player ends their turn without playing a card.
 
-    Drawing is automatic at turn start (see Room), so there is no manual `draw`
-    action; a turn ends by playing a card OR by passing.
+    A turn ends by playing a card OR by ending the turn (pass). In the
+    draw→play→end model the player must have drawn first (when the deck is
+    non-empty). ``EndTurnMsg`` ("end_turn") is an accepted alias handled
+    identically.
     """
 
     type: Literal["pass"] = "pass"
+
+
+class EndTurnMsg(BaseModel):
+    """Alias for :class:`PassMsg` — ends the turn. Same handler as ``pass``."""
+
+    type: Literal["end_turn"] = "end_turn"
 
 
 class Placement(BaseModel):
@@ -77,7 +98,7 @@ class EpilogueVoteMsg(BaseModel):
 
 
 ClientMsg = Annotated[
-    Union[JoinMsg, StartMsg, PassMsg, PlayMsg, CreateCardMsg, PreviewCardMsg, EpilogueVoteMsg],
+    Union[JoinMsg, StartMsg, DrawMsg, PassMsg, EndTurnMsg, PlayMsg, CreateCardMsg, PreviewCardMsg, EpilogueVoteMsg],
     Field(discriminator="type"),
 ]
 

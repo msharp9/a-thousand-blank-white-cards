@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 
-import pytest
-from pydantic import TypeAdapter, ValidationError
+from pydantic import TypeAdapter
 
-from tbwc.models.ws_messages import ClientMsg, JoinMsg, PassMsg, PlayMsg, StateMsg
+from tbwc.models.ws_messages import ClientMsg, DrawMsg, EndTurnMsg, JoinMsg, PassMsg, PlayMsg, StateMsg
 
 
 def test_join_msg_json() -> None:
@@ -25,11 +24,21 @@ def test_client_msg_discriminates_pass() -> None:
     assert msg.type == "pass"
 
 
-def test_client_msg_rejects_removed_draw() -> None:
-    # The manual `draw` action was removed with the draw→play→pass turn model.
+def test_client_msg_discriminates_draw() -> None:
+    # The draw→play→end model has an explicit `draw` client message: the active
+    # player draws before they may play or end their turn.
     ta = TypeAdapter(ClientMsg)
-    with pytest.raises(ValidationError):
-        ta.validate_python({"type": "draw"})
+    msg = ta.validate_python({"type": "draw"})
+    assert isinstance(msg, DrawMsg)
+    assert msg.type == "draw"
+
+
+def test_client_msg_discriminates_end_turn() -> None:
+    # `end_turn` is an accepted alias for `pass` in the draw→play→end model.
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python({"type": "end_turn"})
+    assert isinstance(msg, EndTurnMsg)
+    assert msg.type == "end_turn"
 
 
 def test_client_msg_discriminates_play() -> None:
