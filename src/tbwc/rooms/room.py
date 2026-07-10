@@ -240,6 +240,29 @@ class Room:
             return bool(card.get("blank"))
         return bool(getattr(card, "blank", False))
 
+    def _play_destination(self, card) -> str:
+        """Return the zone a played card lands in: "center" | "in_play" | "discard".
+
+        Derived from the card's canonical placement/timing (preserved by bead 1):
+        - placement == "center"                    → the shared table center.
+        - placement == "self" AND timing=="modifier" (a persistent card that keeps
+          modifying future events)                 → the player's in-play zone,
+          i.e. it stays "in front of" the player.
+        - everything else (immediate point cards, cards with no canonical at all,
+          and authored blanks)                     → the discard pile.
+        """
+        canonical = card.get("canonical") if isinstance(card, dict) else getattr(card, "canonical", None)
+        if canonical is None:
+            # No canonical (blanks, plain point cards): resolve-and-discard.
+            return "discard"
+        placement = canonical.get("placement") if isinstance(canonical, dict) else getattr(canonical, "placement", None)
+        timing = canonical.get("timing") if isinstance(canonical, dict) else getattr(canonical, "timing", None)
+        if placement == "center":
+            return "center"
+        if placement == "self" and timing == "modifier":
+            return "in_play"
+        return "discard"
+
     async def _handle_play(self, player_id: str, msg) -> None:
         """Interpret the played card via the agent (in a thread), apply its effect, advance turn.
 
@@ -380,6 +403,14 @@ class Room:
             )
             self.state = apply_effect(self.state, program, ctx)
             await self._log_and_broadcast(f"Played {card_id}")
+
+        # Terminal apply path: the play is committed (all rejection / pending
+        # early-returns above have already returned, so the card is NOT removed
+        # when the play is rejected or held for a prompt_choice). Move the played
+        # card out of the hand into its destination zone. to_player_id only
+        # matters for the in_play destination; it is harmless for center/discard.
+        dest = self._play_destination(card)
+        self.state = self.state.move_card(card_id, "hand", dest, from_player_id=player_id, to_player_id=player_id)
 
         # Playing a card ends the turn: advance (honouring skip/extra/direction
         # flags the play may have set) and start the next player's turn, which
