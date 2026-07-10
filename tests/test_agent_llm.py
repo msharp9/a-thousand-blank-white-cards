@@ -6,15 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tbwc.config import OPENAI_API_KEY_ERROR, get_settings
+from tbwc.config import OPENAI_API_KEY_ERROR
 
-
-@pytest.fixture(autouse=True)
-def _clear_settings_cache() -> None:
-    """Settings is the single source for the OpenAI key; reset the cache per test."""
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
+# Settings isolation (hermetic .env) + cache reset is handled globally by the
+# autouse ``_hermetic_settings`` fixture in tests/conftest.py.
 
 
 def test_uses_env_model(monkeypatch: pytest.MonkeyPatch) -> None:
