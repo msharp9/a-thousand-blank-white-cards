@@ -77,6 +77,22 @@ def test_play_msg_chosen_card_id_defaults_none() -> None:
     assert msg.chosen_card_id is None
 
 
+def test_play_msg_carries_blank_authoring_fields() -> None:
+    # A play of a blank card carries the authored title+description; both default
+    # to None for a normal play.
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python({"type": "play", "card_id": "blank-0", "title": "Gain 3", "description": "Gain 3 points."})
+    assert isinstance(msg, PlayMsg)
+    assert msg.title == "Gain 3"
+    assert msg.description == "Gain 3 points."
+
+
+def test_play_msg_authoring_fields_default_none() -> None:
+    msg = PlayMsg(card_id="c1")
+    assert msg.title is None
+    assert msg.description is None
+
+
 def test_play_msg_without_placement_parses() -> None:
     # The UI no longer collects a zone/target up front; a play message may omit
     # placement entirely (defaults to None).

@@ -409,3 +409,89 @@ def test_deck_exhaustion_end_to_end_via_pass() -> None:
     asyncio.run(room.handle_action("p1", PassMsg()))
     assert room.state.phase == "ended"
     assert room.state.winner_ids == ["p1"]  # p1 has 5, p2 has 0
+
+
+# ── blank cards: authored on play ──
+def _blank_room() -> Room:
+    """Two-player room mid-game with a single blank card 'blank-0' in the deck."""
+    room = _room_with_two_players()
+    room.state = room.state.model_copy(
+        update={
+            "phase": "playing",
+            "deck": ["d1", "d2"],  # non-empty so the post-play auto-draw doesn't end the game
+            "cards": {
+                "blank-0": {"id": "blank-0", "title": "", "description": "", "blank": True, "creator_id": "blank"}
+            },
+        }
+    )
+    return room
+
+
+def _self_points_result() -> dict:
+    """A simple 'give self points' interpretation (no target choice needed)."""
+    return {"program": EffectProgram(ops=[AddPointsOp(target="self", amount=3)]), "snippet": None, "verdict": "ok"}
+
+
+def test_play_blank_authors_card_and_applies_and_advances() -> None:
+    # Playing a blank with title+description fills in the card (title/description
+    # persisted, blank flag cleared, creator set to the player), interprets it,
+    # applies the effect, and advances the turn.
+    room = _blank_room()
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    msg = PlayMsg(card_id="blank-0", title="Gain 3", description="Gain 3 points.")
+    with patch("tbwc.agent.graph.interpret_card", return_value=_self_points_result()) as mock_interp:
+        asyncio.run(room.handle_action("p1", msg))
+    # Card was authored in the registry.
+    card = room.state.cards["blank-0"]
+    assert card["title"] == "Gain 3"
+    assert card["description"] == "Gain 3 points."
+    assert card["creator_id"] == "p1"
+    assert "blank" not in card
+    # Interpreter saw the AUTHORED text (persist-before-interpret ordering).
+    mock_interp.assert_called_once_with("Gain 3", "Gain 3 points.")
+    # Effect applied and turn advanced.
+    assert room.state.get_player("p1").score == 3
+    assert room.state.turn_index == 1
+
+
+def test_play_blank_persists_authoring_before_interpretation_for_followup() -> None:
+    # Core ordering: the authored content is persisted BEFORE interpretation, so
+    # a prompt_choice follow-up play (which omits title/description) re-interprets
+    # the now-real card. Simulate: first play is a blank chooser card (prompts),
+    # second play carries only the chosen_player_id.
+    room = _blank_room()
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    with patch("tbwc.agent.graph.interpret_card", return_value=_chooser_result()) as mock_interp:
+        # First play: author the blank + interpret -> needs a target -> prompt.
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="blank-0", title="Bless", description="give points")))
+        # After the first play the blank is already a real, authored card.
+        card = room.state.cards["blank-0"]
+        assert card["title"] == "Bless"
+        assert "blank" not in card
+        assert room.state.turn_index == 0  # held pending, no advance yet
+        # Follow-up play carries ONLY the choice (no title/description) — the
+        # persisted card lets it re-interpret correctly.
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="blank-0", chosen_player_id="p2")))
+    # Both plays re-interpreted the same authored text.
+    assert mock_interp.call_args_list[0].args == ("Bless", "give points")
+    assert mock_interp.call_args_list[1].args == ("Bless", "give points")
+    assert room.state.get_player("p2").score == 5
+    assert room.state.turn_index == 1
+
+
+def test_play_blank_without_content_is_rejected() -> None:
+    # A blank played with no title/description is guarded: an error is sent, the
+    # card stays blank, and the turn does not advance (nothing interpreted).
+    room = _blank_room()
+    ws1 = AsyncMock()
+    room.connections.connect("p1", ws1)
+    room.connections.connect("p2", AsyncMock())
+    with patch("tbwc.agent.graph.interpret_card", return_value=_self_points_result()) as mock_interp:
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="blank-0")))
+    sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
+    assert "error" in sent_types
+    mock_interp.assert_not_called()
+    assert room.state.cards["blank-0"]["blank"] is True
+    assert room.state.turn_index == 0

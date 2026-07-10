@@ -3,9 +3,13 @@
 The intended start-game flow is:
   (1) collect existing cards — prior-game kept cards + seed cards from the RAG
       corpus, falling back to the offline seed-data file if RAG is unavailable,
-  (2) create those cards into ``state.cards`` (a card_id -> card dict registry),
-  (3) shuffle their ids into ``state.deck`` (padded to >= MIN_DECK cards),
-  (4) leave play/dealing to the caller (Room._handle_start).
+  (2) seed a fraction of BLANK cards into the deck (see BLANK_CARD_RATIO) — the
+      game is literally *A Thousand Blank White Cards*, so blanks are drawable
+      and playable: a blank sits in the hand as blank and is AUTHORED ON PLAY,
+  (3) create every card (real + blank) into ``state.cards`` (a card_id -> card
+      dict registry),
+  (4) shuffle their ids into ``state.deck`` (padded to >= MIN_DECK cards),
+  (5) leave play/dealing to the caller (Room._handle_start).
 
 Everything here is pure and dependency-injectable: pass an ``rng`` for
 deterministic shuffles and a ``card_source`` to bypass RAG/OpenAI in tests.
@@ -23,8 +27,33 @@ logger = logging.getLogger(__name__)
 # A game needs at least this many cards in the deck to start (acceptance: >= 30).
 MIN_DECK = 30
 
+# Fraction of the target deck size (``min_deck``) that is seeded as BLANK cards.
+# Blanks are added ON TOP of the collected real cards and count toward min_deck,
+# so a freshly built deck is roughly this fraction blank (a little less once real
+# cards push the total above min_deck). ~1/3 keeps blanks common — the game is
+# *A Thousand Blank White Cards* — without letting them dominate the deck.
+BLANK_CARD_RATIO = 1 / 3
+
 # Type alias for a card source: a zero-arg callable returning raw card dicts.
 CardSource = Callable[[], list[dict]]
+
+
+def _make_blank_card(n: int) -> dict:
+    """Return a blank card dict (id ``blank-<n>``).
+
+    A blank enters the hand as blank (empty title/description, ``blank`` flag
+    set) and is authored on play: Room._handle_play fills in the title and
+    description, sets ``creator_id`` to the player, and clears the ``blank`` flag
+    before interpreting. ``creator_id`` starts as ``"blank"`` so an un-played
+    blank is attributable to no player.
+    """
+    return {
+        "id": f"blank-{n}",
+        "title": "",
+        "description": "",
+        "blank": True,
+        "creator_id": "blank",
+    }
 
 
 def _normalise_card(raw: dict, index: int) -> dict:
@@ -90,10 +119,17 @@ def build_deck(
     Returns ``(cards, deck)`` where ``cards`` maps card_id -> card dict and
     ``deck`` is a shuffled list of card ids with ``len(deck) >= min_deck``.
 
-    If fewer than ``min_deck`` unique cards are available, the deck is padded
-    with additional copies (each a distinct ``<id>#N`` card added to the
-    registry) so the game can always start. Raises ValueError only if the
-    source yields no cards at all.
+    Composition (deterministic given ``rng``):
+      1. Collect the real cards from the source.
+      2. Seed ``round(min_deck * BLANK_CARD_RATIO)`` BLANK cards (``blank-0`` …)
+         ON TOP of the real cards. Blanks are real registry entries (so they
+         render and can be looked up) and count toward ``min_deck``; they are
+         authored on play (see Room._handle_play).
+      3. If real + blank cards still fall short of ``min_deck``, pad with
+         distinct copies of the REAL cards (each a ``<id>#N`` entry) — blanks
+         are never duplicated.
+
+    Raises ValueError only if the source yields no real cards at all.
     """
     rng = rng or random.Random()
     collected = collect_cards(card_source)
@@ -103,7 +139,14 @@ def build_deck(
     cards: dict[str, dict] = {c["id"]: c for c in collected}
     deck: list[str] = list(cards.keys())
 
-    # Pad with distinct copies when the corpus is smaller than the minimum.
+    # Seed blank cards on top of the real cards (they count toward min_deck).
+    num_blanks = round(min_deck * BLANK_CARD_RATIO)
+    for n in range(num_blanks):
+        blank = _make_blank_card(n)
+        cards[blank["id"]] = blank
+        deck.append(blank["id"])
+
+    # Pad with distinct copies of the REAL cards when still short of the minimum.
     copy_index = 2
     while len(deck) < min_deck:
         for base in collected:
@@ -115,5 +158,10 @@ def build_deck(
         copy_index += 1
 
     rng.shuffle(deck)
-    logger.info("built deck of %d cards from %d unique source cards", len(deck), len(collected))
+    logger.info(
+        "built deck of %d cards from %d unique source cards (%d blanks)",
+        len(deck),
+        len(collected),
+        num_blanks,
+    )
     return cards, deck

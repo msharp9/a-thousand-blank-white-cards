@@ -38,6 +38,9 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
          epilogue_vote) and dispatches to the room, broadcasting server messages
          (state, brewing, card_interpreted, effect_applied, preview_result,
          prompt_choice, epilogue, error). Invalid JSON yields an `error` reply.
+         A `play` of a BLANK card additionally carries the authored
+         `title`+`description`, which the room persists onto the card (author on
+         play) before interpreting it.
     """
     code = room_code.upper()
     room = room_manager.get(code)

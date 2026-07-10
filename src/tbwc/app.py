@@ -49,7 +49,7 @@ with a full `state` snapshot. All messages are JSON objects with a `type` field.
 | --- | --- | --- |
 | `join` | `player_id` (null on first join), `name` | Authenticate the socket into the room; must be the first message. |
 | `start` | — | Build/shuffle the deck, deal starting hands, begin play. |
-| `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?` | Play a card; the AI referee interprets it and applies the effect (active player only). Ends the turn. |
+| `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?` | Play a card; the AI referee interprets it and applies the effect (active player only). Ends the turn. For a BLANK card, the first play carries the authored `title`+`description` (the card is filled in and persisted before interpretation); a prompt_choice follow-up re-sends only `card_id`+the choice. |
 | `pass` | — | End your turn without playing a card (active player only). Drawing is automatic at turn start, so there is no manual `draw`. |
 | `create_card` | `title`, `description` | Author a new card and interpret it immediately (allowed off-turn). |
 | `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state. |
