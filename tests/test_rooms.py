@@ -6,7 +6,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
-from tbwc.models.ws_messages import CreateCardMsg, DrawMsg, PlayMsg, Placement, StartMsg
+from tbwc.models.ws_messages import CreateCardMsg, PassMsg, PlayMsg, Placement, StartMsg
 from tbwc.rooms.connections import ConnectionManager
 from tbwc.rooms.manager import RoomManager
 from tbwc.rooms.room import Room
@@ -87,43 +87,39 @@ class TestRoomManager:
 
 
 class TestRoomTurnEnforcement:
-    def test_draw_off_turn_sends_error_and_leaves_deck_unchanged(self) -> None:
+    def test_pass_off_turn_sends_error_and_leaves_turn_unchanged(self) -> None:
         room = _room_two_players()
         room.state = room.state.model_copy(update={"deck": ["c1", "c2"], "phase": "playing"})
         ws2 = AsyncMock()
         room.connections.connect("p2", ws2)  # p2 is NOT active (turn_index 0 -> p1)
-        asyncio.run(room.handle_action("p2", DrawMsg()))
-        ws2.send_text.assert_called_once()
-        sent = json.loads(ws2.send_text.call_args.args[0])
-        assert sent["type"] == "error"
-        assert "turn" in sent["message"].lower()
+        asyncio.run(room.handle_action("p2", PassMsg()))
+        sent_types = [json.loads(c.args[0])["type"] for c in ws2.send_text.call_args_list]
+        assert "error" in sent_types
+        assert room.state.turn_index == 0
         assert room.state.deck == ["c1", "c2"]
 
-    def test_draw_on_turn_moves_card_to_hand_and_broadcasts(self) -> None:
+    def test_pass_advances_turn_and_auto_draws_for_next(self) -> None:
         room = _room_two_players()
         room.state = room.state.model_copy(update={"deck": ["c1", "c2"], "phase": "playing"})
         ws1, ws2 = AsyncMock(), AsyncMock()
         room.connections.connect("p1", ws1)
         room.connections.connect("p2", ws2)
-        asyncio.run(room.handle_action("p1", DrawMsg()))
-        # deck shrank; drawn card moved to the active player's hand
+        asyncio.run(room.handle_action("p1", PassMsg()))
+        # Turn moved to p2, who auto-drew a card at turn start.
+        assert room.state.turn_index == 1
         assert room.state.deck == ["c2"]
-        assert "c1" in room.state.get_player("p1").hand
-        assert room.state.get_player("p2").hand == []
-        # state broadcast reached both sockets
+        assert room.state.get_player("p2").hand == ["c1"]
+        assert room.state.get_player("p1").hand == []
         ws1.send_text.assert_called()
         ws2.send_text.assert_called()
-        payload = json.loads(ws1.send_text.call_args.args[0])
-        assert payload["type"] == "state"
 
-    def test_draw_empty_deck_sends_error(self) -> None:
+    def test_pass_on_empty_deck_ends_game(self) -> None:
         room = _room_two_players()
         room.state = room.state.model_copy(update={"deck": [], "phase": "playing"})
         ws1 = AsyncMock()
         room.connections.connect("p1", ws1)
-        asyncio.run(room.handle_action("p1", DrawMsg()))
-        sent = json.loads(ws1.send_text.call_args.args[0])
-        assert sent["type"] == "error"
+        asyncio.run(room.handle_action("p1", PassMsg()))
+        assert room.state.phase == "ended"
 
     def test_start_sets_phase_playing(self) -> None:
         room = _room_two_players()

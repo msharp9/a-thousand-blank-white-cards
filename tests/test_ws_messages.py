@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 
-from pydantic import TypeAdapter
+import pytest
+from pydantic import TypeAdapter, ValidationError
 
-from tbwc.models.ws_messages import ClientMsg, DrawMsg, JoinMsg, PlayMsg, StateMsg
+from tbwc.models.ws_messages import ClientMsg, JoinMsg, PassMsg, PlayMsg, StateMsg
 
 
 def test_join_msg_json() -> None:
@@ -17,11 +18,18 @@ def test_join_msg_json() -> None:
     }
 
 
-def test_client_msg_discriminates_draw() -> None:
+def test_client_msg_discriminates_pass() -> None:
     ta = TypeAdapter(ClientMsg)
-    msg = ta.validate_python({"type": "draw"})
-    assert isinstance(msg, DrawMsg)
-    assert msg.type == "draw"
+    msg = ta.validate_python({"type": "pass"})
+    assert isinstance(msg, PassMsg)
+    assert msg.type == "pass"
+
+
+def test_client_msg_rejects_removed_draw() -> None:
+    # The manual `draw` action was removed with the draw→play→pass turn model.
+    ta = TypeAdapter(ClientMsg)
+    with pytest.raises(ValidationError):
+        ta.validate_python({"type": "draw"})
 
 
 def test_client_msg_discriminates_play() -> None:

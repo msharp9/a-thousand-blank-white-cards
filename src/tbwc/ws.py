@@ -34,7 +34,7 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
          issued by POST /rooms/{code}/join (else 4000/4001). A second socket for
          the same player replaces the older one (4009).
       3. Server replays a full `state` snapshot, then loops: it validates each
-         client message (join/start/draw/play/create_card/preview_card/
+         client message (join/start/pass/play/create_card/preview_card/
          epilogue_vote) and dispatches to the room, broadcasting server messages
          (state, brewing, card_interpreted, effect_applied, preview_result,
          prompt_choice, epilogue, error). Invalid JSON yields an `error` reply.
