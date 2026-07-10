@@ -43,6 +43,51 @@ That's the loop: draw, invent, play, watch the rules mutate. The referee keeps i
 
 The backend is a FastAPI app (`src/tbwc/`) with a deterministic game engine, a LangGraph interpretation agent, RAG over a card corpus, and a sandboxed snippet executor; the frontend is a Next.js 16 app in `frontend/`. See the [project write-up](docs/WRITEUP.md#repository-layout) for the full component breakdown and diagrams.
 
+## WebSocket API
+
+Live gameplay runs over a WebSocket. It is intentionally **not** listed in the
+interactive API docs at `/docs` — FastAPI/OpenAPI only documents REST routes, so
+the Swagger page shows just `/health` and the `/rooms` endpoints. This section is
+the durable reference for the realtime protocol.
+
+**Endpoint:** `ws://<host>/ws/{room_code}` (use `wss://` in production).
+
+**Handshake.** Create a room with `POST /rooms`, register a player with
+`POST /rooms/{code}/join` (returns a `player_id`), then open the socket. The
+**first message must be a `join`** envelope carrying that `player_id`. On connect
+(and on reconnect) the server replies with a full `state` snapshot. Every message
+is a JSON object with a `type` field.
+
+**Client → server**
+
+| type | fields | purpose |
+| --- | --- | --- |
+| `join` | `player_id` (null on first join), `name` | Authenticate the socket into the room; must be the first message. |
+| `start` | — | Build/shuffle the deck, deal starting hands, begin play. |
+| `draw` | — | Draw the top card into your hand (active player only). |
+| `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?` | Play a card; the AI referee interprets it and applies the effect (active player only). |
+| `create_card` | `title`, `description` | Author a new card and interpret it immediately (allowed off-turn). |
+| `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state. |
+| `epilogue_vote` | `card_id`, `keep` | Vote to keep/discard a card during the epilogue phase. |
+
+**Server → client**
+
+| type | fields | meaning |
+| --- | --- | --- |
+| `state` | `state` | Full game-state snapshot (sent on connect and after every mutation). |
+| `brewing` | `card_id` | The referee is interpreting a card (in-flight indicator). |
+| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict` | Result of interpreting a played/created card. |
+| `effect_applied` | `log_entry` | An effect was applied; human-readable log line. |
+| `preview_result` | `program`, `snippet`, `verdict` | Reply to `preview_card`. |
+| `prompt_choice` | `card_id`, `prompt`, `choices` | Server asks the active player to pick a target. |
+| `epilogue` | `cards` | Epilogue phase opened with the cards created this game. |
+| `error` | `message` | An error (bad message, not your turn, room not found, …). |
+
+**Close codes:** `4000` bad handshake, `4001` unknown `player_id`, `4004` room
+not found, `4009` connection replaced by a newer socket for the same player.
+
+The message envelopes are defined in [`src/tbwc/models/ws_messages.py`](src/tbwc/models/ws_messages.py); the handler lives in [`src/tbwc/ws.py`](src/tbwc/ws.py).
+
 ## Quickstart — Backend
 
 **Prerequisites:** [`uv`](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.14 (uv can install it for you).
