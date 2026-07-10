@@ -50,3 +50,29 @@ def test_search_preserves_existing_notes() -> None:
     with patch("tbwc.agent.nodes._get_tavily_tool", return_value=fake_tool):
         out = search(_state())
     assert out["search_notes"].startswith("intent [web_search=yes]")
+
+
+def test_tavily_tool_threads_key_from_settings() -> None:
+    """_get_tavily_tool passes Settings.tavily_api_key to TavilySearch (86v)."""
+    nodes._get_tavily_tool.cache_clear()
+    fake_settings = MagicMock(tavily_api_key="sk-tavily-test")
+    with (
+        patch("tbwc.agent.nodes.get_settings", return_value=fake_settings),
+        patch("langchain_tavily.TavilySearch") as MockTavily,
+    ):
+        nodes._get_tavily_tool()
+    MockTavily.assert_called_once_with(max_results=5, tavily_api_key="sk-tavily-test")
+    nodes._get_tavily_tool.cache_clear()
+
+
+def test_tavily_tool_omits_empty_key() -> None:
+    """With no key configured, no empty tavily_api_key kwarg is passed (86v)."""
+    nodes._get_tavily_tool.cache_clear()
+    fake_settings = MagicMock(tavily_api_key="")
+    with (
+        patch("tbwc.agent.nodes.get_settings", return_value=fake_settings),
+        patch("langchain_tavily.TavilySearch") as MockTavily,
+    ):
+        nodes._get_tavily_tool()
+    MockTavily.assert_called_once_with(max_results=5)
+    nodes._get_tavily_tool.cache_clear()

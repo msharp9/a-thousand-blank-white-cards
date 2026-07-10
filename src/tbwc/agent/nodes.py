@@ -9,7 +9,7 @@ from __future__ import annotations
 import functools
 import logging
 import re
-from typing import Any
+from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 
@@ -17,6 +17,7 @@ from tbwc.agent.llm import get_chat_model, with_structured_output
 from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM, JUDGE_SYSTEM
 from tbwc.agent.schemas import Interpretation, SnippetEffect, Verdict
 from tbwc.agent.state import InterpretState
+from tbwc.config import get_settings
 from tbwc.models.effects import EffectProgram, map_authoring_target
 from tbwc.rag.retrievers import advanced_retriever, dense_retriever
 from tbwc.sandbox.validate import validate_snippet as ast_validate
@@ -76,7 +77,7 @@ def _clear_retriever_cache() -> None:
     _RETRIEVER_CACHE.clear()
 
 
-def retrieve(state: InterpretState, config: RunnableConfig | None = None) -> dict:
+def retrieve(state: InterpretState, config: Optional[RunnableConfig] = None) -> dict:
     """Search the RAG store for exemplar cards similar to the card being interpreted.
 
     Reads: state["card_draft"], state["search_notes"]
@@ -143,10 +144,20 @@ def should_search(state: InterpretState) -> str:
 
 @functools.lru_cache(maxsize=1)
 def _get_tavily_tool():
-    """Lazily construct a TavilySearch tool (needs TAVILY_API_KEY)."""
+    """Lazily construct a TavilySearch tool.
+
+    Threads the key from Settings (mirroring agent.llm) since pydantic-settings
+    loads .env into Settings only, not os.environ, and the Tavily wrapper reads
+    os.environ["TAVILY_API_KEY"] by default. Only pass the key when non-empty so
+    an empty string never overrides the wrapper's own env lookup.
+    """
     from langchain_tavily import TavilySearch
 
-    return TavilySearch(max_results=5)
+    key = get_settings().tavily_api_key
+    kwargs: dict[str, Any] = {"max_results": 5}
+    if key:
+        kwargs["tavily_api_key"] = key
+    return TavilySearch(**kwargs)
 
 
 def search(state: InterpretState) -> dict:
@@ -329,7 +340,7 @@ def _format_exemplars_fewshot(retrieved: list[dict]) -> str:
     return "Here are similar example cards and their known-good effects:\n" + "\n".join(blocks) + "\n\n"
 
 
-def emit_ops(state: InterpretState, config: RunnableConfig | None = None) -> dict:
+def emit_ops(state: InterpretState, config: Optional[RunnableConfig] = None) -> dict:
     """Generate an EffectProgram for immediate-mode cards, using retrieved exemplars as few-shot.
 
     Reads: state["card_draft"], state["interpretation"], state["retrieved"]
