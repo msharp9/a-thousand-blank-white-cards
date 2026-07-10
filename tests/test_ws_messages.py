@@ -77,6 +77,15 @@ def test_play_msg_chosen_card_id_defaults_none() -> None:
     assert msg.chosen_card_id is None
 
 
+def test_play_msg_without_placement_parses() -> None:
+    # The UI no longer collects a zone/target up front; a play message may omit
+    # placement entirely (defaults to None).
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python({"type": "play", "card_id": "c1"})
+    assert isinstance(msg, PlayMsg)
+    assert msg.placement is None
+
+
 def test_state_msg_envelope() -> None:
     m = StateMsg(state={"players": []})
     assert m.type == "state"

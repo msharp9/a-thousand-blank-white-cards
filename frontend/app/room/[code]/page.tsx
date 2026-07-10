@@ -3,6 +3,13 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { CreateCardDialog } from "@/components/create-card-dialog";
 import { EffectLog } from "@/components/effect-log";
@@ -11,7 +18,11 @@ import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
 import { HouseRulesZone } from "@/components/house-rules-zone";
 import { SetupPhase } from "@/components/setup-phase";
-import type { CardSnapshot, GameStateSnapshot } from "@/lib/types";
+import type {
+  CardSnapshot,
+  GameStateSnapshot,
+  PromptChoiceMsg,
+} from "@/lib/types";
 import { getPlayerId, storePlayerId, useGameSocket } from "@/lib/ws";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -87,8 +98,17 @@ export default function RoomPage() {
     }
   }, [code, name, joining]);
 
-  const { gameState, log, brewing, previewResult, error, connected, send } =
-    useGameSocket(nameSet ? code : "", name);
+  const {
+    gameState,
+    log,
+    brewing,
+    previewResult,
+    error,
+    connected,
+    promptChoice,
+    clearPromptChoice,
+    send,
+  } = useGameSocket(nameSet ? code : "", name);
 
   const phase = gameState?.phase ?? "lobby";
 
@@ -114,14 +134,6 @@ export default function RoomPage() {
       .map((id) => gameState.cards[id])
       .filter((c): c is CardSnapshot => Boolean(c));
   }, [gameState]);
-
-  const otherPlayers = useMemo(
-    () =>
-      (gameState?.players ?? [])
-        .filter((p) => p.id !== myPlayerId)
-        .map((p) => ({ id: p.id, name: p.name })),
-    [gameState, myPlayerId],
-  );
 
   const isHost = Boolean(
     gameState && myPlayerId && gameState.players[0]?.id === myPlayerId,
@@ -239,12 +251,7 @@ export default function RoomPage() {
                 </Button>
               )}
             </div>
-            <Hand
-              cards={myHandCards}
-              canPlay={isActive}
-              otherPlayers={otherPlayers}
-              send={send}
-            />
+            <Hand cards={myHandCards} canPlay={isActive} send={send} />
             <EffectLog log={log} brewing={brewing} />
           </div>
         )}
@@ -268,7 +275,72 @@ export default function RoomPage() {
         send={send}
         previewResult={previewResult}
       />
+
+      <TargetPickerDialog
+        prompt={promptChoice}
+        onPick={(choice) => {
+          if (!promptChoice) return;
+          // A prompt option carries either a player_id (player-target axis) or a
+          // card_id (card-target axis). Re-send the play with the picked target;
+          // the backend re-interprets, validates, applies, and advances.
+          if (choice.player_id) {
+            send({
+              type: "play",
+              card_id: promptChoice.card_id,
+              chosen_player_id: choice.player_id,
+            });
+          } else if (choice.card_id) {
+            send({
+              type: "play",
+              card_id: promptChoice.card_id,
+              chosen_card_id: choice.card_id,
+            });
+          }
+          clearPromptChoice();
+        }}
+        onCancel={clearPromptChoice}
+      />
     </main>
+  );
+}
+
+// Renders the target picker when the server asks the active player to choose a
+// target for the card they just played. Picking sends a follow-up play carrying
+// the choice; cancelling abandons the pending play (the turn never advanced).
+function TargetPickerDialog({
+  prompt,
+  onPick,
+  onCancel,
+}: {
+  prompt: PromptChoiceMsg | null;
+  onPick: (choice: PromptChoiceMsg["choices"][number]) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Dialog
+      open={Boolean(prompt)}
+      onOpenChange={(open) => {
+        if (!open) onCancel();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Choose a target</DialogTitle>
+          {prompt && <DialogDescription>{prompt.prompt}</DialogDescription>}
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          {prompt?.choices.map((choice) => (
+            <Button
+              key={choice.player_id ?? choice.card_id}
+              variant="outline"
+              onClick={() => onPick(choice)}
+            >
+              {choice.name}
+            </Button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

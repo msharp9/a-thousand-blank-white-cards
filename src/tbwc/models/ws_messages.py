@@ -42,7 +42,10 @@ class Placement(BaseModel):
 class PlayMsg(BaseModel):
     type: Literal["play"] = "play"
     card_id: str
-    placement: Placement
+    # Optional/back-compat: the UI no longer collects a zone/target up front — the
+    # player just picks a card and the interpreter decides whether a target is
+    # needed (surfaced via a prompt_choice follow-up).
+    placement: Placement | None = None
     chosen_player_id: str | None = None  # for prompt_choice cards (player axis)
     chosen_card_id: str | None = None  # for cards that make the actor pick a card
 
