@@ -111,13 +111,42 @@ def _normalise_card(raw: dict, index: int) -> dict:
     return card
 
 
-def collect_cards(card_source: CardSource | None = None) -> list[dict]:
+def venue_allowed(card_venue: str, mode: str) -> bool:
+    """Return whether a card of ``card_venue`` may appear in a ``mode`` game.
+
+    Room ``mode`` is one of {"online", "in_person", "both"}; card ``venue`` is
+    one of {"all", "in_person", "online"} (see CardCanonical.venue):
+
+      * mode "both"      — allows every card (no filtering).
+      * mode "online"    — allows venue in {"all", "online"}; drops "in_person".
+      * mode "in_person" — allows venue in {"all", "in_person"}; drops "online".
+
+    An unknown/missing venue defaults to "all" (always allowed), so blanks and
+    filler cards (which carry no venue) are never filtered out.
+    """
+    if mode == "both":
+        return True
+    if card_venue not in ("all", "in_person", "online"):
+        card_venue = "all"
+    if mode == "online":
+        return card_venue in ("all", "online")
+    if mode == "in_person":
+        return card_venue in ("all", "in_person")
+    # Unknown mode: be permissive rather than silently emptying the deck.
+    return True
+
+
+def collect_cards(card_source: CardSource | None = None, venue_mode: str = "both") -> list[dict]:
     """Collect normalised cards from the given source (or the default source).
 
     The default source tries the RAG corpus first (seed + prior-game kept cards)
     and falls back to reading the offline seed-data file when RAG is unavailable
     (no store initialised / no network / no API key). Duplicate ids are dropped,
     keeping the first occurrence.
+
+    ``venue_mode`` is the room's mode (see :func:`venue_allowed`); cards whose
+    venue is incompatible with it are dropped. It defaults to "both" (no venue
+    filtering) so existing callers are unaffected.
     """
     source = card_source or _default_card_source
     raw_cards = source()
@@ -125,6 +154,8 @@ def collect_cards(card_source: CardSource | None = None) -> list[dict]:
     seen: set[str] = set()
     for index, raw in enumerate(raw_cards):
         card = _normalise_card(raw, index)
+        if not venue_allowed(card.get("venue", "all"), venue_mode):
+            continue
         if card["id"] in seen:
             continue
         seen.add(card["id"])
@@ -153,6 +184,7 @@ def build_deck(
     card_source: CardSource | None = None,
     rng: random.Random | None = None,
     min_deck: int = MIN_DECK,
+    venue_mode: str = "both",
 ) -> tuple[dict[str, dict], list[str]]:
     """Build the card registry and a shuffled deck of at least ``min_deck`` ids.
 
@@ -169,10 +201,14 @@ def build_deck(
          distinct copies of the REAL cards (each a ``<id>#N`` entry) — blanks
          are never duplicated.
 
+    ``venue_mode`` (the room mode) is passed through to :func:`collect_cards`,
+    which drops cards whose venue is incompatible with the mode. It defaults to
+    "both" (no venue filtering).
+
     Raises ValueError only if the source yields no real cards at all.
     """
     rng = rng or random.Random()
-    collected = collect_cards(card_source)
+    collected = collect_cards(card_source, venue_mode)
     if not collected:
         raise ValueError("no cards available to build a deck (empty card source)")
 

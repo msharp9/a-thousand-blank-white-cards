@@ -6,7 +6,13 @@ import random
 
 import pytest
 
-from tbwc.rooms.deck import BLANK_CARD_RATIO, MIN_DECK, build_deck, collect_cards
+from tbwc.rooms.deck import (
+    BLANK_CARD_RATIO,
+    MIN_DECK,
+    build_deck,
+    collect_cards,
+    venue_allowed,
+)
 
 
 def _fake_source(n: int):
@@ -163,6 +169,105 @@ def test_build_deck_default_source_uses_offline_seed_file() -> None:
     cards, deck = build_deck(rng=random.Random(0))
     assert len(deck) >= MIN_DECK
     assert all(cid in cards for cid in deck)
+
+
+# --------------------------------------------------------------------------
+# Venue filtering (bd 70n.16)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("card_venue", "mode", "expected"),
+    [
+        # mode "both" allows everything.
+        ("all", "both", True),
+        ("online", "both", True),
+        ("in_person", "both", True),
+        # mode "online" drops in_person.
+        ("all", "online", True),
+        ("online", "online", True),
+        ("in_person", "online", False),
+        # mode "in_person" drops online.
+        ("all", "in_person", True),
+        ("in_person", "in_person", True),
+        ("online", "in_person", False),
+    ],
+)
+def test_venue_allowed_truth_table(card_venue: str, mode: str, expected: bool) -> None:
+    assert venue_allowed(card_venue, mode) is expected
+
+
+def test_venue_allowed_unknown_venue_defaults_to_all() -> None:
+    # An unrecognised venue is treated as "all" (always allowed).
+    assert venue_allowed("teleport", "online") is True
+    assert venue_allowed("", "in_person") is True
+
+
+def _mixed_venue_source():
+    """A source with one card of each venue plus a venue-less filler."""
+
+    def source() -> list[dict]:
+        base = {"timing": "immediate", "target": "self", "placement": "self", "ops": []}
+        return [
+            {"id": "a", "title": "All", "description": "d", "canonical": {**base, "venue": "all"}},
+            {"id": "o", "title": "Online", "description": "d", "canonical": {**base, "venue": "online"}},
+            {"id": "p", "title": "InPerson", "description": "d", "canonical": {**base, "venue": "in_person"}},
+            {"id": "f", "title": "Filler", "description": "d"},  # no canonical -> venue "all"
+        ]
+
+    return source
+
+
+def test_collect_cards_venue_mode_online_drops_in_person() -> None:
+    ids = [c["id"] for c in collect_cards(_mixed_venue_source(), venue_mode="online")]
+    assert ids == ["a", "o", "f"]  # in_person dropped
+
+
+def test_collect_cards_venue_mode_in_person_drops_online() -> None:
+    ids = [c["id"] for c in collect_cards(_mixed_venue_source(), venue_mode="in_person")]
+    assert ids == ["a", "p", "f"]  # online dropped
+
+
+def test_collect_cards_venue_mode_both_keeps_all() -> None:
+    ids = [c["id"] for c in collect_cards(_mixed_venue_source(), venue_mode="both")]
+    assert ids == ["a", "o", "p", "f"]
+
+
+def test_collect_cards_default_venue_mode_is_both() -> None:
+    # No venue_mode arg = "both" = no filtering (back-compat).
+    ids = [c["id"] for c in collect_cards(_mixed_venue_source())]
+    assert ids == ["a", "o", "p", "f"]
+
+
+def test_build_deck_online_contains_no_in_person_cards() -> None:
+    cards, deck = build_deck(
+        card_source=_mixed_venue_source(),
+        rng=random.Random(1),
+        venue_mode="online",
+    )
+    # No card (real or padded copy) carries venue in_person.
+    assert all(c.get("venue", "all") != "in_person" for c in cards.values())
+
+
+def test_venue_less_card_is_always_kept() -> None:
+    # Filler/blank-shaped card without a venue survives even a filtered mode.
+    def source() -> list[dict]:
+        return [{"id": "nv", "title": "NoVenue", "description": "d"}]
+
+    for mode in ("online", "in_person", "both"):
+        (card,) = collect_cards(source, venue_mode=mode)
+        assert card["id"] == "nv"
+
+
+def test_seed_data_has_an_in_person_card() -> None:
+    # The premade pool must tag at least one physical card as in_person so that
+    # venue filtering has a real effect on the default deck.
+    import json
+    from pathlib import Path
+
+    seed = json.loads(Path("data/seed_cards.json").read_text())
+    venues = [c.get("canonical", {}).get("venue") for c in seed]
+    assert "in_person" in venues
 
 
 def test_default_source_prefers_rag_when_populated() -> None:

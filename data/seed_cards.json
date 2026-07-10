@@ -295,6 +295,7 @@
       "target": "all",
       "placement": "center",
       "trigger": "on_physical_action",
+      "venue": "in_person",
       "snippet": "If any player stands from their seat while this card is in play, they lose 5 points. Honor system applies."
     }
   },
