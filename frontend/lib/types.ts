@@ -13,8 +13,15 @@ export type Placement = {
 
 export type JoinMsg = { type: "join"; player_id: string | null; name: string };
 export type StartMsg = { type: "start" };
-// Drawing is automatic at turn start; a turn ends by playing a card OR passing.
+// A turn begins with an explicit draw step; the active player then plays a card
+// OR ends their turn. Drawing is no longer automatic — the client sends `draw`
+// at turn start (gated by has_drawn), and the Play action is blocked until then.
+export type DrawMsg = { type: "draw" };
+// A turn ends by playing a card OR ending the turn. `pass` and `end_turn` are
+// aliases; the backend only lets the active player end without playing when they
+// hold no playable card (can_pass).
 export type PassMsg = { type: "pass" };
+export type EndTurnMsg = { type: "end_turn" };
 export type PlayMsg = {
   type: "play";
   card_id: string;
@@ -51,7 +58,9 @@ export type EpilogueVoteMsg = {
 export type ClientMsg =
   | JoinMsg
   | StartMsg
+  | DrawMsg
   | PassMsg
+  | EndTurnMsg
   | PlayMsg
   | CreateCardMsg
   | PreviewCardMsg
@@ -79,6 +88,9 @@ export type PlayerSnapshot = {
   name: string;
   score: number;
   hand: string[];
+  // Cards this player has played in front of them (visible to everyone on the
+  // table). Resolve ids against GameStateSnapshot.cards to render them.
+  in_play: string[];
   connected: boolean;
   // True for a late joiner seated as a spectator (joined after the game left
   // the lobby). Spectators appear on the table but take no turn and cannot
@@ -97,8 +109,20 @@ export type GameStateSnapshot = {
   discard: string[];
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
-  // Populated when phase === "ended": winning player ids (empty = no winner,
-  // multiple = tie). Mirrors GameState.winner_ids in the backend.
+  // Whether the active player has taken their draw step this turn. The Draw
+  // button shows while false; the Play action is gated until true.
+  has_drawn: boolean;
+  // Whether the active player may end their turn without playing. True only when
+  // they hold NO playable card (e.g. no blank to author), so the Pass/End turn
+  // button is hidden whenever they could still play.
+  can_pass: boolean;
+  // During setup: {player_id: number of cards authored so far}.
+  setup_progress: Record<string, number>;
+  // How many cards each player must author during setup (currently 5).
+  cards_to_author: number;
+  // Winning player ids (empty = no winner, multiple = tie). Set when the deck is
+  // exhausted and the game resolves scoring — i.e. populated from the "epilogue"
+  // phase onward, not only at "ended". Mirrors GameState.winner_ids.
   winner_ids: string[];
   log: string[];
 };

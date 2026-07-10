@@ -20,7 +20,7 @@ interface SetupPhaseProps {
   isSpectator?: boolean;
 }
 
-const TARGET_AUTHORED = 5;
+const DEFAULT_TARGET_AUTHORED = 5;
 
 export function SetupPhase({
   gameState,
@@ -32,6 +32,10 @@ export function SetupPhase({
 }: SetupPhaseProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // How many cards each player must author, from the backend (fall back to the
+  // historical default if an older snapshot omits it).
+  const target = gameState.cards_to_author ?? DEFAULT_TARGET_AUTHORED;
+
   const me = gameState.players.find((p) => p.id === myPlayerId);
   const myCards: CardSnapshot[] = (me?.hand ?? [])
     .map((id) => gameState.cards[id])
@@ -39,7 +43,18 @@ export function SetupPhase({
   const myAuthored = Object.values(gameState.cards).filter(
     (c) => c.creator_id === myPlayerId || c.author_id === myPlayerId,
   );
-  const remaining = Math.max(0, TARGET_AUTHORED - myAuthored.length);
+  // Prefer the backend's authoritative per-player count; fall back to the local
+  // tally of authored cards if setup_progress is missing.
+  const myAuthoredCount =
+    gameState.setup_progress?.[myPlayerId] ?? myAuthored.length;
+  const remaining = Math.max(0, target - myAuthoredCount);
+
+  // The 30 pre-made pool cards: during setup the backend parks the premade pool
+  // in state.deck, so resolving those ids gives exactly the pool to show for
+  // authoring-with-synergy.
+  const premadeCards: CardSnapshot[] = gameState.deck
+    .map((id) => gameState.cards[id])
+    .filter((c): c is CardSnapshot => Boolean(c));
 
   // A spectator joined after the game started (setup counts as started): they
   // cannot author cards, so show a watch-only notice instead of the setup UI.
@@ -60,8 +75,19 @@ export function SetupPhase({
       <div>
         <h2 className="text-xl font-bold">Setup — Author your cards</h2>
         <p className="text-sm text-muted-foreground">
-          Write {TARGET_AUTHORED} cards to seed the deck. {remaining} to go.
+          Write {target} cards to seed the deck. {remaining} to go.
         </p>
+        {gameState.setup_progress && gameState.players.length > 0 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {gameState.players
+              .filter((p) => !p.spectator)
+              .map(
+                (p) =>
+                  `${p.name} ${gameState.setup_progress[p.id] ?? 0}/${target}`,
+              )
+              .join(", ")}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -96,6 +122,24 @@ export function SetupPhase({
           <ScrollArea className="w-full">
             <div className="flex gap-2 pb-2">
               {myCards.map((card) => (
+                <CardTile key={card.id} card={card} className="shrink-0" />
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
+      {premadeCards.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium">
+            Pre-made cards in the deck ({premadeCards.length})
+          </p>
+          <p className="text-xs text-muted-foreground">
+            These ship with the deck — author cards that play well with them.
+          </p>
+          <ScrollArea className="w-full">
+            <div className="flex gap-2 pb-2">
+              {premadeCards.map((card) => (
                 <CardTile key={card.id} card={card} className="shrink-0" />
               ))}
             </div>

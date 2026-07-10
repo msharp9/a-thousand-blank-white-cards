@@ -1,5 +1,9 @@
 import { Badge } from "@/components/ui/badge";
-import type { GameStateSnapshot, PlayerSnapshot } from "@/lib/types";
+import type {
+  CardSnapshot,
+  GameStateSnapshot,
+  PlayerSnapshot,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface GameTableProps {
@@ -8,7 +12,7 @@ interface GameTableProps {
 }
 
 export function GameTable({ gameState, myPlayerId }: GameTableProps) {
-  const { players, turn_index, direction, deck } = gameState;
+  const { players, turn_index, direction, deck, cards } = gameState;
   const activePlayer = players.length
     ? players[turn_index % players.length]
     : undefined;
@@ -29,6 +33,7 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
           <PlayerTile
             key={player.id}
             player={player}
+            cards={cards}
             isActive={!player.spectator && player.id === activePlayer?.id}
             isMe={player.id === myPlayerId}
           />
@@ -40,13 +45,21 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
 
 function PlayerTile({
   player,
+  cards,
   isActive,
   isMe,
 }: {
   player: PlayerSnapshot;
+  cards: Record<string, CardSnapshot>;
   isActive: boolean;
   isMe: boolean;
 }) {
+  // Cards this player has played in front of them, resolved to snapshots so
+  // everyone at the table can see what others played.
+  const inPlayCards = (player.in_play ?? [])
+    .map((id) => cards[id])
+    .filter((c): c is CardSnapshot => Boolean(c));
+
   return (
     <div
       className={cn(
@@ -75,6 +88,24 @@ function PlayerTile({
       {isActive && <Badge className="text-[10px]">active</Badge>}
       {!player.connected && (
         <span className="text-[10px] text-muted-foreground">offline</span>
+      )}
+      {inPlayCards.length > 0 && (
+        <div className="mt-1 flex w-full flex-col items-center gap-1">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            In play
+          </span>
+          <div className="flex flex-wrap justify-center gap-1">
+            {inPlayCards.map((card) => (
+              <span
+                key={card.id}
+                className="max-w-[100px] truncate rounded border bg-muted/40 px-1.5 py-0.5 text-[10px]"
+                title={card.description || card.title}
+              >
+                {card.title || "Untitled"}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

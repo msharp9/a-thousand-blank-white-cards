@@ -148,6 +148,17 @@ export default function RoomPage() {
     [gameState],
   );
 
+  // Winner names for the epilogue banner: the backend resolves scoring and sets
+  // winner_ids at the playing → epilogue transition, so they're known before
+  // voting. Empty when there's no winner (banner is hidden).
+  const epilogueWinnerNames: string[] = useMemo(() => {
+    if (!gameState) return [];
+    const ids = gameState.winner_ids ?? [];
+    return gameState.players
+      .filter((p) => ids.includes(p.id))
+      .map((p) => p.name);
+  }, [gameState]);
+
   // ── name gate ──
   if (!nameSet) {
     return (
@@ -255,20 +266,45 @@ export default function RoomPage() {
               </p>
             ) : (
               <>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={() => setDialogOpen(true)}>
                     Author a card
                   </Button>
-                  {isActive && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => send({ type: "pass" })}
-                    >
-                      Pass
-                    </Button>
-                  )}
+                  {/* Turn begins with an explicit draw step: show Draw while the
+                      active player hasn't drawn and the deck isn't empty. */}
+                  {isActive &&
+                    !gameState.has_drawn &&
+                    gameState.deck.length > 0 && (
+                      <Button onClick={() => send({ type: "draw" })}>
+                        Draw a card
+                      </Button>
+                    )}
+                  {/* End turn only when the player may pass (holds no playable
+                      card) and has taken their draw step (or the deck is empty
+                      so there's nothing to draw). */}
+                  {isActive &&
+                    gameState.can_pass &&
+                    (gameState.has_drawn || gameState.deck.length === 0) && (
+                      <Button
+                        variant="secondary"
+                        className="ml-auto"
+                        onClick={() => send({ type: "pass" })}
+                      >
+                        End turn
+                      </Button>
+                    )}
                 </div>
-                <Hand cards={myHandCards} canPlay={isActive} send={send} />
+                {isActive && !gameState.has_drawn && (
+                  <p className="text-sm font-medium text-primary">
+                    Your turn — draw a card to begin.
+                  </p>
+                )}
+                {/* Playing is gated until the draw step is taken. */}
+                <Hand
+                  cards={myHandCards}
+                  canPlay={isActive && gameState.has_drawn}
+                  send={send}
+                />
               </>
             )}
             <EffectLog log={log} brewing={brewing} />
@@ -276,7 +312,17 @@ export default function RoomPage() {
         )}
 
         {gameState && phase === "epilogue" && (
-          <EpilogueView cards={epilogueCards} send={send} />
+          <div className="flex flex-col gap-4">
+            {epilogueWinnerNames.length > 0 && (
+              <div className="mx-auto rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-center">
+                <p className="text-sm font-semibold text-primary">
+                  {epilogueWinnerNames.length > 1 ? "Winners" : "Winner"}:{" "}
+                  {epilogueWinnerNames.join(", ")}
+                </p>
+              </div>
+            )}
+            <EpilogueView cards={epilogueCards} send={send} />
+          </div>
         )}
 
         {gameState && phase === "ended" && (
