@@ -6,15 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tbwc.config import get_settings
-
-
-@pytest.fixture(autouse=True)
-def _clear_settings_cache() -> None:
-    """Settings is the single source for the OpenAI key; reset the cache per test."""
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
+# Settings isolation (hermetic .env) + Settings-cache reset is handled globally
+# by the autouse ``_hermetic_settings`` fixture in tests/conftest.py. The
+# ``get_embeddings`` LRU cache cleared below is a *separate* cache.
 
 
 def test_get_embeddings_uses_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
