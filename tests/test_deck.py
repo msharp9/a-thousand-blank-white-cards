@@ -32,6 +32,71 @@ def test_collect_cards_normalises_and_dedupes() -> None:
     assert cards[0]["creator_id"] == "seed"
 
 
+def test_collect_cards_preserves_canonical_ops_and_venue() -> None:
+    # A structured (gold) card must carry its canonical/ops/venue through
+    # normalisation — otherwise the deterministic play path has no ops to run.
+    def source() -> list[dict]:
+        return [
+            {
+                "id": "g",
+                "title": "Gain 5",
+                "description": "Gain 5 points.",
+                "canonical": {
+                    "timing": "immediate",
+                    "target": "self",
+                    "placement": "self",
+                    "venue": "in_person",
+                    "ops": [{"op": "add_points", "args": {"amount": 5, "target": "self"}}],
+                },
+            }
+        ]
+
+    (card,) = collect_cards(source)
+    assert card["canonical"]["timing"] == "immediate"
+    assert card["ops"] == [{"op": "add_points", "args": {"amount": 5, "target": "self"}}]
+    assert card["venue"] == "in_person"
+
+
+def test_collect_cards_parses_canonical_json_string_from_rag() -> None:
+    # The RAG store persists canonical as a JSON string payload; normalisation
+    # must parse it back into a dict and default venue to "all".
+    import json as _json
+
+    def source() -> list[dict]:
+        return [
+            {
+                "card_id": "r",
+                "title": "R",
+                "description": "d",
+                "source": "seed",
+                "canonical": _json.dumps({"timing": "immediate", "target": "self", "placement": "self", "ops": []}),
+            }
+        ]
+
+    (card,) = collect_cards(source)
+    assert isinstance(card["canonical"], dict)
+    assert card["ops"] == []
+    assert card["venue"] == "all"
+
+
+def test_collect_cards_without_canonical_has_no_ops_key() -> None:
+    # Filler cards (no canonical) stay minimal — no canonical/ops keys leak in.
+    def source() -> list[dict]:
+        return [{"id": "f", "title": "F", "description": "d"}]
+
+    (card,) = collect_cards(source)
+    assert "canonical" not in card
+    assert "ops" not in card
+
+
+def test_collect_cards_empty_canonical_string_is_ignored() -> None:
+    def source() -> list[dict]:
+        return [{"id": "e", "title": "E", "description": "d", "canonical": ""}]
+
+    (card,) = collect_cards(source)
+    assert "canonical" not in card
+
+
 def test_build_deck_meets_minimum_with_small_source() -> None:
     # Only 4 unique cards, but the deck must still reach MIN_DECK via padding.
     rng = random.Random(1)

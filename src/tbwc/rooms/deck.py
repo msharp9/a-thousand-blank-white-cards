@@ -18,6 +18,7 @@ No live external service (Qdrant/OpenAI) is required to build a deck.
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 from collections.abc import Callable
@@ -56,19 +57,58 @@ def _make_blank_card(n: int) -> dict:
     }
 
 
+def _coerce_canonical(raw_canonical: object) -> dict | None:
+    """Return a card's ``canonical`` annotation as a dict, or ``None``.
+
+    The two card sources encode canonical differently: the offline seed file
+    (``data/*.json``) carries it as a nested dict, while the RAG store persists
+    it as a JSON string payload (see ``rag.store.upsert_card``). Normalise both
+    to a dict so downstream (``engine.compile.compile_card``) has one shape to
+    read. Empty strings, ``None`` and unparseable/degenerate values yield
+    ``None`` (i.e. "no structured annotation").
+    """
+    if raw_canonical is None or raw_canonical == "":
+        return None
+    if isinstance(raw_canonical, dict):
+        return raw_canonical
+    if isinstance(raw_canonical, str):
+        try:
+            parsed = json.loads(raw_canonical)
+        except ValueError:  # JSONDecodeError subclasses ValueError
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
 def _normalise_card(raw: dict, index: int) -> dict:
     """Coerce a raw card (RAG payload or seed-file entry) into a game card dict.
 
     RAG payloads key the id as ``card_id``; seed-file entries key it as ``id``.
     Missing ids get a stable ``deck-NNN`` fallback so nothing collides silently.
+
+    Crucially this preserves the card's structured game logic: ``canonical``
+    (normalised to a dict via :func:`_coerce_canonical`), the ``ops`` and
+    ``venue`` lifted out of it for convenient top-level access, and the raw
+    ``description`` snippet. Historically this function dropped everything but
+    id/title/description/creator_id, which stripped the ops off every card and
+    forced every play through the LLM interpreter — the deterministic play path
+    depends on these fields surviving into ``state.cards``.
     """
     card_id = raw.get("id") or raw.get("card_id") or f"deck-{index:03d}"
-    return {
+    canonical = _coerce_canonical(raw.get("canonical"))
+    card: dict = {
         "id": card_id,
         "title": raw.get("title", ""),
         "description": raw.get("description", ""),
         "creator_id": raw.get("source", "seed"),
     }
+    if canonical is not None:
+        card["canonical"] = canonical
+        # Lift ops/venue to the top level so callers need not re-parse canonical.
+        if canonical.get("ops") is not None:
+            card["ops"] = canonical["ops"]
+        card["venue"] = canonical.get("venue", "all")
+    return card
 
 
 def collect_cards(card_source: CardSource | None = None) -> list[dict]:
