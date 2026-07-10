@@ -24,8 +24,14 @@ class StartMsg(BaseModel):
     type: Literal["start"] = "start"
 
 
-class DrawMsg(BaseModel):
-    type: Literal["draw"] = "draw"
+class PassMsg(BaseModel):
+    """The active player ends their turn without playing a card.
+
+    Drawing is automatic at turn start (see Room), so there is no manual `draw`
+    action; a turn ends by playing a card OR by passing.
+    """
+
+    type: Literal["pass"] = "pass"
 
 
 class Placement(BaseModel):
@@ -60,7 +66,7 @@ class EpilogueVoteMsg(BaseModel):
 
 
 ClientMsg = Annotated[
-    Union[JoinMsg, StartMsg, DrawMsg, PlayMsg, CreateCardMsg, PreviewCardMsg, EpilogueVoteMsg],
+    Union[JoinMsg, StartMsg, PassMsg, PlayMsg, CreateCardMsg, PreviewCardMsg, EpilogueVoteMsg],
     Field(discriminator="type"),
 ]
 

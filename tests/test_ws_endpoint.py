@@ -58,7 +58,7 @@ def test_first_message_must_be_join(client: TestClient) -> None:
     code = client.post("/rooms").json()["code"]
     client.post(f"/rooms/{code}/join", json={"name": "Alice"})
     with client.websocket_connect(f"/ws/{code}") as ws:
-        ws.send_json({"type": "draw"})  # not a join
+        ws.send_json({"type": "pass"})  # not a join
         msg = ws.receive_json()
         assert msg["type"] == "error"
         assert "join" in msg["message"].lower()

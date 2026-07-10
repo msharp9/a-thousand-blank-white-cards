@@ -9,7 +9,8 @@ export type Placement = {
 
 export type JoinMsg = { type: "join"; player_id: string | null; name: string };
 export type StartMsg = { type: "start" };
-export type DrawMsg = { type: "draw" };
+// Drawing is automatic at turn start; a turn ends by playing a card OR passing.
+export type PassMsg = { type: "pass" };
 export type PlayMsg = {
   type: "play";
   card_id: string;
@@ -35,7 +36,7 @@ export type EpilogueVoteMsg = {
 export type ClientMsg =
   | JoinMsg
   | StartMsg
-  | DrawMsg
+  | PassMsg
   | PlayMsg
   | CreateCardMsg
   | PreviewCardMsg
@@ -73,6 +74,9 @@ export type GameStateSnapshot = {
   discard: string[];
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
+  // Populated when phase === "ended": winning player ids (empty = no winner,
+  // multiple = tie). Mirrors GameState.winner_ids in the backend.
+  winner_ids: string[];
   log: string[];
 };
 

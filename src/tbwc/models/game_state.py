@@ -80,6 +80,12 @@ class GameState(BaseModel):
 
     phase: Literal["lobby", "setup", "playing", "epilogue", "ended"] = "lobby"
 
+    # Winner player ids, populated when the game ends (phase == "ended"). A tie
+    # yields multiple ids; an empty list means "no winner" (e.g. win_condition
+    # "none"). Surfaced in the snapshot so the frontend can render a win/lose
+    # result without parsing the log.
+    winner_ids: list[str] = Field(default_factory=list)
+
     log: list[str] = Field(default_factory=list)
 
     # Engine-internal turn bookkeeping (not serialized).

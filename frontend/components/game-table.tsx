@@ -8,7 +8,7 @@ interface GameTableProps {
 }
 
 export function GameTable({ gameState, myPlayerId }: GameTableProps) {
-  const { players, turn_index, direction } = gameState;
+  const { players, turn_index, direction, deck } = gameState;
   const activePlayer = players.length
     ? players[turn_index % players.length]
     : undefined;
@@ -17,9 +17,12 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span>Turn order:</span>
         <span className="font-mono">{directionLabel}</span>
+        <span className="ml-auto tabular-nums" title="Cards left in the deck">
+          Deck: {deck.length}
+        </span>
       </div>
       <div className="flex flex-wrap gap-3">
         {players.map((player) => (

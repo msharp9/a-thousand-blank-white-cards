@@ -2,10 +2,21 @@
 
 Room owns an immutable GameState (replaced on each mutation) and serialises all
 handle_action calls with an asyncio.Lock so concurrent WebSocket messages cannot
-corrupt turn order. Draw/play require the active player's turn; card creation and
+corrupt turn order. Play/pass require the active player's turn; card creation and
 preview are allowed off-turn. Play and create_card run the agent interpretation
 graph via asyncio.to_thread (with a "brewing" broadcast), applying resulting
 effects through the engine.
+
+Turn model (draw → play → pass): drawing is AUTOMATIC. When a player's turn
+begins (game start for the first player, and after every turn advance) the room
+auto-draws ``draw_count`` card(s) into their hand. A turn ends when the active
+player plays a card OR sends an explicit ``pass``; either advances the turn,
+which triggers the next player's auto-draw. There is no manual ``draw`` action,
+so a player can never draw beyond the automatic turn-start draw.
+
+End game: when a turn begins and the deck is empty (the previous player drew the
+last card and finished their turn), the game transitions straight to
+``phase="ended"`` with computed ``winner_ids`` broadcast to everyone.
 """
 
 from __future__ import annotations
@@ -16,6 +27,8 @@ import uuid
 
 from tbwc.engine.apply import apply_effect
 from tbwc.engine.events import GameEvent, HookContext
+from tbwc.engine.loop import advance_turn
+from tbwc.engine.scoring import evaluate_win_condition
 from tbwc.models.game_state import GameState, Player
 from tbwc.rooms.connections import ConnectionManager
 from tbwc.rooms.deck import MIN_DECK, build_deck
@@ -63,11 +76,11 @@ class Room:
         mtype = msg.type
         if mtype == "start":
             await self._handle_start(player_id)
-        elif mtype == "draw":
+        elif mtype == "pass":
             if not self._is_active_player(player_id):
                 await self.connections.send(player_id, {"type": "error", "message": "Not your turn"})
                 return
-            await self._handle_draw(player_id)
+            await self._handle_pass(player_id)
         elif mtype == "play":
             if not self._is_active_player(player_id):
                 await self.connections.send(player_id, {"type": "error", "message": "Not your turn"})
@@ -115,17 +128,88 @@ class Room:
             }
         )
         await self._broadcast_state()
+        # Begin the first player's turn: auto-draw (draw → play → pass model).
+        if self.state.players:
+            await self._start_turn(self.state.active_player().id)
 
-    async def _handle_draw(self, player_id: str) -> None:
+    # ── turn lifecycle (auto-draw → play → pass → advance) ──
+    async def _start_turn(self, player_id: str) -> None:
+        """Begin ``player_id``'s turn: auto-draw, or end the game if the deck is dry.
+
+        Draws ``draw_count`` cards into the player's hand. Since determining a
+        truly "playable" card is nontrivial (nearly any non-blank card is
+        arguably playable and card authoring exists), we apply the "draw a second
+        card if you have no playable card" rule PRAGMATICALLY: we use "has at
+        least one card in hand" as the playable proxy, so we only draw one extra
+        card when the hand would otherwise be empty. This keeps the rule simple
+        and avoids a speculative playability analyzer.
+
+        If the deck is empty when the turn begins, the previous player already
+        drew the last card and finished their turn, so the game ends now.
+        """
         if not self.state.deck:
-            await self.connections.send(player_id, {"type": "error", "message": "Deck is empty"})
+            await self._end_game()
             return
-        drawn, *rest = self.state.deck
+
+        self._draw_cards(player_id, self.state.draw_count)
+
+        # Second-draw rule (pragmatic): only when the hand is still empty and a
+        # card remains to be drawn. "Has a card in hand" is the playability proxy.
+        if not self.state.get_player(player_id).hand and self.state.deck:
+            self._draw_cards(player_id, 1)
+
+        await self._broadcast_state()
+
+    def _draw_cards(self, player_id: str, count: int) -> None:
+        """Move up to ``count`` cards from the top of the deck into a hand (in place
+        on self.state via immutable copy). Stops early if the deck runs out."""
+        n = min(count, len(self.state.deck))
+        if n <= 0:
+            return
+        drawn, rest = self.state.deck[:n], self.state.deck[n:]
         new_players = [
-            p.model_copy(update={"hand": [*p.hand, drawn]}) if p.id == player_id else p for p in self.state.players
+            p.model_copy(update={"hand": [*p.hand, *drawn]}) if p.id == player_id else p for p in self.state.players
         ]
         self.state = self.state.model_copy(update={"deck": rest, "players": new_players})
+
+    async def _advance_turn(self) -> None:
+        """Advance to the next player, then start their turn (auto-draw / end-game).
+
+        Reuses ``engine.loop.advance_turn`` so direction, skip-next, extra-turn
+        and any registered skip predicate are all honoured — those flags are set
+        by the reducers during a play's apply_effect and read here off the same
+        (immutable) state. Runs under the caller's lock, so auto-draw + advance
+        is a single serialized operation with no interleaving.
+        """
+        if not self.state.players:
+            return
+        self.state = advance_turn(self.state)
+        await self._start_turn(self.state.active_player().id)
+
+    async def _handle_pass(self, player_id: str) -> None:
+        """Active player ends their turn without playing a card."""
+        await self.connections.broadcast({"type": "effect_applied", "log_entry": f"{player_id} passed"})
+        await self._advance_turn()
+
+    async def _end_game(self) -> None:
+        """Transition to phase='ended', compute winners, and broadcast to everyone.
+
+        Chosen approach: go straight to ``ended`` with computed winners rather
+        than the epilogue voting flow (start_epilogue requires the separate
+        EpilogueManager concern). ``evaluate_win_condition`` honours the state's
+        win_condition (default highest_points). The winners are stored on the
+        state (winner_ids) AND logged so all connected players — not just the
+        active one — see the result on the broadcast.
+        """
+        winners = evaluate_win_condition(self.state)
+        if winners:
+            names = [self.state.get_player(w).name for w in winners]
+            log_line = f"Game over! Winner(s): {', '.join(names)}"
+        else:
+            log_line = "Game over! No winner."
+        self.state = self.state.model_copy(update={"phase": "ended", "winner_ids": winners}).with_log(log_line)
         await self._broadcast_state()
+        await self.connections.broadcast({"type": "effect_applied", "log_entry": log_line})
 
     async def _handle_play(self, player_id: str, msg) -> None:
         """Interpret the played card via the agent (in a thread), apply its effect, advance turn."""
@@ -211,13 +295,11 @@ class Room:
             self.state = apply_effect(self.state, program, ctx)
             await self.connections.broadcast({"type": "effect_applied", "log_entry": f"Played {card_id}"})
 
-        # advance turn
-        n = len(self.state.players)
-        if n:
-            self.state = self.state.model_copy(
-                update={"turn_index": (self.state.turn_index + self.state.direction) % n}
-            )
+        # Playing a card ends the turn: advance (honouring skip/extra/direction
+        # flags the play may have set) and start the next player's turn, which
+        # auto-draws or ends the game on an empty deck.
         await self._broadcast_state()
+        await self._advance_turn()
 
     async def _handle_create_card(self, player_id: str, msg) -> None:
         """Author a new card and interpret it immediately (allowed off-turn)."""
