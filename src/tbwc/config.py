@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # --- Logging ---
+    # Root/"tbwc" logger level applied by tbwc.logging_config.configure_logging().
+    # Standard names (DEBUG/INFO/WARNING/ERROR/CRITICAL); override via LOG_LEVEL.
+    log_level: str = "INFO"
+
     # --- Provider-aware accessors --------------------------------------------
     # These resolve the correct model / base_url / api key / embedding dimension
     # for the active llm_provider, so callers (agent.llm, rag.embeddings,

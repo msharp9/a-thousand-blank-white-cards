@@ -42,3 +42,20 @@ def test_join_room_registers_player(client: TestClient) -> None:
     room = room_manager.get(code)
     assert room is not None
     assert any(p.id == pid for p in room.state.players)
+
+
+def test_get_room_state(client: TestClient) -> None:
+    code = client.post("/rooms").json()["code"]
+    client.post(f"/rooms/{code}/join", json={"name": "Alice"})
+    resp = client.get(f"/rooms/{code}/state")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    assert data["room_code"] == code
+    assert data["phase"] == "lobby"
+    assert any(p["name"] == "Alice" for p in data["players"])
+
+
+def test_get_room_state_missing_room(client: TestClient) -> None:
+    resp = client.get("/rooms/ZZZZZZ/state")
+    assert resp.status_code == 404

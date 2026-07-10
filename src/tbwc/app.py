@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from tbwc.config import get_settings, require_openai_api_key
+from tbwc.logging_config import configure_logging
 from tbwc.rooms.manager import check_single_worker, room_manager
 from tbwc.ws import router as ws_router
 
@@ -106,6 +107,10 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
       - warm up the LangGraph agent
       - open the room registry
     """
+    # startup: install the central logging configuration first so every
+    # subsequent startup log line (and all app loggers) use the shared format.
+    configure_logging()
+
     # startup: fail fast with an actionable message if the OpenAI key is missing.
     # require_openai_api_key() is a no-op when llm_provider == "ollama" (the local
     # OpenAI-compatible backend ignores the key), so this gate only fires for OpenAI.
@@ -190,6 +195,19 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
         room_code, player_id, spectator = result
         return JoinRoomResponse(code=room_code, player_id=player_id, spectator=spectator)
+
+    @application.get("/rooms/{code}/state", tags=["rooms"])
+    async def get_room_state(code: str) -> dict:
+        """Debug/read-only snapshot of a room's full game state.
+
+        Returns the JSON-serialisable GameState snapshot (room_code, players,
+        phase, deck, cards, …). 404 if the room does not exist. Intended for
+        debugging and observability — it never mutates state.
+        """
+        room = room_manager.get(code)
+        if room is None:
+            raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
+        return room.snapshot()
 
     application.include_router(ws_router)
 
