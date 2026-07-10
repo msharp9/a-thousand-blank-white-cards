@@ -41,6 +41,13 @@ def get_embeddings() -> OpenAIEmbeddings:
         model=settings.embedding_model or DEFAULT_EMBEDDING_MODEL,
         openai_api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,
+        # Ollama's OpenAI-compatible /embeddings endpoint only accepts raw
+        # strings. By default OpenAIEmbeddings tokenizes text with tiktoken and
+        # POSTs integer token-ID arrays (the "len-safe" path), which Ollama
+        # rejects with "400 - invalid input type". Disabling the context-length
+        # check sends the raw string instead. Only needed for non-OpenAI
+        # (local) providers; the hosted OpenAI API handles token-ID input fine.
+        check_embedding_ctx_length=not settings.is_ollama,
     )
 
 

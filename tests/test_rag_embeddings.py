@@ -20,7 +20,14 @@ def test_get_embeddings_uses_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
     with patch("tbwc.rag.embeddings.OpenAIEmbeddings") as MockEmb:
         MockEmb.return_value = MagicMock()
         mod.get_embeddings()
-        MockEmb.assert_called_once_with(model="my-model", openai_api_key="test-key", base_url=None)
+        # check_embedding_ctx_length=True keeps the hosted-OpenAI len-safe
+        # (tiktoken token-id) path; only the Ollama provider disables it.
+        MockEmb.assert_called_once_with(
+            model="my-model",
+            openai_api_key="test-key",
+            base_url=None,
+            check_embedding_ctx_length=True,
+        )
     mod.get_embeddings.cache_clear()
 
 
@@ -91,6 +98,9 @@ def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.M
         assert kwargs["model"] == "nomic-embed-text"
         assert kwargs["base_url"] == "http://localhost:11434/v1"
         assert kwargs["openai_api_key"] == "ollama"
+        # Ollama's /embeddings endpoint rejects tiktoken token-id arrays, so the
+        # len-safe context-length check must be disabled to send raw strings.
+        assert kwargs["check_embedding_ctx_length"] is False
     mod.get_embeddings.cache_clear()
 
 
