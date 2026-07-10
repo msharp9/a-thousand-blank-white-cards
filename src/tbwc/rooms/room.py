@@ -188,7 +188,7 @@ class Room:
 
     async def _handle_pass(self, player_id: str) -> None:
         """Active player ends their turn without playing a card."""
-        await self.connections.broadcast({"type": "effect_applied", "log_entry": f"{player_id} passed"})
+        await self._log_and_broadcast(f"{player_id} passed")
         await self._advance_turn()
 
     async def _end_game(self) -> None:
@@ -320,7 +320,7 @@ class Room:
                 chosen_card_id=chosen_card_id,
             )
             self.state = apply_effect(self.state, program, ctx)
-            await self.connections.broadcast({"type": "effect_applied", "log_entry": f"Played {card_id}"})
+            await self._log_and_broadcast(f"Played {card_id}")
 
         # Playing a card ends the turn: advance (honouring skip/extra/direction
         # flags the play may have set) and start the next player's turn, which
@@ -393,17 +393,23 @@ class Room:
             result = await self._epilogue.tally_and_persist()
             self.state = self.state.model_copy(update={"phase": "ended"})
             await self._broadcast_state()
-            await self.connections.broadcast(
-                {
-                    "type": "effect_applied",
-                    "log_entry": f"Epilogue complete. Kept: {len(result.kept)} cards.",
-                }
-            )
+            await self._log_and_broadcast(f"Epilogue complete. Kept: {len(result.kept)} cards.")
 
     # ── helpers ──
     def snapshot(self) -> dict:
         """JSON-serialisable snapshot of the current GameState."""
         return self.state.model_dump()
+
+    async def _log_and_broadcast(self, log_entry: str) -> None:
+        """Append ``log_entry`` to the persistent game log AND broadcast it live.
+
+        The live ``effect_applied`` message drives clients' in-session log, but a
+        client that (re)joins or refreshes only gets the state snapshot — so the
+        entry must also live in ``state.log`` to survive a reload. Every effect /
+        turn log line goes through here to keep the two in sync.
+        """
+        self.state = self.state.with_log(log_entry)
+        await self.connections.broadcast({"type": "effect_applied", "log_entry": log_entry})
 
     async def _broadcast_state(self) -> None:
         await self.connections.broadcast_state(self.snapshot())
