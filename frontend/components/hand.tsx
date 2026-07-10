@@ -2,39 +2,25 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { CardTile } from "@/components/card";
-import type { CardSnapshot, ClientMsg, Placement } from "@/lib/types";
+import type { CardSnapshot, ClientMsg } from "@/lib/types";
 
 interface HandProps {
   cards: CardSnapshot[];
   /** Is it this player's turn? Play controls only show when true. */
   canPlay: boolean;
-  /** Other players for the "player" placement target. */
-  otherPlayers: Array<{ id: string; name: string }>;
   send: (msg: ClientMsg) => void;
 }
 
-export function Hand({ cards, canPlay, otherPlayers, send }: HandProps) {
+export function Hand({ cards, canPlay, send }: HandProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [zone, setZone] = useState<Placement["zone"]>("self");
-  const [targetPlayerId, setTargetPlayerId] = useState<string | undefined>(
-    undefined,
-  );
 
+  // The player just picks a card and plays it. The interpreter reads the card
+  // and, if a target is needed, the server replies with a prompt_choice that
+  // the room page turns into a picker — so no zone/target dropdown here.
   function playSelected() {
     if (!selectedId) return;
-    const placement: Placement = { zone };
-    if (zone === "player" && targetPlayerId) {
-      placement.target_player_id = targetPlayerId;
-    }
-    send({ type: "play", card_id: selectedId, placement });
+    send({ type: "play", card_id: selectedId });
     setSelectedId(null);
   }
 
@@ -67,46 +53,7 @@ export function Hand({ cards, canPlay, otherPlayers, send }: HandProps) {
 
       {canPlay && selectedId && (
         <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={zone}
-            onValueChange={(v) => setZone(v as Placement["zone"])}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Placement" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="self">In front of me</SelectItem>
-              <SelectItem value="player">Target a player</SelectItem>
-              <SelectItem value="center">Center / house rule</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {zone === "player" && (
-            <Select
-              value={targetPlayerId ?? null}
-              onValueChange={(v) =>
-                setTargetPlayerId((v as string | null) ?? undefined)
-              }
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Pick player" />
-              </SelectTrigger>
-              <SelectContent>
-                {otherPlayers.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          <Button
-            onClick={playSelected}
-            disabled={zone === "player" && !targetPlayerId}
-          >
-            Play
-          </Button>
+          <Button onClick={playSelected}>Play</Button>
         </div>
       )}
     </div>

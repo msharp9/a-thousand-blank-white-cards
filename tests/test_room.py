@@ -153,19 +153,43 @@ def test_play_chooser_card_with_valid_choice_applies() -> None:
     assert room.state.turn_index == 1
 
 
-def test_play_chooser_card_without_choice_errors_cleanly() -> None:
+def test_play_chooser_card_without_choice_prompts() -> None:
+    # Under the card-driven targeting design, a play that needs a player choice
+    # but supplies none is HELD PENDING: the server sends a prompt_choice with
+    # the candidate players and does NOT advance the turn (no error, no score
+    # change, card not consumed).
     room = _chooser_room()
     ws1 = AsyncMock()
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", AsyncMock())
-    msg = PlayMsg(card_id="c1", placement=Placement(zone="center"), chosen_player_id=None)
+    msg = PlayMsg(card_id="c1", chosen_player_id=None)
     with patch("tbwc.agent.graph.interpret_card", return_value=_chooser_result()):
         asyncio.run(room.handle_action("p1", msg))
-    # An error was sent to the active player, no score change, turn NOT advanced.
-    sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
-    assert "error" in sent_types
+    sent = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
+    sent_types = [m["type"] for m in sent]
+    assert "prompt_choice" in sent_types
+    assert "error" not in sent_types
+    prompt = next(m for m in sent if m["type"] == "prompt_choice")
+    assert prompt["card_id"] == "c1"
+    assert {c["player_id"] for c in prompt["choices"]} == {"p1", "p2"}
+    assert all("name" in c for c in prompt["choices"])
+    # Turn NOT advanced, no score applied.
     assert room.state.get_player("p2").score == 0
     assert room.state.turn_index == 0
+
+
+def test_play_chooser_followup_with_choice_applies_and_advances() -> None:
+    # The follow-up play carrying the picked chosen_player_id applies the effect
+    # and advances the turn (the second play re-interprets — no server pending
+    # state is held).
+    room = _chooser_room()
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    with patch("tbwc.agent.graph.interpret_card", return_value=_chooser_result()):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))  # prompt
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1", chosen_player_id="p2")))  # answer
+    assert room.state.get_player("p2").score == 5
+    assert room.state.turn_index == 1
 
 
 def test_play_chooser_card_with_invalid_choice_errors_cleanly() -> None:
@@ -217,19 +241,37 @@ def test_play_card_choice_with_valid_card_applies() -> None:
     assert room.state.turn_index == 1
 
 
-def test_play_card_choice_without_card_errors_cleanly() -> None:
+def test_play_card_choice_without_card_prompts() -> None:
+    # The card-target axis also prompts (rather than errors) when no card was
+    # chosen: the server sends a prompt_choice listing the selectable cards and
+    # holds the play pending (no destruction, turn NOT advanced).
     room = _card_chooser_room()
     ws1 = AsyncMock()
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", AsyncMock())
-    msg = PlayMsg(card_id="c1", placement=Placement(zone="center"), chosen_card_id=None)
+    msg = PlayMsg(card_id="c1", chosen_card_id=None)
     with patch("tbwc.agent.graph.interpret_card", return_value=_card_chooser_result()):
         asyncio.run(room.handle_action("p1", msg))
-    # Clean error, no destruction, turn NOT advanced (no ValueError bubbling to 500).
-    sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
-    assert "error" in sent_types
+    sent = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
+    sent_types = [m["type"] for m in sent]
+    assert "prompt_choice" in sent_types
+    assert "error" not in sent_types
+    prompt = next(m for m in sent if m["type"] == "prompt_choice")
+    assert "t1" in {c["card_id"] for c in prompt["choices"]}
     assert "t1" in room.state.get_player("p1").in_play
     assert room.state.turn_index == 0
+
+
+def test_play_card_choice_followup_with_card_applies_and_advances() -> None:
+    room = _card_chooser_room()
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    with patch("tbwc.agent.graph.interpret_card", return_value=_card_chooser_result()):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))  # prompt
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1", chosen_card_id="t1")))  # answer
+    assert "t1" not in room.state.get_player("p1").in_play
+    assert "t1" in room.state.discard
+    assert room.state.turn_index == 1
 
 
 def test_play_card_choice_with_invalid_card_errors_cleanly() -> None:

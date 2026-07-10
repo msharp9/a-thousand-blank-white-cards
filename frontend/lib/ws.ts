@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMsg, GameStateSnapshot, ServerMsg } from "./types";
+import type {
+  ClientMsg,
+  GameStateSnapshot,
+  PromptChoiceMsg,
+  ServerMsg,
+} from "./types";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
 
@@ -47,6 +52,12 @@ export interface GameSocketState {
   } | null;
   error: string | null;
   connected: boolean;
+  // Set when the server needs the active player to pick a target for a card
+  // they just played (the play is held pending server-side). The UI shows a
+  // picker; answering sends a follow-up play with the choice. Cleared by
+  // clearPromptChoice once handled.
+  promptChoice: PromptChoiceMsg | null;
+  clearPromptChoice: () => void;
   send: (msg: ClientMsg) => void;
 }
 
@@ -59,12 +70,17 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     useState<GameSocketState["previewResult"]>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [promptChoice, setPromptChoice] = useState<PromptChoiceMsg | null>(
+    null,
+  );
 
   const send = useCallback((msg: ClientMsg) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
     }
   }, []);
+
+  const clearPromptChoice = useCallback(() => setPromptChoice(null), []);
 
   useEffect(() => {
     if (!code || !name) return;
@@ -111,6 +127,10 @@ export function useGameSocket(code: string, name: string): GameSocketState {
               verdict: msg.verdict,
             });
             break;
+          case "prompt_choice":
+            setBrewing(null);
+            setPromptChoice(msg);
+            break;
           case "error":
             setError(msg.message);
             break;
@@ -153,7 +173,17 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     };
   }, [code, name]);
 
-  return { gameState, log, brewing, previewResult, error, connected, send };
+  return {
+    gameState,
+    log,
+    brewing,
+    previewResult,
+    error,
+    connected,
+    promptChoice,
+    clearPromptChoice,
+    send,
+  };
 }
 
 export function storePlayerId(code: string, playerId: string): void {

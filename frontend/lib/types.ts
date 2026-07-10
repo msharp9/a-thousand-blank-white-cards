@@ -14,8 +14,13 @@ export type PassMsg = { type: "pass" };
 export type PlayMsg = {
   type: "play";
   card_id: string;
-  placement: Placement;
+  // Optional/back-compat: the UI no longer collects a zone/target dropdown; the
+  // player just picks a card. A target, if the card needs one, is supplied on a
+  // follow-up play via chosen_player_id / chosen_card_id in response to a
+  // prompt_choice.
+  placement?: Placement;
   chosen_player_id?: string;
+  chosen_card_id?: string;
 };
 export type CreateCardMsg = {
   type: "create_card";
@@ -95,11 +100,19 @@ export type PreviewResultMsg = {
   snippet?: string | null;
   verdict: string;
 };
+// A single selectable option in a prompt_choice. Player-target prompts carry a
+// `player_id`; card-target prompts carry a `card_id`. Exactly one is present,
+// which tells the UI which field to send back on the follow-up play.
+export type PromptChoiceOption = {
+  player_id?: string;
+  card_id?: string;
+  name: string;
+};
 export type PromptChoiceMsg = {
   type: "prompt_choice";
   card_id: string;
   prompt: string;
-  choices: Array<{ player_id: string; name: string }>;
+  choices: PromptChoiceOption[];
 };
 export type EpilogueMsg = { type: "epilogue"; cards: CardSnapshot[] };
 export type ErrorMsg = { type: "error"; message: string };

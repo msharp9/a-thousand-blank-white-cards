@@ -261,9 +261,19 @@ class Room:
             needs_card_choice = any(getattr(op, "card_target", None) == "chosen_card" for op in ops)
 
             if needs_player_choice and chosen_player_id is None:
+                # Instead of erroring, ask the active player who to target. The
+                # play is held PENDING: the turn does NOT advance and the card is
+                # not consumed. The client answers with a second `play` message
+                # carrying chosen_player_id, which re-runs this handler (we do NOT
+                # keep server-side pending state — see module note / bead jcc).
                 await self.connections.send(
                     player_id,
-                    {"type": "error", "message": "This card requires you to choose a target player"},
+                    {
+                        "type": "prompt_choice",
+                        "card_id": card_id,
+                        "prompt": f"Choose a target player for {title}",
+                        "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                    },
                 )
                 return
             if chosen_player_id is not None and chosen_player_id not in valid_player_ids:
@@ -273,9 +283,26 @@ class Room:
                 )
                 return
             if needs_card_choice and chosen_card_id is None:
+                # Card-target axis: also prompt rather than error. Choices are the
+                # cards the actor may legally pick (in-play zone + their hand).
                 await self.connections.send(
                     player_id,
-                    {"type": "error", "message": "This card requires you to choose a target card"},
+                    {
+                        "type": "prompt_choice",
+                        "card_id": card_id,
+                        "prompt": f"Choose a target card for {title}",
+                        "choices": [
+                            {
+                                "card_id": cid,
+                                "name": (
+                                    self.state.cards[cid].get("title", cid)
+                                    if isinstance(self.state.cards.get(cid), dict)
+                                    else getattr(self.state.cards.get(cid), "title", cid)
+                                ),
+                            }
+                            for cid in valid_card_ids
+                        ],
+                    },
                 )
                 return
             if needs_card_choice and chosen_card_id not in valid_card_ids:
