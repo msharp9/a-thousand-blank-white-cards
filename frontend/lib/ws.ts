@@ -31,7 +31,7 @@ function playerIdKey(code: string): string {
 }
 
 // Fallback text for a hard-rejection close code when the server did not send an
-// `error` message first. Mirrors the close codes in src/tbwc/ws.py.
+// `error` message first. Mirrors the close codes in src/board/ws.py.
 function closeCodeMessage(code: number): string {
   switch (code) {
     case 4001:
