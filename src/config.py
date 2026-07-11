@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     port: int = 8000
 
     # --- Logging ---
-    # Root/"tbwc" logger level applied by logging_config.configure_logging().
+    # Root logger level applied by logging_config.configure_logging().
     # Standard names (DEBUG/INFO/WARNING/ERROR/CRITICAL); override via LOG_LEVEL.
     log_level: str = "INFO"
 

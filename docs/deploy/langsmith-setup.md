@@ -10,8 +10,8 @@ token usage, and any errors.
 
 The LangChain/LangSmith SDK reads configuration from environment variables. It
 supports both the modern `LANGSMITH_*` names and the legacy `LANGCHAIN_*` names
-(the older names for the same settings). tbwc's `Settings`
-(`src/tbwc/config.py`) standardizes on the `LANGSMITH_*` variables and treats the
+(the older names for the same settings). The `Settings`
+(`src/config.py`) standardizes on the `LANGSMITH_*` variables and treats the
 `LANGCHAIN_*` names purely as back-compat aliases (a `LANGCHAIN_*` value is used
 only when the matching `LANGSMITH_*` value is unset). Always prefer the
 `LANGSMITH_*` variables for new deployments:
@@ -67,7 +67,7 @@ the next boot.
 ## 5. Confirm tracing is enabled in the logs
 
 On startup the app logs its LangSmith status (see the `lifespan` handler in
-`src/tbwc/app.py`). Open the Render service **Logs** and look for:
+`src/board/app.py`). Open the Render service **Logs** and look for:
 
 ```
 LangSmith tracing ENABLED project=tbwc-prod endpoint=https://api.smith.langchain.com
