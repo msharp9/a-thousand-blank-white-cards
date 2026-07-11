@@ -2,7 +2,8 @@
 
 Each scorer conforms to ScorerFunction: scorer(context: ScorerContext) -> Score.
   context.input    = raw card dict {title, description, ...}
-  context.output   = dict returned by the agent graph (keys: effect_program, snippet_effect, classification, ...)
+  context.output   = dict from evals.harness.normalise_agent_output
+                     (keys: effect_program, snippet_effect, verdict, ...)
   context.expected = human_canonical dict
 """
 
@@ -22,14 +23,23 @@ def _judge() -> JudgeLLM:
 
 
 def _effect_summary(output: dict[str, Any]) -> str:
-    """Extract a text summary of the agent's generated effect for the judge."""
+    """Extract a text summary of the agent's generated effect for the judge.
+
+    Prefers the structured effect_program, then a generated snippet body. When the
+    agent produced neither (e.g. an "invalid" verdict), fall back to the verdict +
+    in-character comment so the judge still has something to score. The old graph's
+    "classification" dict no longer exists (the single agent has no classify step),
+    so it is not consulted here.
+    """
     ep = output.get("effect_program")
     if ep:
         return json.dumps(ep, default=str)
     se = output.get("snippet_effect")
     if se:
         return str(se)
-    return json.dumps(output.get("classification", {}), default=str)
+    verdict = output.get("verdict")
+    comment = output.get("comment")
+    return json.dumps({"verdict": verdict, "comment": comment}, default=str)
 
 
 def _run_judge(context: ScorerContext) -> Verdict:

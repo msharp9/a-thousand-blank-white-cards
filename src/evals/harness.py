@@ -4,8 +4,9 @@
 Usage:
     OPENAI_API_KEY=... uv run python -m evals.harness [--data PATH] [--limit N]
 
-Loads the real-card testset, runs the compiled agent graph on each card, scores
-each output with ALL_SCORERS, and prints a per-dimension table + pipeline metrics.
+Loads the real-card testset, runs the single tool-calling agent
+(:func:`agent.runtime.run_agent`) on each card, scores each output with
+ALL_SCORERS, and prints a per-dimension table + pipeline metrics.
 """
 
 from __future__ import annotations
@@ -42,29 +43,45 @@ def load_eval_items(data_path: Path, limit: int | None = None) -> list[EvalItem]
     return items
 
 
-def _normalise_graph_output(state: dict[str, Any]) -> dict[str, Any]:
-    """Map compiled-graph output keys to the aliases the scorers expect."""
-    out: dict[str, Any] = dict(state)
-    program = state.get("program")
+def normalise_agent_output(result: Any) -> dict[str, Any]:
+    """Map an :class:`~agent.contract.InterpretResult` to the dict the scorers read.
+
+    The scorers (see evals.scorers) consume three keys:
+      - ``effect_program``: the EffectProgram as a plain dict (dsl_validity re-validates
+        it, the judge summarises it). Produced from ``result.program``.
+      - ``snippet_effect``: the generated Python hook body, if any. Produced from
+        ``result.snippet.code``.
+      - ``verdict``: the agent's overall verdict string ("ok"/"invalid"/"needs_choice").
+
+    Note: the old graph exposed a "classification" dict (from a dedicated classify
+    node) that the judge could fall back to. The new single agent has no separate
+    classify step, so there is no "classification" key to derive; the judge instead
+    summarises the effect_program / snippet directly (both richer signals of intent),
+    which is why _effect_summary already prefers those. No sub-metric is lost.
+    """
+    program = getattr(result, "program", None)
+    snippet = getattr(result, "snippet", None)
+    out: dict[str, Any] = {
+        "verdict": getattr(result, "verdict", None),
+        "comment": getattr(result, "comment", ""),
+        "persona_action": getattr(result, "persona_action", "none"),
+    }
     if program is not None:
-        # EffectProgram -> plain dict for dsl_validity's EffectProgram.model_validate
+        # EffectProgram -> plain dict for dsl_validity's EffectProgram.model_validate.
         out["effect_program"] = program.model_dump() if hasattr(program, "model_dump") else program
-    snippet = state.get("snippet")
     if snippet is not None:
         out["snippet_effect"] = getattr(snippet, "code", snippet)
-    interp = state.get("interpretation")
-    if interp is not None:
-        out["classification"] = interp.model_dump() if hasattr(interp, "model_dump") else interp
     return out
 
 
 def make_task():
-    from agent.graph import graph
+    from agent.runtime import run_agent
 
     def task(card: dict[str, Any]) -> dict[str, Any]:
-        card_draft = {"title": card.get("title", ""), "description": card.get("description", "")}
-        result = graph.invoke({"card_draft": card_draft, "attempts": 0})
-        return _normalise_graph_output(result)
+        # Eval cards have no live game state, so state/actor are None; run_agent
+        # never raises or hangs, always returning a well-formed InterpretResult.
+        result = run_agent(card.get("title", ""), card.get("description", ""))
+        return normalise_agent_output(result)
 
     return task
 

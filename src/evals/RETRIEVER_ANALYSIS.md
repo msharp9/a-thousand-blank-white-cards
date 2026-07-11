@@ -9,8 +9,10 @@ card-interpretation agent. It covers two experiments:
 
 Both experiments are evaluated with the Phase 5 eval harness over the 35-card real
 testset. The A/B driver scripts already exist (`evals.retriever_ab`,
-`evals.improvement_ab`), but running them end-to-end requires a live
-`OPENAI_API_KEY` (both to drive the agent graph and to run the LLM judge).
+`evals.improvement_ab`). `improvement_ab` drives the single tool-calling agent
+(`agent.runtime.run_agent`) and the LLM judge, so it requires a live
+`OPENAI_API_KEY`. `retriever_ab` was rewired to compare the two retrievers directly
+with deterministic structural scorers (no agent, no judge) — see §2.
 
 > **⚠️ Results in this document are ILLUSTRATIVE PLACEHOLDERS.** Every number in the
 > tables below is a hand-authored estimate used to show the *shape* of the expected
@@ -76,8 +78,8 @@ exemplars.
 
 The implementation is deliberately **interchangeable** with the plain dense
 retriever: both satisfy the `Retriever = Callable[[str, int], list[dict]]` interface,
-so the agent graph selects between them purely via the `retriever_mode` config key
-(`"dense"` vs `"advanced"`) with no graph changes. Paraphrase generation is also
+so callers select between them by constructing one or the other
+(`dense_retriever()` vs `advanced_retriever()`). Paraphrase generation is also
 **non-fatal**: if the LLM call or JSON parse fails, it logs a warning and falls back
 to just the original query, so the advanced retriever degrades gracefully to the
 dense baseline rather than erroring.
@@ -88,28 +90,28 @@ dense baseline rather than erroring.
 
 ### Methodology
 
-The A/B driver is [`src/evals/retriever_ab.py`](./retriever_ab.py). It:
+The A/B driver is [`src/evals/retriever_ab.py`](./retriever_ab.py). Since the legacy
+graph (and its `retriever_mode` config knob) was retired, the driver now compares the
+two retrievers **directly** rather than through a downstream interpreter — the truest,
+fully deterministic test of retrieval quality. It:
 
 - Loads the **35-card hand-annotated gold testset** from
   [`data/eval/eval_cards.json`](../../../data/eval/eval_cards.json) via the Phase 5
   harness (`load_eval_items`).
-- Runs the **same agent graph** twice — once with `retriever_mode="dense"`, once with
-  `retriever_mode="advanced"` — invoking `graph.invoke` per card and normalizing the
-  output with `_normalise_graph_output`.
-- Scores every run with the full scorer set `ALL_SCORERS`
-  ([`src/evals/scorers.py`](./scorers.py)):
-  - **intent_match** — LLM judge: does the generated effect do what the card says?
-  - **dsl_validity** — structural check: is `effect_program` a non-empty, Pydantic-valid
-    `EffectProgram`? (This is the only non-judge, deterministic scorer.)
-  - **target_accuracy** — LLM judge: is the effect's target/placement correct?
-  - **timing_accuracy** — LLM judge: is the timing (immediate/persistent/triggered)
-    correct?
+- For each card, retrieves the top-k exemplars with `dense_retriever()` and again with
+  `advanced_retriever()` (from [`src/agent/rag/retrievers.py`](../rag/retrievers.py)).
+- Scores every run with three **deterministic, structural** retrieval-quality scorers
+  (no LLM judge):
+  - **recall_nonempty** — did the retriever return at least one exemplar?
+  - **timing_match** — does any retrieved exemplar's canonical `timing` match the gold
+    card's expected timing?
+  - **target_match** — does any retrieved exemplar's canonical `target` match expected?
 - Reports each scorer's mean plus `mean_task_latency_ms` (wall-clock per card),
   and a best-first ranking via `compare_eval_reports`.
 
-The three judge-based scorers share a single `gpt-5.4-mini` judge
-([`src/evals/judge.py`](./judge.py)) that returns a structured `Verdict`; only
-`dsl_validity` is measured structurally.
+Because retrieval quality is measured structurally against the gold labels, this A/B
+needs no LLM judge and no OpenAI key (unless `advanced_retriever`'s live paraphraser
+is exercised against a real store).
 
 Run it with (see §4 for env setup):
 
@@ -125,61 +127,52 @@ uv run python -m evals.retriever_ab
 
 | Metric | dense | advanced | delta |
 | --- | ---: | ---: | ---: |
-| intent_match | 0.71 | 0.78 | +0.07 |
-| dsl_validity | 0.83 | 0.86 | +0.03 |
-| target_accuracy | 0.74 | 0.79 | +0.05 |
-| timing_accuracy | 0.80 | 0.82 | +0.02 |
-| mean_task_latency_ms | 3200 | 4600 | +1400 |
+| recall_nonempty | 1.00 | 1.00 | +0.00 |
+| timing_match | 0.71 | 0.80 | +0.09 |
+| target_match | 0.66 | 0.74 | +0.08 |
+| mean_task_latency_ms | 120 | 1600 | +1480 |
 
-*Expected shape:* the advanced retriever should nudge the judge-based dimensions
-(especially `intent_match`) upward by surfacing more structurally-relevant
-exemplars, at the cost of higher per-card latency from the extra paraphrase LLM call
-and additional vector lookups.
+*Expected shape:* the advanced retriever should surface a broader, more diverse set of
+exemplars, so `timing_match`/`target_match` (does *any* retrieved exemplar share the
+gold card's canonical timing/target?) rise, at the cost of higher per-card latency
+from the extra paraphrase LLM call and additional vector lookups. `recall_nonempty`
+stays saturated because both retrievers always return something for a non-empty store.
 
 ---
 
-## 3. "One Other Improvement" — Few-shot Exemplars in `emit_ops`
+## 3. "One Other Improvement" — Few-shot Exemplar Priming
 
 ### Justification
 
-The second improvement targets the generation step rather than retrieval.
-`emit_ops` ([`src/agent/nodes.py`](../agent/nodes.py)) produces the
-`EffectProgram` for immediate-mode cards. Even though it uses
-`ChatOpenAI.with_structured_output(EffectProgram)` — so the *schema* is enforced by
-Pydantic — the model still has to choose *which ops and field names* to emit. With
-TBWC's short, idiosyncratic card text, the model tends to **invent op shapes and
-field names that don't exist** in the canonical vocabulary, or map an effect onto a
-plausible-but-wrong op. Structured output catches malformed JSON; it does not catch a
-semantically wrong-but-well-typed program, and repeated schema-repair attempts on
-invented shapes hurt both validity and intent fidelity.
+The second improvement targets generation rather than retrieval. The single
+tool-calling agent ([`src/agent/runtime.py`](../agent/runtime.py)) still has to choose
+*which ops and field names* to emit. With TBWC's short, idiosyncratic card text, the
+model tends to **invent op shapes and field names that don't exist** in the canonical
+vocabulary, or map an effect onto a plausible-but-wrong op. Its structured
+`InterpretResult` contract catches malformed output; it does not catch a semantically
+wrong-but-well-typed program.
 
-The fix: inject the **top-3 retrieved exemplars with their canonical effects** as
-few-shot patterns directly into the `emit_ops` prompt. Each exemplar shows a real
-card's title, description, and its *known-good* canonical effect, so the model
-mirrors concrete, in-vocabulary op patterns instead of inventing them.
-
-This is implemented by `_format_exemplars_fewshot` (formats up to 3 retrieved
-exemplars into an "Example N:" block) and gated by the `few_shot_exemplars` config
-toggle in `emit_ops` (default `True`; when `False`, no exemplars are injected and the
-node behaves like the pre-improvement baseline). The toggle is what makes a clean
-before/after A/B possible.
+The fix: **prime the agent with the top-3 retrieved exemplars and their canonical
+effects** by prepending them to the card description before interpretation. Each
+exemplar shows a real card's title, description, and its *known-good* canonical
+effect, so the model mirrors concrete, in-vocabulary op patterns instead of inventing
+them. (In the retired graph this was a `few_shot_exemplars` toggle on the `emit_ops`
+node; with the single agent it is done at the entry point by enriching the description,
+which is the cleanest before/after axis available through `run_agent`'s public API.)
 
 Note the two improvements **compound**: better retrieval (§1) yields better
-exemplars, which makes the few-shot injection here more effective. The A/B below
-isolates the few-shot effect by holding `retriever_mode` fixed (default `dense`).
+exemplars, which makes the priming here more effective.
 
 ### Methodology
 
 The driver is [`src/evals/improvement_ab.py`](./improvement_ab.py). It runs the
-same 35-card testset twice against the same graph, toggling only
-`few_shot_exemplars`:
+same 35-card testset twice through `agent.runtime.run_agent`, toggling only whether
+the top-3 exemplars (from `dense_retriever()`) are prepended to the description:
 
-- `before_no_fewshot` → `few_shot_exemplars=False`
-- `after_fewshot` → `few_shot_exemplars=True`
+- `before_no_fewshot` → bare card description
+- `after_fewshot` → description primed with retrieved exemplars
 
-`retriever_mode` is held constant (default `dense`, overridable via
-`--retriever-mode`) so the delta is attributable to few-shot injection alone. Scoring
-uses the same `ALL_SCORERS` and judge as §2.
+Scoring uses the same `ALL_SCORERS` and `gpt-5.4-mini` judge as the harness.
 
 ```bash
 uv run python -m evals.improvement_ab
@@ -199,21 +192,22 @@ uv run python -m evals.improvement_ab
 | timing_accuracy | 0.79 | 0.81 | +0.02 |
 | mean_task_latency_ms | 3100 | 3300 | +0.200k |
 
-*Expected shape:* few-shot injection should lift `dsl_validity` the most — its whole
+*Expected shape:* exemplar priming should lift `dsl_validity` the most — its whole
 purpose is to stop the model inventing invalid op shapes — with a secondary lift to
-`intent_match`. Latency should barely move, since it adds prompt tokens but no extra
-LLM calls (the exemplars are already retrieved upstream).
+`intent_match`. Latency should barely move, since it adds prompt tokens plus one
+retrieval call.
 
 ---
 
 ## 4. How to Regenerate
 
-Both scripts drive the live agent graph **and** an LLM judge, so an OpenAI key is
-mandatory. From the repository root:
+`improvement_ab` drives the live single agent **and** an LLM judge, so an OpenAI key
+is mandatory for it; `retriever_ab` only needs a key if the advanced retriever's live
+paraphraser runs against a real store. From the repository root:
 
 ```bash
-# Required: OpenAI key powers the agent graph, the multi-query paraphraser,
-# and the gpt-5.4-mini judge.
+# Required for improvement_ab: OpenAI key powers the single agent, the multi-query
+# paraphraser, and the gpt-5.4-mini judge.
 export OPENAI_API_KEY=sk-...
 
 # Optional: enable LangSmith tracing for per-run inspection of judge calls.
@@ -233,8 +227,6 @@ Useful flags (both scripts):
 - `--data PATH` — use a different testset (defaults to `data/eval/eval_cards.json`).
 - `--limit N` — evaluate only the first `N` cards (handy for a quick smoke run that
   keeps API cost/latency down).
-- `--retriever-mode {dense,advanced}` — *(improvement_ab only)* which retriever to hold
-  fixed while toggling few-shot; defaults to `dense`.
 
 **Where output goes:** both scripts print to **stdout** — a Markdown comparison table
 (rendered by `render_ab_table` / `render_improvement_table`) followed by a best-first

@@ -1,4 +1,4 @@
-"""Tests for the eval harness plumbing (graph + scorers mocked)."""
+"""Tests for the eval harness plumbing (run_agent + judge mocked)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+from agent.contract import InterpretResult
 from evals.eval_core import EvalRunReport
-from evals.harness import _normalise_graph_output, load_eval_items, run_harness
+from evals.harness import load_eval_items, normalise_agent_output, run_harness
 from models.effects import AddPointsOp, EffectProgram
 
 
@@ -23,12 +24,14 @@ def test_load_eval_items(tmp_path: Path) -> None:
 
 def test_normalise_maps_program_to_effect_program() -> None:
     prog = EffectProgram(ops=[AddPointsOp(target="self", amount=3)])
-    out = _normalise_graph_output({"program": prog})
+    result = InterpretResult(program=prog, verdict="ok")
+    out = normalise_agent_output(result)
     assert "effect_program" in out
     assert out["effect_program"]["ops"][0]["op"] == "add_points"
+    assert out["verdict"] == "ok"
 
 
-def test_run_harness_with_mocked_graph(tmp_path: Path) -> None:
+def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
     data = [
         {
             "title": "Gain 3",
@@ -40,11 +43,11 @@ def test_run_harness_with_mocked_graph(tmp_path: Path) -> None:
     p.write_text(json.dumps(data))
 
     prog = EffectProgram(ops=[AddPointsOp(target="self", amount=3)])
-    fake_state = {"program": prog, "snippet": None, "interpretation": None, "verdict": None}
+    fake_result = InterpretResult(program=prog, snippet=None, verdict="ok")
 
-    # mock the compiled graph.invoke so no LLM runs; mock the judge-based scorers to avoid API.
+    # mock run_agent so no LLM runs; mock the judge-based scorers to avoid API.
     with (
-        patch("agent.graph.graph.invoke", return_value=fake_state),
+        patch("agent.runtime.run_agent", return_value=fake_result),
         patch("evals.scorers._run_judge") as mock_judge,
     ):
         from evals.judge import Verdict
