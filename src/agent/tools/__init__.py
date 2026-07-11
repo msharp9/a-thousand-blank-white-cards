@@ -13,16 +13,43 @@ passed-in snapshot, not via a board import.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger("agent.tools")
 
 
 def get_default_tools() -> list[Any]:
     """Return the context-free tools safe to bind on every agent build.
 
-    Populated as the individual tool beads (C2-C5, C8) land. Each newly added
-    tool module appends its tool object here. Context-dependent tools
+    These are the tools whose behaviour does not depend on the specific game in
+    play — web search, MTG lookup, the game-rules reference, the interpreted-card
+    RAG corpus, and the agent's own decision memory. Context-dependent tools
     (read_game_state / read_engine_methods, bead C6/C7) are bound per-invocation
     by the caller, not returned here.
+
+    Imports are done lazily inside the function so that importing ``agent.tools``
+    stays cheap and a single tool's optional dependency (e.g. langchain-tavily,
+    qdrant) failing to import degrades to a smaller toolbox rather than breaking
+    agent construction entirely.
     """
     tools: list[Any] = []
+
+    from agent.tools.agent_memory import get_agent_memory_tools
+    from agent.tools.card_rag import get_card_rag_tool
+    from agent.tools.game_rules import get_game_rules_tool
+    from agent.tools.mtg_lookup import get_mtg_lookup_tool
+    from agent.tools.web_search import get_web_search_tool
+
+    for factory in (get_web_search_tool, get_card_rag_tool, get_game_rules_tool, get_mtg_lookup_tool):
+        try:
+            tools.append(factory())
+        except Exception:  # noqa: BLE001 — a missing optional dep must not break agent build
+            logger.warning("tool %s unavailable; skipping", getattr(factory, "__name__", factory))
+
+    try:
+        tools.extend(get_agent_memory_tools())
+    except Exception:  # noqa: BLE001
+        logger.warning("agent_memory tools unavailable; skipping")
+
     return tools
