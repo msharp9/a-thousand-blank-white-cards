@@ -173,6 +173,47 @@ def _parse_result(result: dict[str, Any]) -> InterpretResult:
     )
 
 
+def _assemble_tools(
+    state: Any | None,
+    actor_id: str | None,
+    creator_id: str | None,
+    extra: list[Any] | None,
+) -> list[Any]:
+    """Build the final bound tool list for one interpretation.
+
+    Order: the context-free defaults (:func:`agent.tools.get_default_tools`, which
+    now includes ``read_engine_methods``) + the context-DEPENDENT
+    ``read_game_state`` tool (only when ``state`` is provided, closed over the
+    snapshot/actor/creator) + any explicitly-passed ``extra`` tools (an
+    override/extra hook used by tests).
+
+    Every stage is guarded so tool-building can NEVER break agent construction: a
+    failing stage degrades to a smaller toolbox, mirroring get_default_tools'
+    per-tool degradation.
+    """
+    tools: list[Any] = []
+
+    try:
+        from agent.tools import get_default_tools
+
+        tools.extend(get_default_tools())
+    except Exception:  # noqa: BLE001 — a broken default toolbox must not break the agent
+        logger.warning("default tools unavailable; continuing with a reduced toolbox")
+
+    if state is not None:
+        try:
+            from agent.tools.read_game_state import make_read_game_state_tool
+
+            tools.append(make_read_game_state_tool(state, actor_id, creator_id))
+        except Exception:  # noqa: BLE001 — the state tool is best-effort
+            logger.warning("read_game_state tool unavailable; skipping")
+
+    if extra:
+        tools.extend(extra)
+
+    return tools
+
+
 def run_agent(
     title: str,
     description: str,
@@ -216,8 +257,10 @@ def run_agent(
         creator_id=creator_id,
     )
 
+    bound_tools = _assemble_tools(state, actor_id, creator_id, tools)
+
     try:
-        agent = build_agent(tools=tools, model=model, system_prompt=system_prompt)
+        agent = build_agent(tools=bound_tools, model=model, system_prompt=system_prompt)
     except Exception:  # noqa: BLE001 — model/agent construction must never escape
         logger.exception("agent construction failed; returning bounded fallback")
         return _fallback_result(

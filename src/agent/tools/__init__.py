@@ -24,9 +24,10 @@ def get_default_tools() -> list[Any]:
 
     These are the tools whose behaviour does not depend on the specific game in
     play — web search, MTG lookup, the game-rules reference, the interpreted-card
-    RAG corpus, and the agent's own decision memory. Context-dependent tools
-    (read_game_state / read_engine_methods, bead C6/C7) are bound per-invocation
-    by the caller, not returned here.
+    RAG corpus, the agent's own decision memory, and the engine-introspection
+    reference (read_engine_methods). The one context-DEPENDENT tool,
+    read_game_state (bead C6), closes over the live snapshot and is bound
+    per-invocation by the caller (run_agent), not returned here.
 
     Imports are done lazily inside the function so that importing ``agent.tools``
     stays cheap and a single tool's optional dependency (e.g. langchain-tavily,
@@ -39,9 +40,16 @@ def get_default_tools() -> list[Any]:
     from agent.tools.card_rag import get_card_rag_tool
     from agent.tools.game_rules import get_game_rules_tool
     from agent.tools.mtg_lookup import get_mtg_lookup_tool
+    from agent.tools.read_engine_methods import get_read_engine_methods_tool
     from agent.tools.web_search import get_web_search_tool
 
-    for factory in (get_web_search_tool, get_card_rag_tool, get_game_rules_tool, get_mtg_lookup_tool):
+    for factory in (
+        get_web_search_tool,
+        get_card_rag_tool,
+        get_game_rules_tool,
+        get_mtg_lookup_tool,
+        get_read_engine_methods_tool,
+    ):
         try:
             tools.append(factory())
         except Exception:  # noqa: BLE001 — a missing optional dep must not break agent build
