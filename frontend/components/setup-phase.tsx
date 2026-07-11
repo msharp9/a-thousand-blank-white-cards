@@ -16,7 +16,6 @@ interface SetupPhaseProps {
     snippet?: string | null;
     verdict: string;
   } | null;
-  isHost?: boolean;
   isSpectator?: boolean;
 }
 
@@ -27,7 +26,6 @@ export function SetupPhase({
   myPlayerId,
   send,
   previewResult,
-  isHost,
   isSpectator,
 }: SetupPhaseProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -147,14 +145,9 @@ export function SetupPhase({
         </div>
       )}
 
-      {isHost && (
-        <Button
-          onClick={() => send({ type: "start" })}
-          disabled={remaining > 0}
-        >
-          Start game
-        </Button>
-      )}
+      <p className="text-xs italic text-muted-foreground">
+        The game starts automatically once everyone has authored their cards.
+      </p>
 
       <CreateCardDialog
         open={dialogOpen}

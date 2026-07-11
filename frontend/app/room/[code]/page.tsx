@@ -247,7 +247,6 @@ export default function RoomPage() {
             myPlayerId={myPlayerId ?? ""}
             send={send}
             previewResult={previewResult}
-            isHost={isHost}
             isSpectator={isSpectator}
           />
         )}

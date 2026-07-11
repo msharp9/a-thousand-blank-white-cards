@@ -97,6 +97,63 @@ def test_full_flow_two_players_reaches_playing_with_dealt_hands() -> None:
     assert room.state.deck  # deck is non-empty after dealing
 
 
+def test_auto_start_when_last_player_finishes_authoring() -> None:
+    # No {type:"start"} is ever sent for the setup->playing transition: it fires
+    # automatically once the final player authors their last required card.
+    room = _room_two_players()
+    asyncio.run(room.handle_action("p1", StartMsg()))  # lobby -> setup
+
+    # p1 authors all their cards first — game must NOT start yet (p2 behind).
+    for i in range(CARDS_TO_AUTHOR):
+        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"a{i}", description="gain 1 point")))
+    assert room.state.phase == "setup"
+
+    # p2 authors all but the last — still setup.
+    for i in range(CARDS_TO_AUTHOR - 1):
+        asyncio.run(room.handle_action("p2", CreateCardMsg(title=f"b{i}", description="gain 1 point")))
+    assert room.state.phase == "setup"
+
+    # p2 authors the FINAL required card — the game auto-transitions to playing
+    # WITHOUT any StartMsg, with hands dealt and the first turn begun.
+    asyncio.run(room.handle_action("p2", CreateCardMsg(title="b-last", description="gain 1 point")))
+    assert room.state.phase == "playing"
+    assert len(room.state.get_player("p1").hand) == STARTING_HAND_SIZE
+    assert len(room.state.get_player("p2").hand) == STARTING_HAND_SIZE
+    # First turn begun: draw flag reset for the active player.
+    assert room._has_drawn is False
+
+
+def test_authoring_while_players_behind_does_not_auto_start() -> None:
+    room = _room_two_players()
+    asyncio.run(room.handle_action("p1", StartMsg()))  # lobby -> setup
+
+    # Only p1 authors the full quota; p2 has authored nothing.
+    for i in range(CARDS_TO_AUTHOR):
+        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"c{i}", description="gain 1 point")))
+
+    # p2 is still behind, so the game must remain in setup.
+    assert room.state.phase == "setup"
+    for p in room.state.players:
+        assert p.hand == []
+
+
+def test_single_player_game_auto_starts() -> None:
+    room = Room("SOLO01")
+    room.add_player("p1", "Solo")
+    room.connections.connect("p1", AsyncMock())
+    asyncio.run(room.handle_action("p1", StartMsg()))  # lobby -> setup
+    assert room.state.phase == "setup"
+
+    for i in range(CARDS_TO_AUTHOR - 1):
+        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"s{i}", description="gain 1 point")))
+    assert room.state.phase == "setup"
+
+    # The final required card triggers the auto-start for the lone player.
+    asyncio.run(room.handle_action("p1", CreateCardMsg(title="s-last", description="gain 1 point")))
+    assert room.state.phase == "playing"
+    assert len(room.state.get_player("p1").hand) == STARTING_HAND_SIZE
+
+
 def test_finalized_deck_size_for_two_players() -> None:
     # 30 premade + 10 authored (5 each) + 10 blanks (5/player) = 50 total, minus
     # 10 dealt (5 each) = 40 remaining in the deck.
