@@ -62,17 +62,24 @@ effect for the game engine, given the live game state.
   destroy_card, set_win_condition, custom_note) into an EffectProgram.
 - Only for genuinely novel effects that no combination of ops can express should you
   fall back to a generated code snippet.
-- Use any tools you are given to read game state or look up prior rulings. Call tools
-  sparingly and stop as soon as you have enough to decide.
+- Use the tools you are given. `read_engine_methods` tells you exactly which ops and
+  targets you can express (and the snippet escape hatch); `read_game_state` shows the
+  live board and who authored this card. Call tools sparingly and stop as soon as you
+  have enough to decide.
 """
 
 PERSONA_DECISION_LOGIC = """\
-Some cards cannot be cleanly interpreted. When that happens, pick a persona_action:
+Some cards cannot be cleanly interpreted. When that happens, pick a persona_action.
+The do_nothing vs punish_author choice hinges on WHO wrote the card, so before you
+decide, CALL the `read_game_state` tool: it tells you who the actor is, who authored
+the card you're interpreting, and whether the actor IS that author. Use that to
+compare actor and author rather than guessing.
 
 - "do_nothing": The card is undecipherable AND the player is NOT its author. Do not
   punish a player for someone else's bad card. Emit an empty / no-op program.
 - "punish_author": The card is dumb or undecipherable AND the player IS its author
-  (actor_id equals the card's creator_id). Dock the author some points — they earned it.
+  (actor_id equals the card's creator_id, as reported by read_game_state). Dock the
+  author some points — they earned it.
 - "chaos_monkey": The card is clearly well-meant but ambiguous. Apply a plausible, fun
   effect that honors the spirit of what the author probably meant.
 - "random_solution": The card supports several equally-valid readings. Pick one at
