@@ -22,4 +22,4 @@ ENV PORT=8000
 EXPOSE 8000
 
 # uv run uses the synced venv; bind to 0.0.0.0 and honor the platform's $PORT.
-CMD ["sh", "-c", "uv run uvicorn tbwc.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uv run uvicorn board.app:app --host 0.0.0.0 --port ${PORT:-8000}"]

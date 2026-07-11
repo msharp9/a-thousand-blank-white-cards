@@ -63,16 +63,6 @@ order"*, *"Everyone swaps hands"*. When a card isn't a simple point change, an
 | **Robin Hood** | "Steal 8 points from the player with the most points." | Moves 8 points from the current leader to you. |
 | **Keepsake** | "Worth 10 points if it's still in your hand at the end." | +10 at game end, only if you never played it. |
 
-## Architecture
-
-Three components, plus plain [pydantic](https://docs.pydantic.dev) models (`src/models/`) as the data contracts between them:
-
-- **Board** (`src/board/`) — the realtime layer: the FastAPI app, the WebSocket endpoint, and the `Room` that owns each game's state, drives the turn loop, and fans updates out to players.
-- **Engine** (`src/engine/`) — the pure, immutable game "physics": scoring, drawing, turn order, win conditions, and card resolution, exposed through a small `GameEngine` facade over reducer functions. It never calls the AI. Complex free-text effects can compile to a sandboxed Python snippet (`src/engine/sandbox/`).
-- **Agent** (`src/agent/`) — a single tool-calling agent (LangGraph `create_agent`) that interprets a card **only** when the engine can't resolve it deterministically. It has seven tools: web search, MTG lookup (Scryfall), the game-rules reference (Wikipedia), a card-similarity RAG retriever, engine-method + game-state introspection, and its own decision memory. When a card is undecipherable it picks an in-character persona (do nothing / punish the author / chaos / random), and it always adds a short, funny remark that lands in the game history for everyone to read.
-
-The engine may call the agent's *output*, but never the reverse; the layering `board → agent → engine → models` is enforced by a test (`tests/test_layering.py`). The full write-up with diagrams lives in [`docs/WRITEUP.md`](docs/WRITEUP.md).
-
 ## Quickstart — Backend
 
 **Prerequisites:** [`uv`](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.14 (uv can install it for you).
@@ -159,5 +149,3 @@ See [`src/evals/RETRIEVER_ANALYSIS.md`](src/evals/RETRIEVER_ANALYSIS.md) for ret
 - [Retriever analysis](src/evals/RETRIEVER_ANALYSIS.md) — eval findings.
 - [Loom demo script](docs/loom-script.md) — timed ≤10-minute demo walkthrough.
 - [Deployment docs](docs/deploy/) — Render, Vercel, LangSmith, and smoke checklist.
-</content>
-</invoke>
