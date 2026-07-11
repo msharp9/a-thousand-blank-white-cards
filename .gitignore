@@ -208,3 +208,6 @@ frontend/.next/
 .dmux-hooks/
 .claude/dmux/
 .claude/hooks/dmux-stop-hook.cjs
+
+# Claude Code agent worktrees (local orchestration, not project code)
+.claude/worktrees/
