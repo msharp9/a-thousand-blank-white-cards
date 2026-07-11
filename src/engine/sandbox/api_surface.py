@@ -1,4 +1,4 @@
-"""sandbox.api_surface — restricted façade passed to LLM snippet apply().
+"""engine.sandbox.api_surface — restricted façade passed to LLM snippet apply().
 
 A snippet's apply(state, ctx) receives a SandboxGame; it CANNOT touch raw
 GameState. Each mutating call records an op dict in self._ops. After apply()

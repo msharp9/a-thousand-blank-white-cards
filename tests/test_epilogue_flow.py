@@ -6,8 +6,8 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 from models.ws_messages import EpilogueVoteMsg
-from rooms.epilogue import EpilogueManager
-from rooms.room import Room
+from board.rooms.epilogue import EpilogueManager
+from board.rooms.room import Room
 
 
 def test_all_votes_in_requires_every_player_on_every_card() -> None:
@@ -35,7 +35,7 @@ def test_tally_and_persist_upserts_kept_cards() -> None:
         mgr.record_vote("p2", "c1", keep=True)
         mgr.record_vote("p1", "c2", keep=False)
         mgr.record_vote("p2", "c2", keep=False)
-        with patch("rag.store.upsert_card") as mock_upsert:
+        with patch("agent.rag.store.upsert_card") as mock_upsert:
             result = await mgr.tally_and_persist()
         return result, mock_upsert
 
@@ -65,7 +65,7 @@ def test_room_start_epilogue_and_complete_vote() -> None:
     room.add_player("p1", "Alice")
     room.state = room.state.model_copy(update={"cards": {"c1": {"id": "c1", "title": "T", "description": "D"}}})
     room.connections.connect("p1", AsyncMock())
-    with patch("rag.store.upsert_card"):
+    with patch("agent.rag.store.upsert_card"):
         asyncio.run(room.start_epilogue())
         assert room.state.phase == "epilogue"
         asyncio.run(room.handle_action("p1", EpilogueVoteMsg(card_id="c1", keep=True)))

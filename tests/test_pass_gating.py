@@ -13,7 +13,7 @@ import json
 from unittest.mock import AsyncMock
 
 from models.ws_messages import PassMsg
-from rooms.room import Room
+from board.rooms.room import Room
 
 
 def _playing_room(p1_hand: list[str], cards: dict) -> Room:

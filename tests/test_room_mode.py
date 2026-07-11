@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app import create_app
+from board.app import create_app
 from models.game_state import GameState
-from rooms.manager import RoomManager, room_manager
+from board.rooms.manager import RoomManager, room_manager
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""sandbox._child_runner — executed as __main__ inside the isolated subprocess.
+"""engine.sandbox._child_runner — executed as __main__ inside the isolated subprocess.
 
 Protocol:
   stdin:  one JSON line {"state": {...}, "ctx": {...}, "code": "<snippet src>"}
@@ -63,7 +63,7 @@ def main() -> None:
     ctx_dict = payload["ctx"]
     code = payload["code"]
 
-    from sandbox.api_surface import SandboxGame
+    from engine.sandbox.api_surface import SandboxGame
 
     sandbox = SandboxGame(state_dict, ctx_dict)
 

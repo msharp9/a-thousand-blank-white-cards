@@ -1,4 +1,4 @@
-"""rooms.manager — registry of active game rooms.
+"""board.rooms.manager — registry of active game rooms.
 
 NOTE: rooms are NOT persisted — a server restart clears all games. Intentional for v1.
 """
@@ -10,8 +10,8 @@ import random
 import string
 import uuid
 
-from rooms.room import Room
-from rooms.store import InMemoryRoomStore, RoomStore
+from board.rooms.room import Room
+from board.rooms.store import InMemoryRoomStore, RoomStore
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class RoomManager:
     SINGLE-WORKER GUARANTEE / DISTRIBUTED SEAM
     ------------------------------------------
     Room lookup is only correct when the whole app runs as a SINGLE worker
-    process. The default backend (:class:`~rooms.store.InMemoryRoomStore`)
+    process. The default backend (:class:`~board.rooms.store.InMemoryRoomStore`)
     keeps rooms in that one worker's memory, so REST join
     (POST /rooms/{code}/join) and the WS connect (/ws/{code}) always hit the same
     process and see the same rooms. This is the app's current deployment model
@@ -131,7 +131,7 @@ def check_single_worker(worker_count: int | None = None) -> None:
             "process-local InMemoryRoomStore. Rooms are NOT shared across "
             "workers, so REST join and WS connect can land on different workers "
             "and reject valid players. Run a SINGLE worker, or implement a "
-            "shared RoomStore (see rooms.store) before scaling out.",
+            "shared RoomStore (see board.rooms.store) before scaling out.",
             count,
         )
 

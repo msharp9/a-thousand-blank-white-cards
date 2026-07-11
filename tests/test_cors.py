@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app import create_app
+from board.app import create_app
 from config import Settings, get_settings
 
 
@@ -26,9 +26,9 @@ def test_cors_allows_configured_origin(client: TestClient) -> None:
 
 def test_cors_origins_env_json_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     # pydantic-settings parses a JSON array env value for list[str]
-    monkeypatch.setenv("CORS_ORIGINS", '["https://vercel.app","http://localhost:3000"]')
+    monkeypatch.setenv("CORS_ORIGINS", '["https://tbwc.vercel.app","http://localhost:3000"]')
     s = Settings(_env_file=None)  # type: ignore[call-arg]
-    assert "https://vercel.app" in s.cors_origins
+    assert "https://tbwc.vercel.app" in s.cors_origins
     assert len(s.cors_origins) == 2
 
 

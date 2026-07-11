@@ -1,6 +1,6 @@
-"""rag.retrievers — retriever factories behind a common interface.
+"""agent.rag.retrievers — retriever factories behind a common interface.
 
-dense_retriever() is the real baseline (cosine via rag.store.search).
+dense_retriever() is the real baseline (cosine via agent.rag.store.search).
 advanced_retriever() is a multi-query expansion retriever: it paraphrases the
 query via an LLM, retrieves each paraphrase through the dense retriever, and
 returns the deduplicated union — without touching the agent graph.
@@ -13,7 +13,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from rag.store import search
+from agent.rag.store import search
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ _PARAPHRASE_SYSTEM = (
 
 
 def dense_retriever() -> Retriever:
-    """Return the baseline dense (cosine) retriever backed by rag.store.search."""
+    """Return the baseline dense (cosine) retriever backed by agent.rag.store.search."""
 
     def _retrieve(query: str, k: int = 4) -> list[dict[str, Any]]:
         return search(query, k=k)

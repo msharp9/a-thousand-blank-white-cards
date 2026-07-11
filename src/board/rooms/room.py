@@ -1,4 +1,4 @@
-"""rooms.room — one game session: GameState + ConnectionManager + turn enforcement.
+"""board.rooms.room — one game session: GameState + ConnectionManager + turn enforcement.
 
 Room owns an immutable GameState (replaced on each mutation) and serialises all
 handle_action calls with an asyncio.Lock so concurrent WebSocket messages cannot
@@ -34,14 +34,14 @@ from engine.loop import advance_turn
 from engine.scoring import evaluate_win_condition, resolve_end_of_game
 from models.effects import CustomNoteOp, EffectProgram
 from models.game_state import GameState, Player
-from rooms.connections import ConnectionManager
-from rooms.deck import (
+from board.rooms.connections import ConnectionManager
+from board.rooms.deck import (
     BLANKS_PER_PLAYER,
     PREMADE_POOL_SIZE,
     build_premade_pool,
     finalize_deck,
 )
-from rooms.epilogue import EpilogueManager
+from board.rooms.epilogue import EpilogueManager
 
 logger = logging.getLogger(__name__)
 

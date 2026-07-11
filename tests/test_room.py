@@ -10,7 +10,7 @@ from conftest import drive_to_playing
 
 from models.effects import AddPointsOp, DestroyCardOp, EffectProgram
 from models.ws_messages import CreateCardMsg, DrawMsg, PassMsg, PlayMsg, Placement, StartMsg
-from rooms.room import Room
+from board.rooms.room import Room
 
 
 def _room_with_two_players() -> Room:
@@ -114,7 +114,7 @@ def test_start_sets_phase_setup() -> None:
     room = _room_with_two_players()
     room.connections.connect("p1", AsyncMock())
 
-    import rag.store as store
+    import agent.rag.store as store
 
     store._client = None  # force the offline seed-file fallback
     asyncio.run(room.handle_action("p1", StartMsg()))
@@ -128,7 +128,7 @@ def test_start_sets_phase_playing() -> None:
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
 
-    import rag.store as store
+    import agent.rag.store as store
 
     store._client = None  # force the offline seed-file fallback
     drive_to_playing(room, ["p1", "p2"])
@@ -141,7 +141,7 @@ def test_start_builds_deck_of_at_least_30_and_deals_hands() -> None:
     room.connections.connect("p2", AsyncMock())
 
     # Force the offline path: no RAG store initialised -> seed-file fallback.
-    import rag.store as store
+    import agent.rag.store as store
 
     store._client = None
     drive_to_playing(room, ["p1", "p2"])
@@ -171,7 +171,7 @@ def test_first_player_not_auto_drawn_then_explicit_draw_adds_cards() -> None:
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
 
-    import rag.store as store
+    import agent.rag.store as store
 
     store._client = None
     drive_to_playing(room, ["p1", "p2"])

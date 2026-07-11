@@ -1,4 +1,4 @@
-"""rag.embeddings — cached OpenAI embeddings singleton for card RAG."""
+"""agent.rag.embeddings — cached OpenAI embeddings singleton for card RAG."""
 
 from __future__ import annotations
 

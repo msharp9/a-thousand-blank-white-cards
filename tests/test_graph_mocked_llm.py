@@ -13,7 +13,7 @@ import pytest
 
 from agent.schemas import Interpretation, SnippetEffect, Verdict
 from models.effects import AddPointsOp, EffectProgram
-from sandbox.validate import validate_snippet
+from engine.sandbox.validate import validate_snippet
 
 VALID_SNIPPET_CODE = (
     "def apply(state, ctx):\n    pid = ctx['player_id']\n    state.scores[pid] = state.scores.get(pid, 0) + 5\n"

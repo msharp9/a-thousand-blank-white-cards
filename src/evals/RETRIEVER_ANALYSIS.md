@@ -23,7 +23,7 @@ testset. The A/B driver scripts already exist (`evals.retriever_ab`,
 ## 1. Advanced Retriever Justification
 
 **Choice: multi-query retrieval** (`MultiQueryCardRetriever` /
-`advanced_retriever()` in [`src/rag/retrievers.py`](../rag/retrievers.py)).
+`advanced_retriever()` in [`src/agent/rag/retrievers.py`](../rag/retrievers.py)).
 
 ### Why the baseline dense retriever is a poor fit for TBWC cards
 
@@ -219,7 +219,7 @@ export OPENAI_API_KEY=sk-...
 # Optional: enable LangSmith tracing for per-run inspection of judge calls.
 # export LANGSMITH_API_KEY=ls-...
 # export LANGSMITH_TRACING=true
-# export LANGSMITH_PROJECT=phase6
+# export LANGSMITH_PROJECT=tbwc-phase6
 
 # Experiment 1 — retriever A/B (dense vs advanced multi-query)
 uv run python -m evals.retriever_ab

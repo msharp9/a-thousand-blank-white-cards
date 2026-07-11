@@ -7,7 +7,7 @@ import pytest
 from engine.events import GameEvent, HookContext
 from models.effects import AddPointsOp
 from models.game_state import GameState, Player
-from sandbox.revalidate import DiffValidationError, apply_snippet_diff, parse_diff
+from engine.sandbox.revalidate import DiffValidationError, apply_snippet_diff, parse_diff
 
 
 def test_parse_valid_ops() -> None:

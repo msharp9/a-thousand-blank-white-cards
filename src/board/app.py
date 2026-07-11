@@ -1,4 +1,4 @@
-"""app — FastAPI application factory.
+"""board.app — FastAPI application factory.
 
 Exposes `app` (the ASGI application) and `create_app()` for testing.
 `create_app()` mounts the REST routes (GET /health, POST /rooms,
@@ -21,8 +21,8 @@ from pydantic import BaseModel
 
 from config import get_settings, require_openai_api_key
 from logging_config import configure_logging
-from rooms.manager import check_single_worker, room_manager
-from ws import router as ws_router
+from board.rooms.manager import check_single_worker, room_manager
+from board.ws import router as ws_router
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     check_single_worker()
 
     try:
-        from rag.seed import load_seed_cards
+        from agent.rag.seed import load_seed_cards
 
         load_seed_cards()
     except Exception:  # pragma: no cover - startup best-effort; network/store errors

@@ -1,4 +1,4 @@
-"""sandbox.validate — AST allowlist static safety checker for generated snippets.
+"""engine.sandbox.validate — AST allowlist static safety checker for generated snippets.
 
 Generated `def apply(state, ctx)` snippets must pass this static check before they are
 ever stored or executed: no imports, no exec/eval/open/compile/__import__/breakpoint

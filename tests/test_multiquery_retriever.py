@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from rag.retrievers import MultiQueryCardRetriever, advanced_retriever
+from agent.rag.retrievers import MultiQueryCardRetriever, advanced_retriever
 
 
 def _base_returning(docs_by_query: dict[str, list[dict]]):

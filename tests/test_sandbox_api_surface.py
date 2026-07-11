@@ -6,7 +6,7 @@ import copy
 
 import pytest
 
-from sandbox.api_surface import SandboxGame
+from engine.sandbox.api_surface import SandboxGame
 
 STATE = {
     "players": [

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app import create_app
+from board.app import create_app
 from config import OPENAI_API_KEY_ERROR, get_settings
 
 

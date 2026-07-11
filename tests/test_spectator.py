@@ -17,8 +17,8 @@ from models.game_state import GameState, Player, WinCondition
 from conftest import drive_to_playing
 
 from models.ws_messages import CreateCardMsg, PassMsg, PlayMsg
-from rooms.manager import RoomManager
-from rooms.room import Room
+from board.rooms.manager import RoomManager
+from board.rooms.room import Room
 
 
 # ── join gating ──
@@ -111,7 +111,7 @@ def _room_two_players_and_start() -> Room:
     room.add_player("p2", "Bob")
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
-    import rag.store as store
+    import agent.rag.store as store
 
     store._client = None  # offline seed-file fallback
     # Drive the full two-step start flow (lobby -> setup -> playing): each real

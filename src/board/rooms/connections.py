@@ -1,4 +1,4 @@
-"""rooms.connections — per-room WebSocket registry.
+"""board.rooms.connections — per-room WebSocket registry.
 
 A pure async utility: tracks live WebSocket connections keyed by player_id,
 handles broadcast/targeted-send/disconnect. Knows nothing about game logic.

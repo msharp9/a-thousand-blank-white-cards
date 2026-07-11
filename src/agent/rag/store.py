@@ -1,4 +1,4 @@
-"""rag.store — in-memory Qdrant vector store for card exemplars.
+"""agent.rag.store — in-memory Qdrant vector store for card exemplars.
 
 Manages the single global 'cards' collection in :memory: mode (prototype).
 Exposes init_store(), upsert_card(), search(). Embedded text is title+description;
@@ -13,7 +13,7 @@ from typing import Any
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from rag.embeddings import embedding_dimensions, embed_text
+from agent.rag.embeddings import embedding_dimensions, embed_text
 
 COLLECTION_NAME = "cards"
 

@@ -43,7 +43,7 @@ class InterpretState(TypedDict, total=False):
     retrieved: list[dict[str, Any]]
     search_notes: str | None
     interpretation: Any  # agent.schemas.Interpretation at runtime
-    program: Any  # EffectProgram at runtime (Any avoids import cycle)
+    program: Any  # tbwc EffectProgram at runtime (Any avoids import cycle)
     snippet: Any  # agent.schemas.SnippetEffect at runtime
     verdict: Any  # agent.schemas.Verdict at runtime
     attempts: int

@@ -72,7 +72,7 @@ def make_task():
 def run_harness(data_path: Path | None = None, limit: int | None = None) -> EvalRunReport:
     """Run the full eval and return the report (also usable programmatically)."""
     items = load_eval_items(data_path or DEFAULT_DATA, limit=limit)
-    report = run_eval("interpretation", data=items, task=make_task(), scorers=ALL_SCORERS)
+    report = run_eval("tbwc-interpretation", data=items, task=make_task(), scorers=ALL_SCORERS)
     return report
 
 

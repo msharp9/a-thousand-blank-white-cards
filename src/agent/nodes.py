@@ -19,8 +19,8 @@ from agent.schemas import Interpretation, SnippetEffect, Verdict
 from agent.state import InterpretState
 from config import get_settings
 from models.effects import EffectProgram, map_authoring_target
-from rag.retrievers import advanced_retriever, dense_retriever
-from sandbox.validate import validate_snippet as ast_validate
+from agent.rag.retrievers import advanced_retriever, dense_retriever
+from engine.sandbox.validate import validate_snippet as ast_validate
 
 logger = logging.getLogger(__name__)
 

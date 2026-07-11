@@ -1,4 +1,4 @@
-"""rag.seed — load gold/filler seed cards into the Qdrant RAG store at startup."""
+"""agent.rag.seed — load gold/filler seed cards into the Qdrant RAG store at startup."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 
-from rag.store import init_store, upsert_card
+from agent.rag.store import init_store, upsert_card
 
 logger = logging.getLogger(__name__)
 

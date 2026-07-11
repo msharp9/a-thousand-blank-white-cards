@@ -81,7 +81,7 @@ cp .env.example .env
 # Optional: TAVILY_API_KEY, LANGSMITH_*, QDRANT_* (see comments in .env.example).
 
 # 4. Run the API
-uv run uvicorn tbwc.app:app --reload
+uv run uvicorn board.app:app --reload
 
 # 5. Health check
 curl localhost:8000/health
@@ -129,12 +129,12 @@ uvx prek install
 Offline evaluation of the agent + retriever. All eval scripts call OpenAI, so set `OPENAI_API_KEY` first.
 
 ```bash
-uv run python -m tbwc.evals.harness          # main eval harness
-uv run python -m tbwc.evals.retriever_ab     # retriever A/B comparison
-uv run python -m tbwc.evals.improvement_ab   # few-shot before/after eval
+uv run python -m evals.harness          # main eval harness
+uv run python -m evals.retriever_ab     # retriever A/B comparison
+uv run python -m evals.improvement_ab   # few-shot before/after eval
 ```
 
-See [`src/tbwc/evals/RETRIEVER_ANALYSIS.md`](src/tbwc/evals/RETRIEVER_ANALYSIS.md) for retriever analysis.
+See [`src/evals/RETRIEVER_ANALYSIS.md`](src/evals/RETRIEVER_ANALYSIS.md) for retriever analysis.
 
 ## Deployment
 
@@ -146,7 +146,7 @@ See [`src/tbwc/evals/RETRIEVER_ANALYSIS.md`](src/tbwc/evals/RETRIEVER_ANALYSIS.m
 ## Docs & links
 
 - [Project write-up](docs/WRITEUP.md) — problem, solution, architecture diagrams, eval results, and Demo Day notes (rubric tasks 1–7).
-- [Retriever analysis](src/tbwc/evals/RETRIEVER_ANALYSIS.md) — eval findings.
+- [Retriever analysis](src/evals/RETRIEVER_ANALYSIS.md) — eval findings.
 - [Loom demo script](docs/loom-script.md) — timed ≤10-minute demo walkthrough.
 - [Deployment docs](docs/deploy/) — Render, Vercel, LangSmith, and smoke checklist.
 </content>

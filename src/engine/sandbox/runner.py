@@ -1,4 +1,4 @@
-"""sandbox.runner — execute_snippet: spawn an isolated subprocess, collect the op diff.
+"""engine.sandbox.runner — execute_snippet: spawn an isolated subprocess, collect the op diff.
 
 Security boundary = subprocess + rlimit (set in _child_runner). In-process exec is NOT
 a boundary. For production, replace with gVisor/Firecracker/container-per-exec or a hosted
@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from sandbox.validate import validate_snippet
+from engine.sandbox.validate import validate_snippet
 
 _WALL_TIMEOUT: float = 10.0
 _CHILD_RUNNER = Path(__file__).parent / "_child_runner.py"
@@ -45,7 +45,7 @@ def execute_snippet(
         raise SnippetExecutionError(f"Snippet failed validation: {result_check.error}")
 
     payload = json.dumps({"state": state_dict, "ctx": ctx_dict, "code": code})
-    src_dir = str(Path(__file__).parent.parent)  # .../src (parent of sandbox)
+    src_dir = str(Path(__file__).parent.parent.parent)  # .../src (engine/sandbox/runner.py -> src)
     cmd = [sys.executable, "-I", str(_CHILD_RUNNER)]
 
     proc = subprocess.Popen(

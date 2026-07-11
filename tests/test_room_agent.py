@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from models.effects import AddPointsOp, EffectProgram
 from models.ws_messages import CreateCardMsg, Placement, PlayMsg
-from rooms.room import Room
+from board.rooms.room import Room
 
 
 def _room() -> Room:

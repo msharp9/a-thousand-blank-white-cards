@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 
-from rooms.manager import (
+from board.rooms.manager import (
     RoomManager,
     _detect_worker_count,
     check_single_worker,
 )
-from rooms.room import Room
-from rooms.store import InMemoryRoomStore, RoomStore
+from board.rooms.room import Room
+from board.rooms.store import InMemoryRoomStore, RoomStore
 
 
 class TestInMemoryRoomStore:
@@ -70,17 +70,17 @@ class TestRoomManagerUsesStore:
 
 class TestSingleWorkerGuard:
     def test_no_warning_for_single_worker(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="rooms.manager"):
+        with caplog.at_level(logging.WARNING, logger="board.rooms.manager"):
             check_single_worker(worker_count=1)
         assert caplog.records == []
 
     def test_no_warning_when_unknown(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="rooms.manager"):
+        with caplog.at_level(logging.WARNING, logger="board.rooms.manager"):
             check_single_worker(worker_count=None)
         assert caplog.records == []
 
     def test_warns_for_multi_worker(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="rooms.manager"):
+        with caplog.at_level(logging.WARNING, logger="board.rooms.manager"):
             check_single_worker(worker_count=4)
         assert any("workers" in r.message.lower() for r in caplog.records)
         assert any("4" in r.getMessage() for r in caplog.records)
@@ -99,6 +99,6 @@ class TestSingleWorkerGuard:
 
     def test_check_reads_env_when_no_arg(self, monkeypatch, caplog) -> None:
         monkeypatch.setenv("WEB_CONCURRENCY", "2")
-        with caplog.at_level(logging.WARNING, logger="rooms.manager"):
+        with caplog.at_level(logging.WARNING, logger="board.rooms.manager"):
             check_single_worker()
         assert any("workers" in r.message.lower() for r in caplog.records)

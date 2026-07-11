@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rooms.manager import RoomManager, room_manager
+from board.rooms.manager import RoomManager, room_manager
 
 
 def test_create_and_join() -> None:

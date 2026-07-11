@@ -1,4 +1,4 @@
-"""ws — WebSocket endpoint /ws/{room_code} for a game room.
+"""board.ws — WebSocket endpoint /ws/{room_code} for a game room.
 
 Protocol: client connects, sends a 'join' envelope (with player_id from the REST
 join stored in localStorage; echoed on reconnect), then exchanges typed JSON.
@@ -13,7 +13,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter, ValidationError
 
 from models.ws_messages import ClientMsg, JoinMsg
-from rooms.manager import room_manager
+from board.rooms.manager import room_manager
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ _client_msg_adapter: TypeAdapter[ClientMsg] = TypeAdapter(ClientMsg)
 async def ws_handler(websocket: WebSocket, room_code: str) -> None:
     """WebSocket handler for a game room (join -> message loop -> disconnect).
 
-    Protocol (full reference lives in the OpenAPI description in app and the
+    Protocol (full reference lives in the OpenAPI description in board.app and the
     README "WebSocket API" section):
 
       1. Client connects to /ws/{room_code}; an unknown room is rejected (4004).

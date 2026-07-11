@@ -1,4 +1,4 @@
-"""sandbox.revalidate — parse raw snippet op dicts back to a validated EffectProgram, then apply.
+"""engine.sandbox.revalidate — parse raw snippet op dicts back to a validated EffectProgram, then apply.
 
 Final safety net: even if a malicious snippet smuggles an unexpected op dict through stdout,
 Pydantic validation here rejects anything not in the Op discriminated union. The resulting

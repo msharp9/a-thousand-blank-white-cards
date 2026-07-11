@@ -1,4 +1,4 @@
-"""rooms.deck — build and shuffle a starting deck for a new game.
+"""board.rooms.deck — build and shuffle a starting deck for a new game.
 
 The intended start-game flow is:
   (1) collect existing cards — prior-game kept cards + seed cards from the RAG
@@ -167,7 +167,7 @@ def collect_cards(card_source: CardSource | None = None, venue_mode: str = "both
 def _default_card_source() -> list[dict]:
     """Prefer RAG-stored cards; fall back to the offline seed-data file."""
     try:
-        from rag.store import list_all_cards
+        from agent.rag.store import list_all_cards
 
         cards = list_all_cards()
         if cards:
@@ -175,7 +175,7 @@ def _default_card_source() -> list[dict]:
     except Exception as exc:  # store not initialised / offline — fall back
         logger.info("RAG card source unavailable, using offline seed file: %s", exc)
 
-    from rag.seed import read_seed_cards
+    from agent.rag.seed import read_seed_cards
 
     return read_seed_cards()
 
@@ -194,7 +194,7 @@ SIMPLE_SEED_PATH = Path("data/seed_cards_simple.json")
 
 def _simple_card_source() -> list[dict]:
     """Card source for the deterministic simple game: the point-only seed deck."""
-    from rag.seed import read_seed_cards
+    from agent.rag.seed import read_seed_cards
 
     return read_seed_cards(SIMPLE_SEED_PATH)
 

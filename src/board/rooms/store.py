@@ -1,10 +1,10 @@
-"""rooms.store — pluggable storage backend for active game rooms.
+"""board.rooms.store — pluggable storage backend for active game rooms.
 
 This module defines the ``RoomStore`` seam so the room registry is not hard-wired
 to a single in-process dict. Today the only implementation is
 ``InMemoryRoomStore`` (process-local, single-worker only). The Protocol exists so
 a future distributed backend (e.g. Redis, a shared coordinator) can be dropped in
-WITHOUT touching :class:`rooms.manager.RoomManager` — see the multi-worker
+WITHOUT touching :class:`board.rooms.manager.RoomManager` — see the multi-worker
 note there.
 
 Codes are expected to already be normalised to upper-case by the caller
@@ -15,12 +15,12 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from rooms.room import Room
+from board.rooms.room import Room
 
 
 @runtime_checkable
 class RoomStore(Protocol):
-    """Storage backend for active :class:`~rooms.room.Room` instances.
+    """Storage backend for active :class:`~board.rooms.room.Room` instances.
 
     A future distributed implementation (Redis, etc.) only needs to satisfy this
     Protocol; ``RoomManager`` delegates all persistence to it.
@@ -48,7 +48,7 @@ class InMemoryRoomStore:
 
     PROCESS-LOCAL and SINGLE-WORKER ONLY: rooms live only in the memory of the
     worker that created them, and are cleared on restart. See
-    :class:`rooms.manager.RoomManager` for the multi-worker hazard this
+    :class:`board.rooms.manager.RoomManager` for the multi-worker hazard this
     implies and the guard that surfaces it at startup.
     """
 

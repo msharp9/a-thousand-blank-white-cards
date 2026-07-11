@@ -1,4 +1,4 @@
-"""Tests for rag.seed (store + embeddings mocked)."""
+"""Tests for agent.rag.seed (store + embeddings mocked)."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ def test_load_seed_cards_upserts_all(tmp_path: Path) -> None:
     seed_file = tmp_path / "seed_cards.json"
     seed_file.write_text(json.dumps(sample))
     with (
-        patch("rag.seed.init_store") as mock_init,
-        patch("rag.seed.upsert_card") as mock_upsert,
+        patch("agent.rag.seed.init_store") as mock_init,
+        patch("agent.rag.seed.upsert_card") as mock_upsert,
     ):
-        from rag.seed import load_seed_cards
+        from agent.rag.seed import load_seed_cards
 
         n = load_seed_cards(seed_file)
     assert n == 3
@@ -36,7 +36,7 @@ def test_load_seed_cards_upserts_all(tmp_path: Path) -> None:
 
 
 def test_missing_file_returns_zero(tmp_path: Path) -> None:
-    from rag.seed import load_seed_cards
+    from agent.rag.seed import load_seed_cards
 
     assert load_seed_cards(tmp_path / "nonexistent.json") == 0
 
@@ -48,7 +48,7 @@ def test_read_seed_cards_assigns_ids(tmp_path: Path) -> None:
     ]
     seed_file = tmp_path / "seed_cards.json"
     seed_file.write_text(json.dumps(sample))
-    from rag.seed import read_seed_cards
+    from agent.rag.seed import read_seed_cards
 
     cards = read_seed_cards(seed_file)
     assert cards[0]["id"] == "keep"
@@ -56,14 +56,14 @@ def test_read_seed_cards_assigns_ids(tmp_path: Path) -> None:
 
 
 def test_read_seed_cards_missing_returns_empty(tmp_path: Path) -> None:
-    from rag.seed import read_seed_cards
+    from agent.rag.seed import read_seed_cards
 
     assert read_seed_cards(tmp_path / "nope.json") == []
 
 
 def test_real_seed_file_shape() -> None:
     # Sanity: the real data file parses and every entry has title+description.
-    from rag.seed import DEFAULT_SEED_PATH
+    from agent.rag.seed import DEFAULT_SEED_PATH
 
     data = json.loads(DEFAULT_SEED_PATH.read_text())
     assert len(data) == 60

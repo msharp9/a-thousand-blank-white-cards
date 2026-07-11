@@ -63,7 +63,7 @@ def cache_snippet(card_id: str, code: str) -> None:
 
     Raises via the runner's validation on unsafe code (execute_snippet re-checks too).
     """
-    from sandbox.validate import validate_snippet
+    from engine.sandbox.validate import validate_snippet
 
     result = validate_snippet(code)
     if not result.ok:
@@ -93,8 +93,8 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
         if not get_settings().snippet_execution_enabled:
             return state
 
-        from sandbox.revalidate import DiffValidationError, apply_snippet_diff
-        from sandbox.runner import SnippetExecutionError, execute_snippet
+        from engine.sandbox.revalidate import DiffValidationError, apply_snippet_diff
+        from engine.sandbox.runner import SnippetExecutionError, execute_snippet
 
         state_dict = json.loads(state.model_dump_json())
         ctx_dict = {

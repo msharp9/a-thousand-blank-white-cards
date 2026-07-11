@@ -6,7 +6,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock
 
-from rooms.connections import ConnectionManager
+from board.rooms.connections import ConnectionManager
 
 
 def test_broadcast() -> None:

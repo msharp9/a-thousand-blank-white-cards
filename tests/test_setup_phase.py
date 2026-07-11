@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 from conftest import drive_to_playing
 
 from models.ws_messages import CreateCardMsg, StartMsg
-from rooms.room import CARDS_TO_AUTHOR, PREMADE_POOL_SIZE, STARTING_HAND_SIZE, Room
+from board.rooms.room import CARDS_TO_AUTHOR, PREMADE_POOL_SIZE, STARTING_HAND_SIZE, Room
 
 
 def _room_two_players() -> Room:

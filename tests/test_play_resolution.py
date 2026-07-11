@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, patch
 
 from models.effects import AddPointsOp, EffectProgram
 from models.ws_messages import PlayMsg
-from rooms.room import Room
+from board.rooms.room import Room
 
 
 def _room_with_card(card: dict, *, hand_owner: str = "p1") -> Room:

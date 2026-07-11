@@ -12,8 +12,8 @@ from __future__ import annotations
 from engine.events import GameEvent, HookContext
 from models.effects import AddPointsOp, CustomNoteOp, EffectProgram, SubtractPointsOp
 from models.game_state import GameState, Player
-from sandbox.revalidate import apply_snippet_diff, parse_diff
-from sandbox.runner import execute_snippet
+from engine.sandbox.revalidate import apply_snippet_diff, parse_diff
+from engine.sandbox.runner import execute_snippet
 
 STATE_DICT = {
     "players": [

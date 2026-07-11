@@ -13,7 +13,7 @@ import asyncio
 from unittest.mock import AsyncMock
 
 from models.ws_messages import EpilogueVoteMsg, PassMsg
-from rooms.room import Room
+from board.rooms.room import Room
 
 
 def _ended_room(p1_hand: list[str], cards: dict, scores: tuple[int, int]) -> Room:

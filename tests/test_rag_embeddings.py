@@ -1,4 +1,4 @@
-"""Tests for rag.embeddings."""
+"""Tests for agent.rag.embeddings."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ import pytest
 def test_get_embeddings_uses_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_EMBEDDING_MODEL", "my-model")
-    import rag.embeddings as mod
+    import agent.rag.embeddings as mod
 
     mod.get_embeddings.cache_clear()
-    with patch("rag.embeddings.OpenAIEmbeddings") as MockEmb:
+    with patch("agent.rag.embeddings.OpenAIEmbeddings") as MockEmb:
         MockEmb.return_value = MagicMock()
         mod.get_embeddings()
         # check_embedding_ctx_length=True keeps the hosted-OpenAI len-safe
@@ -33,10 +33,10 @@ def test_get_embeddings_uses_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_get_embeddings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    import rag.embeddings as mod
+    import agent.rag.embeddings as mod
 
     mod.get_embeddings.cache_clear()
-    with patch("rag.embeddings.OpenAIEmbeddings") as MockEmb:
+    with patch("agent.rag.embeddings.OpenAIEmbeddings") as MockEmb:
         MockEmb.return_value = MagicMock()
         a = mod.get_embeddings()
         b = mod.get_embeddings()
@@ -47,10 +47,10 @@ def test_get_embeddings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_embed_text_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    import rag.embeddings as mod
+    import agent.rag.embeddings as mod
 
     mod.get_embeddings.cache_clear()
-    with patch("rag.embeddings.OpenAIEmbeddings") as MockEmb:
+    with patch("agent.rag.embeddings.OpenAIEmbeddings") as MockEmb:
         inst = MagicMock()
         inst.embed_query.return_value = [0.1, 0.2, 0.3]
         MockEmb.return_value = inst
@@ -63,13 +63,13 @@ def test_embed_text_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    import rag.embeddings as mod
+    import agent.rag.embeddings as mod
 
     from config import get_settings
 
     get_settings.cache_clear()
     mod.get_embeddings.cache_clear()
-    with patch("rag.embeddings.OpenAIEmbeddings") as MockEmb:
+    with patch("agent.rag.embeddings.OpenAIEmbeddings") as MockEmb:
         with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
             mod.get_embeddings()
         MockEmb.assert_not_called()
@@ -77,7 +77,7 @@ def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 def test_constants() -> None:
-    from rag.embeddings import DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIMENSIONS
+    from agent.rag.embeddings import DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIMENSIONS
 
     assert EMBEDDING_DIMENSIONS == 1536
     assert DEFAULT_EMBEDDING_MODEL == "text-embedding-3-small"
@@ -88,10 +88,10 @@ def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.M
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)  # no OpenAI key needed
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
-    import rag.embeddings as mod
+    import agent.rag.embeddings as mod
 
     mod.get_embeddings.cache_clear()
-    with patch("rag.embeddings.OpenAIEmbeddings") as MockEmb:
+    with patch("agent.rag.embeddings.OpenAIEmbeddings") as MockEmb:
         MockEmb.return_value = MagicMock()
         mod.get_embeddings()
         _, kwargs = MockEmb.call_args
@@ -107,7 +107,7 @@ def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.M
 def test_embedding_dimensions_is_provider_aware(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Qdrant-facing dimension follows the active provider (1536 vs 768)."""
     from config import get_settings
-    from rag.embeddings import embedding_dimensions
+    from agent.rag.embeddings import embedding_dimensions
 
     get_settings.cache_clear()
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")

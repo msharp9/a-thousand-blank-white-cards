@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sandbox.runner import SnippetExecutionError, execute_snippet
+from engine.sandbox.runner import SnippetExecutionError, execute_snippet
 
 STATE = {
     "players": [{"id": "p1", "name": "A", "score": 0, "hand": [], "connected": True}],

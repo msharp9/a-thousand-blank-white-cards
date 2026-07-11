@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from config import Settings
-from sandbox.runner import execute_snippet
+from engine.sandbox.runner import execute_snippet
 
 STATE = {
     "players": [{"id": "p1", "name": "A", "score": 0, "hand": [], "connected": True}],

@@ -1,4 +1,4 @@
-"""rooms.epilogue — epilogue vote lifecycle for one Room.
+"""board.rooms.epilogue — epilogue vote lifecycle for one Room.
 
 Collects keep/destroy votes on cards created during the game, tallies them via the
 phase-1 tally logic, and upserts kept cards into the RAG corpus so future games can
@@ -11,7 +11,7 @@ import asyncio
 import logging
 from typing import Any
 
-from rooms.connections import ConnectionManager
+from board.rooms.connections import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class EpilogueManager:
     async def tally_and_persist(self) -> Any:
         """Tally votes, upsert kept cards into RAG, return the EpilogueResult."""
         from engine.epilogue import tally_votes
-        from rag.store import upsert_card
+        from agent.rag.store import upsert_card
 
         card_ids = [c["id"] for c in self._cards]
         # tally_votes expects {player_id: {card_id: vote}}, but votes are stored

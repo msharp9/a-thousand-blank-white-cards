@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, patch
 from conftest import drive_to_playing
 
 from models.ws_messages import CreateCardMsg, DrawMsg, PassMsg, PlayMsg, Placement
-from rooms.connections import ConnectionManager
-from rooms.manager import RoomManager
-from rooms.room import Room
+from board.rooms.connections import ConnectionManager
+from board.rooms.manager import RoomManager
+from board.rooms.room import Room
 
 
 def _room_two_players() -> Room:

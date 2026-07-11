@@ -1,4 +1,4 @@
-"""Tests for rag.retrievers."""
+"""Tests for agent.rag.retrievers."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 def test_dense_retriever_calls_search() -> None:
     fake_results = [{"card_id": "c1", "score": 0.9}]
-    with patch("rag.retrievers.search", return_value=fake_results) as mock_search:
-        from rag.retrievers import dense_retriever
+    with patch("agent.rag.retrievers.search", return_value=fake_results) as mock_search:
+        from agent.rag.retrievers import dense_retriever
 
         retrieve = dense_retriever()
         results = retrieve("test query", k=2)
@@ -17,8 +17,8 @@ def test_dense_retriever_calls_search() -> None:
 
 
 def test_dense_retriever_default_k() -> None:
-    with patch("rag.retrievers.search", return_value=[]) as mock_search:
-        from rag.retrievers import dense_retriever
+    with patch("agent.rag.retrievers.search", return_value=[]) as mock_search:
+        from agent.rag.retrievers import dense_retriever
 
         dense_retriever()("q")
         mock_search.assert_called_once_with("q", k=4)
@@ -29,8 +29,8 @@ def test_advanced_retriever_is_multiquery() -> None:
     # no longer a plain delegate to dense. With paraphrase generation failing/empty
     # it degrades to a single dense query over the base retriever.
     fake_results = [{"card_id": "x", "title": "X"}]
-    with patch("rag.retrievers.search", return_value=fake_results) as mock_search:
-        from rag.retrievers import MultiQueryCardRetriever, advanced_retriever
+    with patch("agent.rag.retrievers.search", return_value=fake_results) as mock_search:
+        from agent.rag.retrievers import MultiQueryCardRetriever, advanced_retriever
 
         retrieve = advanced_retriever()
         assert callable(retrieve)

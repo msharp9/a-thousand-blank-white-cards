@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # LANGCHAIN_* names are the *old* names for the same LangSmith settings, kept
     # here only as back-compat aliases so pre-existing .env files keep working:
     # if the LANGSMITH_* value is unset, the LANGCHAIN_* value populates it.
-    # App code (see app) reads only the langsmith_* fields.
+    # App code (see board.app) reads only the langsmith_* fields.
     langsmith_tracing: bool = Field(
         default=False,
         validation_alias=AliasChoices("langsmith_tracing", "langchain_tracing_v2"),
@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     port: int = 8000
 
     # --- Logging ---
-    # Root logger level applied by logging_config.configure_logging().
+    # Root/"tbwc" logger level applied by logging_config.configure_logging().
     # Standard names (DEBUG/INFO/WARNING/ERROR/CRITICAL); override via LOG_LEVEL.
     log_level: str = "INFO"
 
@@ -151,7 +151,7 @@ def require_openai_api_key() -> str:
     The key is only required for the ``openai`` provider. When ``llm_provider ==
     "ollama"`` all traffic goes to a local OpenAI-compatible server that ignores
     the key, so this gate is a no-op (returns the placeholder key) and the
-    startup check in app does not fire.
+    startup check in board.app does not fire.
     """
     settings = get_settings()
     # Skip the OpenAI-key requirement entirely for the local Ollama backend.
