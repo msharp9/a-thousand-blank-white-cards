@@ -40,12 +40,11 @@ def get_embeddings() -> OpenAIEmbeddings:
         model=settings.embedding_model or DEFAULT_EMBEDDING_MODEL,
         openai_api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,
-        # By default OpenAIEmbeddings tokenizes text with tiktoken and POSTs
-        # integer token-ID arrays (the "len-safe" path). The hosted OpenAI API
-        # accepts that, but some gateways / local servers (e.g. Ollama's
-        # /embeddings endpoint) reject token-ID arrays with "400 - invalid input
-        # type" and need raw strings. Controlled by LLM_EMBEDDING_CHECK_CTX_LENGTH.
-        check_embedding_ctx_length=settings.embedding_check_ctx_length,
+        default_headers=settings.llm_default_headers,
+        # False = send raw strings, not tiktoken token-ID arrays. Gateways (bifrost/
+        # Bedrock) and local servers reject token arrays; cards are length-bounded so
+        # the tiktoken chunking that True would add is never needed.
+        check_embedding_ctx_length=False,
     )
 
 

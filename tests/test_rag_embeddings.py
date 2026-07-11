@@ -20,12 +20,14 @@ def test_get_embeddings_uses_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
     with patch("agent.rag.embeddings.OpenAIEmbeddings") as MockEmb:
         MockEmb.return_value = MagicMock()
         mod.get_embeddings()
-        # check_embedding_ctx_length defaults True (hosted-OpenAI len-safe path).
+        # check_embedding_ctx_length is hardcoded False: send raw strings, not token
+        # arrays (gateways/Bedrock reject arrays; cards are length-bounded).
         MockEmb.assert_called_once_with(
             model="my-model",
             openai_api_key="test-key",
             base_url=None,
-            check_embedding_ctx_length=True,
+            check_embedding_ctx_length=False,
+            default_headers=None,
         )
     mod.get_embeddings.cache_clear()
 
@@ -84,13 +86,12 @@ def test_constants() -> None:
     assert DEFAULT_EMBEDDING_MODEL == "text-embedding-3-small"
 
 
-def test_gateway_base_url_key_and_ctx_length(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """A local gateway config (base_url + key + ctx-length off) flows through."""
+def test_gateway_base_url_and_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A gateway config (base_url + key) flows through; ctx-length is always False."""
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
     monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434/v1")
     monkeypatch.setenv("LLM_API_KEY", "ollama")
     monkeypatch.setenv("LLM_EMBEDDING_MODEL", "nomic-embed-text")
-    monkeypatch.setenv("LLM_EMBEDDING_CHECK_CTX_LENGTH", "false")
     import agent.rag.embeddings as mod
 
     mod.get_embeddings.cache_clear()
@@ -101,7 +102,7 @@ def test_gateway_base_url_key_and_ctx_length(monkeypatch: pytest.MonkeyPatch, tm
         assert kwargs["model"] == "nomic-embed-text"
         assert kwargs["base_url"] == "http://localhost:11434/v1"
         assert kwargs["openai_api_key"] == "ollama"
-        # Gateways/local servers that reject tiktoken token-id arrays disable this.
+        # Hardcoded: raw strings, never tiktoken token-id arrays.
         assert kwargs["check_embedding_ctx_length"] is False
     mod.get_embeddings.cache_clear()
 

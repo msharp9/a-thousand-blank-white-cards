@@ -14,6 +14,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from agent.rag.embeddings import embedding_dimensions, embed_text
+from models.card import MAX_CARD_DESCRIPTION, MAX_CARD_TITLE
 
 COLLECTION_NAME = "cards"
 
@@ -68,6 +69,11 @@ def upsert_card(
     canonical is stored as payload (not embedded). source is a provenance label
     ("seed" | "player"), also payload.
     """
+    if len(title) > MAX_CARD_TITLE or len(description) > MAX_CARD_DESCRIPTION:
+        raise ValueError(
+            f"card {card_id!r} exceeds text limits "
+            f"(title {len(title)}/{MAX_CARD_TITLE}, description {len(description)}/{MAX_CARD_DESCRIPTION})"
+        )
     client = _require_client()
     text = f"{title}\n{description}"
     vector = embed_text(text)

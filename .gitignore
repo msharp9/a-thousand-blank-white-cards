@@ -189,10 +189,12 @@ data/eval/**/*.pyc
 data/eval/images/*
 !data/eval/images/manifest.json
 
-# Models
+# Models (ML artifact dirs) — but NOT the src/models Python source package.
+# The negation must match the current flat src/ layout; the old src/tbwc/models/
+# path was flattened away, and hatch honors this ignore at build time (it dropped
+# src/models from the wheel while the stale negation pointed at the dead path).
 models/
-# ...but not the Python source package
-!src/tbwc/models/
+!src/models/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

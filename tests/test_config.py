@@ -17,7 +17,6 @@ def test_defaults_load_without_env_file() -> None:
     assert s.llm_chat_model == "gpt-5.4-mini"
     assert s.llm_embedding_model == "text-embedding-3-small"
     assert s.llm_embedding_dimensions == 1536
-    assert s.llm_embedding_check_ctx_length is True
     assert s.qdrant_collection == "tbwc_cards"
     assert s.port == 8000
     assert "http://localhost:3000" in s.cors_origins
@@ -67,16 +66,14 @@ def test_api_key_set_is_returned(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_accessors_follow_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    """chat/embedding model + dimensions + ctx-length flow through the accessors."""
+    """chat/embedding model + dimensions flow through the accessors."""
     monkeypatch.setenv("LLM_CHAT_MODEL", "gpt-oss-20b")
     monkeypatch.setenv("LLM_EMBEDDING_MODEL", "nomic-embed-text")
     monkeypatch.setenv("LLM_EMBEDDING_DIMENSIONS", "768")
-    monkeypatch.setenv("LLM_EMBEDDING_CHECK_CTX_LENGTH", "false")
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.chat_model == "gpt-oss-20b"
     assert s.embedding_model == "nomic-embed-text"
     assert s.embedding_dimensions == 768
-    assert s.embedding_check_ctx_length is False
 
 
 def test_warn_if_no_llm_credentials_warns(

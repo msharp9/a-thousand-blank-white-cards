@@ -19,21 +19,21 @@ npm run dev                  # http://localhost:3000
 
 Environment variables:
 
-| Variable              | Purpose                | Example                 |
-| --------------------- | ---------------------- | ----------------------- |
-| `NEXT_PUBLIC_API_URL` | REST base URL          | `http://localhost:8000` |
-| `NEXT_PUBLIC_WS_URL`  | WebSocket base URL     | `ws://localhost:8000`   |
+| Variable              | Purpose            | Example                 |
+| --------------------- | ------------------ | ----------------------- |
+| `NEXT_PUBLIC_API_URL` | REST base URL      | `http://localhost:8000` |
+| `NEXT_PUBLIC_WS_URL`  | WebSocket base URL | `ws://localhost:8000`   |
 
 ## Scripts
 
-| Command             | Description                  |
-| ------------------- | ---------------------------- |
-| `npm run dev`       | Start the dev server         |
-| `npm run build`     | Production build             |
-| `npm run start`     | Serve the production build   |
-| `npm run typecheck` | Type-check (`tsc --noEmit`)  |
-| `npm run lint`      | Lint (`eslint`)              |
-| `npm run format`    | Format (`prettier --write`)  |
+| Command             | Description                 |
+| ------------------- | --------------------------- |
+| `npm run dev`       | Start the dev server        |
+| `npm run build`     | Production build            |
+| `npm run start`     | Serve the production build  |
+| `npm run typecheck` | Type-check (`tsc --noEmit`) |
+| `npm run lint`      | Lint (`eslint`)             |
+| `npm run format`    | Format (`prettier --write`) |
 
 ## Deployment
 

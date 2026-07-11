@@ -53,6 +53,22 @@ def test_stable_point_id_is_deterministic() -> None:
     assert _stable_point_id("c1") != _stable_point_id("c2")
 
 
+def test_upsert_rejects_oversized_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Seed data bypasses the ws schemas, so upsert_card guards the length itself."""
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    from models.card import MAX_CARD_DESCRIPTION, MAX_CARD_TITLE
+
+    fake_vector = [0.1] * 1536
+    with patch("agent.rag.store.embed_text", return_value=fake_vector):
+        from agent.rag.store import init_store, upsert_card
+
+        init_store()
+        with pytest.raises(ValueError, match="exceeds text limits"):
+            upsert_card("c1", "x" * (MAX_CARD_TITLE + 1), "ok", "{}", "seed")
+        with pytest.raises(ValueError, match="exceeds text limits"):
+            upsert_card("c2", "ok", "y" * (MAX_CARD_DESCRIPTION + 1), "{}", "seed")
+
+
 def test_reupsert_same_card_id_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_API_KEY", "test-key")
     fake_vector = [0.1] * 1536

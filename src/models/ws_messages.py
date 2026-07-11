@@ -11,6 +11,13 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
 
+from models.card import MAX_CARD_DESCRIPTION, MAX_CARD_TITLE
+
+# Length-bounded card text, enforced on every inbound authoring message via the
+# ClientMsg TypeAdapter in board.ws. Limits live in models.card (single source).
+CardTitle = Annotated[str, Field(max_length=MAX_CARD_TITLE)]
+CardDescription = Annotated[str, Field(max_length=MAX_CARD_DESCRIPTION)]
+
 # ─── client → server ────────────────────────────────────────────────────────
 
 
@@ -75,20 +82,20 @@ class PlayMsg(BaseModel):
     # the room persists them (clearing the blank flag) BEFORE interpreting, so
     # any prompt_choice follow-up play (which omits these) re-interprets the
     # now-real card. Ignored for non-blank cards.
-    title: str | None = None
-    description: str | None = None
+    title: CardTitle | None = None
+    description: CardDescription | None = None
 
 
 class CreateCardMsg(BaseModel):
     type: Literal["create_card"] = "create_card"
-    title: str
-    description: str
+    title: CardTitle
+    description: CardDescription
 
 
 class PreviewCardMsg(BaseModel):
     type: Literal["preview_card"] = "preview_card"
-    title: str
-    description: str
+    title: CardTitle
+    description: CardDescription
 
 
 class EpilogueVoteMsg(BaseModel):

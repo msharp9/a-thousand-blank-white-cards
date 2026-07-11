@@ -29,4 +29,5 @@ def get_chat_model(model_name: str | None = None, *, temperature: float = 0) -> 
         temperature=temperature,
         openai_api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,
+        default_headers=settings.llm_default_headers,
     )

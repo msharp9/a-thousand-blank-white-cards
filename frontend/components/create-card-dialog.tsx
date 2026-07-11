@@ -78,12 +78,14 @@ export function CreateCardDialog({
             placeholder="Card title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            maxLength={60}
           />
           <Textarea
             placeholder="Describe the rule… e.g. 'Everyone loses 5 points'"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
+            maxLength={500}
           />
           {previewing && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">

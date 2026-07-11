@@ -47,11 +47,11 @@ logger = logging.getLogger(__name__)
 # Maximum number of reasoning/tool-call steps before we bail out. The compiled
 # agent's recursion_limit counts super-steps; a value of 8 comfortably allows a
 # few tool round-trips (each tool call is ~2 steps: model -> tool -> model).
-MAX_TOOL_CALLS: int = 8
+MAX_TOOL_CALLS: int = 12
 
 # Wall-clock ceiling for a single interpretation, in seconds. Guards against a
 # tool or model call that hangs on the network even when the step count is low.
-AGENT_TIMEOUT_SECONDS: float = 20.0
+AGENT_TIMEOUT_SECONDS: float = 600.0
 
 
 def _configure_langsmith() -> None:
@@ -281,7 +281,7 @@ def run_agent(
             logger.warning("agent timed out after %.1fs; returning bounded fallback", timeout)
             future.cancel()
             return _fallback_result(
-                comment="You took so long I lost interest. Nothing happens.",
+                comment="Figuring out your card took so long I lost interest. Nothing happens.",
                 note="Interpretation timed out: no effect applied.",
             )
         except GraphRecursionError:

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 
-from pydantic import TypeAdapter
+import pytest
+from pydantic import TypeAdapter, ValidationError
 
+from models.card import MAX_CARD_DESCRIPTION, MAX_CARD_TITLE
 from models.ws_messages import ClientMsg, DrawMsg, EndTurnMsg, JoinMsg, PassMsg, PlayMsg, StateMsg
 
 
@@ -115,3 +117,38 @@ def test_state_msg_envelope() -> None:
     m = StateMsg(state={"players": []})
     assert m.type == "state"
     assert m.state == {"players": []}
+
+
+# ─── card text length limits (enforced on all authoring messages) ────────────
+
+
+def test_create_card_at_limit_ok() -> None:
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python(
+        {"type": "create_card", "title": "x" * MAX_CARD_TITLE, "description": "y" * MAX_CARD_DESCRIPTION}
+    )
+    assert msg.type == "create_card"
+
+
+def test_create_card_over_title_limit_rejected() -> None:
+    ta = TypeAdapter(ClientMsg)
+    with pytest.raises(ValidationError):
+        ta.validate_python({"type": "create_card", "title": "x" * (MAX_CARD_TITLE + 1), "description": "ok"})
+
+
+def test_create_card_over_description_limit_rejected() -> None:
+    ta = TypeAdapter(ClientMsg)
+    with pytest.raises(ValidationError):
+        ta.validate_python({"type": "create_card", "title": "ok", "description": "y" * (MAX_CARD_DESCRIPTION + 1)})
+
+
+def test_preview_card_over_limit_rejected() -> None:
+    ta = TypeAdapter(ClientMsg)
+    with pytest.raises(ValidationError):
+        ta.validate_python({"type": "preview_card", "title": "x" * (MAX_CARD_TITLE + 1), "description": "ok"})
+
+
+def test_play_authoring_over_limit_rejected() -> None:
+    ta = TypeAdapter(ClientMsg)
+    with pytest.raises(ValidationError):
+        ta.validate_python({"type": "play", "card_id": "blank-0", "description": "y" * (MAX_CARD_DESCRIPTION + 1)})

@@ -41,12 +41,6 @@ class Settings(BaseSettings):
     # MUST match the model. OpenAI text-embedding-3-small is 1536-dim; other
     # servers differ (e.g. Ollama nomic-embed-text is 768) — override to match.
     llm_embedding_dimensions: int = 1536
-    # Whether OpenAIEmbeddings should run its tiktoken context-length check, which
-    # POSTs integer token-ID arrays (the "len-safe" path). The hosted OpenAI API
-    # handles that fine (default True), but some gateways / local servers (e.g.
-    # Ollama) reject token-ID arrays with "400 - invalid input type" and need raw
-    # strings, so set LLM_EMBEDDING_CHECK_CTX_LENGTH=false for those.
-    llm_embedding_check_ctx_length: bool = True
 
     # --- LangSmith observability ---
     # Canonical config uses the modern LANGSMITH_* env var convention. The legacy
@@ -120,6 +114,13 @@ class Settings(BaseSettings):
         return self.llm_api_key_raw or self.API_KEY_PLACEHOLDER
 
     @property
+    def llm_default_headers(self) -> dict[str, str] | None:
+        """Mirror LLM_API_KEY into bifrost's x-bf-vk header when a gateway is set."""
+        if self.llm_api_key_raw and self.llm_base_url_raw:
+            return {"x-bf-vk": self.llm_api_key_raw}
+        return None
+
+    @property
     def chat_model(self) -> str:
         return self.llm_chat_model
 
@@ -131,11 +132,6 @@ class Settings(BaseSettings):
     def embedding_dimensions(self) -> int:
         """Vector size of the embedding model; threaded into Qdrant collection sizing."""
         return self.llm_embedding_dimensions
-
-    @property
-    def embedding_check_ctx_length(self) -> bool:
-        """Pass-through for OpenAIEmbeddings' tiktoken context-length check."""
-        return self.llm_embedding_check_ctx_length
 
 
 @lru_cache(maxsize=1)

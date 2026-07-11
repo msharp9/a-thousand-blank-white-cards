@@ -11,6 +11,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+# Card text limits. A card is a card, not a novel — bounding the text keeps every
+# card small enough to embed as a single chunk and enforces the game's terse style.
+# Single source of truth; imported by models.ws_messages and agent.rag.store.
+MAX_CARD_TITLE = 60
+MAX_CARD_DESCRIPTION = 500
+
 
 # ---------------------------------------------------------------------------
 # Canonical annotation — describes HOW a card is executed by the engine
@@ -83,16 +89,19 @@ class CardCanonical(BaseModel):
 class GoldCard(BaseModel):
     """A fully-annotated exemplar card used to train the AI card generator."""
 
-    title: str = Field(description="Short card name, ≤60 chars.")
-    description: str = Field(description="Card text as written on the physical card. May include flavour text.")
+    title: str = Field(max_length=MAX_CARD_TITLE, description="Short card name.")
+    description: str = Field(
+        max_length=MAX_CARD_DESCRIPTION,
+        description="Card text as written on the physical card. May include flavour text.",
+    )
     canonical: CardCanonical
 
 
 class FillerCard(BaseModel):
     """A text-only card — title + description only, no structured annotation."""
 
-    title: str
-    description: str
+    title: str = Field(max_length=MAX_CARD_TITLE)
+    description: str = Field(max_length=MAX_CARD_DESCRIPTION)
 
 
 # ---------------------------------------------------------------------------
