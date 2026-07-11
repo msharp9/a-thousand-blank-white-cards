@@ -124,6 +124,9 @@ class CardInterpretedMsg(BaseModel):
     program: str | None = None
     snippet: str | None = None
     verdict: str  # "ok" | "invalid" | "needs_choice"
+    # In-character comment from the agent. Optional so pre-agent callers / older
+    # clients stay compatible; D1/D2 consume it (D1 persists it to the game log).
+    comment: str = ""
 
 
 class PreviewResultMsg(BaseModel):

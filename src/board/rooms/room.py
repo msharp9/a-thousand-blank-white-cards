@@ -482,7 +482,7 @@ class Room:
             return "in_play"
         return "discard"
 
-    async def _resolve_program(self, card_id: str, card) -> EffectProgram:
+    async def _resolve_program(self, card_id: str, card, actor_id: str | None = None) -> EffectProgram:
         """Return the EffectProgram to apply for a played card — NEVER None.
 
         Resolution order (the deterministic basic game must not depend on the LLM):
@@ -491,46 +491,61 @@ class Room:
            card, or a blank authored with a canonical), ``compile_card`` turns
            them into a runtime program. This path is fully deterministic and
            never calls the agent; the simple seed deck lives entirely here.
-        2. **LLM interpretation (best-effort)** — for free-text cards with no
-           compilable ops (most authored blanks), we ask the agent to interpret
-           the title/description. This runs in a thread and is broadcast as
-           ``brewing``/``card_interpreted`` for UI feedback. If it yields a valid
-           program we use it.
+        2. **Agent interpretation (best-effort)** — for free-text cards with no
+           compilable ops (most authored blanks), we ask the single tool-calling
+           agent (:func:`agent.runtime.run_agent`) to interpret the card. Unlike
+           the old title/description-only graph entry, the agent receives the live
+           ``GameState`` plus the ``actor_id`` (who played it) and ``creator_id``
+           (who authored it) so it can read the board and apply its persona
+           (do_nothing / punish_author / chaos_monkey / random_solution). This
+           runs in a thread and is broadcast as ``brewing``/``card_interpreted``
+           for UI feedback. If it yields a valid program we use it.
         3. **Deterministic fallback** — if neither produced ops (no canonical AND
-           the LLM was unavailable / returned nothing / an invalid verdict), we
+           the agent was unavailable / returned nothing / an invalid verdict), we
            return a single ``CustomNoteOp`` so the play still resolves with a log
            line instead of silently doing nothing. A play NEVER silently no-ops.
         """
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
         description = card["description"] if isinstance(card, dict) else getattr(card, "description", "")
+        creator_id = card.get("creator_id") if isinstance(card, dict) else getattr(card, "creator_id", None)
 
-        # 1. Deterministic compiled path — no LLM.
+        # 1. Deterministic compiled path — no agent.
         compiled = compile_card(card if isinstance(card, dict) else card.model_dump())
         if compiled is not None and compiled.ops:
             return compiled
 
-        # 2. Best-effort LLM interpretation for free-text cards.
-        from agent.graph import interpret_card
+        # 2. Best-effort agent interpretation for free-text cards. Pass the live
+        # GameState (a value, immutable-by-convention — read_game_state handles a
+        # GameState directly) plus actor/creator so the persona can act.
+        from agent.contract import InterpretResult
+        from agent.runtime import run_agent
 
         await self.connections.broadcast({"type": "brewing", "card_id": card_id})
         try:
-            result = await asyncio.to_thread(interpret_card, title, description)
+            result: InterpretResult = await asyncio.to_thread(
+                run_agent, title, description, self.state, actor_id, creator_id=creator_id
+            )
         except Exception:
-            logger.exception("interpret_card failed for %s; using deterministic fallback", card_id)
-            result = {"verdict": "error", "program": None, "snippet": None}
+            # run_agent is designed never to raise, but keep the guard so a
+            # surprise never breaks a play — fall back deterministically.
+            logger.exception("run_agent failed for %s; using deterministic fallback", card_id)
+            result = InterpretResult(verdict="invalid", comment="", persona_action="none")
 
         await self.connections.broadcast(
             {
                 "type": "card_interpreted",
                 "card_id": card_id,
-                "program": str(result.get("program")) if result.get("program") is not None else None,
-                "snippet": getattr(result.get("snippet"), "code", None),
-                "verdict": result.get("verdict", "error"),
+                "program": str(result.program) if result.program is not None else None,
+                "snippet": getattr(result.snippet, "code", None),
+                "verdict": result.verdict,
+                # Carry the in-character comment so the frontend/D1 can surface it.
+                # (D1 owns persisting it to state.log; here we only broadcast it.)
+                "comment": result.comment,
             }
         )
 
-        program = result.get("program")
-        if result.get("verdict") == "ok" and program is not None and getattr(program, "ops", None):
+        program = result.program
+        if result.verdict == "ok" and program is not None and getattr(program, "ops", None):
             return program
 
         # 3. Deterministic fallback — never a silent no-op.
@@ -579,7 +594,7 @@ class Room:
             card = authored
 
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
-        program = await self._resolve_program(card_id, card)
+        program = await self._resolve_program(card_id, card, actor_id=player_id)
 
         if program is not None and program.ops:
             # Cards whose program targets "chooser"/"target_player"
@@ -705,17 +720,25 @@ class Room:
             await self._broadcast_state()
             return
 
-        from agent.graph import interpret_card
+        from agent.contract import InterpretResult
+        from agent.runtime import run_agent
 
         await self.connections.broadcast({"type": "brewing", "card_id": card_id})
-        result = await asyncio.to_thread(interpret_card, msg.title, msg.description)
+        # A just-created card's actor IS its creator (player_id authored it).
+        try:
+            result: InterpretResult = await asyncio.to_thread(
+                run_agent, msg.title, msg.description, self.state, player_id, creator_id=player_id
+            )
+        except Exception:
+            logger.exception("run_agent failed for %s; using deterministic fallback", card_id)
+            result = InterpretResult(verdict="invalid", comment="", persona_action="none")
 
         # store interpretation summary on the card
         card = {
             **self.state.cards[card_id],
-            "program": str(result.get("program")) if result.get("program") is not None else None,
-            "snippet": getattr(result.get("snippet"), "code", None),
-            "verdict": result["verdict"],
+            "program": str(result.program) if result.program is not None else None,
+            "snippet": getattr(result.snippet, "code", None),
+            "verdict": result.verdict,
         }
         merged = {**self.state.cards, card_id: card}
         self.state = self.state.model_copy(update={"cards": merged})
@@ -727,6 +750,8 @@ class Room:
                 "program": card["program"],
                 "snippet": card["snippet"],
                 "verdict": card["verdict"],
+                # Carry the in-character comment for the frontend/D1 (not persisted here).
+                "comment": result.comment,
             }
         )
         await self._broadcast_state()

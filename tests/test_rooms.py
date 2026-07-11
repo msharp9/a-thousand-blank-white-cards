@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from conftest import drive_to_playing
 
+from agent.contract import InterpretResult
 from models.ws_messages import CreateCardMsg, DrawMsg, PassMsg, PlayMsg, Placement
 from board.rooms.connections import ConnectionManager
 from board.rooms.manager import RoomManager
@@ -149,8 +150,8 @@ class TestRoomTurnEnforcement:
         room.state = room.state.model_copy(update={"phase": "playing"})
         room.connections.connect("p2", AsyncMock())  # p2 is off-turn
         with patch(
-            "agent.graph.interpret_card",
-            return_value={"program": None, "snippet": None, "verdict": "invalid"},
+            "agent.runtime.run_agent",
+            return_value=InterpretResult(program=None, snippet=None, verdict="invalid"),
         ):
             asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do stuff")))
         assert len(room.state.cards) == 1
@@ -171,7 +172,7 @@ class TestRoomTurnEnforcement:
         room.connections.connect("p2", ws2)  # p2 off-turn
         msg = PlayMsg(card_id="card-x", placement=Placement(zone="self"))
         # patch defensively: it must NOT be called on the off-turn path
-        with patch("agent.graph.interpret_card") as mock_interpret:
+        with patch("agent.runtime.run_agent") as mock_interpret:
             asyncio.run(room.handle_action("p2", msg))
         mock_interpret.assert_not_called()
         sent = json.loads(ws2.send_text.call_args.args[0])

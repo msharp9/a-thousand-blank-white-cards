@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from conftest import drive_to_playing
 
+from agent.contract import InterpretResult
 from models.effects import AddPointsOp, DestroyCardOp, EffectProgram
 from models.ws_messages import CreateCardMsg, DrawMsg, PassMsg, PlayMsg, Placement, StartMsg
 from board.rooms.room import Room
@@ -192,8 +193,8 @@ def test_create_card_off_turn_allowed() -> None:
     room = _room_with_two_players()
     room.state = room.state.model_copy(update={"phase": "playing"})
     room.connections.connect("p2", AsyncMock())
-    fake_result = {"program": None, "snippet": None, "verdict": "invalid"}
-    with patch("agent.graph.interpret_card", return_value=fake_result):
+    fake_result = InterpretResult(program=None, snippet=None, verdict="invalid")
+    with patch("agent.runtime.run_agent", return_value=fake_result):
         asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do something")))
     assert len(room.state.cards) == 1
 
@@ -215,10 +216,10 @@ def _chooser_room() -> Room:
     return room
 
 
-def _chooser_result() -> dict:
+def _chooser_result() -> InterpretResult:
     """Interpretation result with a chooser-target op requiring a choice."""
     program = EffectProgram(ops=[AddPointsOp(target="chooser", amount=5)], requires_choice=True)
-    return {"program": program, "snippet": None, "verdict": "ok"}
+    return InterpretResult(program=program, snippet=None, verdict="ok")
 
 
 def test_play_chooser_card_with_valid_choice_applies() -> None:
@@ -226,7 +227,7 @@ def test_play_chooser_card_with_valid_choice_applies() -> None:
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
     msg = PlayMsg(card_id="c1", placement=Placement(zone="player", target_player_id="p2"), chosen_player_id="p2")
-    with patch("agent.graph.interpret_card", return_value=_chooser_result()):
+    with patch("agent.runtime.run_agent", return_value=_chooser_result()):
         asyncio.run(room.handle_action("p1", msg))
     # The chosen player received the points and the turn advanced.
     assert room.state.get_player("p2").score == 5
@@ -243,7 +244,7 @@ def test_play_chooser_card_without_choice_prompts() -> None:
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", AsyncMock())
     msg = PlayMsg(card_id="c1", chosen_player_id=None)
-    with patch("agent.graph.interpret_card", return_value=_chooser_result()):
+    with patch("agent.runtime.run_agent", return_value=_chooser_result()):
         asyncio.run(room.handle_action("p1", msg))
     sent = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
     sent_types = [m["type"] for m in sent]
@@ -265,7 +266,7 @@ def test_play_chooser_followup_with_choice_applies_and_advances() -> None:
     room = _chooser_room()
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
-    with patch("agent.graph.interpret_card", return_value=_chooser_result()):
+    with patch("agent.runtime.run_agent", return_value=_chooser_result()):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))  # prompt
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1", chosen_player_id="p2")))  # answer
     assert room.state.get_player("p2").score == 5
@@ -278,7 +279,7 @@ def test_play_chooser_card_with_invalid_choice_errors_cleanly() -> None:
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", AsyncMock())
     msg = PlayMsg(card_id="c1", placement=Placement(zone="center"), chosen_player_id="ghost")
-    with patch("agent.graph.interpret_card", return_value=_chooser_result()):
+    with patch("agent.runtime.run_agent", return_value=_chooser_result()):
         asyncio.run(room.handle_action("p1", msg))
     sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
     assert "error" in sent_types
@@ -306,9 +307,9 @@ def _card_chooser_room() -> Room:
     return room
 
 
-def _card_chooser_result() -> dict:
+def _card_chooser_result() -> InterpretResult:
     program = EffectProgram(ops=[DestroyCardOp(card_target="chosen_card")], requires_choice=True)
-    return {"program": program, "snippet": None, "verdict": "ok"}
+    return InterpretResult(program=program, snippet=None, verdict="ok")
 
 
 def test_play_card_choice_with_valid_card_applies() -> None:
@@ -316,7 +317,7 @@ def test_play_card_choice_with_valid_card_applies() -> None:
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
     msg = PlayMsg(card_id="c1", placement=Placement(zone="center"), chosen_card_id="t1")
-    with patch("agent.graph.interpret_card", return_value=_card_chooser_result()):
+    with patch("agent.runtime.run_agent", return_value=_card_chooser_result()):
         asyncio.run(room.handle_action("p1", msg))
     # The chosen card was destroyed and the turn advanced.
     assert "t1" not in room.state.get_player("p1").in_play
@@ -333,7 +334,7 @@ def test_play_card_choice_without_card_prompts() -> None:
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", AsyncMock())
     msg = PlayMsg(card_id="c1", chosen_card_id=None)
-    with patch("agent.graph.interpret_card", return_value=_card_chooser_result()):
+    with patch("agent.runtime.run_agent", return_value=_card_chooser_result()):
         asyncio.run(room.handle_action("p1", msg))
     sent = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
     sent_types = [m["type"] for m in sent]
@@ -349,7 +350,7 @@ def test_play_card_choice_followup_with_card_applies_and_advances() -> None:
     room = _card_chooser_room()
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
-    with patch("agent.graph.interpret_card", return_value=_card_chooser_result()):
+    with patch("agent.runtime.run_agent", return_value=_card_chooser_result()):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))  # prompt
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1", chosen_card_id="t1")))  # answer
     assert "t1" not in room.state.get_player("p1").in_play
@@ -363,7 +364,7 @@ def test_play_card_choice_with_invalid_card_errors_cleanly() -> None:
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", AsyncMock())
     msg = PlayMsg(card_id="c1", placement=Placement(zone="center"), chosen_card_id="ghost_card")
-    with patch("agent.graph.interpret_card", return_value=_card_chooser_result()):
+    with patch("agent.runtime.run_agent", return_value=_card_chooser_result()):
         asyncio.run(room.handle_action("p1", msg))
     sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
     assert "error" in sent_types
@@ -508,9 +509,9 @@ def _blank_room() -> Room:
     return room
 
 
-def _self_points_result() -> dict:
+def _self_points_result() -> InterpretResult:
     """A simple 'give self points' interpretation (no target choice needed)."""
-    return {"program": EffectProgram(ops=[AddPointsOp(target="self", amount=3)]), "snippet": None, "verdict": "ok"}
+    return InterpretResult(program=EffectProgram(ops=[AddPointsOp(target="self", amount=3)]), snippet=None, verdict="ok")
 
 
 def test_play_blank_authors_card_and_applies_and_advances() -> None:
@@ -521,7 +522,7 @@ def test_play_blank_authors_card_and_applies_and_advances() -> None:
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
     msg = PlayMsg(card_id="blank-0", title="Gain 3", description="Gain 3 points.")
-    with patch("agent.graph.interpret_card", return_value=_self_points_result()) as mock_interp:
+    with patch("agent.runtime.run_agent", return_value=_self_points_result()) as mock_interp:
         asyncio.run(room.handle_action("p1", msg))
     # Card was authored in the registry.
     card = room.state.cards["blank-0"]
@@ -529,8 +530,17 @@ def test_play_blank_authors_card_and_applies_and_advances() -> None:
     assert card["description"] == "Gain 3 points."
     assert card["creator_id"] == "p1"
     assert "blank" not in card
-    # Interpreter saw the AUTHORED text (persist-before-interpret ordering).
-    mock_interp.assert_called_once_with("Gain 3", "Gain 3 points.")
+    # Interpreter saw the AUTHORED text (persist-before-interpret ordering) plus
+    # the live state, actor_id and creator_id (the player who authored the blank).
+    from models.game_state import GameState
+
+    mock_interp.assert_called_once()
+    call = mock_interp.call_args
+    assert call.args[0] == "Gain 3"
+    assert call.args[1] == "Gain 3 points."
+    assert isinstance(call.args[2], GameState)  # live GameState passed to the agent
+    assert call.args[3] == "p1"  # actor_id
+    assert call.kwargs["creator_id"] == "p1"  # authored-on-play: creator == actor
     # Effect applied and turn advanced.
     assert room.state.get_player("p1").score == 3
     assert room.state.turn_index == 1
@@ -544,7 +554,7 @@ def test_play_blank_persists_authoring_before_interpretation_for_followup() -> N
     room = _blank_room()
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
-    with patch("agent.graph.interpret_card", return_value=_chooser_result()) as mock_interp:
+    with patch("agent.runtime.run_agent", return_value=_chooser_result()) as mock_interp:
         # First play: author the blank + interpret -> needs a target -> prompt.
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="blank-0", title="Bless", description="give points")))
         # After the first play the blank is already a real, authored card.
@@ -555,9 +565,10 @@ def test_play_blank_persists_authoring_before_interpretation_for_followup() -> N
         # Follow-up play carries ONLY the choice (no title/description) — the
         # persisted card lets it re-interpret correctly.
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="blank-0", chosen_player_id="p2")))
-    # Both plays re-interpreted the same authored text.
-    assert mock_interp.call_args_list[0].args == ("Bless", "give points")
-    assert mock_interp.call_args_list[1].args == ("Bless", "give points")
+    # Both plays re-interpreted the same authored text (title/description are the
+    # first two positional args; run_agent also receives state/actor/creator).
+    assert mock_interp.call_args_list[0].args[:2] == ("Bless", "give points")
+    assert mock_interp.call_args_list[1].args[:2] == ("Bless", "give points")
     assert room.state.get_player("p2").score == 5
     assert room.state.turn_index == 1
 
@@ -569,7 +580,7 @@ def test_play_blank_without_content_is_rejected() -> None:
     ws1 = AsyncMock()
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", AsyncMock())
-    with patch("agent.graph.interpret_card", return_value=_self_points_result()) as mock_interp:
+    with patch("agent.runtime.run_agent", return_value=_self_points_result()) as mock_interp:
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="blank-0")))
     sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
     assert "error" in sent_types

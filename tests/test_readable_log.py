@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+from agent.contract import InterpretResult
 from models.effects import EffectProgram
 from models.ws_messages import PlayMsg
 from board.rooms.room import Room
@@ -41,7 +42,7 @@ def test_play_log_uses_name_title_and_delta() -> None:
         },
     }
     room = _playing_room(card)
-    with patch("agent.graph.interpret_card", side_effect=AssertionError("no LLM")):
+    with patch("agent.runtime.run_agent", side_effect=AssertionError("no agent")):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
     played = [line for line in room.state.log if "played" in line]
     assert played, room.state.log
@@ -62,7 +63,7 @@ def test_play_log_shows_other_players_deltas() -> None:
         },
     }
     room = _playing_room(card)
-    with patch("agent.graph.interpret_card", side_effect=AssertionError("no LLM")):
+    with patch("agent.runtime.run_agent", side_effect=AssertionError("no agent")):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c2")))
     line = [line for line in room.state.log if "played" in line][-1]
     assert "Alice played Everyone Else Loses 2" in line
@@ -74,8 +75,8 @@ def test_play_log_no_delta_for_effectless_card() -> None:
     room = _playing_room(card)
     # A card with no ops resolves to a CustomNoteOp (no score change).
     with patch(
-        "agent.graph.interpret_card",
-        return_value={"program": EffectProgram(ops=[]), "snippet": None, "verdict": "invalid"},
+        "agent.runtime.run_agent",
+        return_value=InterpretResult(program=EffectProgram(ops=[]), snippet=None, verdict="invalid"),
     ):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c3")))
     line = [line for line in room.state.log if "played" in line][-1]

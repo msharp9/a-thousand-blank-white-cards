@@ -1,4 +1,4 @@
-"""Tests for Room agent-interpretation integration (interpret_card mocked)."""
+"""Tests for Room agent-interpretation integration (run_agent mocked)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
+from agent.contract import InterpretResult
 from models.effects import AddPointsOp, EffectProgram
 from models.ws_messages import CreateCardMsg, Placement, PlayMsg
 from board.rooms.room import Room
@@ -29,12 +30,12 @@ def test_play_interprets_and_applies_ok(monkeypatch) -> None:
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", AsyncMock())
 
-    fake_result = {
-        "program": EffectProgram(ops=[AddPointsOp(target="self", amount=3)]),
-        "snippet": None,
-        "verdict": "ok",
-    }
-    with patch("agent.graph.interpret_card", return_value=fake_result):
+    fake_result = InterpretResult(
+        program=EffectProgram(ops=[AddPointsOp(target="self", amount=3)]),
+        snippet=None,
+        verdict="ok",
+    )
+    with patch("agent.runtime.run_agent", return_value=fake_result):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1", placement=Placement(zone="self"))))
 
     # p1 gained 3 (add_points self resolves to actor), turn advanced to p2
@@ -50,7 +51,7 @@ def test_play_unknown_card_errors(monkeypatch) -> None:
     room = _room()
     ws1 = AsyncMock()
     room.connections.connect("p1", ws1)
-    with patch("agent.graph.interpret_card", return_value={"program": None, "snippet": None, "verdict": "ok"}):
+    with patch("agent.runtime.run_agent", return_value=InterpretResult(program=None, snippet=None, verdict="ok")):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="nope", placement=Placement(zone="self"))))
     sent = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
     assert any(m["type"] == "error" for m in sent)
@@ -59,8 +60,8 @@ def test_play_unknown_card_errors(monkeypatch) -> None:
 def test_create_card_interprets(monkeypatch) -> None:
     room = _room()
     room.connections.connect("p2", AsyncMock())
-    fake_result = {"program": None, "snippet": None, "verdict": "invalid"}
-    with patch("agent.graph.interpret_card", return_value=fake_result):
+    fake_result = InterpretResult(program=None, snippet=None, verdict="invalid")
+    with patch("agent.runtime.run_agent", return_value=fake_result):
         asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do stuff")))
     # a card was added and annotated with a verdict
     assert len(room.state.cards) == 1
