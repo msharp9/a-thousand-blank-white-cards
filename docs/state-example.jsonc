@@ -1,0 +1,38 @@
+{
+  "state": {
+    "board": {
+      "cardsInCenter": ["Card1", "Card2"],  // Cards currently in play on the board
+      "discardPile": ["Card3", "Card4"],  // Cards that have been played and are no longer in the game
+      "deck": ["Card5", "Card6"]  // Cards that are yet to be drawn
+    },
+    "rules": {
+      "draw": 1,  // Number of cards a player must draw at the start of their turn
+      "play": 1,  // Number of cards a player can play during their turn
+      "cannotPlay": { "draw": 1 },  // If a player cannot play, they must draw 1 card
+      "endCondition": { "type": "deckEmpty" },  // The game ends when the deck is empty
+      "winCondition": { "type": "maxPoints" }  // The player with the most points wins
+    },
+    "turnOrder": ["Player1", "Player2"],  // The order in which players take their turns
+    "players": {
+      "Player1": {
+        "points": 2,  // Current points of Player1
+        "cardsInHand": ["Card7", "Card8"],  // Cards currently in Player1's hand
+        "conditions": null  // Any special conditions affecting Player1
+      },
+      "Player2": {
+        "points": 5,
+        "cardsInHand": ["Card9", "Card10"],
+        "conditions": { "skipNextTurn": 1 } 
+      }
+    },
+    "spectators": ["Person1", "Person2"],  // People watching the game but not participating
+    "history": [ // A log of actions taken during the game
+      "player1 turn starts",
+      "player1 draws 1",
+      "player1 plays <Card-name> card",
+      "player1 turn ends",
+      "player2 skips turn due to <Card-name>",
+      "player3 turn starts"
+    ]
+  }
+}
