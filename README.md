@@ -114,7 +114,7 @@ Then open [http://localhost:3000](http://localhost:3000). Make sure the backend 
 ## Testing & quality
 
 ```bash
-uv run pytest              # ~710 tests, ~92% coverage (fails under 80%)
+uv run pytest              # run the test suite (coverage is enforced in CI)
 uv run ruff check .        # lint
 uv run ruff format --check .   # formatting check
 ```
@@ -135,7 +135,7 @@ uv run python -m evals.retriever_ab     # retriever A/B comparison
 uv run python -m evals.improvement_ab   # few-shot before/after eval
 ```
 
-See [`src/evals/RETRIEVER_ANALYSIS.md`](src/evals/RETRIEVER_ANALYSIS.md) for retriever analysis.
+See [`docs/RETRIEVER_ANALYSIS.md`](docs/RETRIEVER_ANALYSIS.md) for retriever analysis.
 
 ## Deployment
 
@@ -147,6 +147,6 @@ See [`src/evals/RETRIEVER_ANALYSIS.md`](src/evals/RETRIEVER_ANALYSIS.md) for ret
 ## Docs & links
 
 - [Project write-up](docs/WRITEUP.md) — problem, solution, architecture diagrams, eval results, and Demo Day notes (rubric tasks 1–7).
-- [Retriever analysis](src/evals/RETRIEVER_ANALYSIS.md) — eval findings.
+- [Retriever analysis](docs/RETRIEVER_ANALYSIS.md) — eval findings.
 - [Loom demo script](docs/loom-script.md) — timed ≤10-minute demo walkthrough.
 - [Deployment docs](docs/deploy/) — Render, Vercel, LangSmith, and smoke checklist.
