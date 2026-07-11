@@ -31,7 +31,7 @@ The DB path is configurable via ``Settings.agent_memory_db`` (env
 
 Graceful degradation: every sqlite error is swallowed and the LLM-facing tools
 return a short string ("memory unavailable" / "nothing recalled") — they NEVER
-raise, so a flaky/read-only DB can never break the agent graph.
+raise, so a flaky/read-only DB can never break the agent.
 """
 
 from __future__ import annotations

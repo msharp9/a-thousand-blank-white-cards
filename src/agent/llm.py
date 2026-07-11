@@ -1,4 +1,4 @@
-"""agent.llm — ChatOpenAI factory shared by all interpretation-agent nodes."""
+"""agent.llm — ChatOpenAI factory shared by the interpretation agent."""
 
 from __future__ import annotations
 
@@ -47,8 +47,8 @@ def with_structured_output(llm: ChatOpenAI, schema: Any) -> Runnable:
     decoding, which gpt-oss-20b tends to handle better. Left empty (the default),
     this passes NO method= kwarg so hosted-OpenAI behaviour is unchanged.
 
-    The agent nodes (agent.nodes) go through this helper so the method is
-    configurable in one place without rewriting each call site.
+    Agent call sites go through this helper so the method is configurable in one
+    place without rewriting each call site.
     """
     method = get_settings().structured_output_method
     if method:

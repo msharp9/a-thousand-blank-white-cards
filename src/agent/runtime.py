@@ -1,7 +1,7 @@
 """agent.runtime — the NEW single tool-calling agent (skeleton, bead C1).
 
-This is the replacement for the legacy 9-node LangGraph in ``agent.graph``. It
-assembles ONE ReAct/tool-calling agent (LangChain ``create_agent``) with:
+This replaced the legacy 9-node LangGraph (now removed). It assembles ONE
+ReAct/tool-calling agent (LangChain ``create_agent``) with:
 
 - the persona system prompt from :mod:`agent.persona`,
 - a bound tool list (EMPTY by default — the seven real tools land in beads C2-C9;

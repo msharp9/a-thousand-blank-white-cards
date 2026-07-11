@@ -2,7 +2,7 @@
 
 Given (card description, agent's generated effect summary, human_canonical expected),
 produce a structured Verdict scoring each dimension independently. This Verdict is
-eval-only and distinct from agent.schemas.Verdict.
+eval-only (defined below) and unrelated to the production agent contract.
 """
 
 from __future__ import annotations

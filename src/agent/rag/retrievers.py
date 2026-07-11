@@ -3,7 +3,7 @@
 dense_retriever() is the real baseline (cosine via agent.rag.store.search).
 advanced_retriever() is a multi-query expansion retriever: it paraphrases the
 query via an LLM, retrieves each paraphrase through the dense retriever, and
-returns the deduplicated union — without touching the agent graph.
+returns the deduplicated union.
 """
 
 from __future__ import annotations

@@ -45,9 +45,8 @@ from models.effects import (
 
 logger = logging.getLogger(__name__)
 
-# Player-target values that mean "the actor picks at play time" — mirrors the
-# convention in agent.nodes._normalize_program_targets. Their presence on any
-# produced op flips EffectProgram.requires_choice.
+# Player-target values that mean "the actor picks at play time". Their presence
+# on any produced op flips EffectProgram.requires_choice.
 _CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
 # CardTarget values that require a play-time card choice.
 _CHOICE_CARD_TARGETS: frozenset[str] = frozenset({"chosen_card"})
