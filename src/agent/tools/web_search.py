@@ -32,8 +32,8 @@ _UNAVAILABLE = "web search unavailable"
 def _get_tavily_client() -> Any:
     """Lazily construct (and cache) a TavilySearch client.
 
-    Mirrors agent.nodes: pydantic-settings loads the key into Settings only (not
-    os.environ), while the Tavily wrapper reads os.environ["TAVILY_API_KEY"] by
+    pydantic-settings loads the key into Settings only (not os.environ), while
+    the Tavily wrapper reads os.environ["TAVILY_API_KEY"] by
     default. So we thread the key from Settings, passing it only when non-empty
     (an empty string would otherwise clobber the wrapper's own env lookup).
     """

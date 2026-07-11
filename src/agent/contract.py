@@ -1,8 +1,8 @@
 """agent.contract — the shared, forward-looking interpretation result contract.
 
 This module defines :class:`InterpretResult`, the canonical shape returned by the
-card-interpretation entry point (``agent.graph.interpret_card``). It is the contract
-that the rewritten single tool-calling agent (beads C1–C10) will fulfill.
+card-interpretation entry point (``agent.runtime.run_agent``), plus
+:class:`SnippetEffect`, the generated-hook payload that result can carry.
 
 Design constraint: this module imports ONLY from ``models.*`` and ``typing`` — no
 ``board``, no heavy agent/LangChain dependencies — so it stays a clean, cheap-to-import
@@ -15,8 +15,21 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from agent.schemas import SnippetEffect
 from models.effects import EffectProgram
+
+
+class SnippetEffect(BaseModel):
+    """A generated Python hook body for novel/complex card effects."""
+
+    code: str = Field(
+        description=(
+            "Complete body of `def apply(state, ctx)` as a Python string. Must not contain "
+            "imports, exec, eval, open, or dunder attribute access. The function receives "
+            "`state` (GameState) and `ctx` (a dict with keys 'player_id', 'card', 'event'). "
+            "It returns None (mutates state in place)."
+        )
+    )
+    explanation: str = Field(description="Plain-English explanation of what the snippet does.")
 
 
 class InterpretResult(BaseModel):

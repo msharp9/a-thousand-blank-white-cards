@@ -67,19 +67,3 @@ def test_create_card_interprets(monkeypatch) -> None:
     assert len(room.state.cards) == 1
     card = next(iter(room.state.cards.values()))
     assert card["verdict"] == "invalid"
-
-
-def test_interpret_card_adapter_shape() -> None:
-    from unittest.mock import patch
-
-    import agent.graph as g
-    from agent.schemas import Verdict
-
-    canned = {
-        "program": None,
-        "snippet": None,
-        "verdict": Verdict(intent=True, timing=True, target=True, trigger=True, magnitude=True, ok=True, reason="ok"),
-    }
-    with patch.object(g.graph, "invoke", return_value=canned):
-        out = g.interpret_card("t", "d")
-    assert out["verdict"] == "ok"

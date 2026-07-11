@@ -229,6 +229,6 @@ Op = Annotated[
 class EffectProgram(BaseModel):
     ops: list[Op] = Field(default_factory=list)
     # True when any op needs a play-time choice from the actor: a player
-    # "chooser"/"target_player" target OR a "chosen_card" CardTarget. Normalised
-    # in agent.nodes._normalize_program_targets.
+    # "chooser"/"target_player" target OR a "chosen_card" CardTarget. Set when
+    # the agent's emitted program is compiled (see engine.compile).
     requires_choice: bool = False

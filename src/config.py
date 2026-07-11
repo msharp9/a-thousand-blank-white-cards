@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     ollama_embedding_dimensions: int = 768
 
     # Optional override for LangChain's `.with_structured_output(...)` method
-    # (used in agent/nodes.py). Empty = library default. gpt-oss-20b may need
-    # "json_schema" for reliable structured output — see agent/nodes.py note.
+    # (see agent.llm.with_structured_output). Empty = library default. gpt-oss-20b
+    # may need "json_schema" for reliable structured output.
     structured_output_method: str = ""
 
     # --- LangSmith observability ---
