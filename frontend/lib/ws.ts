@@ -10,6 +10,10 @@ import type {
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
 
+// How long a transient (message-level) error banner stays up before it
+// auto-dismisses. Kept short so a stale validation notice never lingers.
+const TRANSIENT_ERROR_MS = 4500;
+
 // Player identity is scoped per-room AND per-tab.
 //
 // We use sessionStorage (not localStorage) keyed by room code so that:
@@ -50,7 +54,16 @@ export interface GameSocketState {
     snippet?: string | null;
     verdict: string;
   } | null;
-  error: string | null;
+  // A hard connection rejection (close code >= 4000, or a fatal socket error).
+  // Retrying can never fix it, so the room page tears down to a "back to lobby"
+  // screen. Cleared only when a fresh socket opens successfully.
+  fatalError: string | null;
+  // A recoverable, message-level error from the server ({type:'error'}), e.g.
+  // "You have already drawn this turn". The game stays mounted; the UI shows a
+  // dismissible banner. Auto-clears after a few seconds or on the next state
+  // update, and can be dismissed manually via clearTransientError.
+  transientError: string | null;
+  clearTransientError: () => void;
   connected: boolean;
   // Set when the server needs the active player to pick a target for a card
   // they just played (the play is held pending server-side). The UI shows a
@@ -68,11 +81,32 @@ export function useGameSocket(code: string, name: string): GameSocketState {
   const [brewing, setBrewing] = useState<string | null>(null);
   const [previewResult, setPreviewResult] =
     useState<GameSocketState["previewResult"]>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [fatalError, setFatalError] = useState<string | null>(null);
+  const [transientError, setTransientError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [promptChoice, setPromptChoice] = useState<PromptChoiceMsg | null>(
     null,
   );
+
+  // Pending auto-dismiss timer for the current transient error, so a newer
+  // error resets the countdown instead of being cut short by an older one.
+  const transientTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  // The most recent server `error` message. A hard rejection (close code >=
+  // 4000) is preceded by a matching `error` payload from the server (see
+  // src/board/ws.py); onclose adopts it so the fatal screen shows the server's
+  // specific reason instead of the generic close-code fallback.
+  const lastServerErrorRef = useRef<string | null>(null);
+
+  const clearTransientError = useCallback(() => {
+    if (transientTimeoutRef.current) {
+      clearTimeout(transientTimeoutRef.current);
+      transientTimeoutRef.current = null;
+    }
+    lastServerErrorRef.current = null;
+    setTransientError(null);
+  }, []);
 
   const send = useCallback((msg: ClientMsg) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -99,7 +133,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
           return;
         }
         setConnected(true);
-        setError(null);
+        setFatalError(null);
         const storedId = sessionStorage.getItem(playerIdKey(code));
         ws.send(JSON.stringify({ type: "join", player_id: storedId, name }));
       };
@@ -114,6 +148,9 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             // state.log in sync with every effect_applied it broadcasts, so
             // replacing here is idempotent with the live appends below.
             setLog(msg.state.log ?? []);
+            // A fresh authoritative state means whatever the last transient
+            // error complained about has been superseded — clear it early.
+            clearTransientError();
             break;
           case "effect_applied":
             setLog((prev) => [...prev, msg.log_entry]);
@@ -137,7 +174,21 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             setPromptChoice(msg);
             break;
           case "error":
-            setError(msg.message);
+            // Message-level errors are recoverable gameplay/validation notices
+            // (e.g. "You have already drawn this turn"). Surface them as a
+            // transient banner — never tear down the game — and auto-dismiss
+            // after a short delay. Reset any pending timer so a newer error
+            // gets the full window.
+            lastServerErrorRef.current = msg.message;
+            if (transientTimeoutRef.current) {
+              clearTimeout(transientTimeoutRef.current);
+            }
+            setTransientError(msg.message);
+            transientTimeoutRef.current = setTimeout(() => {
+              transientTimeoutRef.current = null;
+              lastServerErrorRef.current = null;
+              setTransientError(null);
+            }, TRANSIENT_ERROR_MS);
             break;
           default:
             break;
@@ -154,18 +205,28 @@ export function useGameSocket(code: string, name: string): GameSocketState {
         // instead of spinning forever. Transient drops (1006 abnormal close,
         // etc.) fall through and reconnect after a short delay.
         if (evt.code >= 4000) {
-          // Keep the server's own error message if it sent one before closing;
-          // otherwise fall back to a code-specific message.
-          setError((prev) => prev ?? closeCodeMessage(evt.code));
+          // Hard rejection: surface a fatal error (drives the back-to-lobby
+          // screen) and stop retrying. The server sends a specific `error`
+          // payload just before these closes — prefer it, and fall back to a
+          // code-specific message. Promote it out of the transient banner so
+          // it isn't shown twice.
+          if (transientTimeoutRef.current) {
+            clearTimeout(transientTimeoutRef.current);
+            transientTimeoutRef.current = null;
+          }
+          setTransientError(null);
+          setFatalError(
+            lastServerErrorRef.current ?? closeCodeMessage(evt.code),
+          );
           return;
         }
         retryTimeout = setTimeout(connect, 2000);
       };
 
       ws.onerror = () => {
-        // onerror typically precedes a transient (1006) close; don't clobber a
-        // more specific error already delivered via an `error` message.
-        setError((prev) => prev ?? "Connection error — reconnecting…");
+        // onerror typically precedes a transient (1006) close that reconnects.
+        // We intentionally do NOT set a fatal error here: the retry loop is
+        // still running, and the header already shows "Reconnecting…".
       };
     }
 
@@ -174,16 +235,22 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     return () => {
       cancelled = true;
       clearTimeout(retryTimeout);
+      if (transientTimeoutRef.current) {
+        clearTimeout(transientTimeoutRef.current);
+        transientTimeoutRef.current = null;
+      }
       wsRef.current?.close();
     };
-  }, [code, name]);
+  }, [code, name, clearTransientError]);
 
   return {
     gameState,
     log,
     brewing,
     previewResult,
-    error,
+    fatalError,
+    transientError,
+    clearTransientError,
     connected,
     promptChoice,
     clearPromptChoice,

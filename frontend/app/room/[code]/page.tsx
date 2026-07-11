@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -103,7 +104,9 @@ export default function RoomPage() {
     log,
     brewing,
     previewResult,
-    error,
+    fatalError,
+    transientError,
+    clearTransientError,
     connected,
     promptChoice,
     clearPromptChoice,
@@ -182,13 +185,14 @@ export default function RoomPage() {
     );
   }
 
-  // Surface a genuine join/WS error before the "Connecting" spinner so a hard
+  // Surface a fatal join/WS rejection before the "Connecting" spinner so a hard
   // rejection (e.g. server closes with 4001) is shown instead of spinning
-  // forever.
-  if (error) {
+  // forever. Recoverable, message-level errors do NOT come through here — they
+  // render as a transient banner over the live game (see below).
+  if (fatalError) {
     return (
       <main className="flex h-dvh flex-col items-center justify-center gap-4 text-destructive">
-        <p>{error}</p>
+        <p>{fatalError}</p>
         <Button variant="outline" onClick={() => router.push("/")}>
           Back to lobby
         </Button>
@@ -206,6 +210,26 @@ export default function RoomPage() {
 
   return (
     <main className="flex h-dvh flex-col">
+      {/* Recoverable, message-level errors (e.g. "You have already drawn this
+          turn") show as a dismissible banner over the live game — the table
+          stays mounted and interactive. Auto-clears from the socket layer. */}
+      {transientError && (
+        <div
+          role="alert"
+          className="fixed inset-x-0 top-3 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive shadow-sm backdrop-blur"
+        >
+          <span>{transientError}</span>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="text-destructive hover:bg-destructive/20"
+            onClick={clearTransientError}
+          >
+            <XIcon />
+            <span className="sr-only">Dismiss</span>
+          </Button>
+        </div>
+      )}
       <header className="flex items-center gap-3 border-b bg-background/80 px-4 py-2 backdrop-blur">
         <span className="font-mono text-sm text-muted-foreground">
           Room {code}
