@@ -8,85 +8,66 @@ A digital, AI-refereed implementation of the party game **1000 Blank White Cards
 
 ## How to play
 
-You're a rules author, not just a player. Every card is one you (or someone at the table) invented — a scribble like *"Steal 8 points from whoever's winning"* or *"Everyone must stand up; the last one seated loses 5"* — and an **AI referee** reads it, works out what it means, and makes it happen. The fantasy: dream up any rule you want and watch the game bend around it, instantly, with no arguing.
+The deck is made of cards *you and the other players write*. You build the deck
+together, then play it out one turn at a time. The player with the most points at
+the end wins — but the real fun is inventing the cards.
 
-**Turn flow.** On your turn you:
+A game runs in these steps:
 
-1. **Draw** a card from the deck (or grab a blank one).
-2. **Create** a new card by writing free text, and/or **play** a card from your hand.
-3. The referee **resolves** it — interpreting the text into a game effect (gain/lose points, skip a turn, reverse the order, steal, rewrite the win condition…) and updating everyone's board in realtime.
+1. **Join the lobby.** Everyone opens the room and enters a name. One player is
+   the host.
+2. **Start the game.** The host starts it once everyone's in.
+3. **Build the deck.** The deck is assembled from three sources:
+   - **30 pre-made cards** are shuffled in.
+   - **Each player writes 5 cards** — give each a title and say what it does
+     (e.g. *"Gain 5 points"*, *"Everyone else loses 2"*).
+   - **5 blank cards per player** are shuffled in, to be written later.
 
-Play passes around the table. Anyone can invent a card that changes the rules — including how you win — so the game you finish is never the game you started.
+   So a 2-player game has **50 cards** (30 + 10 written + 10 blank) and a 6-player
+   game has **90** (30 + 30 + 30).
+4. **Deal.** The deck is shuffled and **5 cards are dealt to each player**.
+5. **Take turns.** Play passes around the table. Each turn is exactly:
+   1. **Draw** one card from the deck.
+   2. **Play** one card from your hand.
+      - If it's a **blank card**, you write it *as you play it* — give it a title
+        and effect, then it resolves. (Blanks are the only cards you author
+        mid-game; your other cards were written back in step 3.)
+      - A played card applies its effect, then goes to the discard pile (or stays
+        in front of you if it's a lasting card).
+   3. **End your turn.**
 
-**Winning.** There's no fixed target: a card sets (or *re-sets*) the win condition. It might be *"first to 1000 points"*, *"lowest score wins"*, or something a player made up thirty seconds ago. When a win condition is met, that game ends — and the best cards can be kept for next time.
+   You can only **pass** (end your turn without playing) if you truly have nothing
+   playable. Since a blank card can always be written and played, holding one
+   means you can't pass.
+6. **The game ends** when the **last card is drawn from the deck**: the player who
+   drew it finishes their turn, and then the game is over.
+7. **Score and win.** Any end-of-game card effects resolve first (for example, a
+   card worth points *only if you're still holding it*). Then everyone totals
+   their points — **the highest score wins.**
+8. **Epilogue.** Players vote on which of the newly-written cards are good enough
+   to keep in the pile for future games. The rest are discarded.
+
+**The basic game.** In the simplest game, every card just **adds or subtracts
+points** from one or more players — no special rules needed. That's all it takes
+to play a full game start to finish.
+
+**Going further (optional AI assist).** Because cards are free text, you can write
+almost anything — *"Steal 8 points from whoever's winning"*, *"Reverse the turn
+order"*, *"Everyone swaps hands"*. When a card isn't a simple point change, an
+**AI referee** (a LangGraph agent, see the [project write-up](docs/WRITEUP.md#repository-layout))
+reads the text, works out what it means, and applies it. If it can't interpret a
+card, the card still plays with no mechanical effect, so the game never gets stuck.
 
 **Example cards**
 
-| Card | What it says | What the referee does |
+| Card | What it says | What happens |
 | --- | --- | --- |
 | **Windfall** | "Gain 5 points." | +5 points to you, immediately. |
 | **Tax Season** | "Every player loses 10 points. No exceptions." | −10 points to all players. |
-| **Backwards Day** | "Reverse the direction of play." | Flips turn order for the rest of the game. |
 | **Robin Hood** | "Steal 8 points from the player with the most points." | Moves 8 points from the current leader to you. |
-| **New Rules** | "Forget 1000 — first player to reach 250 wins." | Rewrites the win condition to *first to 250*. |
+| **Keepsake** | "Worth 10 points if it's still in your hand at the end." | +10 at game end, only if you never played it. |
 
-**A short exchange**
-
-> **Ana** plays **Windfall** → *Ana +5 (now 5).*
-> **Ben** writes and plays a blank card: *"Anyone who laughs loses 3 points."* The referee reads it, applies it as a persistent rule — *watch out.*
-> **Ana** plays **Robin Hood**, targeting Ben (who's leading) → *steals 8 from Ben to Ana.*
-> **Ben**, rattled, plays **New Rules**: *"Lowest score wins."* → the whole game inverts. Now everyone's racing to give points *away*.
-
-That's the loop: draw, invent, play, watch the rules mutate. The referee keeps it fair and fast so the table can keep being ridiculous.
-
-## Architecture
-
-The backend is a FastAPI app (`src/tbwc/`) with a deterministic game engine, a LangGraph interpretation agent, RAG over a card corpus, and a sandboxed snippet executor; the frontend is a Next.js 16 app in `frontend/`. See the [project write-up](docs/WRITEUP.md#repository-layout) for the full component breakdown and diagrams.
-
-## WebSocket API
-
-Live gameplay runs over a WebSocket. It is intentionally **not** listed in the
-interactive API docs at `/docs` — FastAPI/OpenAPI only documents REST routes, so
-the Swagger page shows just `/health` and the `/rooms` endpoints. This section is
-the durable reference for the realtime protocol.
-
-**Endpoint:** `ws://<host>/ws/{room_code}` (use `wss://` in production).
-
-**Handshake.** Create a room with `POST /rooms`, register a player with
-`POST /rooms/{code}/join` (returns a `player_id`), then open the socket. The
-**first message must be a `join`** envelope carrying that `player_id`. On connect
-(and on reconnect) the server replies with a full `state` snapshot. Every message
-is a JSON object with a `type` field.
-
-**Client → server**
-
-| type | fields | purpose |
-| --- | --- | --- |
-| `join` | `player_id` (null on first join), `name` | Authenticate the socket into the room; must be the first message. |
-| `start` | — | Build/shuffle the deck, deal starting hands, begin play. |
-| `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?` | Play a card; the AI referee interprets it and applies the effect (active player only). Ends the turn. Playing a **blank** card carries the authored `title`+`description` on the first play — the card is filled in (and persisted) before interpretation. |
-| `pass` | — | End your turn without playing a card (active player only). Drawing is automatic at turn start, so there is no manual `draw`. |
-| `create_card` | `title`, `description` | Author a new card and interpret it immediately (allowed off-turn). |
-| `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state. |
-| `epilogue_vote` | `card_id`, `keep` | Vote to keep/discard a card during the epilogue phase. |
-
-**Server → client**
-
-| type | fields | meaning |
-| --- | --- | --- |
-| `state` | `state` | Full game-state snapshot (sent on connect and after every mutation). |
-| `brewing` | `card_id` | The referee is interpreting a card (in-flight indicator). |
-| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict` | Result of interpreting a played/created card. |
-| `effect_applied` | `log_entry` | An effect was applied; human-readable log line. |
-| `preview_result` | `program`, `snippet`, `verdict` | Reply to `preview_card`. |
-| `prompt_choice` | `card_id`, `prompt`, `choices` | Server asks the active player to pick a target. |
-| `epilogue` | `cards` | Epilogue phase opened with the cards created this game. |
-| `error` | `message` | An error (bad message, not your turn, room not found, …). |
-
-**Close codes:** `4000` bad handshake, `4001` unknown `player_id`, `4004` room
-not found, `4009` connection replaced by a newer socket for the same player.
-
-The message envelopes are defined in [`src/tbwc/models/ws_messages.py`](src/tbwc/models/ws_messages.py); the handler lives in [`src/tbwc/ws.py`](src/tbwc/ws.py).
+The realtime WebSocket protocol is documented in the [project write-up](docs/WRITEUP.md#websocket-protocol).
 
 ## Quickstart — Backend
 

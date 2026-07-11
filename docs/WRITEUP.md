@@ -157,6 +157,52 @@ flowchart LR
     AG --> SB
 ```
 
+### WebSocket protocol
+
+Live gameplay runs over a WebSocket. It is intentionally **not** listed in the
+interactive API docs at `/docs` — FastAPI/OpenAPI only documents REST routes, so
+the Swagger page shows just `/health` and the `/rooms` endpoints. This is the
+durable reference for the realtime protocol.
+
+**Endpoint:** `ws://<host>/ws/{room_code}` (use `wss://` in production).
+
+**Handshake.** Create a room with `POST /rooms`, register a player with
+`POST /rooms/{code}/join` (returns a `player_id`), then open the socket. The
+**first message must be a `join`** envelope carrying that `player_id`. On connect
+(and on reconnect) the server replies with a full `state` snapshot. Every message
+is a JSON object with a `type` field.
+
+**Client → server**
+
+| type | fields | purpose |
+| --- | --- | --- |
+| `join` | `player_id` (null on first join), `name` | Authenticate the socket into the room; must be the first message. |
+| `start` | — | Host only. Sent twice: from the **lobby** it builds the 30-card pre-made pool and enters the **setup** phase; from **setup** (once every player has authored their cards) it finalises + shuffles the deck, deals 5 to each player, and begins play. |
+| `create_card` | `title`, `description` | Author a new card. Used during **setup** to write your starting cards (each player writes 5). |
+| `draw` | — | Active player draws their card — the first step of a turn. Must draw before playing or ending the turn (while the deck has cards). |
+| `play` | `card_id`, `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?` | Play a card from your hand and end your turn (active player only, after drawing). Playing a **blank** card carries the authored `title`+`description` on the first play — the card is filled in (and persisted) before it resolves. If a card needs a target the server replies with `prompt_choice`; resend `play` with the choice. |
+| `pass` / `end_turn` | — | End your turn without playing (active player only). Only allowed when you have nothing playable — since a blank is always playable, holding one means you can't pass. |
+| `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state. |
+| `epilogue_vote` | `card_id`, `keep` | Vote to keep/discard a card during the epilogue phase. |
+
+**Server → client**
+
+| type | fields | meaning |
+| --- | --- | --- |
+| `state` | `state` | Full game-state snapshot (sent on connect and after every mutation). |
+| `brewing` | `card_id` | The referee is interpreting a card (in-flight indicator). |
+| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict` | Result of interpreting a played/created card. |
+| `effect_applied` | `log_entry` | An effect was applied; human-readable log line. |
+| `preview_result` | `program`, `snippet`, `verdict` | Reply to `preview_card`. |
+| `prompt_choice` | `card_id`, `prompt`, `choices` | Server asks the active player to pick a target. |
+| `epilogue` | `cards` | Epilogue phase opened with the cards created this game. |
+| `error` | `message` | An error (bad message, not your turn, room not found, …). |
+
+**Close codes:** `4000` bad handshake, `4001` unknown `player_id`, `4004` room
+not found, `4009` connection replaced by a newer socket for the same player.
+
+The message envelopes are defined in [`src/tbwc/models/ws_messages.py`](../src/tbwc/models/ws_messages.py); the handler lives in [`src/tbwc/ws.py`](../src/tbwc/ws.py).
+
 ### Agent workflow (LangGraph interpretation graph)
 
 Nodes and edges match `src/tbwc/agent/graph.py`. `MAX_ATTEMPTS = 3` bounds both
