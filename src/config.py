@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     qdrant_api_key: str = ""
     qdrant_collection: str = "tbwc_cards"
 
+    # --- Agent memory (sqlite) ---
+    # Backing store for the interpretation agent's own prior card-interpretation
+    # decisions (see agent.tools.agent_memory). Defaults to a repo-relative file
+    # that .gitignore already ignores (*.db); override via AGENT_MEMORY_DB, or set
+    # ":memory:" for an ephemeral in-process store.
+    agent_memory_db: str = "agent_memory.db"
+
     # --- Sandbox ---
     snippet_execution_enabled: bool = True
 
