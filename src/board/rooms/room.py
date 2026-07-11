@@ -207,6 +207,12 @@ class Room:
           ``STARTING_HAND_SIZE`` to each real player, enter ``phase="playing"``
           and begin the first turn.
 
+        The setup→playing transition normally happens AUTOMATICALLY once every
+        player finishes authoring (see ``_handle_create_card``); this manual
+        entry is kept as a safety/fallback path (and still owns lobby→setup). A
+        manual ``start`` that arrives after auto-start already fired lands in the
+        ``else`` branch below as a harmless "Game already started" no-op.
+
         Deck building never requires a live external service; it runs in a thread
         since collection may touch the (in-memory) RAG store.
         """
@@ -232,8 +238,15 @@ class Room:
         self.state = self.state.model_copy(update={"phase": "setup", "cards": merged_cards, "deck": list(pool)})
         await self._broadcast_state()
 
-    async def _start_playing(self, player_id: str) -> None:
-        """setup → playing: gate on authoring, finalise deck, deal, begin play."""
+    async def _start_playing(self, player_id: str | None = None) -> None:
+        """setup → playing: gate on authoring, finalise deck, deal, begin play.
+
+        ``player_id`` is the player who requested the manual start; it is used
+        ONLY to address the "waiting on…" error when someone is still behind. On
+        the AUTO-START path (called from ``_handle_create_card`` once everyone has
+        finished authoring) there is no requesting player, so it is None and the
+        gate below never fires (we only auto-start when nobody is behind).
+        """
         players = list(self.state.players)
         dealt_to = [p for p in players if not p.spectator]
 
@@ -241,10 +254,11 @@ class Room:
         behind = [p for p in dealt_to if self._authored_count(p.id) < CARDS_TO_AUTHOR]
         if behind:
             names = ", ".join(self._name(p.id) for p in behind)
-            await self.connections.send(
-                player_id,
-                {"type": "error", "message": f"Waiting on {names} to author {CARDS_TO_AUTHOR} cards"},
-            )
+            if player_id is not None:
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": f"Waiting on {names} to author {CARDS_TO_AUTHOR} cards"},
+                )
             return
 
         # The pre-made pool ids are the current deck; authored cards are the
@@ -733,6 +747,9 @@ class Room:
         author unlimited cards before the host starts. The cap is scoped STRICTLY
         to ``phase == "setup"`` — mid-game a player may freely create cards (e.g.
         blanks), so the playing-phase path below stays uncapped.
+
+        Once this card completes the LAST player's authoring quota, the game
+        AUTO-STARTS (setup→playing) — no manual "start" is required.
         """
         # Setup-only upper bound: reject (targeted, not broadcast) once the player
         # has authored the required number of cards, BEFORE any card is created.
@@ -756,7 +773,20 @@ class Room:
         self.state = self.state.model_copy(update={"cards": new_cards})
 
         if self.state.phase == "setup":
-            await self._broadcast_state()
+            # Auto-start: once every non-spectator has authored the required
+            # number of cards, transition straight to playing — no manual
+            # "start" needed. Guard the degenerate zero-players case so we never
+            # auto-start an empty table. ``_start_playing`` broadcasts the new
+            # (playing) state itself, so we don't also broadcast the pre-start
+            # setup state on this path.
+            real_players = self.state.turn_players()
+            everyone_done = bool(real_players) and all(
+                self._authored_count(p.id) >= CARDS_TO_AUTHOR for p in real_players
+            )
+            if everyone_done:
+                await self._start_playing()
+            else:
+                await self._broadcast_state()
             return
 
         from agent.contract import InterpretResult
