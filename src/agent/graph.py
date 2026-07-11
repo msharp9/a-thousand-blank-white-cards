@@ -78,13 +78,32 @@ def build_graph() -> StateGraph:
 graph = build_graph().compile()
 
 
-def interpret_card(title: str, description: str) -> dict:
+def interpret_card(title: str, description: str, state=None, actor_id: str | None = None) -> dict:
     """Synchronous entry point: run the interpretation graph on one card.
 
-    Returns a plain dict: {"program": EffectProgram | None, "snippet": <SnippetEffect|None>,
-    "verdict": "ok" | "invalid" | "needs_choice"}. Safe to call inside asyncio.to_thread.
+    This is the CANONICAL forward-looking signature. ``state`` (a GameState or
+    serializable snapshot) and ``actor_id`` (str) are accepted so callers can pass
+    them today; they are IGNORED for now (the old graph does not use them) and will
+    be wired up by the rewritten agent (beads C1/C10) without another signature change.
+
+    Returns a plain dict matching the :class:`agent.contract.InterpretResult` shape::
+
+        {"program": EffectProgram | None, "snippet": SnippetEffect | None,
+         "verdict": "ok" | "invalid" | "needs_choice",
+         "comment": str, "persona_action": str}
+
+    The legacy keys (``program``/``snippet``/``verdict``) are preserved exactly, so
+    existing callers and ~40 test call-sites that patch this function and read only
+    those keys keep working. ``comment`` defaults to ``""`` and ``persona_action`` to
+    ``"none"`` (populated by the real agent later). Safe to call inside asyncio.to_thread.
     """
     final = graph.invoke({"card_draft": {"title": title, "description": description}, "attempts": 0})
     verdict_obj = final.get("verdict")
     verdict = "ok" if (verdict_obj is not None and getattr(verdict_obj, "ok", False)) else "invalid"
-    return {"program": final.get("program"), "snippet": final.get("snippet"), "verdict": verdict}
+    return {
+        "program": final.get("program"),
+        "snippet": final.get("snippet"),
+        "verdict": verdict,
+        "comment": "",
+        "persona_action": "none",
+    }
