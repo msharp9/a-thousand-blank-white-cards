@@ -19,13 +19,20 @@ with deterministic structural scorers (no agent, no judge) — see §2.
 > result, not a measured value. They must be regenerated with a live `LLM_API_KEY`
 > using the exact commands in [How to regenerate](#4-how-to-regenerate) before this
 > analysis is submitted as final.
+>
+> **Vetting status (bead 82f.5):** as of this writing the eval suite CANNOT be run
+> against the configured LLM gateway — three code defects block it (data-path
+> fragility, a hardcoded judge model, and an unconditional `temperature` param the
+> gateway's model rejects). See [`docs/EVAL_ASSESSMENT.md`](EVAL_ASSESSMENT.md) for
+> the full honest assessment, and bead **82f.11** for the fix that will let these
+> numbers be regenerated for real.
 
 ---
 
 ## 1. Advanced Retriever Justification
 
 **Choice: multi-query retrieval** (`MultiQueryCardRetriever` /
-`advanced_retriever()` in [`src/agent/rag/retrievers.py`](../rag/retrievers.py)).
+`advanced_retriever()` in [`src/agent/rag/retrievers.py`](../src/agent/rag/retrievers.py)).
 
 ### Why the baseline dense retriever is a poor fit for TBWC cards
 
@@ -90,16 +97,16 @@ dense baseline rather than erroring.
 
 ### Methodology
 
-The A/B driver is [`src/evals/retriever_ab.py`](./retriever_ab.py). Since the legacy
+The A/B driver is [`src/evals/retriever_ab.py`](../src/evals/retriever_ab.py). Since the legacy
 graph (and its `retriever_mode` config knob) was retired, the driver now compares the
 two retrievers **directly** rather than through a downstream interpreter — the truest,
 fully deterministic test of retrieval quality. It:
 
 - Loads the **35-card hand-annotated gold testset** from
-  [`data/eval/eval_cards.json`](../../../data/eval/eval_cards.json) via the Phase 5
+  [`data/eval/eval_cards.json`](../data/eval/eval_cards.json) via the Phase 5
   harness (`load_eval_items`).
 - For each card, retrieves the top-k exemplars with `dense_retriever()` and again with
-  `advanced_retriever()` (from [`src/agent/rag/retrievers.py`](../rag/retrievers.py)).
+  `advanced_retriever()` (from [`src/agent/rag/retrievers.py`](../src/agent/rag/retrievers.py)).
 - Scores every run with three **deterministic, structural** retrieval-quality scorers
   (no LLM judge):
   - **recall_nonempty** — did the retriever return at least one exemplar?
@@ -145,7 +152,7 @@ stays saturated because both retrievers always return something for a non-empty 
 ### Justification
 
 The second improvement targets generation rather than retrieval. The single
-tool-calling agent ([`src/agent/runtime.py`](../agent/runtime.py)) still has to choose
+tool-calling agent ([`src/agent/runtime.py`](../src/agent/runtime.py)) still has to choose
 *which ops and field names* to emit. With TBWC's short, idiosyncratic card text, the
 model tends to **invent op shapes and field names that don't exist** in the canonical
 vocabulary, or map an effect onto a plausible-but-wrong op. Its structured
@@ -165,7 +172,7 @@ exemplars, which makes the priming here more effective.
 
 ### Methodology
 
-The driver is [`src/evals/improvement_ab.py`](./improvement_ab.py). It runs the
+The driver is [`src/evals/improvement_ab.py`](../src/evals/improvement_ab.py). It runs the
 same 35-card testset twice through `agent.runtime.run_agent`, toggling only whether
 the top-3 exemplars (from `dense_retriever()`) are prepended to the description:
 
