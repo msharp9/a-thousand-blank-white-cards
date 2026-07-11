@@ -1,16 +1,18 @@
 # 1000 Blank White Cards
 
-A digital, AI-refereed implementation of the party game **1000 Blank White Cards**, where players draw, write, and play their own cards to invent the game as they go.
+A digital, AI-supported implementation of the party game **1000 Blank White Cards**, where players draw, write, and play their own cards to invent the game as they go.
+
+"Everything's made up and the points don't matter."
 
 ## What it is
 
-[1000 Blank White Cards](https://en.wikipedia.org/wiki/1000_Blank_White_Cards) is a party game with no fixed rules: players write free-text cards ("Gain 5 points", "Everyone swaps hands", "Draw a cat, +2 to anyone who compliments it") and play them to make up the game collaboratively. This project brings that to a realtime web app where an **AI referee** — a LangGraph agent backed by retrieval-augmented generation (RAG) — reads each hand-written card, interprets its intent, and turns it into executable game effects. Multiple players join a shared room over WebSockets and play together in the browser.
+[1000 Blank White Cards](https://en.wikipedia.org/wiki/1000_Blank_White_Cards) is a party game with no fixed rules: players write free-text cards ("Gain 5 points", "Everyone swaps hands", "Draw a cat, +2 to anyone who compliments it") and play them to make up the game collaboratively. This project brings that to a realtime web app where an AI agent brings the cards to life by translating their description to executable game effects. 1000 Blank White Cards is a non-serious party game played for laughs.
 
 ## How to play
 
 The deck is made of cards *you and the other players write*. You build the deck
 together, then play it out one turn at a time. The player with the most points at
-the end wins — but the real fun is inventing the cards.
+the end wins (unless they don't), but the real fun is inventing the cards. 
 
 A game runs in these steps:
 
@@ -19,12 +21,9 @@ A game runs in these steps:
 2. **Start the game.** The host starts it once everyone's in.
 3. **Build the deck.** The deck is assembled from three sources:
    - **30 pre-made cards** are shuffled in.
-   - **Each player writes 5 cards** — give each a title and say what it does
+   - **Each player writes 5 cards** — title and description
      (e.g. *"Gain 5 points"*, *"Everyone else loses 2"*).
    - **5 blank cards per player** are shuffled in, to be written later.
-
-   So a 2-player game has **50 cards** (30 + 10 written + 10 blank) and a 6-player
-   game has **90** (30 + 30 + 30).
 4. **Deal.** The deck is shuffled and **5 cards are dealt to each player**.
 5. **Take turns.** Play passes around the table. Each turn is exactly:
    1. **Draw** one card from the deck.
@@ -34,11 +33,9 @@ A game runs in these steps:
         mid-game; your other cards were written back in step 3.)
       - A played card applies its effect, then goes to the discard pile (or stays
         in front of you if it's a lasting card).
+      - If you can't play a card, you may draw a second card. **Note:** A blank card
+        is always playable.
    3. **End your turn.**
-
-   You can only **pass** (end your turn without playing) if you truly have nothing
-   playable. Since a blank card can always be written and played, holding one
-   means you can't pass.
 6. **The game ends** when the **last card is drawn from the deck**: the player who
    drew it finishes their turn, and then the game is over.
 7. **Score and win.** Any end-of-game card effects resolve first (for example, a
@@ -46,6 +43,7 @@ A game runs in these steps:
    their points — **the highest score wins.**
 8. **Epilogue.** Players vote on which of the newly-written cards are good enough
    to keep in the pile for future games. The rest are discarded.
+   - **Note:** Many players agree that creating a card that gets the most votes during the Epilogue phase is the true victory.
 
 **The basic game.** In the simplest game, every card just **adds or subtracts
 points** from one or more players — no special rules needed. That's all it takes
@@ -54,9 +52,7 @@ to play a full game start to finish.
 **Going further (optional AI assist).** Because cards are free text, you can write
 almost anything — *"Steal 8 points from whoever's winning"*, *"Reverse the turn
 order"*, *"Everyone swaps hands"*. When a card isn't a simple point change, an
-**AI referee** (a LangGraph agent, see the [project write-up](docs/WRITEUP.md#repository-layout))
-reads the text, works out what it means, and applies it. If it can't interpret a
-card, the card still plays with no mechanical effect, so the game never gets stuck.
+**AI agent** reads the text, works out what it means, and applies it. If the agent can't figure out the intent of the card, look out! Anything can happen!
 
 **Example cards**
 
@@ -66,8 +62,6 @@ card, the card still plays with no mechanical effect, so the game never gets stu
 | **Tax Season** | "Every player loses 10 points. No exceptions." | −10 points to all players. |
 | **Robin Hood** | "Steal 8 points from the player with the most points." | Moves 8 points from the current leader to you. |
 | **Keepsake** | "Worth 10 points if it's still in your hand at the end." | +10 at game end, only if you never played it. |
-
-The realtime WebSocket protocol is documented in the [project write-up](docs/WRITEUP.md#websocket-protocol).
 
 ## Quickstart — Backend
 
