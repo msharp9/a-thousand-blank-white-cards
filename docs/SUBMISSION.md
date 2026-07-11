@@ -78,27 +78,29 @@ VERIFIED` and a note on what to check.
       `eval_core.py`, `scorers.py`, LLM-as-judge in `judge.py`. Run with
       `uv run python -m evals.harness`.
 - [ ] **Conclusions drawn about pipeline performance** — written analysis in
-      [`src/evals/RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md) §5
+      [`src/evals/RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md) §5
       and `src/evals/conclusions.py`.
       `⚠️ NOT VERIFIED`: the result tables are explicitly labelled **illustrative
-      placeholders**. Regenerate with a live `LLM_API_KEY` and replace the numbers
-      + delete the caveat banners before submission (see the file's §4).
+      placeholders**, and the suite is not yet runnable against the configured
+      gateway — see [`EVAL_ASSESSMENT.md`](EVAL_ASSESSMENT.md) and bead **82f.11**.
+      Regenerate with a live gateway key and replace the numbers + delete the caveat
+      banners before submission.
 
 ### Task 6 requirements (improvement)
 
 - [ ] **Advanced retriever implemented + justified** — multi-query expansion
       retriever (`MultiQueryCardRetriever` / `advanced_retriever()`) in
       [`src/agent/rag/retrievers.py`](../src/agent/rag/retrievers.py); rationale in
-      [`RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md) §1.
+      [`RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md) §1.
 - [ ] **Before/after results in a table** — A/B drivers `evals.retriever_ab` and
       `evals.improvement_ab`; tables in
-      [`RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md) §2 and §3.
+      [`RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md) §2 and §3.
       `⚠️ NOT VERIFIED`: same placeholder caveat as Task 5 — regenerate with a real
       key.
 - [ ] **One other improvement, evidenced by the harness** — few-shot exemplar
       priming, driven by
       [`src/evals/improvement_ab.py`](../src/evals/improvement_ab.py); documented in
-      [`RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md) §3.
+      [`RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md) §3.
 
 ### Tasks 1, 2, 3, 7 written deliverables
 
@@ -151,7 +153,7 @@ deploy healthy until every box below is checked.
       `uv run ruff format --check .`.
 - [ ] **Eval numbers regenerated** — run `evals.retriever_ab` and
       `evals.improvement_ab` with a live `LLM_API_KEY`, paste real tables into
-      [`RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md), remove the
+      [`RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md), remove the
       placeholder banners.
 
 ### Render backend env vars
