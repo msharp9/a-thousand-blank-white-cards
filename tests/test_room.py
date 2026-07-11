@@ -59,6 +59,38 @@ def test_draw_action_draws_for_active_player() -> None:
     assert room._has_drawn is True
 
 
+def test_draw_broadcasts_state_with_updated_hand() -> None:
+    # Regression (bm9): drawing must push a fresh 'state' snapshot so the client
+    # sees the new hand and has_drawn=true immediately, without a reconnect.
+    room = _room_with_two_players()
+    room.state = room.state.model_copy(update={"deck": ["c1", "c2"], "phase": "playing"})
+    ws1 = AsyncMock()
+    room.connections.connect("p1", ws1)
+    asyncio.run(room.handle_action("p1", DrawMsg()))
+    states = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
+    state_msgs = [m for m in states if m["type"] == "state"]
+    assert state_msgs, "draw did not broadcast a state snapshot"
+    latest = state_msgs[-1]["state"]
+    assert latest["has_drawn"] is True
+    p1 = next(p for p in latest["players"] if p["id"] == "p1")
+    assert p1["hand"] == ["c1"]
+
+
+def test_draw_from_empty_deck_broadcasts_has_drawn() -> None:
+    # Regression (bm9): the empty-deck path latches has_drawn=True so the player
+    # can still play/pass — that flag change must reach clients via a broadcast.
+    room = _room_with_two_players()
+    room.state = room.state.model_copy(update={"deck": [], "phase": "playing"})
+    ws1 = AsyncMock()
+    room.connections.connect("p1", ws1)
+    asyncio.run(room.handle_action("p1", DrawMsg()))
+    assert room._has_drawn is True
+    msgs = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
+    state_msgs = [m for m in msgs if m["type"] == "state"]
+    assert state_msgs, "empty-deck draw did not broadcast a state snapshot"
+    assert state_msgs[-1]["state"]["has_drawn"] is True
+
+
 def test_second_draw_in_same_turn_is_rejected() -> None:
     # Drawing is once per turn; a second draw errors and draws nothing more.
     room = _room_with_two_players()
