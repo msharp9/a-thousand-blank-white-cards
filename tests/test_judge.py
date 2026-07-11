@@ -51,10 +51,22 @@ def test_verdict_has_all_seven_fields() -> None:
     }
 
 
+def test_judge_routes_through_get_chat_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """JudgeLLM builds its client via the shared gateway factory (get_chat_model)."""
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    with patch("evals.judge.get_chat_model") as mock_factory:
+        llm = MagicMock()
+        mock_factory.return_value = llm
+        JudgeLLM("some-model")
+        mock_factory.assert_called_once_with("some-model", temperature=0)
+        llm.with_structured_output.assert_called_once_with(Verdict)
+
+
 def test_judge_evaluate_calls_structured_output(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
     expected = _verdict()
-    with patch("evals.judge.ChatOpenAI") as MockLLM:
+    # The judge builds its client via agent.llm.get_chat_model -> ChatOpenAI.
+    with patch("agent.llm.ChatOpenAI") as MockLLM:
         structured = MagicMock()
         structured.invoke.return_value = expected
         MockLLM.return_value.with_structured_output.return_value = structured
@@ -69,8 +81,8 @@ def test_judge_evaluate_calls_structured_output(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_judge_evaluate_rejects_non_verdict(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    with patch("evals.judge.ChatOpenAI") as MockLLM:
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    with patch("agent.llm.ChatOpenAI") as MockLLM:
         structured = MagicMock()
         structured.invoke.return_value = {"not": "a verdict"}
         MockLLM.return_value.with_structured_output.return_value = structured

@@ -2,7 +2,7 @@
 """Eval harness for the 1000 Blank White Cards interpretation pipeline.
 
 Usage:
-    OPENAI_API_KEY=... uv run python -m evals.harness [--data PATH] [--limit N]
+    LLM_API_KEY=... uv run python -m evals.harness [--data PATH] [--limit N]
 
 Loads the real-card testset, runs the single tool-calling agent
 (:func:`agent.runtime.run_agent`) on each card, scores each output with

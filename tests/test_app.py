@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from fastapi.testclient import TestClient
 
 from board.app import create_app
-from config import OPENAI_API_KEY_ERROR, get_settings
+from config import get_settings
 
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    # Startup fails fast without a key; provide one so smoke tests can run.
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
     get_settings.cache_clear()
     return TestClient(create_app())
 
@@ -38,34 +39,35 @@ def test_cors_headers_present(client: TestClient) -> None:
     assert response.headers.get("access-control-allow-origin") in (origin, "*")
 
 
-def test_startup_fails_without_openai_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """Startup (lifespan) fails fast with a clear message when the key is unset."""
+def test_startup_warns_without_credentials_but_serves(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Missing key + blank base_url logs a warning but does NOT hard-fail startup."""
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
     get_settings.cache_clear()
-    app = create_app()
-    with pytest.raises(RuntimeError) as exc:
-        # Entering the context manager runs the lifespan startup.
-        with TestClient(app):
-            pass
-    assert str(exc.value) == OPENAI_API_KEY_ERROR
+    with caplog.at_level(logging.WARNING):
+        with TestClient(create_app()) as c:
+            assert c.get("/health").status_code == 200
+    assert any("LLM_API_KEY" in rec.message for rec in caplog.records)
     get_settings.cache_clear()
 
 
 def test_startup_succeeds_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """With a key present, startup completes and the app serves requests."""
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
     get_settings.cache_clear()
     with TestClient(create_app()) as c:
         assert c.get("/health").status_code == 200
     get_settings.cache_clear()
 
 
-def test_startup_succeeds_without_openai_key_for_ollama(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """provider=ollama: startup must NOT require OPENAI_API_KEY."""
+def test_startup_succeeds_with_gateway_base_url(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A keyless gateway (base_url set, no key) starts without warning or failure."""
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434/v1")
     get_settings.cache_clear()
     with TestClient(create_app()) as c:
         assert c.get("/health").status_code == 200

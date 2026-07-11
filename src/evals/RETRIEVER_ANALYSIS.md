@@ -11,12 +11,12 @@ Both experiments are evaluated with the Phase 5 eval harness over the 35-card re
 testset. The A/B driver scripts already exist (`evals.retriever_ab`,
 `evals.improvement_ab`). `improvement_ab` drives the single tool-calling agent
 (`agent.runtime.run_agent`) and the LLM judge, so it requires a live
-`OPENAI_API_KEY`. `retriever_ab` was rewired to compare the two retrievers directly
+`LLM_API_KEY`. `retriever_ab` was rewired to compare the two retrievers directly
 with deterministic structural scorers (no agent, no judge) — see §2.
 
 > **⚠️ Results in this document are ILLUSTRATIVE PLACEHOLDERS.** Every number in the
 > tables below is a hand-authored estimate used to show the *shape* of the expected
-> result, not a measured value. They must be regenerated with a live `OPENAI_API_KEY`
+> result, not a measured value. They must be regenerated with a live `LLM_API_KEY`
 > using the exact commands in [How to regenerate](#4-how-to-regenerate) before this
 > analysis is submitted as final.
 
@@ -122,7 +122,7 @@ uv run python -m evals.retriever_ab
 ### Results
 
 > **⚠️ Illustrative values — regenerate with the command above using a live
-> `OPENAI_API_KEY` before submission.** The numbers below are hand-authored estimates
+> `LLM_API_KEY` before submission.** The numbers below are hand-authored estimates
 > showing the expected direction of change, not measurements.
 
 | Metric | dense | advanced | delta |
@@ -181,7 +181,7 @@ uv run python -m evals.improvement_ab
 ### Results
 
 > **⚠️ Illustrative values — regenerate with the command above using a live
-> `OPENAI_API_KEY` before submission.** Hand-authored estimates showing expected
+> `LLM_API_KEY` before submission.** Hand-authored estimates showing expected
 > direction only.
 
 | Metric | before (no few-shot) | after (few-shot) | delta |
@@ -208,7 +208,7 @@ paraphraser runs against a real store. From the repository root:
 ```bash
 # Required for improvement_ab: OpenAI key powers the single agent, the multi-query
 # paraphraser, and the gpt-5.4-mini judge.
-export OPENAI_API_KEY=sk-...
+export LLM_API_KEY=sk-...
 
 # Optional: enable LangSmith tracing for per-run inspection of judge calls.
 # export LANGSMITH_API_KEY=ls-...

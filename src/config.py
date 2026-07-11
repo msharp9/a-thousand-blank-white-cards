@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
+from typing import ClassVar
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -16,30 +20,33 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- LLM provider ---
-    # "openai" (default, hosted) or "ollama" (local OpenAI-compatible server, e.g.
-    # gpt-oss-20b). Ollama lets you run everything locally to save tokens. The
-    # provider gates the OpenAI-key requirement (see require_openai_api_key /
-    # llm_api_key) and selects which model + base_url + embedding-dim defaults apply.
-    llm_provider: str = "openai"
+    # --- LLM gateway (generic, OpenAI-compatible) ---
+    # ONE base_url / api_key / model set drives BOTH chat and embeddings. Point it
+    # at any OpenAI-compatible endpoint: hosted OpenAI (leave LLM_BASE_URL blank +
+    # set a real LLM_API_KEY), a company gateway such as bifrost
+    # (LLM_BASE_URL=https://.../v1 + key), or a local server like Ollama
+    # (LLM_BASE_URL=http://localhost:11434/v1, LLM_API_KEY=anything).
+    #
+    # The two url/key fields carry the raw env value; the same-named accessors
+    # below normalise them for the OpenAI client (blank base_url -> None, blank
+    # api_key -> a harmless placeholder). We alias so the raw fields keep clean
+    # env names (LLM_BASE_URL / LLM_API_KEY) while the properties shadow the
+    # public names consumers read.
+    llm_base_url_raw: str = Field(default="", validation_alias="llm_base_url")
+    llm_api_key_raw: str = Field(default="", validation_alias="llm_api_key")
 
-    # --- OpenAI ---
-    openai_api_key: str = ""
-    openai_chat_model: str = "gpt-5.4-mini"
-    openai_embedding_model: str = "text-embedding-3-small"
-    # text-embedding-3-small is 1536-dim; this feeds the Qdrant collection size.
-    openai_embedding_dimensions: int = 1536
-
-    # --- Ollama (local, OpenAI-compatible API) ---
-    # Only consulted when llm_provider == "ollama". The server exposes an
-    # OpenAI-compatible endpoint at /v1 and accepts any (dummy) api key.
-    ollama_base_url: str = "http://localhost:11434/v1"
-    ollama_chat_model: str = "gpt-oss-20b"
-    ollama_embedding_model: str = "nomic-embed-text"
-    # IMPORTANT: Ollama embedding models have DIFFERENT dimensionality than
-    # OpenAI's — nomic-embed-text is 768-dim, not 1536. The Qdrant collection must
-    # be created with the matching size (see rag.store.init_store) or upserts fail.
-    ollama_embedding_dimensions: int = 768
+    llm_chat_model: str = "gpt-5.4-mini"
+    llm_embedding_model: str = "text-embedding-3-small"
+    # Vector size of the embedding model; feeds the Qdrant collection dimension and
+    # MUST match the model. OpenAI text-embedding-3-small is 1536-dim; other
+    # servers differ (e.g. Ollama nomic-embed-text is 768) — override to match.
+    llm_embedding_dimensions: int = 1536
+    # Whether OpenAIEmbeddings should run its tiktoken context-length check, which
+    # POSTs integer token-ID arrays (the "len-safe" path). The hosted OpenAI API
+    # handles that fine (default True), but some gateways / local servers (e.g.
+    # Ollama) reject token-ID arrays with "400 - invalid input type" and need raw
+    # strings, so set LLM_EMBEDDING_CHECK_CTX_LENGTH=false for those.
+    llm_embedding_check_ctx_length: bool = True
 
     # --- LangSmith observability ---
     # Canonical config uses the modern LANGSMITH_* env var convention. The legacy
@@ -89,48 +96,46 @@ class Settings(BaseSettings):
     # Standard names (DEBUG/INFO/WARNING/ERROR/CRITICAL); override via LOG_LEVEL.
     log_level: str = "INFO"
 
-    # --- Provider-aware accessors --------------------------------------------
-    # These resolve the correct model / base_url / api key / embedding dimension
-    # for the active llm_provider, so callers (agent.llm, rag.embeddings,
-    # rag.store) don't branch on the provider themselves.
+    # --- Gateway accessors ----------------------------------------------------
+    # Normalise the raw LLM_BASE_URL / LLM_API_KEY values for the OpenAI client so
+    # callers (agent.llm, rag.embeddings, rag.store) never special-case a provider.
 
-    @property
-    def is_ollama(self) -> bool:
-        return self.llm_provider.lower() == "ollama"
-
-    @property
-    def chat_model(self) -> str:
-        return self.ollama_chat_model if self.is_ollama else self.openai_chat_model
-
-    @property
-    def embedding_model(self) -> str:
-        return self.ollama_embedding_model if self.is_ollama else self.openai_embedding_model
+    # Placeholder handed to the OpenAI client when no key is configured. Keyless
+    # local gateways / servers (e.g. Ollama) ignore it, but the client library
+    # still requires a NON-EMPTY string, so we supply one.
+    API_KEY_PLACEHOLDER: ClassVar[str] = "not-needed"
 
     @property
     def llm_base_url(self) -> str | None:
-        """OpenAI-compatible base_url for the active provider (None = library default)."""
-        return self.ollama_base_url if self.is_ollama else None
+        """OpenAI-compatible base_url (None = the OpenAI library default endpoint)."""
+        return self.llm_base_url_raw or None
 
     @property
     def llm_api_key(self) -> str:
-        """API key for the active provider.
+        """API key for the gateway, or a placeholder when none is configured.
 
-        Ollama's OpenAI-compatible server ignores the key but the OpenAI client
-        still requires a non-empty string, so we hand it a harmless placeholder.
-        For OpenAI we require a real key via require_openai_api_key().
+        Blank is allowed (keyless local gateways), but the OpenAI client requires
+        a non-empty string, so we substitute ``API_KEY_PLACEHOLDER``.
         """
-        if self.is_ollama:
-            return self.openai_api_key or "ollama"
-        return require_openai_api_key()
+        return self.llm_api_key_raw or self.API_KEY_PLACEHOLDER
+
+    @property
+    def chat_model(self) -> str:
+        return self.llm_chat_model
+
+    @property
+    def embedding_model(self) -> str:
+        return self.llm_embedding_model
 
     @property
     def embedding_dimensions(self) -> int:
-        """Vector size for the active provider's embedding model.
+        """Vector size of the embedding model; threaded into Qdrant collection sizing."""
+        return self.llm_embedding_dimensions
 
-        Threaded into the Qdrant collection creation. text-embedding-3-small is
-        1536-dim; nomic-embed-text (Ollama) is 768-dim — the collection MUST match.
-        """
-        return self.ollama_embedding_dimensions if self.is_ollama else self.openai_embedding_dimensions
+    @property
+    def embedding_check_ctx_length(self) -> bool:
+        """Pass-through for OpenAIEmbeddings' tiktoken context-length check."""
+        return self.llm_embedding_check_ctx_length
 
 
 @lru_cache(maxsize=1)
@@ -139,27 +144,18 @@ def get_settings() -> Settings:
     return Settings()
 
 
-# Actionable message surfaced at startup / on first LLM call when the key is absent.
-OPENAI_API_KEY_ERROR = "OPENAI_API_KEY is not set. Set it in your environment or .env file."
+def warn_if_no_llm_credentials() -> None:
+    """SOFT check: warn (never raise) when the LLM gateway is likely unusable.
 
-
-def require_openai_api_key() -> str:
-    """Return the configured OpenAI API key, or raise a clear, actionable error.
-
-    ``Settings`` (via pydantic-settings ``env_file=".env"``) is the single source
-    of truth, so a key set only in ``.env`` is honoured without a manual
-    ``load_dotenv`` bridge.
-
-    The key is only required for the ``openai`` provider. When ``llm_provider ==
-    "ollama"`` all traffic goes to a local OpenAI-compatible server that ignores
-    the key, so this gate is a no-op (returns the placeholder key) and the
-    startup check in board.app does not fire.
+    An empty ``LLM_BASE_URL`` targets hosted OpenAI, which needs a real key; if
+    ``LLM_API_KEY`` is ALSO empty that combo will fail on the first call. We only
+    log a warning — a blank key is legitimate for keyless local gateways, and a
+    non-empty ``LLM_BASE_URL`` means some other endpoint is in play — so startup
+    never hard-fails on credentials.
     """
     settings = get_settings()
-    # Skip the OpenAI-key requirement entirely for the local Ollama backend.
-    if settings.is_ollama:
-        return settings.openai_api_key or "ollama"
-    key = settings.openai_api_key
-    if not key:
-        raise RuntimeError(OPENAI_API_KEY_ERROR)
-    return key
+    if not settings.llm_base_url_raw and not settings.llm_api_key_raw:
+        logger.warning(
+            "No LLM_API_KEY set and LLM_BASE_URL is empty (hosted OpenAI) — "
+            "LLM calls will fail. Set LLM_API_KEY, or point LLM_BASE_URL at a gateway."
+        )

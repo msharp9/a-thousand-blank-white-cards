@@ -77,7 +77,8 @@ uv sync
 
 # 3. Configure environment
 cp .env.example .env
-# Edit .env and set OPENAI_API_KEY (required).
+# Edit .env and set LLM_API_KEY (hosted OpenAI), or point LLM_BASE_URL at an
+# OpenAI-compatible gateway / local server (see comments in .env.example).
 # Optional: TAVILY_API_KEY, LANGSMITH_*, QDRANT_* (see comments in .env.example).
 
 # 4. Run the API
@@ -126,7 +127,7 @@ uvx prek install
 
 ## Evals
 
-Offline evaluation of the agent + retriever. All eval scripts call OpenAI, so set `OPENAI_API_KEY` first.
+Offline evaluation of the agent + retriever. All eval scripts call the LLM gateway, so configure `LLM_API_KEY` (and optionally `LLM_BASE_URL`) first.
 
 ```bash
 uv run python -m evals.harness          # main eval harness
