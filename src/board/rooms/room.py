@@ -51,6 +51,12 @@ STARTING_HAND_SIZE = 5
 # Cards each player must author during the setup phase before the game can start.
 CARDS_TO_AUTHOR = BLANKS_PER_PLAYER
 
+# Prefix stamped on the interpretation agent's in-character comment when it is
+# appended to the persistent game log. Marks the line as the AI referee talking
+# so players can tell it apart from the plain "X played Y" effect lines. Kept as
+# a module constant so tests and any future styling share one source of truth.
+AGENT_COMMENT_PREFIX = "🤖 "
+
 
 class Room:
     """One game session. Thread-safe via asyncio.Lock."""
@@ -71,6 +77,11 @@ class Room:
         # drawn so the game ends after the drawer finishes their turn.
         self._has_drawn: bool = False
         self._deck_exhausted: bool = False
+        # Card ids whose agent comment has already been appended to state.log this
+        # session. A card that needs a target is resolved TWICE (resolve → prompt_choice
+        # → follow-up play re-resolves), so this guards against double-logging the
+        # referee comment for one played card. See _resolve_program.
+        self._comment_logged: set[str] = set()
 
     # ── player management ──
     def add_player(self, player_id: str, name: str, spectator: bool = False) -> None:
@@ -544,6 +555,15 @@ class Room:
             }
         )
 
+        # D1: persist the referee's comment to the PERSISTENT game log so it
+        # survives a reconnect/refresh (a rejoining client only gets the state
+        # snapshot, not the transient card_interpreted broadcast above). Only when
+        # non-empty — the deterministic compiled path never reaches here, so cards
+        # resolved deterministically produce no referee line (intended). Guarded by
+        # card_id so a target-requiring card (resolve → prompt_choice → re-resolve)
+        # logs its comment exactly once across the round-trip.
+        await self._log_agent_comment(card_id, result.comment)
+
         program = result.program
         if result.verdict == "ok" and program is not None and getattr(program, "ops", None):
             return program
@@ -754,6 +774,11 @@ class Room:
                 "comment": result.comment,
             }
         )
+        # D1: persist the referee comment so it survives a reconnect (see
+        # _resolve_program). create_card interprets a card_id exactly once, so no
+        # round-trip guard is needed, but we route through the same helper for a
+        # single consistent format + prefix.
+        await self._log_agent_comment(card_id, result.comment)
         await self._broadcast_state()
 
     async def _handle_preview_card(self, player_id: str, msg) -> None:
@@ -819,6 +844,26 @@ class Room:
         """
         self.state = self.state.with_log(log_entry)
         await self.connections.broadcast({"type": "effect_applied", "log_entry": log_entry})
+
+    async def _log_agent_comment(self, card_id: str, comment: str) -> None:
+        """Persist the interpretation agent's in-character comment to the game log.
+
+        Appends ``AGENT_COMMENT_PREFIX + comment`` to ``state.log`` (and broadcasts
+        it live) via :meth:`_log_and_broadcast`, so the referee's quip both shows
+        up live AND survives a reconnect/refresh (rejoiners only receive the state
+        snapshot, whose ``log`` this feeds).
+
+        No-ops on an empty comment (the deterministic compiled path has no comment,
+        and we must not spam blank lines) and de-dupes per ``card_id``: a card that
+        needs a target is re-resolved after its prompt_choice, so this guards the
+        comment to log exactly once per played card.
+        """
+        if not comment:
+            return
+        if card_id in self._comment_logged:
+            return
+        self._comment_logged.add(card_id)
+        await self._log_and_broadcast(f"{AGENT_COMMENT_PREFIX}{comment}")
 
     async def _broadcast_state(self) -> None:
         await self.connections.broadcast_state(self.snapshot())
