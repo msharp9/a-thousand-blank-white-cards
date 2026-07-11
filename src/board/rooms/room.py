@@ -319,6 +319,8 @@ class Room:
             # Nothing left to draw; mark drawn so the player can still play/pass.
             self._has_drawn = True
             await self.connections.send(player_id, {"type": "error", "message": "The deck is empty — nothing to draw"})
+            # Broadcast so the has_drawn flag change reaches clients and Play/Pass unlock.
+            await self._broadcast_state()
             return
 
         self._draw_cards(player_id, self.state.draw_count)
@@ -327,6 +329,8 @@ class Room:
             # The last card(s) were just drawn — the game ends when this turn ends.
             self._deck_exhausted = True
         await self._log_and_broadcast(f"{self._name(player_id)} drew a card")
+        # Push a fresh snapshot so clients see the new hand + has_drawn without a refresh.
+        await self._broadcast_state()
 
     def _draw_cards(self, player_id: str, count: int) -> None:
         """Move up to ``count`` cards from the top of the deck into a hand (in place
