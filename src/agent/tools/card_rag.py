@@ -37,7 +37,9 @@ def _format_hits(hits: list[dict[str, Any]]) -> str:
         score = hit.get("score")
         try:
             score_str = f"{float(score):.3f}"
-        except (TypeError, ValueError):
+        except TypeError:
+            score_str = "n/a"
+        except ValueError:
             score_str = "n/a"
         lines.append(f"{title} — {description} — score={score_str}")
     return "\n".join(lines)

@@ -511,7 +511,9 @@ def _blank_room() -> Room:
 
 def _self_points_result() -> InterpretResult:
     """A simple 'give self points' interpretation (no target choice needed)."""
-    return InterpretResult(program=EffectProgram(ops=[AddPointsOp(target="self", amount=3)]), snippet=None, verdict="ok")
+    return InterpretResult(
+        program=EffectProgram(ops=[AddPointsOp(target="self", amount=3)]), snippet=None, verdict="ok"
+    )
 
 
 def test_play_blank_authors_card_and_applies_and_advances() -> None:

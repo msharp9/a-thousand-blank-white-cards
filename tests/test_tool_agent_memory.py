@@ -85,9 +85,10 @@ def test_graceful_degradation_on_sqlite_error(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setenv("AGENT_MEMORY_DB", str(bad))
     get_settings.cache_clear()
     try:
-        assert remember_decision.invoke(
-            {"card_title": "X", "card_description": "y", "verdict": "z"}
-        ) == "memory unavailable"
+        assert (
+            remember_decision.invoke({"card_title": "X", "card_description": "y", "verdict": "z"})
+            == "memory unavailable"
+        )
         assert recall_decisions.invoke({"query": "anything"}) == "memory unavailable"
     finally:
         get_settings.cache_clear()

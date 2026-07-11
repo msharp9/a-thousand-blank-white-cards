@@ -132,7 +132,7 @@ def _summarize(decisions: list[dict[str, Any]]) -> str:
     """Render recalled decisions as a concise, LLM-readable text block."""
     lines: list[str] = []
     for d in decisions:
-        parts = [f"- \"{d['card_title']}\" -> verdict: {d['verdict'] or 'n/a'}"]
+        parts = [f'- "{d["card_title"]}" -> verdict: {d["verdict"] or "n/a"}']
         if d.get("persona_action"):
             parts.append(f"persona_action: {d['persona_action']}")
         if d.get("note"):
