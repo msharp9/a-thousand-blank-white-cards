@@ -95,8 +95,12 @@ export function SetupPhase({
           <p className="text-sm font-medium">
             Cards you authored ({myAuthored.length})
           </p>
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            Author a card
+          <Button
+            size="sm"
+            onClick={() => setDialogOpen(true)}
+            disabled={remaining === 0}
+          >
+            {remaining === 0 ? "All cards authored" : "Author a card"}
           </Button>
         </div>
         {myAuthored.length === 0 ? (
