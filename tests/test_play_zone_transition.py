@@ -1,7 +1,7 @@
 """Bead 70n.4 — a played card must leave the hand and land in the correct zone.
 
 These tests drive ``Room._handle_play`` (via ``handle_action``) with the agent's
-``interpret_card`` stubbed so no real LLM runs, and assert the played card is
+``run_agent`` stubbed so no real LLM runs, and assert the played card is
 removed from the actor's hand and appended to the zone derived from its canonical
 placement/timing:
 
@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+from agent.contract import InterpretResult
 from models.effects import AddPointsOp, EffectProgram
 from models.ws_messages import PlayMsg
 from board.rooms.room import Room
@@ -37,15 +38,15 @@ def _room_with_card(card: dict) -> Room:
     return r
 
 
-_OK_PROGRAM = {
-    "program": EffectProgram(ops=[AddPointsOp(target="self", amount=5)]),
-    "snippet": None,
-    "verdict": "ok",
-}
+_OK_PROGRAM = InterpretResult(
+    program=EffectProgram(ops=[AddPointsOp(target="self", amount=5)]),
+    snippet=None,
+    verdict="ok",
+)
 
 
 def _play(room: Room, card_id: str) -> None:
-    with patch("agent.graph.interpret_card", return_value=_OK_PROGRAM):
+    with patch("agent.runtime.run_agent", return_value=_OK_PROGRAM):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id=card_id)))
 
 
@@ -118,7 +119,7 @@ def test_rejected_play_keeps_card_in_hand() -> None:
     # stay in the hand (turn not consumed).
     card = {"id": "c5", "title": "", "description": "", "blank": True}
     room = _room_with_card(card)
-    with patch("agent.graph.interpret_card", return_value=_OK_PROGRAM):
+    with patch("agent.runtime.run_agent", return_value=_OK_PROGRAM):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c5")))
 
     assert "c5" in room.state.get_player("p1").hand

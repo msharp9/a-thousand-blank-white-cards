@@ -11,6 +11,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
+from agent.contract import InterpretResult
 from engine.loop import advance_turn
 from engine.scoring import evaluate_win_condition
 from models.game_state import GameState, Player, WinCondition
@@ -186,8 +187,8 @@ def test_spectator_create_card_is_rejected() -> None:
 def test_non_spectator_create_card_still_allowed_off_turn() -> None:
     room = _playing_room_with_spectator()
     room.connections.connect("p2", AsyncMock())
-    fake = {"program": None, "snippet": None, "verdict": "invalid"}
-    with patch("agent.graph.interpret_card", return_value=fake):
+    fake = InterpretResult(program=None, snippet=None, verdict="invalid")
+    with patch("agent.runtime.run_agent", return_value=fake):
         asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="x")))
     assert len(room.state.cards) == 1
 

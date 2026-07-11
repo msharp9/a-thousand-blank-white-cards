@@ -54,11 +54,11 @@ def test_authoring_during_setup_increments_progress_and_skips_llm() -> None:
     room = _room_two_players()
     asyncio.run(room.handle_action("p1", StartMsg()))
 
-    with patch("agent.graph.interpret_card") as mock_interp:
+    with patch("agent.runtime.run_agent") as mock_interp:
         asyncio.run(room.handle_action("p1", CreateCardMsg(title="Mine", description="gain 1 point")))
         asyncio.run(room.handle_action("p1", CreateCardMsg(title="Mine2", description="gain 1 point")))
 
-    # The LLM is never called during setup authoring.
+    # The agent is never called during setup authoring.
     mock_interp.assert_not_called()
     # p1's authored count advanced; p2 untouched.
     assert room.snapshot()["setup_progress"] == {"p1": 2, "p2": 0}
