@@ -104,10 +104,10 @@ export function SetupPhase({
             No cards yet — click “Author a card”.
           </p>
         ) : (
-          <ScrollArea className="w-full">
-            <div className="flex gap-2 pb-2">
+          <ScrollArea className="max-h-[28rem] w-full">
+            <div className="grid grid-cols-3 gap-2 pb-2 sm:grid-cols-4 md:grid-cols-5">
               {myAuthored.map((card) => (
-                <CardTile key={card.id} card={card} className="shrink-0" />
+                <CardTile key={card.id} card={card} className="w-full" />
               ))}
             </div>
           </ScrollArea>
@@ -119,10 +119,10 @@ export function SetupPhase({
           <p className="text-sm font-medium">
             Your dealt hand ({myCards.length})
           </p>
-          <ScrollArea className="w-full">
-            <div className="flex gap-2 pb-2">
+          <ScrollArea className="max-h-[28rem] w-full">
+            <div className="grid grid-cols-3 gap-2 pb-2 sm:grid-cols-4 md:grid-cols-5">
               {myCards.map((card) => (
-                <CardTile key={card.id} card={card} className="shrink-0" />
+                <CardTile key={card.id} card={card} className="w-full" />
               ))}
             </div>
           </ScrollArea>
@@ -137,10 +137,10 @@ export function SetupPhase({
           <p className="text-xs text-muted-foreground">
             These ship with the deck — author cards that play well with them.
           </p>
-          <ScrollArea className="w-full">
-            <div className="flex gap-2 pb-2">
+          <ScrollArea className="max-h-[28rem] w-full">
+            <div className="grid grid-cols-3 gap-2 pb-2 sm:grid-cols-4 md:grid-cols-5">
               {premadeCards.map((card) => (
-                <CardTile key={card.id} card={card} className="shrink-0" />
+                <CardTile key={card.id} card={card} className="w-full" />
               ))}
             </div>
           </ScrollArea>
