@@ -67,6 +67,61 @@ def test_authoring_during_setup_increments_progress_and_skips_llm() -> None:
     assert len(authored) == 2
 
 
+def test_authoring_up_to_the_limit_during_setup_is_allowed() -> None:
+    room = _room_two_players()
+    asyncio.run(room.handle_action("p1", StartMsg()))
+
+    for i in range(CARDS_TO_AUTHOR):
+        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"c{i}", description="gain 1 point")))
+
+    assert room.snapshot()["setup_progress"]["p1"] == CARDS_TO_AUTHOR
+    authored = [c for c in room.state.cards.values() if c.get("creator_id") == "p1"]
+    assert len(authored) == CARDS_TO_AUTHOR
+
+
+def test_authoring_over_the_limit_during_setup_is_rejected() -> None:
+    import json
+
+    room = _room_two_players()
+    ws1 = AsyncMock()
+    room.connections.connect("p1", ws1)
+    asyncio.run(room.handle_action("p1", StartMsg()))  # -> setup
+
+    # Author up to the cap.
+    for i in range(CARDS_TO_AUTHOR):
+        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"c{i}", description="gain 1 point")))
+
+    ws1.reset_mock()
+    # The (CARDS_TO_AUTHOR + 1)th create must be rejected and add no card.
+    asyncio.run(room.handle_action("p1", CreateCardMsg(title="extra", description="gain 1 point")))
+
+    sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
+    assert "error" in sent_types
+    # Still exactly CARDS_TO_AUTHOR authored — the over-limit card was not registered.
+    authored = [c for c in room.state.cards.values() if c.get("creator_id") == "p1"]
+    assert len(authored) == CARDS_TO_AUTHOR
+    assert not any(c.get("title") == "extra" for c in room.state.cards.values())
+
+
+def test_create_card_cap_does_not_apply_during_playing_phase() -> None:
+    from unittest.mock import patch
+
+    from agent.contract import InterpretResult
+
+    room = _room_two_players()
+    # Jump straight to playing; the setup-only cap must not gate mid-game creates.
+    room.state = room.state.model_copy(update={"phase": "playing"})
+
+    fake_result = InterpretResult(program=None, snippet=None, verdict="invalid")
+    with patch("agent.runtime.run_agent", return_value=fake_result):
+        # Author far more than CARDS_TO_AUTHOR — none should be rejected by the cap.
+        for i in range(CARDS_TO_AUTHOR + 3):
+            asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"mid{i}", description="do something")))
+
+    authored = [c for c in room.state.cards.values() if c.get("creator_id") == "p1"]
+    assert len(authored) == CARDS_TO_AUTHOR + 3
+
+
 def test_start_during_setup_with_players_behind_errors_and_stays_in_setup() -> None:
     room = _room_two_players()
     ws1 = AsyncMock()

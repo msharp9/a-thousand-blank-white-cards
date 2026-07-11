@@ -727,7 +727,22 @@ class Room:
         setup authoring stays fast and never depends on a live service. The card
         is simply registered with its ``creator_id`` (which drives
         ``setup_progress`` and the start gate) and broadcast.
+
+        Setup authoring is capped at ``CARDS_TO_AUTHOR`` per player: the start
+        gate only enforces a LOWER bound, so without this cap a player could
+        author unlimited cards before the host starts. The cap is scoped STRICTLY
+        to ``phase == "setup"`` — mid-game a player may freely create cards (e.g.
+        blanks), so the playing-phase path below stays uncapped.
         """
+        # Setup-only upper bound: reject (targeted, not broadcast) once the player
+        # has authored the required number of cards, BEFORE any card is created.
+        if self.state.phase == "setup" and self._authored_count(player_id) >= CARDS_TO_AUTHOR:
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": f"You've already authored the maximum of {CARDS_TO_AUTHOR} cards."},
+            )
+            return
+
         card_id = str(uuid.uuid4())
         new_cards = {
             **self.state.cards,
