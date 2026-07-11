@@ -58,7 +58,7 @@ def test_judge_routes_through_get_chat_model(monkeypatch: pytest.MonkeyPatch) ->
         llm = MagicMock()
         mock_factory.return_value = llm
         JudgeLLM("some-model")
-        mock_factory.assert_called_once_with("some-model", temperature=0)
+        mock_factory.assert_called_once_with("some-model")
         llm.with_structured_output.assert_called_once_with(Verdict)
 
 

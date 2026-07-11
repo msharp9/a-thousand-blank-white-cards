@@ -52,7 +52,7 @@ class MultiQueryCardRetriever:
         if self._llm is None:
             from agent.llm import get_chat_model
 
-            self._llm = get_chat_model(temperature=0.3)
+            self._llm = get_chat_model()
         return self._llm
 
     def _paraphrases(self, query: str) -> list[str]:

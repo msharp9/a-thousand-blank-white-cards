@@ -71,7 +71,7 @@ class JudgeLLM:
         # Route through the shared gateway-aware factory so the judge hits the same
         # OpenAI-compatible endpoint (hosted OpenAI, a gateway, or a local server)
         # as the rest of the app instead of constructing a raw OpenAI client.
-        self._llm = get_chat_model(model, temperature=0).with_structured_output(Verdict)
+        self._llm = get_chat_model(model).with_structured_output(Verdict)
 
     def evaluate(self, *, card_description: str, generated_summary: str, human_canonical: dict) -> Verdict:
         """Call the LLM judge and return a structured Verdict.

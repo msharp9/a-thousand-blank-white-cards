@@ -19,8 +19,20 @@ def test_uses_env_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
         get_chat_model()
         MockLLM.assert_called_once_with(
-            model="custom-model", temperature=0, openai_api_key="test-key", base_url=None, default_headers=None
+            model="custom-model", openai_api_key="test-key", base_url=None, default_headers=None
         )
+
+
+def test_temperature_omitted_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No temperature is sent unless explicitly asked for — some gateway models reject it."""
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    with patch("agent.llm.ChatOpenAI") as MockLLM:
+        MockLLM.return_value = MagicMock()
+        from agent.llm import get_chat_model
+
+        get_chat_model()
+        _, kwargs = MockLLM.call_args
+        assert "temperature" not in kwargs
 
 
 def test_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
