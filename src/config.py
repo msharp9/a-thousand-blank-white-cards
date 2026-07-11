@@ -41,11 +41,6 @@ class Settings(BaseSettings):
     # be created with the matching size (see rag.store.init_store) or upserts fail.
     ollama_embedding_dimensions: int = 768
 
-    # Optional override for LangChain's `.with_structured_output(...)` method
-    # (see agent.llm.with_structured_output). Empty = library default. gpt-oss-20b
-    # may need "json_schema" for reliable structured output.
-    structured_output_method: str = ""
-
     # --- LangSmith observability ---
     # Canonical config uses the modern LANGSMITH_* env var convention. The legacy
     # LANGCHAIN_* names are the *old* names for the same LangSmith settings, kept

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 
 from config import get_settings
@@ -34,23 +31,3 @@ def get_chat_model(model_name: str | None = None, *, temperature: float = 0) -> 
         openai_api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,
     )
-
-
-def with_structured_output(llm: ChatOpenAI, schema: Any) -> Runnable:
-    """Wrap ``llm.with_structured_output(schema)`` honouring STRUCTURED_OUTPUT_METHOD.
-
-    CAVEAT (Ollama / gpt-oss-20b): LangChain's structured-output binding defaults
-    to OpenAI function/tool calling. Local models served via Ollama's
-    OpenAI-compatible API may not support tool-calling reliably (or at all), so
-    typed extraction can fail or return malformed output. Setting
-    STRUCTURED_OUTPUT_METHOD="json_schema" switches to JSON-schema-constrained
-    decoding, which gpt-oss-20b tends to handle better. Left empty (the default),
-    this passes NO method= kwarg so hosted-OpenAI behaviour is unchanged.
-
-    Agent call sites go through this helper so the method is configurable in one
-    place without rewriting each call site.
-    """
-    method = get_settings().structured_output_method
-    if method:
-        return llm.with_structured_output(schema, method=method)
-    return llm.with_structured_output(schema)

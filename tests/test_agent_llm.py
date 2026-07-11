@@ -71,24 +71,3 @@ def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.M
         assert kwargs["model"] == "gpt-oss-20b"
         assert kwargs["base_url"] == "http://localhost:11434/v1"
         assert kwargs["openai_api_key"] == "ollama"  # placeholder, no real key
-
-
-def test_with_structured_output_default_passes_no_method(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Default (unset STRUCTURED_OUTPUT_METHOD) keeps hosted-OpenAI behaviour."""
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    from agent.llm import with_structured_output
-
-    fake_llm = MagicMock()
-    with_structured_output(fake_llm, object)
-    fake_llm.with_structured_output.assert_called_once_with(object)
-
-
-def test_with_structured_output_honours_configured_method(monkeypatch: pytest.MonkeyPatch) -> None:
-    """STRUCTURED_OUTPUT_METHOD=json_schema is threaded into with_structured_output."""
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("STRUCTURED_OUTPUT_METHOD", "json_schema")
-    from agent.llm import with_structured_output
-
-    fake_llm = MagicMock()
-    with_structured_output(fake_llm, object)
-    fake_llm.with_structured_output.assert_called_once_with(object, method="json_schema")

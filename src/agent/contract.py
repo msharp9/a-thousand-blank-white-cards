@@ -35,9 +35,11 @@ class SnippetEffect(BaseModel):
 class InterpretResult(BaseModel):
     """Structured result of interpreting one card into an executable effect.
 
-    This is the NEW canonical contract. The legacy dict shape returned today is a
-    subset of these fields (``program``/``snippet``/``verdict``); ``comment`` and
-    ``persona_action`` are populated by the real agent later (empty/``"none"`` for now).
+    Returned by :func:`agent.runtime.run_agent`. ``program``/``snippet`` carry the
+    mechanical effect (a compiled op program or a generated Python hook);
+    ``verdict`` reports interpretation success; ``comment`` is the referee's
+    in-character remark; ``persona_action`` records the persona branch chosen when
+    a card could not be cleanly interpreted.
     """
 
     program: EffectProgram | None = Field(
