@@ -9,7 +9,9 @@ services:
     envVars:
       - key: PORT
         value: "10000"
-      - key: OPENAI_API_KEY
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
         sync: false
       - key: TAVILY_API_KEY
         sync: false

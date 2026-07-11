@@ -11,8 +11,9 @@ import json
 from typing import Annotated
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+
+from agent.llm import get_chat_model
 
 
 class Verdict(BaseModel):
@@ -67,7 +68,10 @@ class JudgeLLM:
     """Multi-dimensional LLM judge. Stateless; create once and reuse across eval items."""
 
     def __init__(self, model: str = "gpt-5.4-mini") -> None:
-        self._llm = ChatOpenAI(model=model, temperature=0).with_structured_output(Verdict)
+        # Route through the shared gateway-aware factory so the judge hits the same
+        # OpenAI-compatible endpoint (hosted OpenAI, a gateway, or a local server)
+        # as the rest of the app instead of constructing a raw OpenAI client.
+        self._llm = get_chat_model(model, temperature=0).with_structured_output(Verdict)
 
     def evaluate(self, *, card_description: str, generated_summary: str, human_canonical: dict) -> Verdict:
         """Call the LLM judge and return a structured Verdict.

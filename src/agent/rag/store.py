@@ -40,7 +40,7 @@ def init_store() -> QdrantClient:
     """
     global _client
     _client = QdrantClient(location=":memory:")
-    # Size the collection to the ACTIVE provider's embedding dimension. OpenAI
+    # Size the collection to the configured embedding dimension. OpenAI
     # text-embedding-3-small is 1536-dim, Ollama nomic-embed-text is 768-dim — a
     # mismatch here makes every upsert fail, so derive it rather than hard-coding.
     _client.recreate_collection(

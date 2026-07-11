@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import get_settings, require_openai_api_key
+from config import get_settings, warn_if_no_llm_credentials
 from logging_config import configure_logging
 from board.rooms.manager import check_single_worker, room_manager
 from board.ws import router as ws_router
@@ -112,10 +112,11 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     # subsequent startup log line (and all app loggers) use the shared format.
     configure_logging()
 
-    # startup: fail fast with an actionable message if the OpenAI key is missing.
-    # require_openai_api_key() is a no-op when llm_provider == "ollama" (the local
-    # OpenAI-compatible backend ignores the key), so this gate only fires for OpenAI.
-    require_openai_api_key()
+    # startup: SOFT credential check. A generic OpenAI-compatible gateway may be
+    # keyless (local servers), so we never hard-fail here; we only log a warning
+    # when the config can't possibly work (hosted OpenAI with no key). See
+    # config.warn_if_no_llm_credentials.
+    warn_if_no_llm_credentials()
 
     # startup: warn loudly if a multi-worker deployment is configured — the
     # room registry uses a process-local in-memory store (single-worker only).

@@ -1,4 +1,4 @@
-"""Tests for agent.rag.embeddings."""
+"""Tests for agent.rag.embeddings (generic gateway)."""
 
 from __future__ import annotations
 
@@ -12,16 +12,15 @@ import pytest
 
 
 def test_get_embeddings_uses_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_EMBEDDING_MODEL", "my-model")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_EMBEDDING_MODEL", "my-model")
     import agent.rag.embeddings as mod
 
     mod.get_embeddings.cache_clear()
     with patch("agent.rag.embeddings.OpenAIEmbeddings") as MockEmb:
         MockEmb.return_value = MagicMock()
         mod.get_embeddings()
-        # check_embedding_ctx_length=True keeps the hosted-OpenAI len-safe
-        # (tiktoken token-id) path; only the Ollama provider disables it.
+        # check_embedding_ctx_length defaults True (hosted-OpenAI len-safe path).
         MockEmb.assert_called_once_with(
             model="my-model",
             openai_api_key="test-key",
@@ -32,7 +31,7 @@ def test_get_embeddings_uses_model_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_get_embeddings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
     import agent.rag.embeddings as mod
 
     mod.get_embeddings.cache_clear()
@@ -46,7 +45,7 @@ def test_get_embeddings_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_embed_text_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
     import agent.rag.embeddings as mod
 
     mod.get_embeddings.cache_clear()
@@ -60,19 +59,21 @@ def test_embed_text_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
     mod.get_embeddings.cache_clear()
 
 
-def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def test_empty_key_uses_placeholder(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A blank LLM_API_KEY passes the non-empty placeholder (no raise)."""
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     import agent.rag.embeddings as mod
 
-    from config import get_settings
+    from config import Settings, get_settings
 
     get_settings.cache_clear()
     mod.get_embeddings.cache_clear()
     with patch("agent.rag.embeddings.OpenAIEmbeddings") as MockEmb:
-        with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
-            mod.get_embeddings()
-        MockEmb.assert_not_called()
+        MockEmb.return_value = MagicMock()
+        mod.get_embeddings()
+        _, kwargs = MockEmb.call_args
+        assert kwargs["openai_api_key"] == Settings.API_KEY_PLACEHOLDER
     mod.get_embeddings.cache_clear()
 
 
@@ -83,11 +84,13 @@ def test_constants() -> None:
     assert DEFAULT_EMBEDDING_MODEL == "text-embedding-3-small"
 
 
-def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """provider=ollama builds embeddings against local base_url with a dummy key."""
+def test_gateway_base_url_key_and_ctx_length(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A local gateway config (base_url + key + ctx-length off) flows through."""
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)  # no OpenAI key needed
-    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("LLM_API_KEY", "ollama")
+    monkeypatch.setenv("LLM_EMBEDDING_MODEL", "nomic-embed-text")
+    monkeypatch.setenv("LLM_EMBEDDING_CHECK_CTX_LENGTH", "false")
     import agent.rag.embeddings as mod
 
     mod.get_embeddings.cache_clear()
@@ -98,23 +101,22 @@ def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.M
         assert kwargs["model"] == "nomic-embed-text"
         assert kwargs["base_url"] == "http://localhost:11434/v1"
         assert kwargs["openai_api_key"] == "ollama"
-        # Ollama's /embeddings endpoint rejects tiktoken token-id arrays, so the
-        # len-safe context-length check must be disabled to send raw strings.
+        # Gateways/local servers that reject tiktoken token-id arrays disable this.
         assert kwargs["check_embedding_ctx_length"] is False
     mod.get_embeddings.cache_clear()
 
 
-def test_embedding_dimensions_is_provider_aware(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The Qdrant-facing dimension follows the active provider (1536 vs 768)."""
+def test_embedding_dimensions_follows_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Qdrant-facing dimension follows LLM_EMBEDDING_DIMENSIONS."""
     from config import get_settings
     from agent.rag.embeddings import embedding_dimensions
 
     get_settings.cache_clear()
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.delenv("LLM_EMBEDDING_DIMENSIONS", raising=False)
     assert embedding_dimensions() == 1536
 
     get_settings.cache_clear()
-    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_EMBEDDING_DIMENSIONS", "768")
     assert embedding_dimensions() == 768
     get_settings.cache_clear()

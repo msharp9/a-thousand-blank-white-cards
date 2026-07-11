@@ -2,10 +2,10 @@
 
 The whole suite must be hermetic with respect to the developer's ``.env``.
 ``config.Settings`` loads the repo-root ``.env`` (pydantic-settings
-``env_file=".env"``), so a local ``.env`` — e.g. ``LLM_PROVIDER=ollama`` plus
-``OPENAI_CHAT_MODEL`` / ``OPENAI_EMBEDDING_MODEL`` overrides — would otherwise
-leak into tests and override the values individual tests set, producing failures
-that only reproduce on machines configured for the local Ollama backend.
+``env_file=".env"``), so a local ``.env`` — e.g. ``LLM_BASE_URL`` plus
+``LLM_CHAT_MODEL`` / ``LLM_EMBEDDING_MODEL`` overrides for a local gateway —
+would otherwise leak into tests and override the values individual tests set,
+producing failures that only reproduce on machines configured for a gateway.
 
 Env vars set via ``monkeypatch.setenv`` still win (they take precedence over the
 ``.env`` file), so tests that want a specific provider/model keep working; we

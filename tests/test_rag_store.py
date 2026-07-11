@@ -8,7 +8,7 @@ import pytest
 
 
 def test_upsert_and_search(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
     fake_vector = [0.1] * 1536
     with patch("agent.rag.store.embed_text", return_value=fake_vector):
         from agent.rag.store import init_store, search, upsert_card
@@ -23,7 +23,7 @@ def test_upsert_and_search(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_list_all_cards_returns_every_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
     fake_vector = [0.1] * 1536
     with patch("agent.rag.store.embed_text", return_value=fake_vector):
         from agent.rag.store import init_store, list_all_cards, upsert_card
@@ -54,7 +54,7 @@ def test_stable_point_id_is_deterministic() -> None:
 
 
 def test_reupsert_same_card_id_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
     fake_vector = [0.1] * 1536
     with patch("agent.rag.store.embed_text", return_value=fake_vector):
         from agent.rag.store import COLLECTION_NAME, init_store, upsert_card

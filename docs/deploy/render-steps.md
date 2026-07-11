@@ -27,9 +27,9 @@ supply the secret environment variables through the dashboard.
   project. Render needs read access to the repo so it can pull code and detect
   `render.yaml`.
 
-- **Your secret values on hand:** `OPENAI_API_KEY`, `TAVILY_API_KEY`,
-  `LANGSMITH_API_KEY`, and the deployed frontend origin(s) for `CORS_ORIGINS`
-  (e.g. your Vercel URL).
+- **Your secret values on hand:** `LLM_API_KEY` (and `LLM_BASE_URL` if you use a
+  gateway rather than hosted OpenAI), `TAVILY_API_KEY`, `LANGSMITH_API_KEY`, and
+  the deployed frontend origin(s) for `CORS_ORIGINS` (e.g. your Vercel URL).
 
 ## What `render.yaml` declares
 
@@ -55,7 +55,8 @@ Values set inline in `render.yaml` (no action needed):
 Values marked `sync: false` are **not** stored in the repo. Render creates the keys
 but leaves them blank; you must fill them in through the dashboard (see below):
 
-- `OPENAI_API_KEY`
+- `LLM_API_KEY`
+- `LLM_BASE_URL`
 - `TAVILY_API_KEY`
 - `LANGSMITH_API_KEY`
 - `CORS_ORIGINS`
@@ -81,7 +82,8 @@ first deploy, otherwise the service will start without its credentials.
 
 1. Open the `tbwc-backend` service → **Environment** tab.
 2. Set each secret value:
-   - `OPENAI_API_KEY` — your OpenAI API key.
+   - `LLM_API_KEY` — your LLM gateway / OpenAI API key.
+   - `LLM_BASE_URL` — OpenAI-compatible endpoint URL; leave blank for hosted OpenAI.
    - `TAVILY_API_KEY` — your Tavily API key.
    - `LANGSMITH_API_KEY` — your LangSmith API key.
    - `CORS_ORIGINS` — the allowed browser origins for your frontend.

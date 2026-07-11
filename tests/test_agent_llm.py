@@ -1,4 +1,4 @@
-"""Tests for agent.llm."""
+"""Tests for agent.llm (generic gateway factory)."""
 
 from __future__ import annotations
 
@@ -6,15 +6,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from config import OPENAI_API_KEY_ERROR
-
 # Settings isolation (hermetic .env) + cache reset is handled globally by the
 # autouse ``_hermetic_settings`` fixture in tests/conftest.py.
 
 
 def test_uses_env_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_CHAT_MODEL", "custom-model")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_CHAT_MODEL", "custom-model")
     with patch("agent.llm.ChatOpenAI") as MockLLM:
         MockLLM.return_value = MagicMock()
         from agent.llm import get_chat_model
@@ -24,8 +22,8 @@ def test_uses_env_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.delenv("OPENAI_CHAT_MODEL", raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.delenv("LLM_CHAT_MODEL", raising=False)
     with patch("agent.llm.ChatOpenAI") as MockLLM:
         MockLLM.return_value = MagicMock()
         from agent.llm import DEFAULT_CHAT_MODEL, get_chat_model
@@ -36,7 +34,7 @@ def test_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_explicit_model_and_temperature(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
     with patch("agent.llm.ChatOpenAI") as MockLLM:
         MockLLM.return_value = MagicMock()
         from agent.llm import get_chat_model
@@ -45,23 +43,27 @@ def test_explicit_model_and_temperature(monkeypatch: pytest.MonkeyPatch) -> None
         MockLLM.assert_called_once_with(model="gpt-x", temperature=0.7, openai_api_key="test-key", base_url=None)
 
 
-def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def test_empty_key_uses_placeholder(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A blank LLM_API_KEY passes the non-empty placeholder to the client (no raise)."""
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     with patch("agent.llm.ChatOpenAI") as MockLLM:
+        MockLLM.return_value = MagicMock()
         from agent.llm import get_chat_model
+        from config import Settings
 
-        with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
-            get_chat_model()
-        assert OPENAI_API_KEY_ERROR
-        MockLLM.assert_not_called()
+        get_chat_model()
+        _, kwargs = MockLLM.call_args
+        assert kwargs["openai_api_key"] == Settings.API_KEY_PLACEHOLDER
+        assert kwargs["openai_api_key"]  # non-empty
 
 
-def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """provider=ollama builds ChatOpenAI against the local base_url with a dummy key."""
+def test_gateway_base_url_and_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A configured base_url + key (e.g. a local Ollama gateway) flows through."""
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)  # no OpenAI key needed
-    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("LLM_API_KEY", "ollama")
+    monkeypatch.setenv("LLM_CHAT_MODEL", "gpt-oss-20b")
     with patch("agent.llm.ChatOpenAI") as MockLLM:
         MockLLM.return_value = MagicMock()
         from agent.llm import get_chat_model
@@ -70,4 +72,4 @@ def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.M
         _, kwargs = MockLLM.call_args
         assert kwargs["model"] == "gpt-oss-20b"
         assert kwargs["base_url"] == "http://localhost:11434/v1"
-        assert kwargs["openai_api_key"] == "ollama"  # placeholder, no real key
+        assert kwargs["openai_api_key"] == "ollama"

@@ -102,7 +102,7 @@ A convenience script is provided to sanity-check configuration and emit one samp
 trace without needing a live game:
 
 ```bash
-OPENAI_API_KEY=... LANGSMITH_API_KEY=... LANGSMITH_TRACING=true \
+LLM_API_KEY=... LANGSMITH_API_KEY=... LANGSMITH_TRACING=true \
     LANGSMITH_PROJECT=tbwc-prod \
     uv run python ops/verify_langsmith.py
 ```

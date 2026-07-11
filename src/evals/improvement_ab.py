@@ -2,7 +2,7 @@
 """Before/after eval: the single agent WITHOUT vs WITH few-shot exemplar priming.
 
 Usage:
-    OPENAI_API_KEY=... uv run python -m evals.improvement_ab [--data PATH] [--limit N]
+    LLM_API_KEY=... uv run python -m evals.improvement_ab [--data PATH] [--limit N]
 
 The old A/B toggled the graph's ``few_shot_exemplars`` config on the ``emit_ops``
 node. That node no longer exists — there is a single tool-calling agent

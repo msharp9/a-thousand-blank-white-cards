@@ -2,7 +2,7 @@
 """Retriever A/B: baseline dense vs multi-query advanced, over the real-card testset.
 
 Usage:
-    OPENAI_API_KEY=... uv run python -m evals.retriever_ab [--data PATH] [--limit N]
+    LLM_API_KEY=... uv run python -m evals.retriever_ab [--data PATH] [--limit N]
 
 The old version drove the whole legacy pipeline twice via a ``retriever_mode`` config
 key that only that pipeline understood. The single agent (:func:`agent.runtime.run_agent`)
