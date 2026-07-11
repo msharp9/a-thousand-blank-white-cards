@@ -1,11 +1,204 @@
 # Final Submission Checklist
 
-TODO: Recreate, but good.
+Pre-submission gate for the AI Makerspace Certification Challenge. Work through
+both parts before recording the Loom and submitting the form
+(<https://forms.gle/xtM9F38nfRKcdjH97>). Every requirement below maps to concrete
+evidence in this repo; anything not yet verifiable is flagged with `⚠️ NOT
+VERIFIED` and a note on what to check.
 
-Requirements:
+---
 
-- Use an LLM gateway of your choice
-- Must have a memory component
-- Be able to run it on my phone and laptop in a browser
-- Your own personal data, uploaded to your application (e.g., RAG)
-- The ability to search publicly available data (e.g., a simple agentic search tool like Tavily)
+## Part A — Requirements checklist
+
+### Task 2 requirements (architecture constraints)
+
+- [ ] **LLM gateway of your choice** — one OpenAI-compatible `LLM_BASE_URL` /
+      `LLM_API_KEY` pair drives both chat and embeddings; works against hosted
+      OpenAI, a company gateway (e.g. bifrost), or a local server (Ollama).
+      Evidence: [`src/config.py`](../src/config.py) (`llm_base_url_raw`,
+      `llm_api_key_raw`, `llm_extra_headers`, gateway accessors) and
+      [`src/agent/llm.py`](../src/agent/llm.py).
+- [ ] **Memory component** — two are present:
+      (1) a Qdrant vector store of card exemplars
+      ([`src/agent/rag/store.py`](../src/agent/rag/store.py),
+      [`src/agent/rag/seed.py`](../src/agent/rag/seed.py)); and
+      (2) a persistent sqlite store of the agent's own prior rulings
+      ([`src/agent/tools/agent_memory.py`](../src/agent/tools/agent_memory.py),
+      configured by `Settings.agent_memory_db`).
+- [ ] **Runs on phone and laptop in a browser** — Next.js frontend under
+      [`frontend/`](../frontend/) served over HTTPS on Vercel; responsive Tailwind
+      layout ([`frontend/app/layout.tsx`](../frontend/app/layout.tsx) sets
+      `min-h-full flex`, components use `sm:`/`md:` breakpoints e.g.
+      [`frontend/components/setup-phase.tsx`](../frontend/components/setup-phase.tsx)).
+      Two-device (laptop + phone) verification is codified in the smoke checklist,
+      [`docs/deploy/smoke-checklist.md`](deploy/smoke-checklist.md) §2.
+      Note: no explicit `viewport` export in `layout.tsx`; Next.js injects a
+      default `width=device-width` meta, but confirm phone rendering during the
+      smoke test.
+
+### Task 3 requirements (data)
+
+- [ ] **Personal data uploaded to the app (RAG)** — card corpus in
+      [`data/seed_cards.json`](../data/seed_cards.json) (seeded into Qdrant at
+      startup) and the hand-annotated gold set
+      [`data/eval/eval_cards.json`](../data/eval/eval_cards.json) plus
+      [`data/eval/real_cards.json`](../data/eval/real_cards.json). Retrieval is
+      exposed to the agent via the `card_rag` tool
+      ([`src/agent/tools/card_rag.py`](../src/agent/tools/card_rag.py)) over
+      [`src/agent/rag/`](../src/agent/rag/).
+- [ ] **Agentic public-data search** — Tavily-backed `web_search` tool
+      ([`src/agent/tools/web_search.py`](../src/agent/tools/web_search.py)), keyed by
+      `TAVILY_API_KEY` in [`src/config.py`](../src/config.py) and bound by default
+      via `get_default_tools()`
+      ([`src/agent/tools/__init__.py`](../src/agent/tools/__init__.py)).
+
+### Task 4 requirements (build + deploy)
+
+- [ ] **End-to-end agentic RAG prototype built** — single tool-calling agent in
+      [`src/agent/runtime.py`](../src/agent/runtime.py) with the RAG + web-search +
+      memory + game-introspection toolbox; FastAPI backend
+      ([`src/board/app.py`](../src/board/app.py), REST + WebSocket) and the Next.js
+      frontend.
+- [ ] **Deployed to a public endpoint** — backend on Render via
+      [`render.yaml`](../render.yaml) (Docker, `/health` check) per
+      [`docs/deploy/render-steps.md`](deploy/render-steps.md); frontend on Vercel
+      per [`docs/deploy/vercel-steps.md`](deploy/vercel-steps.md).
+      `⚠️ NOT VERIFIED`: the actual live URLs
+      (`https://tbwc-backend.onrender.com`, `https://tbwc.vercel.app`) are examples
+      in the docs — confirm the real deployed URLs respond before submitting (see
+      Part B).
+
+### Task 5 requirements (evals)
+
+- [ ] **Test dataset prepared** — 35-card hand-annotated gold set at
+      [`data/eval/eval_cards.json`](../data/eval/eval_cards.json)
+      (+ [`ANNOTATION_GUIDE.md`](../data/eval/ANNOTATION_GUIDE.md),
+      [`CANONICAL_SPEC.md`](../data/eval/CANONICAL_SPEC.md)).
+- [ ] **Evaluation harness built** — [`src/evals/`](../src/evals/): `harness.py`,
+      `eval_core.py`, `scorers.py`, LLM-as-judge in `judge.py`. Run with
+      `uv run python -m evals.harness`.
+- [ ] **Conclusions drawn about pipeline performance** — written analysis in
+      [`src/evals/RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md) §5
+      and `src/evals/conclusions.py`.
+      `⚠️ NOT VERIFIED`: the result tables are explicitly labelled **illustrative
+      placeholders**. Regenerate with a live `LLM_API_KEY` and replace the numbers
+      + delete the caveat banners before submission (see the file's §4).
+
+### Task 6 requirements (improvement)
+
+- [ ] **Advanced retriever implemented + justified** — multi-query expansion
+      retriever (`MultiQueryCardRetriever` / `advanced_retriever()`) in
+      [`src/agent/rag/retrievers.py`](../src/agent/rag/retrievers.py); rationale in
+      [`RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md) §1.
+- [ ] **Before/after results in a table** — A/B drivers `evals.retriever_ab` and
+      `evals.improvement_ab`; tables in
+      [`RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md) §2 and §3.
+      `⚠️ NOT VERIFIED`: same placeholder caveat as Task 5 — regenerate with a real
+      key.
+- [ ] **One other improvement, evidenced by the harness** — few-shot exemplar
+      priming, driven by
+      [`src/evals/improvement_ab.py`](../src/evals/improvement_ab.py); documented in
+      [`RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md) §3.
+
+### Tasks 1, 2, 3, 7 written deliverables
+
+These are prose/diagram deliverables. All should live in
+[`docs/WRITEUP.md`](WRITEUP.md).
+
+- [ ] **Task 1** — 1-sentence problem statement; 1–2 paragraphs on the user;
+      current-workflow diagram; eval question / input-output pairs.
+- [ ] **Task 2** — 1-sentence solution; infrastructure diagram with a per-component
+      justification (LLM, agent framework, tools, embeddings, vector DB, monitoring,
+      eval framework, UI, deploy); agent workflow diagram + 1–2 paragraphs.
+- [ ] **Task 3** — default chunking strategy + rationale; data source + external API
+      description and how they interact.
+- [ ] **Task 7** — reflection: what you keep vs. change for Demo Day.
+- Diagram assets exist and can be embedded:
+  [`docs/game.excalidraw.svg`](game.excalidraw.svg),
+  [`docs/agent.excalidraw.svg`](agent.excalidraw.svg).
+- [ ] `⚠️ NOT VERIFIED — BLOCKER`: [`docs/WRITEUP.md`](WRITEUP.md) is currently the
+      stub `TODO: Recreate, but good.` None of the Task 1/2/3/7 written deliverables
+      are actually present. This must be written before submission.
+
+### Final submission bundle (GitHub repo)
+
+- [ ] **Public GitHub repo containing all relevant code** — this repository
+      (backend `src/`, frontend `frontend/`, evals `src/evals/`, deploy docs). Make
+      it public or share access before submitting.
+- [ ] **Written document addressing every deliverable/question** —
+      [`docs/WRITEUP.md`](WRITEUP.md). `⚠️ NOT VERIFIED — BLOCKER`: still a stub (see
+      above).
+- [ ] **Loom video (≤10 min) demoing the app + use case, linked from the repo** —
+      script scaffold at [`docs/loom-script.md`](loom-script.md).
+      `⚠️ NOT VERIFIED — BLOCKER`: `loom-script.md` is still the stub `TODO:
+      Recreate, but good.` and no `loom.com` link exists anywhere in the repo.
+      Record the video and add its URL to the README and/or WRITEUP.
+
+---
+
+## Part B — Deployment checklist
+
+Follow the deploy docs, then gate the deploy on the smoke test. Do not announce a
+deploy healthy until every box below is checked.
+
+### Pre-deploy
+
+- [ ] **Backend Docker image builds and runs locally** — `docker build -t tbwc .`
+      then `docker run -p 8000:8000 --env-file .env tbwc`; `curl
+      localhost:8000/health` returns `{"status": "ok"}`
+      ([`docs/deploy/render-steps.md`](deploy/render-steps.md) Prerequisites).
+- [ ] **Quality gates pass** — `uv run pytest`, `uv run ruff check .`,
+      `uv run ruff format --check .`.
+- [ ] **Eval numbers regenerated** — run `evals.retriever_ab` and
+      `evals.improvement_ab` with a live `LLM_API_KEY`, paste real tables into
+      [`RETRIEVER_ANALYSIS.md`](../src/evals/RETRIEVER_ANALYSIS.md), remove the
+      placeholder banners.
+
+### Render backend env vars
+
+Set the `sync: false` secrets on the `tbwc-backend` service Environment tab
+([`docs/deploy/render-steps.md`](deploy/render-steps.md)):
+
+- [ ] `LLM_API_KEY` set (and `LLM_BASE_URL` if using a gateway; blank = hosted OpenAI).
+- [ ] `TAVILY_API_KEY` set (required for the `web_search` tool to work in prod).
+- [ ] `LANGSMITH_API_KEY` set; inline `LANGSMITH_TRACING=true`,
+      `LANGSMITH_PROJECT=tbwc-prod` per
+      [`docs/deploy/langsmith-setup.md`](deploy/langsmith-setup.md).
+- [ ] `CORS_ORIGINS` set to a **JSON array** string including the Vercel URL, e.g.
+      `["https://tbwc.vercel.app"]` (a bare URL fails pydantic parsing).
+
+### Vercel frontend env vars
+
+Set for the `production` environment
+([`docs/deploy/vercel-steps.md`](deploy/vercel-steps.md)):
+
+- [ ] `NEXT_PUBLIC_API_URL` = the Render backend HTTPS URL (no trailing slash).
+- [ ] `NEXT_PUBLIC_WS_URL` = the Render backend `wss://` URL (must be secure — no
+      `ws://`, browsers block mixed content). No Vercel WebSocket proxy; the browser
+      talks straight to Render.
+- [ ] Redeploy the frontend after changing any `NEXT_PUBLIC_*` var (they inline at
+      build time).
+
+### Post-deploy verification
+
+- [ ] **Backend `/health` green** — `curl https://<render-url>/health` returns
+      `200 {"status": "ok"}` (allow ~30–60s for free-tier cold start).
+- [ ] **LangSmith tracing confirmed** — Render logs show `LangSmith tracing
+      ENABLED project=tbwc-prod`; a trace appears in the `tbwc-prod` project after
+      interpreting one card ([`docs/deploy/langsmith-setup.md`](deploy/langsmith-setup.md) §5–6).
+- [ ] **Automated smoke probe passes** —
+      `uv run python scripts/smoke_test.py --backend <render-url> --origin <vercel-url>`
+      exits `0` (checks `/health`, CORS preflight, and a live WebSocket round-trip)
+      ([`docs/deploy/smoke-checklist.md`](deploy/smoke-checklist.md) §1).
+- [ ] **Manual two-device end-to-end passes** — run every box in
+      [`docs/deploy/smoke-checklist.md`](deploy/smoke-checklist.md) §2: laptop +
+      phone load, create/join room, real-time state sync, play a card, author a wild
+      card (agent interprets it), reconnect, epilogue vote.
+- [ ] **Public URLs reachable from a phone** — open the live Vercel URL on a phone
+      (not just the laptop) and confirm no CORS or mixed-content errors and that the
+      backend is reachable.
+
+### Ship
+
+- [ ] Repo is public / shared, WRITEUP.md complete, Loom recorded and linked.
+- [ ] Submit the form: <https://forms.gle/xtM9F38nfRKcdjH97>.
