@@ -15,22 +15,10 @@ def get_chat_model(model_name: str | None = None, *, temperature: float | None =
     Args:
         model_name: Model id. Falls back to the configured chat model
             (Settings.chat_model — LLM_CHAT_MODEL), then to DEFAULT_CHAT_MODEL.
-        temperature: Sampling temperature. Left as ``None`` (the default), the
-            parameter is OMITTED from the request entirely and the model's own
-            default applies. Only pass a value when a specific endpoint both
-            supports and needs one — some gateway models (notably Bedrock Anthropic)
-            reject ``temperature`` outright, even ``0``.
-
-    Gateway-aware: ``base_url`` is the configured endpoint (Settings.llm_base_url,
-    ``None`` for hosted OpenAI's default) and ``openai_api_key`` is the configured
-    key (a placeholder when blank, for keyless local gateways). ChatOpenAI talks to
-    any OpenAI-compatible endpoint via ``base_url``.
+        temperature: Sampling temperature.
     """
     settings = get_settings()
     name = model_name or settings.chat_model or DEFAULT_CHAT_MODEL
-    # Only forward ``temperature`` when explicitly set; ChatOpenAI drops payload
-    # params left as None, so omitting it keeps the request clean for models that
-    # reject the parameter (e.g. Bedrock Anthropic).
     kwargs: dict[str, object] = {
         "model": name,
         "openai_api_key": settings.llm_api_key,

@@ -2,6 +2,10 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
+## Code Style — Comments & Docstrings
+
+Docstrings capture durable behavior/contract; "why it changed now" goes in the commit. Inline comments only for non-obvious *why*, never to narrate code. "Reduce comments" = cut noise, keep signal.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
 
