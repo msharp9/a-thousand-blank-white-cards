@@ -4,6 +4,11 @@ import { useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
+// Log lines authored by the AI referee are broadcast with this prefix (see the
+// backend's _log_and_broadcast). We render them as commentary rather than as a
+// mechanical effect line.
+const REFEREE_PREFIX = "🤖 ";
+
 interface EffectLogProps {
   log: string[];
   brewing: string | null;
@@ -28,14 +33,20 @@ export function EffectLog({ log, brewing, className }: EffectLogProps) {
         {isEmpty && (
           <p className="text-xs italic text-muted-foreground">No events yet.</p>
         )}
-        {log.map((entry, i) => (
-          <div
-            key={i}
-            className="border-b border-border/40 py-0.5 text-xs last:border-0"
-          >
-            {entry}
-          </div>
-        ))}
+        {log.map((entry, i) => {
+          const isReferee = entry.startsWith(REFEREE_PREFIX);
+          return (
+            <div
+              key={i}
+              className={cn(
+                "border-b border-border/40 py-0.5 text-xs last:border-0",
+                isReferee && "italic text-primary",
+              )}
+            >
+              {entry}
+            </div>
+          );
+        })}
         {brewing && (
           <div className="flex items-center gap-1.5 py-0.5 text-xs text-muted-foreground">
             <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />

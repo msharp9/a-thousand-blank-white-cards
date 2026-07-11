@@ -135,6 +135,12 @@ export type CardInterpretedMsg = {
   program?: string | null;
   snippet?: string | null;
   verdict: string;
+  // A short in-character quip from the AI referee about the interpreted card.
+  // Persisted separately: the backend also appends it to state.log with a "🤖 "
+  // prefix and broadcasts it via effect_applied, so the frontend renders it from
+  // the log (see EffectLog) rather than from this transient field. Optional to
+  // stay compatible with older servers that predate C10.
+  comment?: string;
 };
 export type PreviewResultMsg = {
   type: "preview_result";
