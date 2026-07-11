@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tbwc.agent.nodes import route_search, should_search
+from agent.nodes import route_search, should_search
 
 
 def test_proper_noun_triggers_search() -> None:

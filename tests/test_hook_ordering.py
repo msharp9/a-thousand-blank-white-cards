@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from tbwc.engine.events import GameEvent, HookContext
-from tbwc.engine.hooks import HookRegistry, RegisteredHook, fire_hooks, get_default_registry
-from tbwc.models.cards import Card
-from tbwc.models.game_state import GameState, Player
+from engine.events import GameEvent, HookContext
+from engine.hooks import HookRegistry, RegisteredHook, fire_hooks, get_default_registry
+from models.cards import Card
+from models.game_state import GameState, Player
 
 
 def make_state_with_cards(**card_properties) -> GameState:

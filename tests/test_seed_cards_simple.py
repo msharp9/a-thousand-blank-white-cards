@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import pathlib
 
-from tbwc.engine.compile import compile_card
-from tbwc.models.card import GoldCard, parse_seed_card
-from tbwc.models.effects import EffectProgram
+from engine.compile import compile_card
+from models.card import GoldCard, parse_seed_card
+from models.effects import EffectProgram
 
 DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 

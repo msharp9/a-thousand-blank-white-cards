@@ -1,8 +1,8 @@
-"""Tests for tbwc.models.card schema validation."""
+"""Tests for models.card schema validation."""
 
 from __future__ import annotations
 
-from tbwc.models.card import FillerCard, GoldCard, parse_seed_card
+from models.card import FillerCard, GoldCard, parse_seed_card
 
 
 GOLD_DICT = {

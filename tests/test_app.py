@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from tbwc.app import create_app
-from tbwc.config import OPENAI_API_KEY_ERROR, get_settings
+from app import create_app
+from config import OPENAI_API_KEY_ERROR, get_settings
 
 
 @pytest.fixture

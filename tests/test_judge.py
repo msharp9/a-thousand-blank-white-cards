@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tbwc.evals.judge import JudgeLLM, Verdict
+from evals.judge import JudgeLLM, Verdict
 
 
 def _verdict() -> Verdict:
@@ -54,7 +54,7 @@ def test_verdict_has_all_seven_fields() -> None:
 def test_judge_evaluate_calls_structured_output(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     expected = _verdict()
-    with patch("tbwc.evals.judge.ChatOpenAI") as MockLLM:
+    with patch("evals.judge.ChatOpenAI") as MockLLM:
         structured = MagicMock()
         structured.invoke.return_value = expected
         MockLLM.return_value.with_structured_output.return_value = structured
@@ -70,7 +70,7 @@ def test_judge_evaluate_calls_structured_output(monkeypatch: pytest.MonkeyPatch)
 
 def test_judge_evaluate_rejects_non_verdict(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    with patch("tbwc.evals.judge.ChatOpenAI") as MockLLM:
+    with patch("evals.judge.ChatOpenAI") as MockLLM:
         structured = MagicMock()
         structured.invoke.return_value = {"not": "a verdict"}
         MockLLM.return_value.with_structured_output.return_value = structured

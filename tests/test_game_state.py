@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tbwc.models.game_state import GameState, Player, WinCondition
+from models.game_state import GameState, Player, WinCondition
 
 
 def test_constructs_with_defaults() -> None:

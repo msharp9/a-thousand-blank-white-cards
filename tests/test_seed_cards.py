@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import pathlib
 
-from tbwc.models.card import FillerCard, GoldCard, parse_seed_card
+from models.card import FillerCard, GoldCard, parse_seed_card
 
 DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 

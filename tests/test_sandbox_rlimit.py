@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from tbwc.sandbox.runner import SnippetExecutionError, execute_snippet
+from sandbox.runner import SnippetExecutionError, execute_snippet
 
 STATE = {
     "players": [{"id": "p1", "name": "A", "score": 0, "hand": [], "connected": True}],
@@ -26,7 +26,7 @@ def test_infinite_loop_times_out() -> None:
 def test_file_write_blocked() -> None:
     # RLIMIT_FSIZE=0 (Unix) OR the AST validator/child error — either way no readable file.
     # 'open' is blocked by the AST allowlist, so this is rejected before/at execution.
-    code = "def apply(s, c):\n    open('/tmp/tbwc_sandbox_escape.txt', 'w').write('x')\n"
+    code = "def apply(s, c):\n    open('/tmp/sandbox_escape.txt', 'w').write('x')\n"
     with pytest.raises(SnippetExecutionError):
         execute_snippet(code, STATE, CTX, timeout=5.0)
 

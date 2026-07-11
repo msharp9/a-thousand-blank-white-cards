@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from tbwc.engine.apply import apply_effect
-from tbwc.engine.events import EventBus, GameEvent, HookContext
-from tbwc.models.effects import AddPointsOp, EffectProgram, ReverseOrderOp
-from tbwc.models.game_state import GameState, Player
+from engine.apply import apply_effect
+from engine.events import EventBus, GameEvent, HookContext
+from models.effects import AddPointsOp, EffectProgram, ReverseOrderOp
+from models.game_state import GameState, Player
 
 
 class SpyBus(EventBus):

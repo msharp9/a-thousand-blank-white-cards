@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from tbwc.app import create_app
-from tbwc.models.game_state import GameState
-from tbwc.rooms.manager import RoomManager, room_manager
+from app import create_app
+from models.game_state import GameState
+from rooms.manager import RoomManager, room_manager
 
 
 @pytest.fixture

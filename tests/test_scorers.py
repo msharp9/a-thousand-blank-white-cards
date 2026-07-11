@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tbwc.evals.eval_core import EvalItem, ScorerContext
-from tbwc.evals.scorers import ALL_SCORERS, dsl_validity, intent_match_judge, target_accuracy, timing_accuracy
+from evals.eval_core import EvalItem, ScorerContext
+from evals.scorers import ALL_SCORERS, dsl_validity, intent_match_judge, target_accuracy, timing_accuracy
 
 
 def _ctx(output, expected=None) -> ScorerContext:
@@ -19,7 +19,7 @@ def test_all_scorers_count() -> None:
 
 
 def test_dsl_validity_valid_effect_program() -> None:
-    # Use a real EffectProgram-shaped dict (matches tbwc.models.effects). Confirm the op shape
+    # Use a real EffectProgram-shaped dict (matches models.effects). Confirm the op shape
     # against effects.py: AddPointsOp = {"op": "add_points", "target": "self", "amount": 5}.
     ep = {"ops": [{"op": "add_points", "target": "self", "amount": 5}]}
     score = dsl_validity.evaluate(_ctx({"effect_program": ep}))

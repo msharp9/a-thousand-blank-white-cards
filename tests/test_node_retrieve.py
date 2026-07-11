@@ -9,8 +9,8 @@ FAKE_EXEMPLARS = [{"card_id": "s1", "title": "Extra Turn", "description": "...",
 
 def test_retrieve_uses_search_notes() -> None:
     fake_retriever = MagicMock(return_value=FAKE_EXEMPLARS)
-    with patch("tbwc.agent.nodes._retriever", fake_retriever):
-        from tbwc.agent.nodes import retrieve
+    with patch("agent.nodes._retriever", fake_retriever):
+        from agent.nodes import retrieve
 
         state = {
             "card_draft": {"title": "Go Again", "description": "Take another turn."},
@@ -23,8 +23,8 @@ def test_retrieve_uses_search_notes() -> None:
 
 def test_retrieve_falls_back_to_card_text() -> None:
     fake_retriever = MagicMock(return_value=[])
-    with patch("tbwc.agent.nodes._retriever", fake_retriever):
-        from tbwc.agent.nodes import retrieve
+    with patch("agent.nodes._retriever", fake_retriever):
+        from agent.nodes import retrieve
 
         state = {"card_draft": {"title": "Zap", "description": "Lose 5 points."}}
         retrieve(state)

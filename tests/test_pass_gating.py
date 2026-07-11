@@ -12,8 +12,8 @@ import asyncio
 import json
 from unittest.mock import AsyncMock
 
-from tbwc.models.ws_messages import PassMsg
-from tbwc.rooms.room import Room
+from models.ws_messages import PassMsg
+from rooms.room import Room
 
 
 def _playing_room(p1_hand: list[str], cards: dict) -> Room:

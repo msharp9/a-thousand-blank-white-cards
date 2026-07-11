@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, patch
 
 from conftest import drive_to_playing
 
-from tbwc.models.ws_messages import CreateCardMsg, StartMsg
-from tbwc.rooms.room import CARDS_TO_AUTHOR, PREMADE_POOL_SIZE, STARTING_HAND_SIZE, Room
+from models.ws_messages import CreateCardMsg, StartMsg
+from rooms.room import CARDS_TO_AUTHOR, PREMADE_POOL_SIZE, STARTING_HAND_SIZE, Room
 
 
 def _room_two_players() -> Room:
@@ -54,7 +54,7 @@ def test_authoring_during_setup_increments_progress_and_skips_llm() -> None:
     room = _room_two_players()
     asyncio.run(room.handle_action("p1", StartMsg()))
 
-    with patch("tbwc.agent.graph.interpret_card") as mock_interp:
+    with patch("agent.graph.interpret_card") as mock_interp:
         asyncio.run(room.handle_action("p1", CreateCardMsg(title="Mine", description="gain 1 point")))
         asyncio.run(room.handle_action("p1", CreateCardMsg(title="Mine2", description="gain 1 point")))
 

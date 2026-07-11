@@ -14,20 +14,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from tbwc.engine.apply import apply_effect
-from tbwc.engine.events import EventBus, GameEvent, HookContext
-from tbwc.engine.hooks import HookRegistry, RegisteredHook, fire_hooks
-from tbwc.engine.loop import run_turn
-from tbwc.engine.scoring import evaluate_win_condition
-from tbwc.models.cards import Card
-from tbwc.models.effects import (
+from engine.apply import apply_effect
+from engine.events import EventBus, GameEvent, HookContext
+from engine.hooks import HookRegistry, RegisteredHook, fire_hooks
+from engine.loop import run_turn
+from engine.scoring import evaluate_win_condition
+from models.cards import Card
+from models.effects import (
     AddPointsOp,
     ChangeDrawCountOp,
     CustomNoteOp,
     EffectProgram,
     ReverseOrderOp,
 )
-from tbwc.models.game_state import GameState, Player, WinCondition
+from models.game_state import GameState, Player, WinCondition
 
 # ---------------------------------------------------------------------------
 # Test infrastructure: bus, helpers, play_fn factory

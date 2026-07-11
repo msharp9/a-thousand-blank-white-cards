@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tbwc.engine.scoring import check_win, evaluate_win_condition
-from tbwc.models.game_state import GameState, Player, WinCondition
+from engine.scoring import check_win, evaluate_win_condition
+from models.game_state import GameState, Player, WinCondition
 
 
 def _state(kind: str, threshold: int | None = None, **scores: int) -> GameState:

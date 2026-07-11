@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from tbwc.app import create_app
+from app import create_app
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def test_join_room_registers_player(client: TestClient) -> None:
     code = client.post("/rooms").json()["code"]
     pid = client.post(f"/rooms/{code}/join", json={"name": "Alice"}).json()["player_id"]
     # the same player_id should now be in that room
-    from tbwc.rooms.manager import room_manager
+    from rooms.manager import room_manager
 
     room = room_manager.get(code)
     assert room is not None

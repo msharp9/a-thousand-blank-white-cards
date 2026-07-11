@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from tbwc.evals.eval_core import EvalRunReport
-from tbwc.evals.harness import _normalise_graph_output, load_eval_items, run_harness
-from tbwc.models.effects import AddPointsOp, EffectProgram
+from evals.eval_core import EvalRunReport
+from evals.harness import _normalise_graph_output, load_eval_items, run_harness
+from models.effects import AddPointsOp, EffectProgram
 
 
 def test_load_eval_items(tmp_path: Path) -> None:
@@ -44,10 +44,10 @@ def test_run_harness_with_mocked_graph(tmp_path: Path) -> None:
 
     # mock the compiled graph.invoke so no LLM runs; mock the judge-based scorers to avoid API.
     with (
-        patch("tbwc.agent.graph.graph.invoke", return_value=fake_state),
-        patch("tbwc.evals.scorers._run_judge") as mock_judge,
+        patch("agent.graph.graph.invoke", return_value=fake_state),
+        patch("evals.scorers._run_judge") as mock_judge,
     ):
-        from tbwc.evals.judge import Verdict
+        from evals.judge import Verdict
 
         mock_judge.return_value = Verdict(
             intent_match=1.0,

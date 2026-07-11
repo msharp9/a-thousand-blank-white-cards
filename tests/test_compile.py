@@ -1,9 +1,9 @@
-"""Tests for tbwc.engine.compile — card authoring ops -> runtime EffectProgram."""
+"""Tests for engine.compile — card authoring ops -> runtime EffectProgram."""
 
 from __future__ import annotations
 
-from tbwc.engine.compile import compile_card
-from tbwc.models.effects import (
+from engine.compile import compile_card
+from models.effects import (
     AddPointsOp,
     ChangeDrawCountOp,
     CustomNoteOp,

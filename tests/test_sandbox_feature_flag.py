@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from tbwc.config import Settings
-from tbwc.sandbox.runner import execute_snippet
+from config import Settings
+from sandbox.runner import execute_snippet
 
 STATE = {
     "players": [{"id": "p1", "name": "A", "score": 0, "hand": [], "connected": True}],
@@ -29,13 +29,13 @@ def test_flag_default_true() -> None:
 
 def test_disabled_returns_note_without_subprocess() -> None:
     disabled = Settings(_env_file=None, snippet_execution_enabled=False)  # type: ignore[call-arg]
-    with patch("tbwc.config.get_settings", return_value=disabled):
+    with patch("config.get_settings", return_value=disabled):
         ops = execute_snippet(CODE, STATE, CTX)
     assert ops == [{"op": "custom_note", "note": "snippet execution disabled by feature flag"}]
 
 
 def test_enabled_executes_normally() -> None:
     enabled = Settings(_env_file=None, snippet_execution_enabled=True)  # type: ignore[call-arg]
-    with patch("tbwc.config.get_settings", return_value=enabled):
+    with patch("config.get_settings", return_value=enabled):
         ops = execute_snippet(CODE, STATE, CTX)
     assert {"op": "add_points", "target": "p1", "amount": 1} in ops

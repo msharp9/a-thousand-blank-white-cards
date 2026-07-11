@@ -1,8 +1,8 @@
-"""Tests for tbwc.agent.prompts."""
+"""Tests for agent.prompts."""
 
 from __future__ import annotations
 
-from tbwc.agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM, JUDGE_SYSTEM
+from agent.prompts import CLASSIFY_TEMPLATE, INTERPRETER_SYSTEM, JUDGE_SYSTEM
 
 
 def test_prompts_are_strings() -> None:

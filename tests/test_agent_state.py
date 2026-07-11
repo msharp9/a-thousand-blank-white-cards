@@ -1,8 +1,8 @@
-"""Tests for tbwc.agent.state."""
+"""Tests for agent.state."""
 
 from __future__ import annotations
 
-from tbwc.agent.state import CardDraft, InterpretState
+from agent.state import CardDraft, InterpretState
 
 
 def test_interpret_state_instantiates() -> None:

@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from tbwc.evals.eval_core import EvalRunReport
-from tbwc.evals.retriever_ab import render_ab_table, run_ab
-from tbwc.models.effects import AddPointsOp, EffectProgram
+from evals.eval_core import EvalRunReport
+from evals.retriever_ab import render_ab_table, run_ab
+from models.effects import AddPointsOp, EffectProgram
 
 
 def test_run_ab_and_render(tmp_path: Path) -> None:
@@ -19,7 +19,7 @@ def test_run_ab_and_render(tmp_path: Path) -> None:
     prog = EffectProgram(ops=[AddPointsOp(target="self", amount=3)])
     fake_state = {"program": prog, "snippet": None, "interpretation": None, "verdict": None}
 
-    from tbwc.evals.judge import Verdict
+    from evals.judge import Verdict
 
     verdict = Verdict(
         intent_match=1.0,
@@ -31,8 +31,8 @@ def test_run_ab_and_render(tmp_path: Path) -> None:
         reason="ok",
     )
     with (
-        patch("tbwc.agent.graph.graph.invoke", return_value=fake_state),
-        patch("tbwc.evals.scorers._run_judge", return_value=verdict),
+        patch("agent.graph.graph.invoke", return_value=fake_state),
+        patch("evals.scorers._run_judge", return_value=verdict),
     ):
         dense, advanced = run_ab(p)
     assert isinstance(dense, EvalRunReport)

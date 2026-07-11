@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from tbwc.engine.events import EventBus, GameEvent, HookContext
-from tbwc.engine.hooks import HookRegistry, RegisteredHook
-from tbwc.models.game_state import GameState, Player
+from engine.events import EventBus, GameEvent, HookContext
+from engine.hooks import HookRegistry, RegisteredHook
+from models.game_state import GameState, Player
 
 
 def test_game_event_is_str_enum() -> None:

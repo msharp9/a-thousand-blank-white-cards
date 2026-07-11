@@ -1,10 +1,10 @@
-"""Smoke tests for tbwc.evals.eval_core."""
+"""Smoke tests for evals.eval_core."""
 
 from __future__ import annotations
 
 import pytest
 
-from tbwc.evals.eval_core import (
+from evals.eval_core import (
     EvalItem,
     EvalRunReport,
     Score,

@@ -6,7 +6,7 @@ import copy
 
 import pytest
 
-from tbwc.sandbox.api_surface import SandboxGame
+from sandbox.api_surface import SandboxGame
 
 STATE = {
     "players": [

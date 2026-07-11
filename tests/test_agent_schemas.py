@@ -1,8 +1,8 @@
-"""Tests for tbwc.agent.schemas."""
+"""Tests for agent.schemas."""
 
 from __future__ import annotations
 
-from tbwc.agent.schemas import Interpretation, SnippetEffect, Verdict
+from agent.schemas import Interpretation, SnippetEffect, Verdict
 
 
 def test_interpretation_defaults() -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tbwc.engine.epilogue import CardVotes, tally_votes
+from engine.epilogue import CardVotes, tally_votes
 
 
 def test_unanimous_keep() -> None:

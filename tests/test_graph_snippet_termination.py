@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tbwc.agent.nodes import MAX_ATTEMPTS
-from tbwc.agent.schemas import Interpretation, SnippetEffect, Verdict
+from agent.nodes import MAX_ATTEMPTS
+from agent.schemas import Interpretation, SnippetEffect, Verdict
 
 # Always-invalid snippet: the leading import fails the AST allowlist every time.
 INVALID_SNIPPET_CODE = "import os\ndef apply(state, ctx): pass"
@@ -53,15 +53,15 @@ def _make_fake_llm():
 
 @pytest.fixture(autouse=True)
 def _patch_rag():
-    with patch("tbwc.agent.nodes._retriever", MagicMock(return_value=[])):
+    with patch("agent.nodes._retriever", MagicMock(return_value=[])):
         yield
 
 
 def test_snippet_loop_terminates_on_persistent_invalid_snippet(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     fake_llm = _make_fake_llm()
-    with patch("tbwc.agent.nodes.get_chat_model", return_value=fake_llm):
-        from tbwc.agent.graph import graph
+    with patch("agent.nodes.get_chat_model", return_value=fake_llm):
+        from agent.graph import graph
 
         # Must RETURN (reach END) instead of raising GraphRecursionError.
         final = graph.invoke(

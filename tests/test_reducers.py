@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from tbwc.engine.events import GameEvent, HookContext
-from tbwc.engine.reducers import _resolve_card_targets, _resolve_targets, apply_op
-from tbwc.models.effects import (
+from engine.events import GameEvent, HookContext
+from engine.reducers import _resolve_card_targets, _resolve_targets, apply_op
+from models.effects import (
     AddPointsOp,
     ChangeDrawCountOp,
     CustomNoteOp,
@@ -20,7 +20,7 @@ from tbwc.models.effects import (
     StealPointsOp,
     SubtractPointsOp,
 )
-from tbwc.models.game_state import GameState, Player
+from models.game_state import GameState, Player
 
 
 def make_state(players=None, deck=None, direction=1, draw_count=1) -> GameState:

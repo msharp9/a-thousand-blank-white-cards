@@ -11,9 +11,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tbwc.agent.schemas import Interpretation, SnippetEffect, Verdict
-from tbwc.models.effects import AddPointsOp, EffectProgram
-from tbwc.sandbox.validate import validate_snippet
+from agent.schemas import Interpretation, SnippetEffect, Verdict
+from models.effects import AddPointsOp, EffectProgram
+from sandbox.validate import validate_snippet
 
 VALID_SNIPPET_CODE = (
     "def apply(state, ctx):\n    pid = ctx['player_id']\n    state.scores[pid] = state.scores.get(pid, 0) + 5\n"
@@ -63,7 +63,7 @@ def _make_fake_llm(interpretation, effect_program, verdict, snippet_code=VALID_S
 
 @pytest.fixture(autouse=True)
 def _patch_rag():
-    with patch("tbwc.agent.nodes._retriever", MagicMock(return_value=[])):
+    with patch("agent.nodes._retriever", MagicMock(return_value=[])):
         yield
 
 
@@ -71,8 +71,8 @@ def test_graph_immediate_mode_produces_effect_program(monkeypatch: pytest.Monkey
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     program = EffectProgram(ops=[AddPointsOp(amount=3)])
     fake_llm = _make_fake_llm(_immediate_interpretation(), program, _verdict(True))
-    with patch("tbwc.agent.nodes.get_chat_model", return_value=fake_llm):
-        from tbwc.agent.graph import graph
+    with patch("agent.nodes.get_chat_model", return_value=fake_llm):
+        from agent.graph import graph
 
         final = graph.invoke({"card_draft": {"title": "Gain 3 Points", "description": "Gain 3 points."}, "attempts": 0})
     assert final["verdict"].ok is True
@@ -83,8 +83,8 @@ def test_graph_immediate_mode_produces_effect_program(monkeypatch: pytest.Monkey
 def test_graph_snippet_mode_produces_valid_snippet(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     fake_llm = _make_fake_llm(_snippet_interpretation(), None, _verdict(True))
-    with patch("tbwc.agent.nodes.get_chat_model", return_value=fake_llm):
-        from tbwc.agent.graph import graph
+    with patch("agent.nodes.get_chat_model", return_value=fake_llm):
+        from agent.graph import graph
 
         final = graph.invoke(
             {"card_draft": {"title": "Wild Effect", "description": "Something unusual."}, "attempts": 0}
@@ -114,8 +114,8 @@ def test_graph_judge_retry_on_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_llm = MagicMock()
     fake_llm.invoke.return_value = MagicMock(content="intent summary")
     fake_llm.with_structured_output.side_effect = _structured
-    with patch("tbwc.agent.nodes.get_chat_model", return_value=fake_llm):
-        from tbwc.agent.graph import graph
+    with patch("agent.nodes.get_chat_model", return_value=fake_llm):
+        from agent.graph import graph
 
         final = graph.invoke({"card_draft": {"title": "T", "description": "D"}, "attempts": 0})
     assert final.get("attempts", 0) >= 2

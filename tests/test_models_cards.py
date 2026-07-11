@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tbwc.models.cards import Card
+from models.cards import Card
 
 
 def test_card_constructs_minimally() -> None:

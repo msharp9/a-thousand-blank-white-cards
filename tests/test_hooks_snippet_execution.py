@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from tbwc.engine.events import GameEvent, HookContext
-from tbwc.engine.hooks import HookRegistry, RegisteredHook, cache_snippet, fire_hooks, make_snippet_handler
-from tbwc.models.cards import Card
-from tbwc.models.game_state import GameState, Player
+from engine.events import GameEvent, HookContext
+from engine.hooks import HookRegistry, RegisteredHook, cache_snippet, fire_hooks, make_snippet_handler
+from models.cards import Card
+from models.game_state import GameState, Player
 
 SNIPPET_ADD_10 = "def apply(state, ctx):\n    state.add_points('self', 10)\n"
 BAD_SNIPPET = "def apply(state, ctx):\n    raise RuntimeError('oops')\n"

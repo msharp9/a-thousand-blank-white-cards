@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from tbwc.engine.apply import apply_effect  # noqa: F401  (ensures import graph is sound)
-from tbwc.engine.events import EventBus, GameEvent, HookContext
-from tbwc.engine.loop import advance_turn, draw_step, register_skip_predicate, run_turn
-from tbwc.models.effects import AddPointsOp, EffectProgram
-from tbwc.models.game_state import GameState, Player
+from engine.apply import apply_effect  # noqa: F401  (ensures import graph is sound)
+from engine.events import EventBus, GameEvent, HookContext
+from engine.loop import advance_turn, draw_step, register_skip_predicate, run_turn
+from models.effects import AddPointsOp, EffectProgram
+from models.game_state import GameState, Player
 
 
 class SpyBus(EventBus):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tbwc.rooms.manager import RoomManager, room_manager
+from rooms.manager import RoomManager, room_manager
 
 
 def test_create_and_join() -> None:

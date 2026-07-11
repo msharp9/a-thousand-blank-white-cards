@@ -1,4 +1,4 @@
-"""Tests for tbwc.config.Settings."""
+"""Tests for config.Settings."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import pytest
 
 from pathlib import Path
 
-from tbwc.config import OPENAI_API_KEY_ERROR, Settings, get_settings, require_openai_api_key
+from config import OPENAI_API_KEY_ERROR, Settings, get_settings, require_openai_api_key
 
 
 def test_defaults_load_without_env_file() -> None:

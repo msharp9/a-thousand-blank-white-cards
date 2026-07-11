@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from tbwc.models.effects import (
+from models.effects import (
     AddPointsOp,
     DestroyCardOp,
     EffectProgram,

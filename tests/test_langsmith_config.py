@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tbwc.config import Settings
+from config import Settings
 
 
 def test_langsmith_defaults() -> None:

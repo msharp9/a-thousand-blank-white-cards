@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tbwc.agent.nodes import route_after_validate, validate_snippet_node
-from tbwc.agent.schemas import SnippetEffect
+from agent.nodes import route_after_validate, validate_snippet_node
+from agent.schemas import SnippetEffect
 
 GOOD_SNIPPET = SnippetEffect(
     code="def apply(state, ctx):\n    state.scores[ctx['player_id']] = state.scores.get(ctx['player_id'], 0) + 1",

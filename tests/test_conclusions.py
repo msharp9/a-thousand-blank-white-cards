@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tbwc.evals.conclusions import render_conclusions_md, write_conclusions
-from tbwc.evals.eval_core import EvalItem, Score, create_scorer, run_eval
+from evals.conclusions import render_conclusions_md, write_conclusions
+from evals.eval_core import EvalItem, Score, create_scorer, run_eval
 
 
 def _report():

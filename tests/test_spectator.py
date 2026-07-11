@@ -11,14 +11,14 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
-from tbwc.engine.loop import advance_turn
-from tbwc.engine.scoring import evaluate_win_condition
-from tbwc.models.game_state import GameState, Player, WinCondition
+from engine.loop import advance_turn
+from engine.scoring import evaluate_win_condition
+from models.game_state import GameState, Player, WinCondition
 from conftest import drive_to_playing
 
-from tbwc.models.ws_messages import CreateCardMsg, PassMsg, PlayMsg
-from tbwc.rooms.manager import RoomManager
-from tbwc.rooms.room import Room
+from models.ws_messages import CreateCardMsg, PassMsg, PlayMsg
+from rooms.manager import RoomManager
+from rooms.room import Room
 
 
 # ── join gating ──
@@ -111,7 +111,7 @@ def _room_two_players_and_start() -> Room:
     room.add_player("p2", "Bob")
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
-    import tbwc.rag.store as store
+    import rag.store as store
 
     store._client = None  # offline seed-file fallback
     # Drive the full two-step start flow (lobby -> setup -> playing): each real
@@ -187,7 +187,7 @@ def test_non_spectator_create_card_still_allowed_off_turn() -> None:
     room = _playing_room_with_spectator()
     room.connections.connect("p2", AsyncMock())
     fake = {"program": None, "snippet": None, "verdict": "invalid"}
-    with patch("tbwc.agent.graph.interpret_card", return_value=fake):
+    with patch("agent.graph.interpret_card", return_value=fake):
         asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="x")))
     assert len(room.state.cards) == 1
 

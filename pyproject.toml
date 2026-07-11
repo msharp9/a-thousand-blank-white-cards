@@ -24,7 +24,21 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/tbwc"]
+packages = [
+    "src/agent",
+    "src/engine",
+    "src/evals",
+    "src/models",
+    "src/rag",
+    "src/rooms",
+    "src/sandbox",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/app.py" = "app.py"
+"src/config.py" = "config.py"
+"src/logging_config.py" = "logging_config.py"
+"src/ws.py" = "ws.py"
 
 [dependency-groups]
 dev = [

@@ -1,4 +1,4 @@
-"""Tests for tbwc.rooms.deck — deck building/shuffling (offline, no network)."""
+"""Tests for rooms.deck — deck building/shuffling (offline, no network)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import random
 
 import pytest
 
-from tbwc.rooms.deck import (
+from rooms.deck import (
     BLANK_CARD_RATIO,
     MIN_DECK,
     PREMADE_POOL_SIZE,
@@ -167,7 +167,7 @@ def test_build_deck_empty_source_raises() -> None:
 
 def test_build_deck_default_source_uses_offline_seed_file() -> None:
     # No RAG store initialised, no network: falls back to data/seed_cards.json.
-    import tbwc.rag.store as store
+    import rag.store as store
 
     store._client = None
     cards, deck = build_deck(rng=random.Random(0))
@@ -277,10 +277,10 @@ def test_seed_data_has_an_in_person_card() -> None:
 def test_default_source_prefers_rag_when_populated() -> None:
     from unittest.mock import patch
 
-    from tbwc.rooms.deck import _default_card_source
+    from rooms.deck import _default_card_source
 
     rag_cards = [{"card_id": f"r{i}", "title": f"T{i}", "description": "d"} for i in range(3)]
-    with patch("tbwc.rag.store.list_all_cards", return_value=rag_cards):
+    with patch("rag.store.list_all_cards", return_value=rag_cards):
         result = _default_card_source()
     assert result == rag_cards
 

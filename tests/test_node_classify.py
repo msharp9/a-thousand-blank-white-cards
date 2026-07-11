@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tbwc.agent.schemas import Interpretation
+from agent.schemas import Interpretation
 
 
 def _interp(mode: str = "immediate") -> Interpretation:
@@ -18,8 +18,8 @@ def test_classify_sets_interpretation(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_interp = _interp("immediate")
     fake_llm = MagicMock()
     fake_llm.with_structured_output.return_value.invoke.return_value = fake_interp
-    with patch("tbwc.agent.nodes.get_chat_model", return_value=fake_llm):
-        from tbwc.agent.nodes import classify
+    with patch("agent.nodes.get_chat_model", return_value=fake_llm):
+        from agent.nodes import classify
 
         state = {
             "card_draft": {"title": "T", "description": "D"},
@@ -37,8 +37,8 @@ def test_classify_formats_exemplars(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     fake_llm = MagicMock()
     fake_llm.with_structured_output.return_value.invoke.return_value = _interp()
-    with patch("tbwc.agent.nodes.get_chat_model", return_value=fake_llm):
-        from tbwc.agent.nodes import classify
+    with patch("agent.nodes.get_chat_model", return_value=fake_llm):
+        from agent.nodes import classify
 
         state = {
             "card_draft": {"title": "T", "description": "D"},
@@ -51,18 +51,18 @@ def test_classify_formats_exemplars(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_route_after_classify_immediate() -> None:
-    from tbwc.agent.nodes import route_after_classify
+    from agent.nodes import route_after_classify
 
     assert route_after_classify({"interpretation": _interp("immediate")}) == "emit_ops"
 
 
 def test_route_after_classify_snippet() -> None:
-    from tbwc.agent.nodes import route_after_classify
+    from agent.nodes import route_after_classify
 
     assert route_after_classify({"interpretation": _interp("snippet")}) == "gen_snippet"
 
 
 def test_route_after_classify_none_fallback() -> None:
-    from tbwc.agent.nodes import route_after_classify
+    from agent.nodes import route_after_classify
 
     assert route_after_classify({}) == "gen_snippet"

@@ -1,4 +1,4 @@
-"""Tests for tbwc.agent.llm."""
+"""Tests for agent.llm."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tbwc.config import OPENAI_API_KEY_ERROR
+from config import OPENAI_API_KEY_ERROR
 
 # Settings isolation (hermetic .env) + cache reset is handled globally by the
 # autouse ``_hermetic_settings`` fixture in tests/conftest.py.
@@ -15,9 +15,9 @@ from tbwc.config import OPENAI_API_KEY_ERROR
 def test_uses_env_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_CHAT_MODEL", "custom-model")
-    with patch("tbwc.agent.llm.ChatOpenAI") as MockLLM:
+    with patch("agent.llm.ChatOpenAI") as MockLLM:
         MockLLM.return_value = MagicMock()
-        from tbwc.agent.llm import get_chat_model
+        from agent.llm import get_chat_model
 
         get_chat_model()
         MockLLM.assert_called_once_with(model="custom-model", temperature=0, openai_api_key="test-key", base_url=None)
@@ -26,9 +26,9 @@ def test_uses_env_model(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.delenv("OPENAI_CHAT_MODEL", raising=False)
-    with patch("tbwc.agent.llm.ChatOpenAI") as MockLLM:
+    with patch("agent.llm.ChatOpenAI") as MockLLM:
         MockLLM.return_value = MagicMock()
-        from tbwc.agent.llm import DEFAULT_CHAT_MODEL, get_chat_model
+        from agent.llm import DEFAULT_CHAT_MODEL, get_chat_model
 
         get_chat_model()
         _, kwargs = MockLLM.call_args
@@ -37,9 +37,9 @@ def test_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_explicit_model_and_temperature(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    with patch("tbwc.agent.llm.ChatOpenAI") as MockLLM:
+    with patch("agent.llm.ChatOpenAI") as MockLLM:
         MockLLM.return_value = MagicMock()
-        from tbwc.agent.llm import get_chat_model
+        from agent.llm import get_chat_model
 
         get_chat_model("gpt-x", temperature=0.7)
         MockLLM.assert_called_once_with(model="gpt-x", temperature=0.7, openai_api_key="test-key", base_url=None)
@@ -48,8 +48,8 @@ def test_explicit_model_and_temperature(monkeypatch: pytest.MonkeyPatch) -> None
 def test_missing_key_raises_clear_error(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    with patch("tbwc.agent.llm.ChatOpenAI") as MockLLM:
-        from tbwc.agent.llm import get_chat_model
+    with patch("agent.llm.ChatOpenAI") as MockLLM:
+        from agent.llm import get_chat_model
 
         with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
             get_chat_model()
@@ -62,9 +62,9 @@ def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.M
     monkeypatch.chdir(tmp_path)  # isolate from any real .env in the repo root
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)  # no OpenAI key needed
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
-    with patch("tbwc.agent.llm.ChatOpenAI") as MockLLM:
+    with patch("agent.llm.ChatOpenAI") as MockLLM:
         MockLLM.return_value = MagicMock()
-        from tbwc.agent.llm import get_chat_model
+        from agent.llm import get_chat_model
 
         get_chat_model()
         _, kwargs = MockLLM.call_args
@@ -76,7 +76,7 @@ def test_ollama_provider_uses_base_url_and_placeholder_key(monkeypatch: pytest.M
 def test_with_structured_output_default_passes_no_method(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default (unset STRUCTURED_OUTPUT_METHOD) keeps hosted-OpenAI behaviour."""
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    from tbwc.agent.llm import with_structured_output
+    from agent.llm import with_structured_output
 
     fake_llm = MagicMock()
     with_structured_output(fake_llm, object)
@@ -87,7 +87,7 @@ def test_with_structured_output_honours_configured_method(monkeypatch: pytest.Mo
     """STRUCTURED_OUTPUT_METHOD=json_schema is threaded into with_structured_output."""
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("STRUCTURED_OUTPUT_METHOD", "json_schema")
-    from tbwc.agent.llm import with_structured_output
+    from agent.llm import with_structured_output
 
     fake_llm = MagicMock()
     with_structured_output(fake_llm, object)

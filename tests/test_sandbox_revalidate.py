@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from tbwc.engine.events import GameEvent, HookContext
-from tbwc.models.effects import AddPointsOp
-from tbwc.models.game_state import GameState, Player
-from tbwc.sandbox.revalidate import DiffValidationError, apply_snippet_diff, parse_diff
+from engine.events import GameEvent, HookContext
+from models.effects import AddPointsOp
+from models.game_state import GameState, Player
+from sandbox.revalidate import DiffValidationError, apply_snippet_diff, parse_diff
 
 
 def test_parse_valid_ops() -> None:

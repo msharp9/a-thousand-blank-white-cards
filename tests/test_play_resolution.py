@@ -15,9 +15,9 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-from tbwc.models.effects import AddPointsOp, EffectProgram
-from tbwc.models.ws_messages import PlayMsg
-from tbwc.rooms.room import Room
+from models.effects import AddPointsOp, EffectProgram
+from models.ws_messages import PlayMsg
+from rooms.room import Room
 
 
 def _room_with_card(card: dict, *, hand_owner: str = "p1") -> Room:
@@ -55,7 +55,7 @@ def test_compiled_card_applies_without_calling_the_llm() -> None:
     # A structured card must resolve deterministically — interpret_card is never
     # called, and the score changes by the compiled amount.
     room = _room_with_card(_gain_card("c1", 5))
-    with patch("tbwc.agent.graph.interpret_card", side_effect=AssertionError("LLM must not be called")) as spy:
+    with patch("agent.graph.interpret_card", side_effect=AssertionError("LLM must not be called")) as spy:
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
     spy.assert_not_called()
     assert room.state.get_player("p1").score == 5
@@ -72,7 +72,7 @@ def test_free_text_card_falls_back_to_llm() -> None:
         "snippet": None,
         "verdict": "ok",
     }
-    with patch("tbwc.agent.graph.interpret_card", return_value=llm_program) as spy:
+    with patch("agent.graph.interpret_card", return_value=llm_program) as spy:
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c2")))
     spy.assert_called_once()
     assert room.state.get_player("p1").score == 3
@@ -85,7 +85,7 @@ def test_llm_failure_falls_back_to_custom_note_and_advances() -> None:
     card = {"id": "c3", "title": "Chaos", "description": "Who knows.", "creator_id": "p1"}
     room = _room_with_card(card)
     start_turn = room.state.turn_index
-    with patch("tbwc.agent.graph.interpret_card", side_effect=RuntimeError("boom")):
+    with patch("agent.graph.interpret_card", side_effect=RuntimeError("boom")):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c3")))
     # No score change, but the card was consumed and a log line was recorded.
     assert room.state.get_player("p1").score == 0
@@ -99,7 +99,7 @@ def test_llm_invalid_verdict_falls_back_to_custom_note() -> None:
     card = {"id": "c4", "title": "Nonsense", "description": "???", "creator_id": "p1"}
     room = _room_with_card(card)
     with patch(
-        "tbwc.agent.graph.interpret_card",
+        "agent.graph.interpret_card",
         return_value={"program": None, "snippet": None, "verdict": "invalid"},
     ):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c4")))
@@ -121,7 +121,7 @@ def test_compiled_card_targeting_all_others() -> None:
         },
     }
     room = _room_with_card(card)
-    with patch("tbwc.agent.graph.interpret_card", side_effect=AssertionError("no LLM")):
+    with patch("agent.graph.interpret_card", side_effect=AssertionError("no LLM")):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c5")))
     assert room.state.get_player("p1").score == 0
     assert room.state.get_player("p2").score == -2

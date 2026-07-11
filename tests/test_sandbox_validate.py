@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tbwc.sandbox.validate import validate_snippet
+from sandbox.validate import validate_snippet
 
 VALID_SNIPPET = """
 def apply(state, ctx):

@@ -1,7 +1,7 @@
 """Shared pytest fixtures.
 
 The whole suite must be hermetic with respect to the developer's ``.env``.
-``tbwc.config.Settings`` loads the repo-root ``.env`` (pydantic-settings
+``config.Settings`` loads the repo-root ``.env`` (pydantic-settings
 ``env_file=".env"``), so a local ``.env`` — e.g. ``LLM_PROVIDER=ollama`` plus
 ``OPENAI_CHAT_MODEL`` / ``OPENAI_EMBEDDING_MODEL`` overrides — would otherwise
 leak into tests and override the values individual tests set, producing failures
@@ -18,8 +18,8 @@ import asyncio
 
 import pytest
 
-from tbwc.config import Settings, get_settings
-from tbwc.models.ws_messages import CreateCardMsg, StartMsg
+from config import Settings, get_settings
+from models.ws_messages import CreateCardMsg, StartMsg
 
 
 def drive_to_playing(room, player_ids, cards_each: int = 5) -> None:

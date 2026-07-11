@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tbwc.engine.scoring import evaluate_win_condition, resolve_end_of_game
-from tbwc.models.game_state import GameState, Player, WinCondition
+from engine.scoring import evaluate_win_condition, resolve_end_of_game
+from models.game_state import GameState, Player, WinCondition
 
 
 def _keep_card(amount: int = 10) -> dict:

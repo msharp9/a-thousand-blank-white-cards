@@ -1,4 +1,4 @@
-"""Tests for tbwc.models.ws_messages."""
+"""Tests for models.ws_messages."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 
 from pydantic import TypeAdapter
 
-from tbwc.models.ws_messages import ClientMsg, DrawMsg, EndTurnMsg, JoinMsg, PassMsg, PlayMsg, StateMsg
+from models.ws_messages import ClientMsg, DrawMsg, EndTurnMsg, JoinMsg, PassMsg, PlayMsg, StateMsg
 
 
 def test_join_msg_json() -> None:
