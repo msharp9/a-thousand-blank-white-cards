@@ -8,10 +8,10 @@ Wires the pure reducers and the event bus into a playable turn cycle:
 - ``run_turn``    — one full turn: start events, draw, play, end/win events,
   then advance.
 
-Turn bookkeeping (``_skip_next`` / ``_extra_turn``) lives in PrivateAttr sets
-on GameState. Those cannot be set through ``model_copy(update=...)``, so we use
-``GameState.copy_with_turn_flags`` which always rebinds BOTH private sets to
-fresh set objects, keeping the source state pure.
+Turn bookkeeping (``skip_next`` / ``extra_turn``) lives as reserved keys in
+each ``Player.conditions`` — a serialized, open-ended per-player status map
+(see ``models.game_state.Player``). ``advance_turn`` consumes those keys via
+``GameState.without_condition``, which returns a fresh immutable copy.
 """
 
 from __future__ import annotations
@@ -69,25 +69,24 @@ def draw_step(state: GameState, player_id: str, *, bus: EventBus | None = None) 
 def advance_turn(state: GameState) -> GameState:
     """Advance ``turn_index`` to the next player.
 
-    Honours (in order): extra-turn (stay put, consume the flag), direction,
-    skip-next flags, and a registered skip predicate. Private-attr sets are
-    rebound on a fresh copy with new set objects to preserve purity.
+    Honours (in order): extra-turn (stay put, consume the condition),
+    direction, skip-next (consumed off the skipped player), and a registered
+    skip predicate. Consumed conditions are removed via
+    ``GameState.without_condition``, which always returns a fresh copy.
     """
     players = state.players
     n = len(players)
-    current_id = state.active_player().id
+    current_player = state.active_player()
 
     # Extra turn: the current player goes again; turn_index unchanged.
-    if current_id in state._extra_turn:
-        new_extras = set(state._extra_turn) - {current_id}
-        return state.copy_with_turn_flags(extra_turn=new_extras)
+    if current_player.conditions.get("extra_turn"):
+        return state.without_condition(current_player.id, "extra_turn")
 
     next_idx = (state.turn_index + state.direction) % n
     next_player = players[next_idx]
 
-    skip_set = set(state._skip_next)
-    if next_player.id in skip_set:
-        skip_set.discard(next_player.id)
+    if next_player.conditions.get("skip_next"):
+        state = state.without_condition(next_player.id, "skip_next")
         next_idx = (next_idx + state.direction) % n
 
     if state.skip_predicate is not None:
@@ -95,7 +94,8 @@ def advance_turn(state: GameState) -> GameState:
         if pred_fn is not None:
             candidate = players[next_idx]
             if pred_fn(candidate, state):
-                skip_set.discard(candidate.id)
+                if candidate.conditions.get("skip_next"):
+                    state = state.without_condition(candidate.id, "skip_next")
                 next_idx = (next_idx + state.direction) % n
 
     # Spectators (joined after the game started) NEVER take a turn: keep
@@ -108,7 +108,7 @@ def advance_turn(state: GameState) -> GameState:
         next_idx = (next_idx + state.direction) % n
         guard += 1
 
-    return state.copy_with_turn_flags(turn_index=next_idx, skip_next=skip_set)
+    return state.model_copy(update={"turn_index": next_idx})
 
 
 # ---------------------------------------------------------------------------

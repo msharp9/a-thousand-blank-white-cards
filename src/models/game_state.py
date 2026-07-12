@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field
 
 
 class WinCondition(BaseModel):
@@ -36,6 +36,11 @@ class Player(BaseModel):
     # through every layer), but they take no turn, are never dealt/auto-drawn
     # to, cannot author or play cards, and are excluded from win scoring.
     spectator: bool = False
+    # Open-ended per-player status bag, e.g. {"skip_next": True, "poisoned": 2}.
+    # "skip_next" and "extra_turn" are reserved keys consumed by
+    # engine.loop.advance_turn; any other key is free-form status with no
+    # engine-side meaning yet, surfaced as-is to the UI/agent via model_dump().
+    conditions: dict[str, Any] = Field(default_factory=dict)
 
 
 class GameState(BaseModel):
@@ -94,10 +99,6 @@ class GameState(BaseModel):
     winner_ids: list[str] = Field(default_factory=list)
 
     log: list[str] = Field(default_factory=list)
-
-    # Engine-internal turn bookkeeping (not serialized).
-    _skip_next: set[str] = PrivateAttr(default_factory=set)
-    _extra_turn: set[str] = PrivateAttr(default_factory=set)
 
     def turn_players(self) -> list[Player]:
         """Players who participate in the turn rotation (non-spectators).
@@ -202,20 +203,27 @@ class GameState(BaseModel):
         """Return a copy of this state with msg appended to log."""
         return self.model_copy(update={"log": [*self.log, msg]})
 
-    def copy_with_turn_flags(
-        self,
-        *,
-        turn_index: int | None = None,
-        skip_next: set[str] | None = None,
-        extra_turn: set[str] | None = None,
-    ) -> "GameState":
-        """Return a copy that ALWAYS rebinds BOTH private turn-flag sets to fresh
-        copies (defaulting to copies of the current values), so the source state's
-        private sets are never shared or mutated. Optionally updates turn_index."""
-        update = {}
-        if turn_index is not None:
-            update["turn_index"] = turn_index
-        new = self.model_copy(update=update)
-        new._skip_next = set(self._skip_next if skip_next is None else skip_next)
-        new._extra_turn = set(self._extra_turn if extra_turn is None else extra_turn)
-        return new
+    def with_condition(self, player_id: str, key: str, value: Any) -> "GameState":
+        """Return a copy with ``player_id``'s ``conditions[key]`` set to ``value``.
+
+        Generic: ``key`` may be a reserved condition (``skip_next``,
+        ``extra_turn``) or any free-form status a card invents.
+        """
+        players = [
+            p.model_copy(update={"conditions": {**p.conditions, key: value}}) if p.id == player_id else p
+            for p in self.players
+        ]
+        return self.model_copy(update={"players": players})
+
+    def without_condition(self, player_id: str, key: str) -> "GameState":
+        """Return a copy with ``player_id``'s ``conditions[key]`` removed.
+
+        A no-op (still returns a fresh copy) if the key is absent.
+        """
+        players = [
+            p.model_copy(update={"conditions": {k: v for k, v in p.conditions.items() if k != key}})
+            if p.id == player_id
+            else p
+            for p in self.players
+        ]
+        return self.model_copy(update={"players": players})
