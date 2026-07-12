@@ -11,7 +11,7 @@ These tests assert:
 - It appears in ``room.snapshot()["log"]`` — what a refreshing client receives.
 - Persistence is on GLOBAL state (every client's snapshot has it), not sent only
   to the actor.
-- The deterministic compiled path produces NO referee line (agent not called).
+- The deterministic compiled path produces NO arbiter line (agent not called).
 - A target-requiring card logs its comment EXACTLY once across the
   resolve → prompt_choice → re-resolve round-trip.
 - An empty comment adds no blank log line.
@@ -103,9 +103,9 @@ def test_comment_is_global_state_not_actor_only() -> None:
     assert any(COMMENT in line for line in observer_view["log"])
 
 
-def test_deterministic_compiled_path_produces_no_referee_line() -> None:
+def test_deterministic_compiled_path_produces_no_arbiter_line() -> None:
     # A card with canonical/compiled ops resolves deterministically — the agent is
-    # never called, so there is no comment and no referee line.
+    # never called, so there is no comment and no arbiter line.
     card = {
         "id": "c2",
         "title": "Gain 3",
@@ -127,7 +127,7 @@ def test_deterministic_compiled_path_produces_no_referee_line() -> None:
 
 def test_prompt_choice_round_trip_logs_comment_once() -> None:
     # A target-requiring card is resolved twice (resolve → prompt_choice →
-    # follow-up play re-resolves). The referee comment must log exactly once.
+    # follow-up play re-resolves). The arbiter comment must log exactly once.
     card = _free_text_card()
     room = _playing_room(card)
     room.connections.connect("p1", AsyncMock())

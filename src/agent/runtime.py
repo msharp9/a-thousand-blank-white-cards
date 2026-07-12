@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # Maximum number of reasoning/tool-call steps before we bail out. The compiled
 # agent's recursion_limit counts super-steps; a value of 8 comfortably allows a
 # few tool round-trips (each tool call is ~2 steps: model -> tool -> model).
-MAX_TOOL_CALLS: int = 12
+MAX_TOOL_CALLS: int = 100
 
 # Wall-clock ceiling for a single interpretation, in seconds. Guards against a
 # tool or model call that hangs on the network even when the step count is low.

@@ -58,7 +58,7 @@ export function PlayBlankDialog({
         <DialogHeader>
           <DialogTitle>Fill in your blank card</DialogTitle>
           <DialogDescription>
-            Write the card you want to play. The referee interprets it and plays
+            Write the card you want to play. The arbiter interprets it and plays
             it this turn.
           </DialogDescription>
         </DialogHeader>

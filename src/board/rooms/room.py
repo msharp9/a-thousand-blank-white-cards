@@ -54,7 +54,7 @@ STARTING_HAND_SIZE = 5
 CARDS_TO_AUTHOR = BLANKS_PER_PLAYER
 
 # Prefix stamped on the interpretation agent's in-character comment when it is
-# appended to the persistent game log. Marks the line as the AI referee talking
+# appended to the persistent game log. Marks the line as the AI arbiter talking
 # so players can tell it apart from the plain "X played Y" effect lines. Kept as
 # a module constant so tests and any future styling share one source of truth.
 AGENT_COMMENT_PREFIX = "🤖 "
@@ -92,7 +92,7 @@ class Room:
         # Card ids whose agent comment has already been appended to state.log this
         # session. A card that needs a target is resolved TWICE (resolve → prompt_choice
         # → follow-up play re-resolves), so this guards against double-logging the
-        # referee comment for one played card. See _resolve_program.
+        # arbiter comment for one played card. See _resolve_program.
         self._comment_logged: set[str] = set()
 
     # ── player management ──
@@ -638,11 +638,11 @@ class Room:
             }
         )
 
-        # D1: persist the referee's comment to the PERSISTENT game log so it
+        # D1: persist the arbiter's comment to the PERSISTENT game log so it
         # survives a reconnect/refresh (a rejoining client only gets the state
         # snapshot, not the transient card_interpreted broadcast above). Only when
         # non-empty — the deterministic compiled path never reaches here, so cards
-        # resolved deterministically produce no referee line (intended). Guarded by
+        # resolved deterministically produce no arbiter line (intended). Guarded by
         # card_id so a target-requiring card (resolve → prompt_choice → re-resolve)
         # logs its comment exactly once across the round-trip.
         await self._log_agent_comment(card_id, result.comment)
@@ -888,7 +888,7 @@ class Room:
                 "comment": result.comment,
             }
         )
-        # D1: persist the referee comment so it survives a reconnect (see
+        # D1: persist the arbiter comment so it survives a reconnect (see
         # _resolve_program). create_card interprets a card_id exactly once, so no
         # round-trip guard is needed, but we route through the same helper for a
         # single consistent format + prefix.
@@ -963,7 +963,7 @@ class Room:
         """Persist the interpretation agent's in-character comment to the game log.
 
         Appends ``AGENT_COMMENT_PREFIX + comment`` to ``state.log`` (and broadcasts
-        it live) via :meth:`_log_and_broadcast`, so the referee's quip both shows
+        it live) via :meth:`_log_and_broadcast`, so the arbiter's quip both shows
         up live AND survives a reconnect/refresh (rejoiners only receive the state
         snapshot, whose ``log`` this feeds).
 

@@ -1,7 +1,7 @@
 # 1000 Blank White Cards — Certification Challenge Writeup
 
 This is the submission document for **1000 Blank White Cards (TBWC)** — an
-AI-refereed, real-time party card game. It addresses the seven challenge tasks in
+AI-arbitrated, real-time party card game. It addresses the seven challenge tasks in
 order. It deliberately does **not** repeat the deep technical reference: for module
 boundaries, the import-layering contract, the WebSocket flow, the engine + sandbox
 model, and the full RAG pipeline, see [`docs/architecture.md`](architecture.md). The

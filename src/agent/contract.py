@@ -37,7 +37,7 @@ class InterpretResult(BaseModel):
 
     Returned by :func:`agent.runtime.run_agent`. ``program``/``snippet`` carry the
     mechanical effect (a compiled op program or a generated Python hook);
-    ``verdict`` reports interpretation success; ``comment`` is the referee's
+    ``verdict`` reports interpretation success; ``comment`` is the arbiter's
     in-character remark; ``persona_action`` records the persona branch chosen when
     a card could not be cleanly interpreted.
     """

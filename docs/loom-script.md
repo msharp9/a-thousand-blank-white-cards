@@ -51,7 +51,7 @@ order."** Play it. Point, in order, at:
 
 1. the **"brewing…"** indicator appearing (the card went to the agent, not the
    deterministic compiler);
-2. the **referee comment** line that lands in the effect log — it's prefixed
+2. the **arbiter comment** line that lands in the effect log — it's prefixed
    with the 🤖 robot marker to mark it as the AI game master speaking;
 3. the **scores changing** — 8 points move off the current leader onto the
    player who played it;
@@ -62,11 +62,11 @@ order."** Play it. Point, in order, at:
 **Say:** "Now the fun part. This card isn't a simple point change — it's free
 text with two effects and a *'player in the lead'* that has to be resolved
 against the live board. Watch: it says 'brewing', because it's gone to the AI
-referee. The agent reads the card, pulls up similar cards it's seen before to
+arbiter. The agent reads the card, pulls up similar cards it's seen before to
 ground its interpretation — that's the RAG step — and turns the sentence into an
 executable effect. It applies: eight points come off whoever's winning, and the
 turn order flips. The new state broadcasts to *every* client — see, my phone
-just updated on its own. And the referee left a comment in the log, in
+just updated on its own. And the arbiter left a comment in the log, in
 character." (If a target picker pops up asking who's in the lead, pick and note
 that the server re-interprets the now-targeted card and applies it.)
 
@@ -113,7 +113,7 @@ directory — call out `card_rag.py` (the RAG tool) and `web_search.py` (Tavily)
 **Say:** "When a card can't be compiled deterministically, `run_agent` builds one
 LangChain tool-calling agent with an in-character persona. Its output contract is
 `InterpretResult` — a structured effect program *or* a generated snippet, plus a
-verdict and the referee's comment. It has a real toolbox: `card_rag` retrieves
+verdict and the arbiter's comment. It has a real toolbox: `card_rag` retrieves
 similar cards from Qdrant so interpretation is grounded in precedent, and
 `web_search` hits Tavily when a card references a meme or game term it needs to
 look up. It's bounded on purpose — a hard tool-call cap and a wall-clock timeout

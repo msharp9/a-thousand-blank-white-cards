@@ -52,7 +52,7 @@ with a full `state` snapshot. All messages are JSON objects with a `type` field.
 | `join` | `player_id` (null on first join), `name` | Authenticate the socket into the room; must be the first message. |
 | `start` | — | Build/shuffle the deck, deal starting hands, begin play. |
 | `draw` | — | Draw your card(s) for the turn (active player only). The turn model is **draw → play → end turn**: drawing is EXPLICIT and is the first step; playing or passing before drawing is rejected while the deck has cards. Drawing the last card arms end-of-game. |
-| `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?` | Play a card; the AI referee interprets it and applies the effect (active player only). Ends the turn. For a BLANK card, the first play carries the authored `title`+`description` (the card is filled in and persisted before interpretation); a prompt_choice follow-up re-sends only `card_id`+the choice. |
+| `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?` | Play a card; the AI arbiter interprets it and applies the effect (active player only). Ends the turn. For a BLANK card, the first play carries the authored `title`+`description` (the card is filled in and persisted before interpretation); a prompt_choice follow-up re-sends only `card_id`+the choice. |
 | `pass` / `end_turn` | — | End your turn without playing a card (active player only). `end_turn` is an accepted alias for `pass`, handled identically. |
 | `create_card` | `title`, `description` | Author a new card and interpret it immediately (allowed off-turn). |
 | `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state. |
@@ -63,9 +63,9 @@ with a full `state` snapshot. All messages are JSON objects with a `type` field.
 | type | fields | meaning |
 | --- | --- | --- |
 | `state` | `state` | Full game-state snapshot (sent on connect and after every mutation). |
-| `brewing` | `card_id` | The referee is interpreting a card (in-flight indicator). |
-| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict`, `comment` | Result of interpreting a played/created card. `comment` is the referee's short, in-character remark about the card (may be empty). |
-| `effect_applied` | `log_entry` | An effect (or the referee's `comment`, prefixed `🤖`) was applied; human-readable log line. Also appended to `state.log` so it survives reconnect. |
+| `brewing` | `card_id` | The arbiter is interpreting a card (in-flight indicator). |
+| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict`, `comment` | Result of interpreting a played/created card. `comment` is the arbiter's short, in-character remark about the card (may be empty). |
+| `effect_applied` | `log_entry` | An effect (or the arbiter's `comment`, prefixed `🤖`) was applied; human-readable log line. Also appended to `state.log` so it survives reconnect. |
 | `preview_result` | `program`, `snippet`, `verdict` | Reply to `preview_card`. |
 | `prompt_choice` | `card_id`, `prompt`, `choices` | Server asks the active player to pick a target. |
 | `epilogue` | `cards` | Epilogue phase opened with the cards created this game. |

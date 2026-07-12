@@ -1,6 +1,6 @@
 # Architecture
 
-A durable technical reference for **1000 Blank White Cards** — an AI-refereed,
+A durable technical reference for **1000 Blank White Cards** — an AI-arbitrated,
 real-time party card game. This document describes the running system: its
 module boundaries, the import-layering contract the tests enforce, how a client
 action travels through the stack, the deterministic engine + snippet sandbox,

@@ -109,6 +109,6 @@ def test_comment_rides_on_card_interpreted_broadcast() -> None:
     sent = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
     interpreted = next(m for m in sent if m["type"] == "card_interpreted")
     assert interpreted["comment"] == "A bold move for such a small card."
-    # D1: the comment is ALSO persisted to the game log (with the referee prefix),
+    # D1: the comment is ALSO persisted to the game log (with the arbiter prefix),
     # additively — the transient broadcast above still carries it too.
     assert any("A bold move for such a small card." in line for line in room.state.log)

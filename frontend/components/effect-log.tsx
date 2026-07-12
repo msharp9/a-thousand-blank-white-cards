@@ -4,10 +4,10 @@ import { useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
-// Log lines authored by the AI referee are broadcast with this prefix (see the
+// Log lines authored by the AI arbiter are broadcast with this prefix (see the
 // backend's _log_and_broadcast). We render them as commentary rather than as a
 // mechanical effect line.
-const REFEREE_PREFIX = "🤖 ";
+const ARBITER_PREFIX = "🤖 ";
 
 interface EffectLogProps {
   log: string[];
@@ -34,13 +34,13 @@ export function EffectLog({ log, brewing, className }: EffectLogProps) {
           <p className="text-xs italic text-muted-foreground">No events yet.</p>
         )}
         {log.map((entry, i) => {
-          const isReferee = entry.startsWith(REFEREE_PREFIX);
+          const isArbiter = entry.startsWith(ARBITER_PREFIX);
           return (
             <div
               key={i}
               className={cn(
                 "border-b border-border/40 py-0.5 text-xs last:border-0",
-                isReferee && "italic text-primary",
+                isArbiter && "italic text-primary",
               )}
             >
               {entry}
