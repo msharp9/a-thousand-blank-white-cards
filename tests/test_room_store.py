@@ -78,6 +78,27 @@ class TestFileRoomStore:
         assert got.get_player_ids() == room.get_player_ids()
         assert len(got.state.cards) == len(room.state.cards)
 
+    def test_roundtrip_preserves_conditions_turn_order_and_end_flag(self, tmp_path) -> None:
+        store = FileRoomStore(tmp_path)
+        code = "ABCDEF"
+        room = Room(code)
+        store.put(code, room)
+        room.add_player(player_id="p1", name="Alice")
+        room.add_player(player_id="p2", name="Bob")
+        drive_to_playing(room, ["p1", "p2"])
+        room.state = room.state.with_condition("p2", "poisoned", 2)
+        room.state = room.state.model_copy(
+            update={"turn_order": ["p2", "p1"], "game_over_requested": True, "winner_override": ["p1"]}
+        )
+        store.put(code, room)
+
+        got = FileRoomStore(tmp_path).get(code)
+        assert got is not None
+        assert got.state.get_player("p2").conditions == {"poisoned": 2}
+        assert got.state.turn_order == ["p2", "p1"]
+        assert got.state.game_over_requested is True
+        assert got.state.winner_override == ["p1"]
+
     def test_live_object_is_reused_within_process(self, tmp_path) -> None:
         store = FileRoomStore(tmp_path)
         room = Room("ABCDEF")

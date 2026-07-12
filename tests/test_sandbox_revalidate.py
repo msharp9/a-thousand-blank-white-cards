@@ -47,3 +47,28 @@ def test_apply_snippet_diff_mutates_via_engine() -> None:
     new = apply_snippet_diff(state, [{"op": "add_points", "target": "self", "amount": 5}], ctx)
     assert new.get_player("p1").score == 15
     assert state.get_player("p1").score == 10  # original unchanged
+
+
+def test_parse_rejects_chooser_target() -> None:
+    with pytest.raises(DiffValidationError, match="choice-requiring"):
+        parse_diff([{"op": "add_points", "target": "chooser", "amount": 5}])
+
+
+def test_parse_rejects_target_player() -> None:
+    with pytest.raises(DiffValidationError, match="choice-requiring"):
+        parse_diff([{"op": "skip_turn", "target": "target_player"}])
+
+
+def test_parse_rejects_chosen_card() -> None:
+    with pytest.raises(DiffValidationError, match="choice-requiring"):
+        parse_diff([{"op": "destroy_card", "card_target": "chosen_card"}])
+
+
+def test_parse_rejects_end_game_chooser_winner() -> None:
+    with pytest.raises(DiffValidationError, match="choice-requiring"):
+        parse_diff([{"op": "end_game", "winner": "chooser"}])
+
+
+def test_parse_allows_end_game_self_winner() -> None:
+    program = parse_diff([{"op": "end_game", "winner": "self"}])
+    assert program.ops[0].winner == "self"

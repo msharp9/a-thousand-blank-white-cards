@@ -187,6 +187,15 @@ class Room:
         }:
             await self.connections.send(player_id, {"type": "error", "message": "Spectators cannot take game actions"})
             return
+        # Phase gate: once the game leaves "playing" (results/epilogue/ended —
+        # e.g. an end_game card fired mid-deck), in-game actions must not run;
+        # a stray play would re-trigger _end_game and double-apply end scoring.
+        if mtype in {"draw", "pass", "end_turn", "play"} and self.state.phase != "playing":
+            await self.connections.send(player_id, {"type": "error", "message": "The game is not in play"})
+            return
+        if mtype in {"create_card", "preview_card"} and self.state.phase not in {"setup", "playing"}:
+            await self.connections.send(player_id, {"type": "error", "message": "Card authoring is closed"})
+            return
         if mtype == "start":
             await self._handle_start(player_id)
         elif mtype == "draw":
@@ -548,7 +557,7 @@ class Room:
             if formatted:
                 line += f" ({formatted})"
             await self._log_and_broadcast(line)
-        winners = evaluate_win_condition(self.state)
+        winners = self.state.winner_override or evaluate_win_condition(self.state)
         if winners:
             names = [self.state.get_player(w).name for w in winners]
             log_line = f"Game over! Winner(s): {', '.join(names)}"
@@ -557,7 +566,9 @@ class Room:
         self.state = self.state.model_copy(update={"winner_ids": winners})
         await self._log_and_broadcast(log_line)
         next_phase = "results" if self.state.turn_players() else "ended"
-        self.state = self.state.model_copy(update={"phase": next_phase})
+        self.state = self.state.model_copy(
+            update={"phase": next_phase, "game_over_requested": False, "winner_override": []}
+        )
         await self._broadcast_state()
 
     async def dev_force_end_game(self) -> None:
@@ -733,7 +744,7 @@ class Room:
             return program
 
         # See step 2b in the docstring above.
-        if result.snippet is not None and _program_is_effectless(program):
+        if result.verdict == "ok" and result.snippet is not None and _program_is_effectless(program):
             if await self._apply_snippet(card_id, card, title, result.snippet.code, actor_id):
                 return EffectProgram(ops=[])
 
@@ -775,6 +786,9 @@ class Room:
             await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
             return False
         except DiffValidationError as exc:
+            await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
+            return False
+        except ValueError as exc:
             await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
             return False
 
@@ -933,14 +947,10 @@ class Room:
 
         await self._broadcast_state()
         if game_ending:
-            # end_game / a live win condition ends the game NOW — the deck may
-            # still hold cards, so this does not go through the deck-exhaustion
-            # "finish the turn, then _advance_turn ends it" path.
+            # end_game / a live win condition ends the game NOW, deck or no deck —
+            # unlike deck exhaustion, which lets the drawer finish their turn.
             await self._end_game()
         else:
-            # Playing a card ends the turn: advance (honouring skip/extra-turn
-            # conditions and any turn_order change the play set) and start the
-            # next player's turn, which auto-draws or ends the game on empty deck.
             await self._advance_turn()
 
     async def _handle_create_card(self, player_id: str, msg) -> None:

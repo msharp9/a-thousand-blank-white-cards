@@ -47,17 +47,16 @@ from models.effects import (
     Target,
     is_known_target,
     map_authoring_target,
+    op_requires_choice,
 )
 
 logger = logging.getLogger(__name__)
 
-# Player-target values that mean "the actor picks at play time". Their presence
-# on any produced op flips EffectProgram.requires_choice.
-_CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
-# CardTarget values that require a play-time card choice.
-_CHOICE_CARD_TARGETS: frozenset[str] = frozenset({"chosen_card"})
-# Authoring-vocab synonyms a card/LLM may emit for "end the game right now".
-_END_GAME_OP_NAMES: frozenset[str] = frozenset({"end_game", "win_game", "win_the_game"})
+# Authoring-vocab synonyms for "end the game right now". The "win" spellings
+# additionally crown the card player (EndGameOp.winner="self") — a "You win
+# the game" card must not hand the win to the current score leader.
+_END_GAME_OP_NAMES: frozenset[str] = frozenset({"end_game"})
+_WIN_GAME_OP_NAMES: frozenset[str] = frozenset({"win_game", "win_the_game"})
 
 
 def _map_target(raw: object, *, default: Target, op_name: str, field: str = "target") -> Target:
@@ -165,23 +164,9 @@ def _compile_op(name: str, args: dict) -> Op | None:
         )
     if name in _END_GAME_OP_NAMES:
         return EndGameOp()
+    if name in _WIN_GAME_OP_NAMES:
+        return EndGameOp(winner="self")
     return None
-
-
-def _requires_choice(op: Op) -> bool:
-    """True if this op needs a play-time choice from the actor.
-
-    A player target/from_target/to_target equal to "chooser"/"target_player", or
-    a DestroyCardOp whose card_target is "chosen_card".
-    """
-    for field in ("target", "from_target", "to_target"):
-        value = getattr(op, field, None)
-        if isinstance(value, str) and value in _CHOICE_TARGETS:
-            return True
-    card_target = getattr(op, "card_target", None)
-    if isinstance(card_target, str) and card_target in _CHOICE_CARD_TARGETS:
-        return True
-    return False
 
 
 def compile_card(card: dict) -> EffectProgram | None:
@@ -222,7 +207,7 @@ def compile_card(card: dict) -> EffectProgram | None:
         if op is None:
             logger.warning("compile_card: skipping unsupported op %r", name)
             continue
-        if _requires_choice(op):
+        if op_requires_choice(op):
             requires_choice = True
         compiled.append(op)
 
