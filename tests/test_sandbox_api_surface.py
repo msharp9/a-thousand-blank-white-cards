@@ -15,7 +15,7 @@ STATE = {
     ],
     "turn_index": 0,
     "draw_count": 1,
-    "direction": 1,
+    "turn_order": ["p1", "p2"],
 }
 CTX = {"actor_id": "p1"}
 
@@ -43,6 +43,18 @@ def test_current_and_actor() -> None:
     g = make_game()
     assert g.current_player_id == "p1"
     assert g.actor_id == "p1"
+
+
+def test_turn_order_reads_explicit_list() -> None:
+    g = make_game()
+    assert g.turn_order == ["p1", "p2"]
+
+
+def test_turn_order_falls_back_to_non_spectator_players() -> None:
+    state = copy.deepcopy(STATE)
+    del state["turn_order"]
+    g = SandboxGame(state, dict(CTX))
+    assert g.turn_order == ["p1", "p2"]
 
 
 def test_add_points_records_op() -> None:

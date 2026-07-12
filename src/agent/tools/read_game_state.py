@@ -86,7 +86,7 @@ def _summarize_state(
 
     Surfaces, for each player: name, score, hand size, active-player marker,
     spectator marker, and an ACTOR marker (via ``actor_id``). Also surfaces turn
-    direction, deck size, phase, win condition, and center/house-rule cards, plus
+    order, deck size, phase, win condition, and center/house-rule cards, plus
     an actor-vs-author line so the ``punish_author`` persona branch is decidable.
     """
     if state is None:
@@ -128,9 +128,9 @@ def _summarize_state(
     phase = get("phase")
     if phase:
         lines.append(f"Phase: {phase}.")
-    direction = get("direction")
-    if direction is not None:
-        lines.append(f"Turn direction: {'clockwise' if direction == 1 else 'counter-clockwise'}.")
+    turn_order = get("turn_order")
+    if turn_order:
+        lines.append(f"Turn order: {' -> '.join(turn_order)}.")
     deck = get("deck") or []
     try:
         lines.append(f"Deck size: {len(deck)} cards remaining.")

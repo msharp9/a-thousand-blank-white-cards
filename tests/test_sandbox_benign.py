@@ -22,7 +22,7 @@ STATE_DICT = {
     ],
     "turn_index": 0,
     "draw_count": 1,
-    "direction": 1,
+    "turn_order": ["p1", "p2"],
 }
 CTX_DICT = {"actor_id": "p1", "event": "on_turn_start"}
 
@@ -122,7 +122,7 @@ def test_conditional_snippet_noop_when_condition_false() -> None:
         ],
         "turn_index": 0,
         "draw_count": 1,
-        "direction": 1,
+        "turn_order": ["p1", "p2"],
     }
     code = "def apply(s, c):\n    if any(p.score < 8 for p in s.players()):\n        s.add_points('self', 3)\n"
     ops = execute_snippet(code, high_state, CTX_DICT)

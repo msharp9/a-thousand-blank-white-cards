@@ -7,6 +7,7 @@ never mutate the state passed in. ``apply_op`` dispatches on ``op.op`` via the
 
 from __future__ import annotations
 
+import random
 from collections.abc import Callable
 
 from engine.events import HookContext
@@ -21,6 +22,7 @@ from models.effects import (
     ExtraTurnOp,
     Op,
     ReverseOrderOp,
+    ScrambleOrderOp,
     SetPointsOp,
     SetWinConditionOp,
     SkipTurnOp,
@@ -35,18 +37,26 @@ from models.game_state import GameState, WinCondition
 # Target resolution
 # ---------------------------------------------------------------------------
 def _resolve_targets(target: Target, ctx: HookContext, state: GameState) -> list[str]:
-    """Resolve a Target address into a concrete list of player ids."""
+    """Resolve a Target address into a concrete list of player ids.
+
+    ``left_neighbor``/``right_neighbor`` derive from the actor's position in
+    ``state.effective_turn_order()`` (the mutable rotation list), not raw
+    ``players`` list position — so reversing or scrambling the turn order
+    changes who counts as a neighbor.
+    """
     players = state.players
-    n = len(players)
-    actor_idx = next(i for i, p in enumerate(players) if p.id == ctx.actor_id)
 
     match target:
         case "self":
             return [ctx.actor_id]
         case "left_neighbor":
-            return [players[(actor_idx - state.direction) % n].id]
+            order = state.effective_turn_order()
+            pos = order.index(ctx.actor_id)
+            return [order[(pos - 1) % len(order)]]
         case "right_neighbor":
-            return [players[(actor_idx + state.direction) % n].id]
+            order = state.effective_turn_order()
+            pos = order.index(ctx.actor_id)
+            return [order[(pos + 1) % len(order)]]
         case "all":
             return [p.id for p in players]
         case "all_others":
@@ -140,7 +150,29 @@ def _reduce_extra_turn(state: GameState, op: ExtraTurnOp, ctx: HookContext) -> G
 
 
 def _reduce_reverse_order(state: GameState, op: ReverseOrderOp, ctx: HookContext) -> GameState:
-    return state.model_copy(update={"direction": -state.direction})
+    """Reverse the turn rotation order.
+
+    Reversing the list changes who plays next; it never moves ``turn_index``
+    (a pointer into ``players``, untouched here), so the active player stays
+    exactly who it was.
+    """
+    return state.model_copy(update={"turn_order": list(reversed(state.effective_turn_order()))})
+
+
+def _reduce_scramble_order(
+    state: GameState, op: ScrambleOrderOp, ctx: HookContext, *, rng: random.Random | None = None
+) -> GameState:
+    """Randomize the turn rotation order (proves the list model is expressive
+    beyond a single reverse — swap, insert, move-to-end are equally possible).
+
+    ``rng`` is dependency-injected for deterministic tests, mirroring
+    ``board.rooms.deck.build_deck``'s convention; defaults to a fresh
+    ``random.Random()`` when not supplied.
+    """
+    rng = rng or random.Random()
+    order = list(state.effective_turn_order())
+    rng.shuffle(order)
+    return state.model_copy(update={"turn_order": order})
 
 
 def _reduce_change_draw_count(state: GameState, op: ChangeDrawCountOp, ctx: HookContext) -> GameState:
@@ -248,8 +280,14 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
 }
 
 
-def apply_op(state: GameState, op: Op, ctx: HookContext) -> GameState:
-    """Dispatch a single op to its reducer, returning a new GameState."""
+def apply_op(state: GameState, op: Op, ctx: HookContext, *, rng: random.Random | None = None) -> GameState:
+    """Dispatch a single op to its reducer, returning a new GameState.
+
+    ``rng`` is only consumed by ``scramble_order`` (dependency-injectable for
+    deterministic tests); every other op ignores it.
+    """
+    if op.op == "scramble_order":
+        return _reduce_scramble_order(state, op, ctx, rng=rng)
     return _REDUCERS[op.op](state, op, ctx)
 
 

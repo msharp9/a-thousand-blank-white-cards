@@ -3,8 +3,9 @@
 Wires the pure reducers and the event bus into a playable turn cycle:
 
 - ``draw_step``   — draw the active player's cards for the turn.
-- ``advance_turn``— move ``turn_index`` respecting direction, skip-next,
-  extra-turn, and a pluggable skip-predicate registry.
+- ``advance_turn``— move ``turn_index`` to the next player in
+  ``state.effective_turn_order()``, respecting skip-next, extra-turn, and a
+  pluggable skip-predicate registry.
 - ``run_turn``    — one full turn: start events, draw, play, end/win events,
   then advance.
 
@@ -66,48 +67,58 @@ def draw_step(state: GameState, player_id: str, *, bus: EventBus | None = None) 
 # ---------------------------------------------------------------------------
 # Advance turn
 # ---------------------------------------------------------------------------
+def _next_in_order(order: list[str], player_id: str) -> str:
+    """Return the id following ``player_id`` in ``order``, wrapping around."""
+    pos = order.index(player_id)
+    return order[(pos + 1) % len(order)]
+
+
 def advance_turn(state: GameState) -> GameState:
     """Advance ``turn_index`` to the next player.
 
     Honours (in order): extra-turn (stay put, consume the condition),
-    direction, skip-next (consumed off the skipped player), and a registered
-    skip predicate. Consumed conditions are removed via
-    ``GameState.without_condition``, which always returns a fresh copy.
+    stepping through ``state.effective_turn_order()``, skip-next (consumed off
+    the skipped player), and a registered skip predicate. Consumed conditions
+    are removed via ``GameState.without_condition``, which always returns a
+    fresh copy.
     """
-    players = state.players
-    n = len(players)
     current_player = state.active_player()
 
     # Extra turn: the current player goes again; turn_index unchanged.
     if current_player.conditions.get("extra_turn"):
         return state.without_condition(current_player.id, "extra_turn")
 
-    next_idx = (state.turn_index + state.direction) % n
-    next_player = players[next_idx]
+    order = state.effective_turn_order()
+    next_id = _next_in_order(order, current_player.id)
+    next_player = state.get_player(next_id)
 
     if next_player.conditions.get("skip_next"):
         state = state.without_condition(next_player.id, "skip_next")
-        next_idx = (next_idx + state.direction) % n
+        next_id = _next_in_order(order, next_id)
+        next_player = state.get_player(next_id)
 
     if state.skip_predicate is not None:
         pred_fn = _SKIP_PREDICATES.get(state.skip_predicate)
         if pred_fn is not None:
-            candidate = players[next_idx]
+            candidate = next_player
             if pred_fn(candidate, state):
                 if candidate.conditions.get("skip_next"):
                     state = state.without_condition(candidate.id, "skip_next")
-                next_idx = (next_idx + state.direction) % n
+                next_id = _next_in_order(order, next_id)
+                next_player = state.get_player(next_id)
 
     # Spectators (joined after the game started) NEVER take a turn: keep
-    # stepping past any spectator we'd otherwise land on. Bounded by ``n`` so a
-    # degenerate all-spectator state can't spin forever (it just leaves the
-    # index put). Game start seats turn_index on a non-spectator, so as long as
-    # one non-spectator remains this always lands on a real player.
+    # stepping past any spectator we'd otherwise land on. ``effective_turn_order``
+    # already excludes spectators by construction, so this only guards a
+    # degenerate explicit ``turn_order`` that names one; bounded by
+    # ``len(order)`` so an all-spectator ``order`` can't spin forever.
     guard = 0
-    while players[next_idx].spectator and guard < n:
-        next_idx = (next_idx + state.direction) % n
+    while next_player.spectator and guard < len(order):
+        next_id = _next_in_order(order, next_id)
+        next_player = state.get_player(next_id)
         guard += 1
 
+    next_idx = next(i for i, p in enumerate(state.players) if p.id == next_id)
     return state.model_copy(update={"turn_index": next_idx})
 
 

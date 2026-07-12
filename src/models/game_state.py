@@ -78,8 +78,16 @@ class GameState(BaseModel):
 
     turn_index: int = 0  # index into players list
 
+    # Explicit, ordered, MUTABLE list of player ids describing turn rotation
+    # order (the authoritative design in docs/state-example.jsonc: `turnOrder`).
+    # Empty means "not yet established" — callers read it via
+    # ``effective_turn_order()``, which falls back to ``turn_players()`` order.
+    # Reducers (reverse_order, scramble_order) rewrite this list directly;
+    # unlike the old single-bit ``direction`` flag it can express ANY
+    # reordering (swap, insert, move-to-end, scramble), not just a flip.
+    turn_order: list[str] = Field(default_factory=list)
+
     # Mutable loop configuration — cards can rewrite these
-    direction: Literal[1, -1] = 1  # 1 = clockwise, -1 = counter-clockwise
     draw_count: int = 1  # cards drawn at start of each turn
     # skip_predicate: None or a serializable rule-ref string.
     skip_predicate: str | None = None
@@ -118,6 +126,17 @@ class GameState(BaseModel):
         exists for callers (scoring, tests) that need the participating set.
         """
         return [p for p in self.players if not p.spectator]
+
+    def effective_turn_order(self) -> list[str]:
+        """Return the turn rotation order: ``turn_order`` if set, else the
+        default (non-spectator ``players``, in list order).
+
+        This is the single read path ``advance_turn`` and neighbor-target
+        resolution use to step through the rotation, so a still-unset
+        ``turn_order`` (e.g. a game that hasn't started, or a state built
+        without one) behaves exactly like the old players-list-order default.
+        """
+        return list(self.turn_order) if self.turn_order else [p.id for p in self.turn_players()]
 
     def active_player(self) -> Player:
         """Return the player whose turn it currently is.

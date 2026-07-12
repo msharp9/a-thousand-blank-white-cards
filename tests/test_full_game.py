@@ -56,7 +56,7 @@ def build_initial_state(
     players: list[Player] | None = None,
     deck: list[str] | None = None,
     draw_count: int = 1,
-    direction: int = 1,
+    turn_order: list[str] | None = None,
     turn_index: int = 0,
     phase: str = "playing",
     cards: dict[str, Any] | None = None,
@@ -65,7 +65,7 @@ def build_initial_state(
     """Build a playable GameState.
 
     Defaults: 2 players (Alice=p1, Bob=p2), a 6-card deck, draw_count 1,
-    direction 1, phase "playing".
+    phase "playing".
     """
     if players is None:
         players = [
@@ -79,7 +79,7 @@ def build_initial_state(
         "players": players,
         "deck": list(deck),
         "draw_count": draw_count,
-        "direction": direction,
+        "turn_order": turn_order or [],
         "turn_index": turn_index,
         "phase": phase,
         "cards": cards or {},
@@ -113,7 +113,7 @@ def empty_play_fn(state: GameState, player_id: str):
 class TestFullScriptedGame:
     # -- Scenario 1: reverse + draw-count change through a real turn ---------
     def test_reverse_and_draw_count_change(self) -> None:
-        """Bob plays [ReverseOrderOp, ChangeDrawCountOp(2)] -> direction -1, draw_count 2."""
+        """Bob plays [ReverseOrderOp, ChangeDrawCountOp(2)] -> turn_order reversed, draw_count 2."""
         registry = HookRegistry()  # no hooks: isolate the reducer effects
         bus = SpyBus(registry)
         # turn_index=1 makes Bob (p2) the active player.
@@ -123,10 +123,10 @@ class TestFullScriptedGame:
         program = EffectProgram(ops=[ReverseOrderOp(), ChangeDrawCountOp(amount=2)])
         out = run_turn(state, make_play_fn(program), bus=bus)
 
-        assert out.direction == -1
+        assert out.turn_order == ["p2", "p1"]
         assert out.draw_count == 2
         # Original state must be untouched (purity).
-        assert state.direction == 1
+        assert state.turn_order == []
         assert state.draw_count == 1
 
     # -- Scenario 2: persistent doubling hook doubles a score gain -----------
@@ -226,7 +226,7 @@ class TestFullScriptedGame:
     # -- Scenario 6: capstone — multi-turn scripted drive across a reversal --
     def test_multi_turn_scripted_drive(self) -> None:
         """Drive 2 full turns through run_turn; verify events + turn_index across a reversal."""
-        # 3 players so a direction reversal genuinely changes who plays next.
+        # 3 players so a turn_order reversal genuinely changes who plays next.
         players = [
             Player(id="p1", name="Alice", score=0, hand=[]),
             Player(id="p2", name="Bob", score=0, hand=[]),
@@ -241,15 +241,15 @@ class TestFullScriptedGame:
         # Turn 1: Alice reverses the play order.
         reverse_program = EffectProgram(ops=[ReverseOrderOp()])
         state = run_turn(state, make_play_fn(reverse_program), bus=bus)
-        assert state.direction == -1
-        # (0 - 1) % 3 == 2  -> Carol is next.
+        assert state.turn_order == ["p3", "p2", "p1"]
+        # order is now [p3, p2, p1]; next after p1 is p3.
         assert state.turn_index == 2
         assert state.active_player().id == "p3"
 
         # Turn 2: Carol plays a harmless note.
         note_program = EffectProgram(ops=[CustomNoteOp(note="just visiting")])
         state = run_turn(state, make_play_fn(note_program), bus=bus)
-        # (2 - 1) % 3 == 1  -> Bob is next.
+        # next after p3 in [p3, p2, p1] is p2.
         assert state.turn_index == 1
         assert state.active_player().id == "p2"
 
@@ -273,7 +273,7 @@ def test_build_initial_state_defaults() -> None:
     assert state.get_player("p2").name == "Bob"
     assert len(state.deck) == 6
     assert state.phase == "playing"
-    assert state.direction == 1
+    assert state.turn_order == []
     assert state.draw_count == 1
 
 

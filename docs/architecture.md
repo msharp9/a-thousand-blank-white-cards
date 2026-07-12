@@ -289,9 +289,10 @@ a **new** `GameState`, never mutating the input:
   arrives without a resolved choice — which the Room guards against by prompting).
 - `engine/apply.py::apply_effect` iterates a program's ops and emits
   `ON_SCORE_CHANGE` after any op that changed a score, so persistent hooks react.
-- `engine/loop.py` owns `advance_turn` (honouring `direction`, per-player
-  skip-next / extra-turn flag sets carried as `PrivateAttr` on `GameState`, a
-  named skip-predicate registry, and spectator-skipping) and `draw_step`.
+- `engine/loop.py` owns `advance_turn` (stepping through `GameState.turn_order`
+  — an explicit, ordered, mutable list of player ids — honouring per-player
+  `skip_next` / `extra_turn` conditions, a named skip-predicate registry, and
+  spectator-skipping) and `draw_step`.
 - `engine/events.py` / `engine/hooks.py` provide the synchronous `EventBus`,
   `HookContext`, and the `fire_hooks` ordering algorithm (player-scoped hooks
   fire before center-scoped "house rule" hooks; an `uncounterable` source card
