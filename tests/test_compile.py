@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from engine.compile import compile_card
 from models.effects import (
     AddPointsOp,
@@ -10,6 +12,7 @@ from models.effects import (
     DestroyCardOp,
     DrawCardsOp,
     EffectProgram,
+    EndGameOp,
     ExtraTurnOp,
     ReverseOrderOp,
     SetPointsOp,
@@ -200,6 +203,95 @@ def test_requires_choice_for_chosen_card() -> None:
 def test_no_requires_choice_for_all_in_play() -> None:
     prog = compile_card(_card([{"op": "destroy_card", "args": {"card_target": "all_in_play"}}]))
     assert prog.requires_choice is False
+
+
+# ---------------------------------------------------------------------------
+# Gold-corpus vocabulary drift (bead ao7): chosen_player / next_player /
+# end_game must resolve to real runtime ops instead of silently defaulting.
+# ---------------------------------------------------------------------------
+
+
+def test_chosen_player_maps_to_chooser_and_requires_choice() -> None:
+    prog = compile_card(_card([{"op": "add_points", "args": {"amount": 5, "target": "chosen_player"}}]))
+    assert prog.ops[0].target == "chooser"
+    assert prog.requires_choice is True
+
+
+def test_steal_3_points_nets_a_real_transfer() -> None:
+    """'Steal 3 Points': chosen_player -3 / self +3 — must NOT net to zero."""
+    prog = compile_card(
+        _card(
+            [
+                {"op": "add_points", "args": {"amount": -3, "target": "chosen_player"}},
+                {"op": "add_points", "args": {"amount": 3, "target": "self"}},
+            ]
+        )
+    )
+    assert [op.target for op in prog.ops] == ["chooser", "self"]
+    assert [op.amount for op in prog.ops] == [-3, 3]
+    assert prog.requires_choice is True
+
+
+def test_next_player_maps_to_right_neighbor() -> None:
+    prog = compile_card(_card([{"op": "skip_turn", "args": {"target": "next_player"}}]))
+    assert prog.ops[0].target == "right_neighbor"
+    assert prog.requires_choice is False
+
+
+def test_win_the_game_compiles_to_end_game_op() -> None:
+    prog = compile_card(_card([{"op": "end_game", "args": {}}]))
+    assert isinstance(prog.ops[0], EndGameOp)
+
+
+def test_person_with_fewest_points_wins_uses_lowest_points_kind() -> None:
+    prog = compile_card(_card([{"op": "set_win_condition", "args": {"kind": "lowest_points"}}]))
+    op = prog.ops[0]
+    assert isinstance(op, SetWinConditionOp)
+    assert op.kind == "lowest_points"
+
+
+def test_discard_your_hand_uses_destroy_card_all_in_hand() -> None:
+    prog = compile_card(
+        _card(
+            [
+                {"op": "destroy_card", "args": {"card_target": "all_in_hand"}},
+                {"op": "draw_cards", "args": {"amount": 5, "target": "self"}},
+            ]
+        )
+    )
+    assert [type(op) for op in prog.ops] == [DestroyCardOp, DrawCardsOp]
+    assert prog.ops[0].card_target == "all_in_hand"
+    assert prog.ops[1].amount == 5
+
+
+# ---------------------------------------------------------------------------
+# Drift visibility: unknown targets and skipped ops must log at WARNING level
+# ---------------------------------------------------------------------------
+
+
+def test_unrecognized_target_logs_warning_and_defaults(caplog) -> None:
+    with caplog.at_level(logging.WARNING, logger="engine.compile"):
+        prog = compile_card(_card([{"op": "add_points", "args": {"amount": 5, "target": "some_typo"}}]))
+    assert prog.ops[0].target == "self"
+    assert any("some_typo" in r.getMessage() for r in caplog.records)
+
+
+def test_known_alias_target_does_not_log_warning(caplog) -> None:
+    with caplog.at_level(logging.WARNING, logger="engine.compile"):
+        compile_card(_card([{"op": "add_points", "args": {"amount": 5, "target": "chosen_player"}}]))
+    assert caplog.records == []
+
+
+def test_omitted_target_does_not_log_warning(caplog) -> None:
+    with caplog.at_level(logging.WARNING, logger="engine.compile"):
+        compile_card(_card([{"op": "add_points", "args": {"amount": 5}}]))
+    assert caplog.records == []
+
+
+def test_unsupported_op_logs_warning(caplog) -> None:
+    with caplog.at_level(logging.WARNING, logger="engine.compile"):
+        compile_card(_card([{"op": "trade_hands", "args": {"target": "chosen_player"}}]))
+    assert any("trade_hands" in r.getMessage() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

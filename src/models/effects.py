@@ -82,12 +82,17 @@ _AUTHORING_TARGET_ALIASES: dict[str, Target] = {
     # "a player you pick" — the actor chooses at play time.
     "player": "chooser",
     "opponent": "chooser",
+    "chosen_player": "chooser",
     "all": "all",
     "all_players": "all",
     "everyone": "all",
     # everyone except the actor
     "all_others": "all_others",
     "others": "all_others",
+    # the player who acts immediately after the actor in turn_order — see
+    # engine.loop._next_in_order / advance_turn, which both step +1 through
+    # state.effective_turn_order(); that is exactly right_neighbor's formula.
+    "next_player": "right_neighbor",
 }
 
 
@@ -121,6 +126,17 @@ def map_authoring_target(raw: str, *, default: Target | None = None) -> Target:
         f"known aliases: {sorted(_AUTHORING_TARGET_ALIASES)}. "
         "Note: 'center' is a placement, not a player target."
     )
+
+
+def is_known_target(raw: str) -> bool:
+    """True if ``raw`` normalizes to a valid runtime Target or a known authoring alias.
+
+    Used by callers (see ``engine.compile``) to distinguish an explicit-but-unknown
+    target — which ``map_authoring_target(..., default=...)`` would silently paper
+    over — from an omitted one, so drift can be logged instead of swallowed.
+    """
+    key = raw.strip().lower()
+    return key in _VALID_TARGETS or key in _AUTHORING_TARGET_ALIASES
 
 
 # ---------------------------------------------------------------------------

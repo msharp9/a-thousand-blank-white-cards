@@ -10,6 +10,7 @@ from models.effects import (
     DestroyCardOp,
     EffectProgram,
     StealPointsOp,
+    is_known_target,
     map_authoring_target,
 )
 
@@ -92,6 +93,11 @@ def test_destroy_card_op_discriminates_from_program() -> None:
         ("all_players", "all"),
         ("everyone", "all"),
         ("others", "all_others"),
+        # gold-corpus vocabulary drift (bead ao7): a choice-requiring target and
+        # the turn-order successor now have real aliases instead of silently
+        # defaulting to "self".
+        ("chosen_player", "chooser"),
+        ("next_player", "right_neighbor"),
         # case / whitespace tolerance
         ("Player", "chooser"),
         ("  ALL  ", "all"),
@@ -99,6 +105,21 @@ def test_destroy_card_op_discriminates_from_program() -> None:
 )
 def test_map_authoring_target_aliases(raw: str, expected: str) -> None:
     assert map_authoring_target(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("self", True),
+        ("chosen_player", True),
+        ("next_player", True),
+        ("player", True),
+        ("banana", False),
+        ("center", False),
+    ],
+)
+def test_is_known_target(raw: str, expected: bool) -> None:
+    assert is_known_target(raw) is expected
 
 
 @pytest.mark.parametrize(

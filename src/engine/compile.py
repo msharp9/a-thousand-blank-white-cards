@@ -15,10 +15,12 @@ Design notes:
     out of that mapping and flip ``EffectProgram.requires_choice``.
   * Not every authoring op has a runtime reducer. Authoring-only ops
     (e.g. "multiply_points", "trade_hands", "no_op", "discard_hand") are SKIPPED
-    with a debug log rather than crashing. If skipping leaves zero ops, we
-    return ``None`` so the caller can fall back to the LLM / a CustomNote path.
+    with a WARNING log rather than crashing — corpus drift (an op or target the
+    compiler silently drops) must stay visible, not vanish into a debug stream
+    nobody reads (bead ao7). If skipping leaves zero ops, we return ``None`` so
+    the caller can fall back to the LLM / a CustomNote path.
   * Malformed args (e.g. a missing required "amount") also skip the offending op
-    gracefully instead of raising.
+    gracefully instead of raising, with the same WARNING-level visibility.
 """
 
 from __future__ import annotations
@@ -42,6 +44,8 @@ from models.effects import (
     SkipTurnOp,
     StealPointsOp,
     SubtractPointsOp,
+    Target,
+    is_known_target,
     map_authoring_target,
 )
 
@@ -54,6 +58,27 @@ _CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
 _CHOICE_CARD_TARGETS: frozenset[str] = frozenset({"chosen_card"})
 # Authoring-vocab synonyms a card/LLM may emit for "end the game right now".
 _END_GAME_OP_NAMES: frozenset[str] = frozenset({"end_game", "win_game", "win_the_game"})
+
+
+def _map_target(raw: object, *, default: Target, op_name: str, field: str = "target") -> Target:
+    """Resolve an authoring target arg, warning when it silently falls back to ``default``.
+
+    An explicit-but-unrecognized value (e.g. a card author typo, or vocabulary the
+    alias table hasn't caught up with — see bead ao7) would otherwise be swallowed
+    by ``map_authoring_target``'s ``default`` fallback with no visible trace. An
+    omitted value (``raw`` already equal to ``default``'s own spelling) is not
+    drift and does not warn.
+    """
+    text = str(raw)
+    if not is_known_target(text):
+        logger.warning(
+            "compile_card: op %r has unrecognized %s %r; silently defaulting to %r",
+            op_name,
+            field,
+            text,
+            default,
+        )
+    return map_authoring_target(text, default=default)
 
 
 def _extract_ops(card: dict) -> list[dict] | None:
@@ -89,17 +114,17 @@ def _compile_op(name: str, args: dict) -> Op | None:
     """
     if name == "add_points":
         return AddPointsOp(
-            target=map_authoring_target(args.get("target", "self"), default="self"),
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
             amount=_get_amount(args),
         )
     if name == "subtract_points":
         return SubtractPointsOp(
-            target=map_authoring_target(args.get("target", "self"), default="self"),
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
             amount=_get_amount(args),
         )
     if name == "set_points":
         return SetPointsOp(
-            target=map_authoring_target(args.get("target", "self"), default="self"),
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
             amount=_get_amount(args),
         )
     if name == "steal_points":
@@ -108,14 +133,14 @@ def _compile_op(name: str, args: dict) -> Op | None:
             raise ValueError("steal_points missing 'from'/'from_target'")
         raw_to = args.get("to", args.get("to_target", "self"))
         return StealPointsOp(
-            from_target=map_authoring_target(str(raw_from), default="chooser"),
-            to_target=map_authoring_target(str(raw_to), default="self"),
+            from_target=_map_target(raw_from, default="chooser", op_name=name, field="from_target"),
+            to_target=_map_target(raw_to, default="self", op_name=name, field="to_target"),
             amount=_get_amount(args),
         )
     if name == "skip_turn":
-        return SkipTurnOp(target=map_authoring_target(args.get("target", "self"), default="self"))
+        return SkipTurnOp(target=_map_target(args.get("target", "self"), default="self", op_name=name))
     if name == "extra_turn":
-        return ExtraTurnOp(target=map_authoring_target(args.get("target", "self"), default="self"))
+        return ExtraTurnOp(target=_map_target(args.get("target", "self"), default="self", op_name=name))
     if name == "reverse_order":
         return ReverseOrderOp()
     if name == "scramble_order":
@@ -124,7 +149,7 @@ def _compile_op(name: str, args: dict) -> Op | None:
         return ChangeDrawCountOp(amount=_get_amount(args))
     if name == "draw_cards":
         return DrawCardsOp(
-            target=map_authoring_target(args.get("target", "self"), default="self"),
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
             amount=int(args.get("amount", 1)),
         )
     if name == "set_win_condition":
@@ -179,23 +204,23 @@ def compile_card(card: dict) -> EffectProgram | None:
     requires_choice = False
     for entry in raw_ops:
         if not isinstance(entry, dict):
-            logger.debug("compile_card: skipping non-dict op entry %r", entry)
+            logger.warning("compile_card: skipping non-dict op entry %r", entry)
             continue
         name = entry.get("op")
         if not name:
-            logger.debug("compile_card: skipping op entry with no name %r", entry)
+            logger.warning("compile_card: skipping op entry with no name %r", entry)
             continue
         args = entry.get("args") or {}
         if not isinstance(args, dict):
-            logger.debug("compile_card: skipping op %r with non-dict args %r", name, args)
+            logger.warning("compile_card: skipping op %r with non-dict args %r", name, args)
             continue
         try:
             op = _compile_op(name, args)
         except Exception as exc:  # malformed args (missing amount/kind, bad types) -> skip
-            logger.debug("compile_card: skipping malformed op %r: %s", name, exc)
+            logger.warning("compile_card: skipping malformed op %r: %s", name, exc)
             continue
         if op is None:
-            logger.debug("compile_card: skipping unsupported op %r", name)
+            logger.warning("compile_card: skipping unsupported op %r", name)
             continue
         if _requires_choice(op):
             requires_choice = True

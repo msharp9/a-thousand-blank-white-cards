@@ -140,7 +140,7 @@
         {
           "op": "draw_cards",
           "args": {
-            "count": 3,
+            "amount": 3,
             "target": "self"
           }
         }
@@ -158,7 +158,7 @@
         {
           "op": "draw_cards",
           "args": {
-            "count": 2,
+            "amount": 2,
             "target": "all"
           }
         }
@@ -174,15 +174,15 @@
       "placement": "self",
       "ops": [
         {
-          "op": "discard_hand",
+          "op": "destroy_card",
           "args": {
-            "target": "self"
+            "card_target": "all_in_hand"
           }
         },
         {
           "op": "draw_cards",
           "args": {
-            "count": 5,
+            "amount": 5,
             "target": "self"
           }
         }
@@ -198,11 +198,8 @@
       "placement": "self",
       "ops": [
         {
-          "op": "set_win_condition",
-          "args": {
-            "winner": "self",
-            "condition": "instant"
-          }
+          "op": "end_game",
+          "args": {}
         }
       ]
     }
@@ -219,7 +216,7 @@
         {
           "op": "set_win_condition",
           "args": {
-            "condition": "fewest_points"
+            "kind": "lowest_points"
           }
         }
       ]
@@ -233,16 +230,7 @@
       "target": "self",
       "placement": "self",
       "trigger": "on_play_card",
-      "ops": [
-        {
-          "op": "multiply_points",
-          "args": {
-            "factor": 2,
-            "target": "self",
-            "duration": "next_play"
-          }
-        }
-      ]
+      "snippet": "The next card the actor plays scores double points. No runtime point-multiplier op exists yet; a later rules-as-data bead should add one."
     }
   },
   {
@@ -252,12 +240,7 @@
       "timing": "immediate",
       "target": "center",
       "placement": "self",
-      "ops": [
-        {
-          "op": "negate_last_card",
-          "args": {}
-        }
-      ]
+      "snippet": "Undo the effect of the last card played. No runtime history/negation op exists yet; a later rules-as-data bead should add one."
     }
   },
   {
@@ -267,14 +250,7 @@
       "timing": "immediate",
       "target": "player",
       "placement": "self",
-      "ops": [
-        {
-          "op": "trade_hands",
-          "args": {
-            "target": "chosen_player"
-          }
-        }
-      ]
+      "snippet": "The actor picks another player and swaps their entire hand with that player's hand. No runtime hand-swap op exists yet; a later rules-as-data bead should add one."
     }
   },
   {
@@ -312,7 +288,7 @@
           "op": "add_points",
           "args": {
             "amount": 10,
-            "target": "holder",
+            "target": "self",
             "condition": "still_in_hand"
           }
         }
@@ -328,8 +304,10 @@
       "placement": "self",
       "ops": [
         {
-          "op": "no_op",
-          "args": {}
+          "op": "custom_note",
+          "args": {
+            "note": "Nothing happens. Thank you for your participation."
+          }
         }
       ]
     }
