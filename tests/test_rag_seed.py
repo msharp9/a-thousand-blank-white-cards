@@ -17,22 +17,22 @@ def test_load_seed_cards_upserts_all(tmp_path: Path) -> None:
     seed_file.write_text(json.dumps(sample))
     with (
         patch("agent.rag.seed.init_store") as mock_init,
-        patch("agent.rag.seed.upsert_card") as mock_upsert,
+        patch("agent.rag.seed.upsert_cards") as mock_upsert,
     ):
         from agent.rag.seed import load_seed_cards
 
         n = load_seed_cards(seed_file)
     assert n == 3
     mock_init.assert_called_once()
-    assert mock_upsert.call_count == 3
-    # card 2 got a generated id
-    _, kwargs2 = mock_upsert.call_args_list[1]
-    assert kwargs2["card_id"] == "seed-001"
-    assert kwargs2["canonical"] == ""
+    mock_upsert.assert_called_once()
+    (prepared,), _ = mock_upsert.call_args
+    assert len(prepared) == 3
+    # card 2 got a generated id and empty canonical
+    assert prepared[1]["card_id"] == "seed-001"
+    assert prepared[1]["canonical"] == ""
     # card 3 dict canonical serialised to JSON string
-    _, kwargs3 = mock_upsert.call_args_list[2]
-    assert kwargs3["canonical"] == json.dumps({"timing": "immediate"})
-    assert kwargs3["source"] == "seed"
+    assert prepared[2]["canonical"] == json.dumps({"timing": "immediate"})
+    assert prepared[2]["source"] == "seed"
 
 
 def test_missing_file_returns_zero(tmp_path: Path) -> None:

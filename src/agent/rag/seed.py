@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 
-from agent.rag.store import init_store, upsert_card
+from agent.rag.store import init_store, upsert_cards
 
 logger = logging.getLogger(__name__)
 
@@ -56,19 +56,22 @@ def load_seed_cards(seed_path: Path | None = None) -> int:
 
     init_store()
 
-    count = 0
-    for card in cards:
-        card_id = card["id"]
-        try:
-            upsert_card(
-                card_id=card_id,
-                title=card["title"],
-                description=card["description"],
-                canonical=_canonical_to_str(card.get("canonical")),
-                source="seed",
-            )
-            count += 1
-        except Exception:
-            logger.exception("Failed to upsert seed card %s", card_id)
+    prepared = [
+        {
+            "card_id": card["id"],
+            "title": card["title"],
+            "description": card["description"],
+            "canonical": _canonical_to_str(card.get("canonical")),
+            "source": "seed",
+        }
+        for card in cards
+    ]
+
+    try:
+        upsert_cards(prepared)
+        count = len(prepared)
+    except Exception:
+        logger.exception("Failed to upsert seed cards")
+        count = 0
     logger.info("Loaded %d seed cards into RAG store", count)
     return count

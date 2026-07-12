@@ -167,6 +167,9 @@ cython_debug/
 # Nano lockfiles
 .*.swp
 
+# Embedding content-hash cache (disk-backed, rebuilt on demand)
+.embedding_cache.json
+
 # Data
 output/
 data/*

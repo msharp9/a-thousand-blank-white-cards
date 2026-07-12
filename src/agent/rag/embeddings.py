@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
 from functools import lru_cache
+from pathlib import Path
 
 from langchain_openai import OpenAIEmbeddings
 
 from config import get_settings
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 # Default (OpenAI text-embedding-3-small) vector size. NOTE: this is a fallback
@@ -51,3 +57,77 @@ def get_embeddings() -> OpenAIEmbeddings:
 def embed_text(text: str) -> list[float]:
     """Embed a single string and return the raw float vector."""
     return get_embeddings().embed_query(text)
+
+
+CACHE_FILENAME = ".embedding_cache.json"
+
+_cache: dict[str, list[float]] | None = None
+
+
+def _cache_path() -> Path:
+    """Return the disk cache path at the project root (four levels up from this file)."""
+    return Path(__file__).resolve().parents[3] / CACHE_FILENAME
+
+
+def _load_cache() -> dict[str, list[float]]:
+    """Return the process-wide vector cache, loading it from disk once.
+
+    A missing or corrupt cache file degrades to an empty cache — the cache is a
+    pure optimization and must never break embedding.
+    """
+    global _cache
+    if _cache is None:
+        try:
+            _cache = json.loads(_cache_path().read_text())
+        except Exception:
+            logger.debug("embedding cache unreadable — starting empty", exc_info=True)
+            _cache = {}
+    return _cache
+
+
+def _save_cache(cache: dict[str, list[float]]) -> None:
+    """Persist the cache to disk, swallowing any error (optimization only)."""
+    try:
+        _cache_path().write_text(json.dumps(cache))
+    except Exception:
+        logger.debug("failed to persist embedding cache", exc_info=True)
+
+
+def _cache_key(text: str) -> str:
+    """Hash model + dimensions + text.
+
+    Model and dimensions are part of the key so switching embedding model/provider
+    invalidates automatically: a 1536-dim vector must never be served for a 768-dim
+    model.
+    """
+    model = get_settings().embedding_model
+    payload = f"{model}\n{embedding_dimensions()}\n{text}"
+    return hashlib.blake2b(payload.encode()).hexdigest()
+
+
+def embed_text_cached(text: str) -> list[float]:
+    """Embed a single string, returning a cached vector when the key hits."""
+    cache = _load_cache()
+    key = _cache_key(text)
+    if key in cache:
+        return cache[key]
+    vector = embed_text(text)
+    cache[key] = vector
+    _save_cache(cache)
+    return vector
+
+
+def embed_texts_cached(texts: list[str]) -> list[list[float]]:
+    """Embed many strings, calling the live API once for all cache misses.
+
+    Returns vectors in input order. Duplicate misses within a batch are embedded once.
+    """
+    cache = _load_cache()
+    keys = [_cache_key(text) for text in texts]
+    missing = {key: text for key, text in zip(keys, texts) if key not in cache}
+    if missing:
+        vectors = get_embeddings().embed_documents(list(missing.values()))
+        for key, vector in zip(missing.keys(), vectors):
+            cache[key] = vector
+        _save_cache(cache)
+    return [cache[key] for key in keys]

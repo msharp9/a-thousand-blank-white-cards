@@ -13,7 +13,7 @@ from typing import Any
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from agent.rag.embeddings import embedding_dimensions, embed_text
+from agent.rag.embeddings import embedding_dimensions, embed_text, embed_text_cached, embed_texts_cached
 from models.card import MAX_CARD_DESCRIPTION, MAX_CARD_TITLE
 
 COLLECTION_NAME = "cards"
@@ -57,6 +57,39 @@ def _require_client() -> QdrantClient:
     return _client
 
 
+def _card_text(title: str, description: str) -> str:
+    return f"{title}\n{description}"
+
+
+def _validate_card_lengths(card_id: str, title: str, description: str) -> None:
+    if len(title) > MAX_CARD_TITLE or len(description) > MAX_CARD_DESCRIPTION:
+        raise ValueError(
+            f"card {card_id!r} exceeds text limits "
+            f"(title {len(title)}/{MAX_CARD_TITLE}, description {len(description)}/{MAX_CARD_DESCRIPTION})"
+        )
+
+
+def _card_point(
+    card_id: str,
+    title: str,
+    description: str,
+    canonical: str,
+    source: str,
+    vector: list[float],
+) -> PointStruct:
+    return PointStruct(
+        id=_stable_point_id(card_id),  # Qdrant needs a stable uint64 id
+        vector=vector,
+        payload={
+            "card_id": card_id,
+            "title": title,
+            "description": description,
+            "canonical": canonical,
+            "source": source,
+        },
+    )
+
+
 def upsert_card(
     card_id: str,
     title: str,
@@ -67,29 +100,33 @@ def upsert_card(
     """Embed title+description and upsert a point into the cards collection.
 
     canonical is stored as payload (not embedded). source is a provenance label
-    ("seed" | "player"), also payload.
+    ("seed" | "player"), also payload. Embedding goes through the content-hash cache
+    so unchanged cards are never re-embedded across reloads.
     """
-    if len(title) > MAX_CARD_TITLE or len(description) > MAX_CARD_DESCRIPTION:
-        raise ValueError(
-            f"card {card_id!r} exceeds text limits "
-            f"(title {len(title)}/{MAX_CARD_TITLE}, description {len(description)}/{MAX_CARD_DESCRIPTION})"
-        )
+    _validate_card_lengths(card_id, title, description)
     client = _require_client()
-    text = f"{title}\n{description}"
-    vector = embed_text(text)
-    point_id = _stable_point_id(card_id)  # Qdrant needs a stable uint64 id
-    point = PointStruct(
-        id=point_id,
-        vector=vector,
-        payload={
-            "card_id": card_id,
-            "title": title,
-            "description": description,
-            "canonical": canonical,
-            "source": source,
-        },
-    )
+    vector = embed_text_cached(_card_text(title, description))
+    point = _card_point(card_id, title, description, canonical, source, vector)
     client.upsert(collection_name=COLLECTION_NAME, points=[point])
+
+
+def upsert_cards(cards: list[dict[str, Any]]) -> None:
+    """Embed and upsert many cards in one batch (one embedding round-trip for misses).
+
+    Each dict needs card_id, title, description, canonical, and source. Length limits
+    are validated per card before any embedding.
+    """
+    if not cards:
+        return
+    for card in cards:
+        _validate_card_lengths(card["card_id"], card["title"], card["description"])
+    client = _require_client()
+    vectors = embed_texts_cached([_card_text(c["title"], c["description"]) for c in cards])
+    points = [
+        _card_point(c["card_id"], c["title"], c["description"], c["canonical"], c["source"], vector)
+        for c, vector in zip(cards, vectors)
+    ]
+    client.upsert(collection_name=COLLECTION_NAME, points=points)
 
 
 def list_all_cards(limit: int = 10_000) -> list[dict[str, Any]]:

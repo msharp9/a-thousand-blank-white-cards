@@ -107,6 +107,101 @@ def test_gateway_base_url_and_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> 
     mod.get_embeddings.cache_clear()
 
 
+class _CountingEmbeddings:
+    """Fake embeddings client that counts live calls and returns deterministic vectors."""
+
+    def __init__(self) -> None:
+        self.query_calls = 0
+        self.document_calls = 0
+
+    def embed_query(self, text: str) -> list[float]:
+        self.query_calls += 1
+        return [float(len(text)), 1.0, 2.0]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.document_calls += 1
+        return [[float(len(t)), 1.0, 2.0] for t in texts]
+
+
+@pytest.fixture
+def _cache_env(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """Point the disk cache at tmp_path and reset the process-global cache."""
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    import agent.rag.embeddings as mod
+
+    cache_file = tmp_path / ".embedding_cache.json"
+    monkeypatch.setattr(mod, "_cache_path", lambda: cache_file)
+    mod._cache = None
+    mod.get_embeddings.cache_clear()
+    return mod, cache_file
+
+
+def test_embed_text_cached_hits_on_second_call(_cache_env, monkeypatch: pytest.MonkeyPatch) -> None:
+    mod, _ = _cache_env
+    fake = _CountingEmbeddings()
+    monkeypatch.setattr(mod, "get_embeddings", lambda: fake)
+
+    first = mod.embed_text_cached("hello")
+    assert fake.query_calls == 1
+    mod._cache = None  # force reload from disk to prove persistence
+    second = mod.embed_text_cached("hello")
+    assert second == first
+    assert fake.query_calls == 1  # zero additional live calls
+
+
+def test_embed_texts_cached_batches_misses(_cache_env, monkeypatch: pytest.MonkeyPatch) -> None:
+    mod, _ = _cache_env
+    fake = _CountingEmbeddings()
+    monkeypatch.setattr(mod, "get_embeddings", lambda: fake)
+
+    out = mod.embed_texts_cached(["a", "bb", "ccc"])
+    assert fake.document_calls == 1  # single round-trip for all misses
+    assert [v[0] for v in out] == [1.0, 2.0, 3.0]
+    mod._cache = None
+    again = mod.embed_texts_cached(["a", "bb", "ccc"])
+    assert again == out
+    assert fake.document_calls == 1  # all served from cache
+
+
+def test_changing_model_or_dimensions_misses(_cache_env, monkeypatch: pytest.MonkeyPatch) -> None:
+    from config import get_settings
+
+    mod, _ = _cache_env
+    fake = _CountingEmbeddings()
+    monkeypatch.setattr(mod, "get_embeddings", lambda: fake)
+
+    mod.embed_text_cached("same text")
+    assert fake.query_calls == 1
+
+    # Different text -> miss.
+    mod.embed_text_cached("other text")
+    assert fake.query_calls == 2
+
+    # Different model -> miss even for identical text.
+    get_settings.cache_clear()
+    monkeypatch.setenv("LLM_EMBEDDING_MODEL", "some-other-model")
+    mod.embed_text_cached("same text")
+    assert fake.query_calls == 3
+
+    # Different dimensions -> miss even for identical text+model.
+    get_settings.cache_clear()
+    monkeypatch.setenv("LLM_EMBEDDING_DIMENSIONS", "768")
+    mod.embed_text_cached("same text")
+    assert fake.query_calls == 4
+    get_settings.cache_clear()
+
+
+def test_corrupt_cache_degrades_gracefully(_cache_env, monkeypatch: pytest.MonkeyPatch) -> None:
+    mod, cache_file = _cache_env
+    cache_file.write_text("{ not valid json ")
+    fake = _CountingEmbeddings()
+    monkeypatch.setattr(mod, "get_embeddings", lambda: fake)
+
+    out = mod.embed_text_cached("hello")
+    assert out == [5.0, 1.0, 2.0]
+    assert fake.query_calls == 1
+
+
 def test_embedding_dimensions_follows_config(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Qdrant-facing dimension follows LLM_EMBEDDING_DIMENSIONS."""
     from config import get_settings
