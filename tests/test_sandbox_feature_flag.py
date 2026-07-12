@@ -11,7 +11,7 @@ STATE = {
     "players": [{"id": "p1", "name": "A", "score": 0, "hand": [], "connected": True}],
     "turn_index": 0,
     "draw_count": 1,
-    "direction": 1,
+    "turn_order": ["p1"],
 }
 CTX = {"actor_id": "p1"}
 CODE = "def apply(s, c):\n    s.add_points(c['actor_id'], 1)\n"

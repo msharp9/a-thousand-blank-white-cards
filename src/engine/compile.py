@@ -35,6 +35,7 @@ from models.effects import (
     ExtraTurnOp,
     Op,
     ReverseOrderOp,
+    ScrambleOrderOp,
     SetPointsOp,
     SetWinConditionOp,
     SkipTurnOp,
@@ -114,6 +115,8 @@ def _compile_op(name: str, args: dict) -> Op | None:
         return ExtraTurnOp(target=map_authoring_target(args.get("target", "self"), default="self"))
     if name == "reverse_order":
         return ReverseOrderOp()
+    if name == "scramble_order":
+        return ScrambleOrderOp()
     if name == "change_draw_count":
         return ChangeDrawCountOp(amount=_get_amount(args))
     if name == "draw_cards":

@@ -317,6 +317,9 @@ class Room:
                 "cards": merged_cards,
                 "deck": deck,
                 "players": new_players,
+                # Seed the explicit turn rotation from the real players who
+                # made it into this game, in seating order.
+                "turn_order": [p.id for p in dealt_to],
             }
         )
         # Begin the first player's turn (draw → play → end model): no auto-draw.
@@ -409,7 +412,7 @@ class Room:
         """End the current turn: end the game if the deck is exhausted, else
         advance to the next player and start their turn.
 
-        Reuses ``engine.loop.advance_turn`` so direction, skip-next, extra-turn
+        Reuses ``engine.loop.advance_turn`` so turn_order, skip-next, extra-turn
         and any registered skip predicate are all honoured — those flags are set
         by the reducers during a play's apply_effect. Runs under the caller's
         lock, so advance is a single serialized operation with no interleaving.
@@ -792,9 +795,10 @@ class Room:
         dest = self._play_destination(card)
         self.state = self.state.move_card(card_id, "hand", dest, from_player_id=player_id, to_player_id=player_id)
 
-        # Playing a card ends the turn: advance (honouring skip/extra/direction
-        # flags the play may have set) and start the next player's turn, which
-        # auto-draws or ends the game on an empty deck.
+        # Playing a card ends the turn: advance (honouring skip/extra-turn
+        # conditions and any turn_order change the play may have set) and start
+        # the next player's turn, which auto-draws or ends the game on an empty
+        # deck.
         await self._broadcast_state()
         await self._advance_turn()
 

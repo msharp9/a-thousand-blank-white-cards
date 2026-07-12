@@ -78,8 +78,13 @@ class SandboxGame:
         return self._state.get("draw_count", 1)
 
     @property
-    def direction(self) -> int:
-        return self._state.get("direction", 1)
+    def turn_order(self) -> list[str]:
+        """The turn rotation order (explicit ``turn_order``, or non-spectator
+        players in list order when not yet established)."""
+        order = self._state.get("turn_order")
+        if order:
+            return list(order)
+        return [p["id"] for p in self._state["players"] if not p.get("spectator")]
 
     # ------------------------------------------------------------------
     # Mutators — each appends an op dict; never modifies _state/_ctx

@@ -45,14 +45,14 @@ def test_draw_step_empty_deck_ends_game() -> None:
     assert out.phase == "ended"
 
 
-def test_advance_turn_direction_1() -> None:
-    st = _state(turn_index=0, direction=1)
+def test_advance_turn_default_order() -> None:
+    st = _state(turn_index=0)
     assert advance_turn(st).turn_index == 1
 
 
-def test_advance_turn_direction_neg1() -> None:
-    st = _state(turn_index=0, direction=-1)
-    assert advance_turn(st).turn_index == 2  # (0 - 1) % 3
+def test_advance_turn_follows_explicit_turn_order() -> None:
+    st = _state(turn_index=0, turn_order=["p1", "p3", "p2"])
+    assert advance_turn(st).turn_index == 2  # next after p1 in turn_order is p3
 
 
 def test_skip_next_is_skipped_and_cleared() -> None:
@@ -61,7 +61,7 @@ def test_skip_next_is_skipped_and_cleared() -> None:
         Player(id="p2", name="B", score=0, hand=[], conditions={"skip_next": True}),
         Player(id="p3", name="C", score=0, hand=[]),
     ]
-    st = _state(players=players, turn_index=0, direction=1)
+    st = _state(players=players, turn_index=0)
     out = advance_turn(st)
     assert out.turn_index == 2  # p2 skipped -> lands on p3
     assert out.get_player("p2").conditions == {}
@@ -74,7 +74,7 @@ def test_extra_turn_keeps_index_and_clears() -> None:
         Player(id="p2", name="B", score=0, hand=[], conditions={"extra_turn": True}),
         Player(id="p3", name="C", score=0, hand=[]),
     ]
-    st = _state(players=players, turn_index=1, direction=1)
+    st = _state(players=players, turn_index=1)
     out = advance_turn(st)
     assert out.turn_index == 1  # stays on p2
     assert out.get_player("p2").conditions == {}
@@ -83,7 +83,7 @@ def test_extra_turn_keeps_index_and_clears() -> None:
 
 def test_skip_predicate_registry() -> None:
     register_skip_predicate("always_skip", lambda player, state: True)
-    st = _state(turn_index=0, direction=1, skip_predicate="always_skip")
+    st = _state(turn_index=0, skip_predicate="always_skip")
     out = advance_turn(st)
     # next is p2 (idx1); predicate true -> skip once more -> p3 (idx2)
     assert out.turn_index == 2
@@ -92,14 +92,14 @@ def test_skip_predicate_registry() -> None:
 def test_skip_predicate_unknown_name_no_extra_skip() -> None:
     # skip_predicate names a predicate that is NOT registered -> pred_fn is None,
     # so no extra skip happens.
-    st = _state(turn_index=0, direction=1, skip_predicate="not_registered")
+    st = _state(turn_index=0, skip_predicate="not_registered")
     out = advance_turn(st)
     assert out.turn_index == 1  # plain advance to p2
 
 
 def test_skip_predicate_returning_false_no_extra_skip() -> None:
     register_skip_predicate("never_skip", lambda player, state: False)
-    st = _state(turn_index=0, direction=1, skip_predicate="never_skip")
+    st = _state(turn_index=0, skip_predicate="never_skip")
     out = advance_turn(st)
     assert out.turn_index == 1  # predicate False -> no extra skip
 

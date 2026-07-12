@@ -160,6 +160,12 @@ class ReverseOrderOp(BaseModel):
     op: Literal["reverse_order"] = "reverse_order"
 
 
+class ScrambleOrderOp(BaseModel):
+    """Randomize the turn rotation order (state.turn_order)."""
+
+    op: Literal["scramble_order"] = "scramble_order"
+
+
 class ChangeDrawCountOp(BaseModel):
     op: Literal["change_draw_count"] = "change_draw_count"
     amount: int  # new draw_count value (absolute, not delta)
@@ -212,6 +218,7 @@ Op = Annotated[
         SkipTurnOp,
         ExtraTurnOp,
         ReverseOrderOp,
+        ScrambleOrderOp,
         ChangeDrawCountOp,
         StealPointsOp,
         DrawCardsOp,

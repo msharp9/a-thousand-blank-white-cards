@@ -14,6 +14,7 @@ from models.effects import (
     DrawCardsOp,
     ExtraTurnOp,
     ReverseOrderOp,
+    ScrambleOrderOp,
     SetPointsOp,
     SetWinConditionOp,
     SkipTurnOp,
@@ -23,7 +24,7 @@ from models.effects import (
 from models.game_state import GameState, Player
 
 
-def make_state(players=None, deck=None, direction=1, draw_count=1) -> GameState:
+def make_state(players=None, deck=None, turn_order=None, draw_count=1) -> GameState:
     if players is None:
         players = [
             Player(id="p1", name="Alice", score=10, hand=["c1", "c2"]),
@@ -34,7 +35,7 @@ def make_state(players=None, deck=None, direction=1, draw_count=1) -> GameState:
         room_code="TEST",
         players=players,
         deck=deck or ["d1", "d2", "d3"],
-        direction=direction,
+        turn_order=turn_order or [],
         draw_count=draw_count,
         turn_index=0,
     )
@@ -48,14 +49,15 @@ class TestResolveTargets:
     def test_self(self):
         assert _resolve_targets("self", make_ctx("p1"), make_state()) == ["p1"]
 
-    def test_right_neighbor_clockwise(self):
+    def test_right_neighbor_default_order(self):
         assert _resolve_targets("right_neighbor", make_ctx("p1"), make_state()) == ["p2"]
 
-    def test_left_neighbor_clockwise(self):
+    def test_left_neighbor_default_order(self):
         assert _resolve_targets("left_neighbor", make_ctx("p1"), make_state()) == ["p3"]
 
-    def test_right_neighbor_counter_clockwise(self):
-        assert _resolve_targets("right_neighbor", make_ctx("p1"), make_state(direction=-1)) == ["p3"]
+    def test_right_neighbor_reversed_order(self):
+        reversed_order = make_state(turn_order=["p1", "p3", "p2"])
+        assert _resolve_targets("right_neighbor", make_ctx("p1"), reversed_order) == ["p3"]
 
     def test_all(self):
         assert set(_resolve_targets("all", make_ctx("p1"), make_state())) == {"p1", "p2", "p3"}
@@ -145,13 +147,44 @@ class TestSetPoints:
 
 
 class TestReverseOrder:
-    def test_flips_direction(self):
-        assert apply_op(make_state(direction=1), ReverseOrderOp(), make_ctx("p1")).direction == -1
+    def test_reverses_default_order(self):
+        new = apply_op(make_state(), ReverseOrderOp(), make_ctx("p1"))
+        assert new.turn_order == ["p3", "p2", "p1"]
 
-    def test_double_reverse(self):
-        new = apply_op(make_state(direction=1), ReverseOrderOp(), make_ctx("p1"))
+    def test_double_reverse_restores_order(self):
+        new = apply_op(make_state(), ReverseOrderOp(), make_ctx("p1"))
         new2 = apply_op(new, ReverseOrderOp(), make_ctx("p1"))
-        assert new2.direction == 1
+        assert new2.turn_order == ["p1", "p2", "p3"]
+
+    def test_active_player_unaffected(self):
+        """Reversing turn_order never moves turn_index — the active player
+        (who is not defined by turn_order) stays exactly who it was."""
+        state = make_state()
+        new = apply_op(state, ReverseOrderOp(), make_ctx("p1"))
+        assert new.active_player().id == state.active_player().id
+
+
+class TestScrambleOrder:
+    def test_reorders_turn_order(self):
+        import random
+
+        new = apply_op(make_state(), ScrambleOrderOp(), make_ctx("p1"), rng=random.Random(7))
+        assert set(new.turn_order) == {"p1", "p2", "p3"}
+        assert new.turn_order != ["p1", "p2", "p3"]
+
+    def test_deterministic_given_same_seed(self):
+        import random
+
+        first = apply_op(make_state(), ScrambleOrderOp(), make_ctx("p1"), rng=random.Random(7))
+        second = apply_op(make_state(), ScrambleOrderOp(), make_ctx("p1"), rng=random.Random(7))
+        assert first.turn_order == second.turn_order
+
+    def test_original_state_untouched(self):
+        import random
+
+        state = make_state()
+        apply_op(state, ScrambleOrderOp(), make_ctx("p1"), rng=random.Random(7))
+        assert state.turn_order == []
 
 
 class TestChangeDrawCount:
