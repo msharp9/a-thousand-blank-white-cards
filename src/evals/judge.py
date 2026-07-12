@@ -67,10 +67,12 @@ A persistent card interpreted as immediate scores 0 for timing_correct.
 class JudgeLLM:
     """Multi-dimensional LLM judge. Stateless; create once and reuse across eval items."""
 
-    def __init__(self, model: str = "gpt-5.4-mini") -> None:
+    def __init__(self, model: str | None = None) -> None:
         # Route through the shared gateway-aware factory so the judge hits the same
         # OpenAI-compatible endpoint (hosted OpenAI, a gateway, or a local server)
-        # as the rest of the app instead of constructing a raw OpenAI client.
+        # as the rest of the app instead of constructing a raw OpenAI client. A
+        # None model lets get_chat_model resolve the configured LLM_CHAT_MODEL
+        # instead of overriding it with a hardcoded id.
         self._llm = get_chat_model(model).with_structured_output(Verdict)
 
     def evaluate(self, *, card_description: str, generated_summary: str, human_canonical: dict) -> Verdict:
