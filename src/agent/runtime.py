@@ -15,10 +15,11 @@ Layering: this module may import ``engine``, ``models``, ``config`` and
 beads) take a PASSED-IN snapshot; :func:`run_agent` threads ``state``/``actor_id``
 into the prompt but never reaches into the board layer.
 
-The agent NEVER hangs and NEVER raises to its caller: on recursion-cap hit,
-timeout, or any exception it returns a deterministic bounded fallback
-``InterpretResult`` (verdict ``"invalid"``), mirroring the old
-failure-to-CustomNoteOp behavior.
+The agent NEVER hangs and NEVER raises to its caller: on recursion-cap hit or
+timeout it makes one forced tools-disabled final-answer call and parses that;
+only if the forced call also fails (or any other exception occurs) does it
+return a deterministic bounded fallback ``InterpretResult`` (verdict
+``"invalid"``), mirroring the old failure-to-CustomNoteOp behavior.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.errors import GraphRecursionError
 
 from agent.contract import InterpretResult
@@ -45,13 +47,26 @@ logger = logging.getLogger(__name__)
 # Hard caps — module-level so they are trivially configurable / overridable.
 # ---------------------------------------------------------------------------
 # Maximum number of reasoning/tool-call steps before we bail out. The compiled
-# agent's recursion_limit counts super-steps; a value of 8 comfortably allows a
-# few tool round-trips (each tool call is ~2 steps: model -> tool -> model).
-MAX_TOOL_CALLS: int = 100
+# agent's recursion_limit counts super-steps; a value of 24 comfortably allows
+# a handful of tool round-trips (each tool call is ~2 steps: model -> tool ->
+# model) while still being low enough that hitting it forces a final answer
+# rather than letting the agent burn an unbounded number of tool calls.
+MAX_TOOL_CALLS: int = 24
 
 # Wall-clock ceiling for a single interpretation, in seconds. Guards against a
 # tool or model call that hangs on the network even when the step count is low.
 AGENT_TIMEOUT_SECONDS: float = 600.0
+
+# Extra wall-clock budget for the forced tools-disabled final-answer call made
+# when the step cap or the timeout above is hit. Kept small and separate so a
+# hung model can't turn a give-up into a second, equally long hang.
+FORCED_FINAL_CALL_TIMEOUT_SECONDS: float = 30.0
+
+FORCED_FINAL_INSTRUCTION = (
+    "Budget exhausted — output your final JSON interpretation NOW using what you "
+    "already know. Do not call any tools. Respond with ONLY the JSON object "
+    "matching the contract."
+)
 
 
 def _configure_langsmith() -> None:
@@ -173,6 +188,72 @@ def _parse_result(result: dict[str, Any]) -> InterpretResult:
     )
 
 
+def _sanitize_forced_messages(messages: list[Any]) -> list[Any]:
+    """Drop a trailing AIMessage with unresolved tool_calls.
+
+    The graph can be interrupted (recursion cap) right after the model asks for
+    a tool call but before the tool ran, leaving that call unanswered. Sending
+    it onward would break providers that require every tool_call to be
+    followed by a matching tool result.
+    """
+    if messages and getattr(messages[-1], "tool_calls", None):
+        return messages[:-1]
+    return messages
+
+
+def _build_forced_messages(
+    system_prompt: str,
+    title: str,
+    progress: list[dict[str, Any]],
+) -> list[Any]:
+    """Assemble the message list for the tools-disabled forced-final call.
+
+    Prefers the conversation accumulated while streaming the graph (captured in
+    ``progress``, see :func:`run_agent`) so the forced call can use partial tool
+    results. Degrades to a fresh system+user prompt (the bare-chat-model v1
+    path) when nothing was captured.
+    """
+    if progress:
+        messages = _sanitize_forced_messages(list(progress[-1].get("messages") or []))
+        if messages:
+            return [*messages, HumanMessage(content=FORCED_FINAL_INSTRUCTION)]
+
+    return [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"Interpret the card titled {title!r} and produce the JSON result."),
+        HumanMessage(content=FORCED_FINAL_INSTRUCTION),
+    ]
+
+
+def _forced_final_result(
+    chat_model: Any,
+    system_prompt: str,
+    title: str,
+    progress: list[dict[str, Any]],
+    timeout: float,
+) -> InterpretResult | None:
+    """Make ONE tools-disabled LLM call to force a final answer out of a budget-exhausted agent.
+
+    Returns None (never raises) when the forced call itself times out or errors,
+    so the caller can degrade to the deterministic bounded fallback.
+    """
+    messages = _build_forced_messages(system_prompt, title, progress)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(chat_model.invoke, messages)
+        try:
+            response = future.result(timeout=timeout)
+        except FuturesTimeoutError:
+            logger.warning("forced final-answer call timed out after %.1fs", timeout)
+            future.cancel()
+            return None
+        except Exception:  # noqa: BLE001 — forced call is best-effort
+            logger.exception("forced final-answer call failed")
+            return None
+
+    return _parse_result({"messages": [response]})
+
+
 def _assemble_tools(
     state: Any | None,
     actor_id: str | None,
@@ -225,6 +306,7 @@ def run_agent(
     model: Any | None = None,
     timeout: float | None = None,
     max_tool_calls: int | None = None,
+    forced_call_timeout: float | None = None,
 ) -> InterpretResult:
     """Interpret one card into an :class:`InterpretResult`. Never hangs, never raises.
 
@@ -238,14 +320,20 @@ def run_agent(
         model: Chat model override for tests; defaults to the real provider model.
         timeout: Wall-clock ceiling in seconds (default :data:`AGENT_TIMEOUT_SECONDS`).
         max_tool_calls: Recursion/step cap (default :data:`MAX_TOOL_CALLS`).
+        forced_call_timeout: Wall-clock ceiling for the forced tools-disabled
+            final-answer call made on recursion-cap/timeout (default
+            :data:`FORCED_FINAL_CALL_TIMEOUT_SECONDS`).
 
     Returns:
-        A well-formed InterpretResult. On recursion cap, timeout, model-construction
-        failure, or any other exception, a deterministic bounded fallback with
-        ``verdict="invalid"`` is returned.
+        A well-formed InterpretResult. On recursion cap or timeout, one forced
+        tools-disabled final-answer call is made and its parsed result returned;
+        only if that forced call also fails (or model-construction / any other
+        exception occurs) is a deterministic bounded fallback with
+        ``verdict="invalid"`` returned.
     """
     timeout = AGENT_TIMEOUT_SECONDS if timeout is None else timeout
     recursion_limit = MAX_TOOL_CALLS if max_tool_calls is None else max_tool_calls
+    forced_call_timeout = FORCED_FINAL_CALL_TIMEOUT_SECONDS if forced_call_timeout is None else forced_call_timeout
 
     _configure_langsmith()
 
@@ -260,7 +348,8 @@ def run_agent(
     bound_tools = _assemble_tools(state, actor_id, creator_id, tools)
 
     try:
-        agent = build_agent(tools=bound_tools, model=model, system_prompt=system_prompt)
+        chat_model = model if model is not None else get_chat_model()
+        agent = build_agent(tools=bound_tools, model=chat_model, system_prompt=system_prompt)
     except Exception:  # noqa: BLE001 — model/agent construction must never escape
         logger.exception("agent construction failed; returning bounded fallback")
         return _fallback_result(
@@ -271,21 +360,37 @@ def run_agent(
     inputs = {"messages": [("user", f"Interpret the card titled {title!r} and produce the JSON result.")]}
     config = {"recursion_limit": recursion_limit}
 
-    # Run the (synchronous) invoke on a worker thread so we can enforce a hard
-    # wall-clock timeout even if the underlying call blocks on the network.
+    # progress accumulates every intermediate graph state so that, if the graph
+    # is interrupted by the recursion cap or the timeout below, we still have the
+    # conversation-so-far to hand to the forced final-answer call.
+    progress: list[dict[str, Any]] = []
+
+    def _stream_agent() -> dict[str, Any] | None:
+        for chunk in agent.stream(inputs, config, stream_mode="values"):
+            progress.append(chunk)
+        return progress[-1] if progress else None
+
+    # Run the (synchronous) streaming loop on a worker thread so we can enforce a
+    # hard wall-clock timeout even if the underlying call blocks on the network.
     with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(agent.invoke, inputs, config)
+        future = pool.submit(_stream_agent)
         try:
             result = future.result(timeout=timeout)
         except FuturesTimeoutError:
-            logger.warning("agent timed out after %.1fs; returning bounded fallback", timeout)
+            logger.warning("agent timed out after %.1fs; forcing a final answer", timeout)
             future.cancel()
+            forced = _forced_final_result(chat_model, system_prompt, title, progress, forced_call_timeout)
+            if forced is not None:
+                return forced
             return _fallback_result(
                 comment="Figuring out your card took so long I lost interest. Nothing happens.",
                 note="Interpretation timed out: no effect applied.",
             )
         except GraphRecursionError:
-            logger.warning("agent hit recursion cap (%d); returning bounded fallback", recursion_limit)
+            logger.warning("agent hit recursion cap (%d); forcing a final answer", recursion_limit)
+            forced = _forced_final_result(chat_model, system_prompt, title, progress, forced_call_timeout)
+            if forced is not None:
+                return forced
             return _fallback_result(
                 comment="I went in circles trying to make sense of that. I give up.",
                 note="Interpretation exceeded step budget: no effect applied.",
