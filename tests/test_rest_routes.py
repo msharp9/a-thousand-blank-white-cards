@@ -104,7 +104,7 @@ def test_dev_skip_setup_on_playing_room_returns_409(dev_client: TestClient) -> N
     assert resp.status_code == 409
 
 
-def test_dev_end_game_opens_epilogue(dev_client: TestClient) -> None:
+def test_dev_end_game_opens_results(dev_client: TestClient) -> None:
     code = dev_client.post("/rooms").json()["code"]
     dev_client.post(f"/rooms/{code}/join", json={"name": "Alice"})
     dev_client.post(f"/rooms/{code}/join", json={"name": "Bob"})
@@ -113,7 +113,7 @@ def test_dev_end_game_opens_epilogue(dev_client: TestClient) -> None:
     resp = dev_client.post(f"/rooms/{code}/dev/end-game")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["phase"] in ("epilogue", "ended")
+    assert data["phase"] in ("results", "ended")
     assert "winner_ids" in data
 
 

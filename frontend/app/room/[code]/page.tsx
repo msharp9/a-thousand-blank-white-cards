@@ -18,12 +18,9 @@ import { EpilogueView } from "@/components/epilogue";
 import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
 import { HouseRulesZone } from "@/components/house-rules-zone";
+import { ResultsScreen } from "@/components/results-screen";
 import { SetupPhase } from "@/components/setup-phase";
-import type {
-  CardSnapshot,
-  GameStateSnapshot,
-  PromptChoiceMsg,
-} from "@/lib/types";
+import type { CardSnapshot, PromptChoiceMsg } from "@/lib/types";
 import { getPlayerId, storePlayerId, useGameSocket } from "@/lib/ws";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -333,6 +330,17 @@ export default function RoomPage() {
           </div>
         )}
 
+        {gameState && phase === "results" && (
+          <ResultsScreen
+            gameState={gameState}
+            myPlayerId={myPlayerId ?? ""}
+            log={log}
+            isHost={isHost}
+            send={send}
+            onBack={() => router.push("/")}
+          />
+        )}
+
         {gameState && phase === "epilogue" && (
           <div className="flex flex-col gap-4">
             {epilogueWinnerNames.length > 0 && (
@@ -348,9 +356,12 @@ export default function RoomPage() {
         )}
 
         {gameState && phase === "ended" && (
-          <EndScreen
+          <ResultsScreen
             gameState={gameState}
             myPlayerId={myPlayerId ?? ""}
+            log={log}
+            isHost={isHost}
+            send={send}
             onBack={() => router.push("/")}
           />
         )}
@@ -428,65 +439,5 @@ function TargetPickerDialog({
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// Final win/lose screen. Winners come from the backend's authoritative
-// winner_ids (mirrors GameState.winner_ids); we fall back to computing the
-// highest score client-side only if the field is somehow absent, so an older
-// snapshot still renders a sensible result.
-function EndScreen({
-  gameState,
-  myPlayerId,
-  onBack,
-}: {
-  gameState: GameStateSnapshot;
-  myPlayerId: string;
-  onBack: () => void;
-}) {
-  let winnerIds = gameState.winner_ids ?? [];
-  if (winnerIds.length === 0 && gameState.players.length > 0) {
-    const top = Math.max(...gameState.players.map((p) => p.score));
-    winnerIds = gameState.players
-      .filter((p) => p.score === top)
-      .map((p) => p.id);
-  }
-
-  const iWon = winnerIds.includes(myPlayerId);
-  const winnerNames = gameState.players
-    .filter((p) => winnerIds.includes(p.id))
-    .map((p) => p.name);
-
-  let headline: string;
-  if (winnerIds.length === 0) {
-    headline = "Game over";
-  } else if (iWon) {
-    headline = winnerIds.length > 1 ? "You tied for the win!" : "You win! 🎉";
-  } else {
-    headline = "You lose";
-  }
-
-  return (
-    <div className="flex flex-col items-center gap-4">
-      <h2
-        className={
-          iWon
-            ? "text-2xl font-bold text-primary"
-            : "text-2xl font-bold text-muted-foreground"
-        }
-      >
-        {headline}
-      </h2>
-      {winnerNames.length > 0 && (
-        <p className="text-sm text-muted-foreground">
-          {winnerNames.length > 1 ? "Winners" : "Winner"}:{" "}
-          {winnerNames.join(", ")}
-        </p>
-      )}
-      <GameTable gameState={gameState} myPlayerId={myPlayerId} />
-      <Button variant="outline" onClick={onBack}>
-        Back to lobby
-      </Button>
-    </div>
   );
 }

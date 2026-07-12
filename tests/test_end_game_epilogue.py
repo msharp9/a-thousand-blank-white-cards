@@ -1,21 +1,23 @@
-"""Bead 70n.13 — end-of-game resolves kept-card scoring, then opens the epilogue.
+"""Bead 70n.13 — end-of-game resolves kept-card scoring, then shows results.
 
 When the deck is exhausted and the drawer's turn ends, `_end_game` now:
   1. applies end-of-game (kept-in-hand) card effects via resolve_end_of_game,
   2. computes winner_ids from the final scores,
-  3. opens the epilogue vote (phase="epilogue"),
-and the epilogue completing transitions to phase="ended".
+  3. lands on the results screen (phase="results"),
+the host then advances into the epilogue vote (phase="epilogue") via
+`epilogue_start`, and the epilogue completing transitions to phase="ended".
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
 
 from engine.scoring import evaluate_win_condition, resolve_end_of_game
-from models.ws_messages import EpilogueDoneMsg, EpilogueVoteMsg, PassMsg
+from models.ws_messages import EpilogueDoneMsg, EpilogueStartMsg, EpilogueVoteMsg, PassMsg
 from board.rooms.room import Room
 
 
@@ -35,10 +37,10 @@ def _ended_room(p1_hand: list[str], cards: dict, scores: tuple[int, int]) -> Roo
     return r
 
 
-def test_end_game_opens_epilogue_with_winner() -> None:
+def test_end_game_shows_results_with_winner() -> None:
     room = _ended_room([], {}, scores=(3, 7))
     asyncio.run(room.handle_action("p1", PassMsg()))
-    assert room.state.phase == "epilogue"
+    assert room.state.phase == "results"
     assert room.state.winner_ids == ["p2"]
 
 
@@ -65,7 +67,7 @@ def test_end_game_applies_kept_card_bonus_before_deciding_winner() -> None:
     asyncio.run(room.handle_action("p2", PassMsg()))
     assert room.state.get_player("p1").score == 13
     assert room.state.winner_ids == ["p1"]
-    assert room.state.phase == "epilogue"
+    assert room.state.phase == "results"
 
 
 def test_end_game_logs_kept_card_application_before_winner_line() -> None:
@@ -103,7 +105,7 @@ def test_end_game_logs_kept_card_application_before_winner_line() -> None:
 def test_dev_force_end_game_uses_real_scoring_path() -> None:
     # p1 trails 3-7 but holds a "worth 10 if kept" on_game_end card. Forcing the
     # end game must run the real resolve_end_of_game → evaluate_win_condition path,
-    # so p1's +10 lands and p1 wins 13-7 with the epilogue opening.
+    # so p1's +10 lands and p1 wins 13-7, landing on the results screen.
     kept = {
         "id": "keep10",
         "title": "Worth 10 If Kept",
@@ -123,7 +125,7 @@ def test_dev_force_end_game_uses_real_scoring_path() -> None:
 
     asyncio.run(room.dev_force_end_game())
 
-    assert room.state.phase == "epilogue"
+    assert room.state.phase == "results"
     assert room.state.get_player("p1").score == 13
     assert room.state.winner_ids == expected_winners == ["p1"]
 
@@ -136,11 +138,13 @@ def test_dev_force_end_game_rejects_when_not_playing() -> None:
 
 
 def test_epilogue_vote_completion_reaches_ended() -> None:
-    # After the epilogue opens, both players voting then signalling done
-    # finalizes -> phase="ended".
+    # After the host advances results -> epilogue, both players voting then
+    # signalling done finalizes -> phase="ended".
     authored = {"a1": {"id": "a1", "title": "Custom", "description": "x", "creator_id": "p1", "origin": "authored"}}
     room = _ended_room([], authored, scores=(1, 2))
     asyncio.run(room.handle_action("p1", PassMsg()))
+    assert room.state.phase == "results"
+    asyncio.run(room.handle_action("p1", EpilogueStartMsg()))
     assert room.state.phase == "epilogue"
     # Both real players vote on the single authored card, then mark done.
     asyncio.run(room.handle_action("p1", EpilogueVoteMsg(card_id="a1", keep=True)))
@@ -149,3 +153,70 @@ def test_epilogue_vote_completion_reaches_ended() -> None:
     assert room.state.phase == "epilogue"  # p2 hasn't signalled done yet
     asyncio.run(room.handle_action("p2", EpilogueDoneMsg()))
     assert room.state.phase == "ended"
+    assert room.state.epilogue_result is not None
+    assert [c.id for c in room.state.epilogue_result.kept] == ["a1"]
+    assert room.state.epilogue_result.kept[0].title == "Custom"
+    assert room.state.epilogue_result.destroyed == []
+
+
+def test_reconnect_snapshot_carries_epilogue_result() -> None:
+    # A client that (re)joins after the vote finalizes only gets a fresh
+    # snapshot() call — epilogue_result must ride it, not just live state.
+    authored = {
+        "keep-me": {
+            "id": "keep-me",
+            "title": "Keep Me",
+            "description": "x",
+            "creator_id": "p1",
+            "origin": "authored",
+        },
+        "cut-me": {
+            "id": "cut-me",
+            "title": "Cut Me",
+            "description": "y",
+            "creator_id": "p1",
+            "origin": "authored",
+        },
+    }
+    room = _ended_room([], authored, scores=(1, 2))
+    asyncio.run(room.handle_action("p1", PassMsg()))
+    snap_before = room.snapshot()
+    assert snap_before["phase"] == "results"
+    assert snap_before["epilogue_result"] is None
+
+    asyncio.run(room.handle_action("p1", EpilogueStartMsg()))
+    asyncio.run(room.handle_action("p1", EpilogueVoteMsg(card_id="keep-me", keep=True)))
+    asyncio.run(room.handle_action("p2", EpilogueVoteMsg(card_id="keep-me", keep=True)))
+    asyncio.run(room.handle_action("p1", EpilogueVoteMsg(card_id="cut-me", keep=False)))
+    asyncio.run(room.handle_action("p2", EpilogueVoteMsg(card_id="cut-me", keep=False)))
+    asyncio.run(room.handle_action("p1", EpilogueDoneMsg()))
+    asyncio.run(room.handle_action("p2", EpilogueDoneMsg()))
+    assert room.state.phase == "ended"
+
+    # Simulate a reconnecting client: a brand-new snapshot() call, no reliance
+    # on anything from the live epilogue-vote session.
+    snap_after = room.snapshot()
+    assert snap_after["phase"] == "ended"
+    assert snap_after["epilogue_result"]["kept"] == [{"id": "keep-me", "title": "Keep Me"}]
+    assert snap_after["epilogue_result"]["destroyed"] == [{"id": "cut-me", "title": "Cut Me"}]
+
+
+def test_epilogue_start_rejected_before_results_and_for_non_host() -> None:
+    room = _ended_room([], {}, scores=(1, 2))
+    ws2 = AsyncMock()
+    room.connections.connect("p2", ws2)
+    # Still "playing" — no results screen to advance from yet.
+    asyncio.run(room.handle_action("p1", EpilogueStartMsg()))
+    assert room.state.phase == "playing"
+
+    asyncio.run(room.handle_action("p1", PassMsg()))
+    assert room.state.phase == "results"
+
+    # p2 is not the host.
+    asyncio.run(room.handle_action("p2", EpilogueStartMsg()))
+    assert room.state.phase == "results"
+    sent = [c.args[0] for c in ws2.send_text.call_args_list]
+    assert any(json.loads(m)["type"] == "error" for m in sent)
+
+    asyncio.run(room.handle_action("p1", EpilogueStartMsg()))
+    assert room.state.phase == "epilogue"

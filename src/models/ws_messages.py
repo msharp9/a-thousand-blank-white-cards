@@ -98,6 +98,13 @@ class PreviewCardMsg(BaseModel):
     description: CardDescription
 
 
+class EpilogueStartMsg(BaseModel):
+    """Host-only: advance from the post-game results screen into the epilogue
+    vote. Only valid while ``phase == "results"``."""
+
+    type: Literal["epilogue_start"] = "epilogue_start"
+
+
 class EpilogueVoteMsg(BaseModel):
     type: Literal["epilogue_vote"] = "epilogue_vote"
     card_id: str
@@ -127,6 +134,7 @@ ClientMsg = Annotated[
         PlayMsg,
         CreateCardMsg,
         PreviewCardMsg,
+        EpilogueStartMsg,
         EpilogueVoteMsg,
         EpilogueDoneMsg,
         EpilogueFinalizeMsg,
