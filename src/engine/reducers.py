@@ -17,6 +17,7 @@ from models.effects import (
     CustomNoteOp,
     DestroyCardOp,
     DrawCardsOp,
+    EndGameOp,
     ExtraTurnOp,
     Op,
     ReverseOrderOp,
@@ -223,6 +224,10 @@ def _reduce_custom_note(state: GameState, op: CustomNoteOp, ctx: HookContext) ->
     return state.with_log(f"[note] {op.note}")
 
 
+def _reduce_end_game(state: GameState, op: EndGameOp, ctx: HookContext) -> GameState:
+    return state.model_copy(update={"game_over_requested": True})
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
@@ -239,6 +244,7 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
     "destroy_card": _reduce_destroy_card,
     "set_win_condition": _reduce_set_win_condition,
     "custom_note": _reduce_custom_note,
+    "end_game": _reduce_end_game,
 }
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from engine.scoring import check_win, evaluate_win_condition
+from engine.scoring import check_win, evaluate_win_condition, win_condition_met
 from models.game_state import GameState, Player, WinCondition
 
 
@@ -65,3 +65,36 @@ def test_check_win_no_winner_leaves_state() -> None:
     st = _state("none", p1=10)
     out = check_win(st)
     assert out.phase == st.phase
+
+
+def test_win_condition_met_highest_points_never_live() -> None:
+    # highest_points always has a winner once any active player exists, so it
+    # must never be treated as "met" mid-game (that would end turn one).
+    st = _state("highest_points", p1=10, p2=25)
+    assert win_condition_met(st) is False
+
+
+def test_win_condition_met_lowest_points_never_live() -> None:
+    st = _state("lowest_points", p1=10, p2=25)
+    assert win_condition_met(st) is False
+
+
+def test_win_condition_met_first_to_threshold_reached() -> None:
+    st = _state("first_to", threshold=10, p1=10, p2=3)
+    assert win_condition_met(st) is True
+
+
+def test_win_condition_met_first_to_threshold_not_reached() -> None:
+    st = _state("first_to", threshold=10, p1=5, p2=3)
+    assert win_condition_met(st) is False
+
+
+def test_win_condition_met_last_standing() -> None:
+    players = [Player(id="p1", name="A", connected=True), Player(id="p2", name="B", connected=False)]
+    st = GameState(room_code="AAAA", players=players, win_condition=WinCondition(kind="last_standing"))
+    assert win_condition_met(st) is True
+
+
+def test_win_condition_met_none_never_live() -> None:
+    st = _state("none", p1=10)
+    assert win_condition_met(st) is False
