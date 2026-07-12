@@ -308,6 +308,27 @@ class CreateCardOp(BaseModel):
     count: int = Field(default=1, ge=1, le=10)
 
 
+class RegisterHookOp(BaseModel):
+    """Register a persistent sandboxed hook that fires on a named game event.
+
+    The single pipeline for dynamic behavior registration: the reducer
+    validates ``code`` against the sandbox rules and appends a serialized
+    ``HookSpec`` to ``GameState.hooks`` (capped at 3 hooks per source card).
+    """
+
+    op: Literal["register_hook"] = "register_hook"
+    event: str  # a GameEvent value, e.g. "on_turn_start"
+    scope: Literal["player", "center"] = "center"
+    code: str
+
+
+class UnregisterHookOp(BaseModel):
+    """Remove every hook registered by ``source_card_id``."""
+
+    op: Literal["unregister_hook"] = "unregister_hook"
+    source_card_id: str
+
+
 class SetRuleOp(BaseModel):
     """Write one path in ``GameState.rules`` (the mutable rules-as-data bag).
 
@@ -364,6 +385,8 @@ Op = Annotated[
         DestroyCardOp,
         SetWinConditionOp,
         SetRuleOp,
+        RegisterHookOp,
+        UnregisterHookOp,
         SetConditionOp,
         SetCardAttributeOp,
         CreateCardOp,

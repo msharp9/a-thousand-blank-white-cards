@@ -41,7 +41,8 @@ from collections.abc import Callable
 
 from engine.apply import apply_effect
 from engine.compile import compile_card
-from engine.events import GameEvent, HookContext
+from engine.events import EventBus, GameEvent, HookContext
+from engine.hooks import build_registry
 from engine.loop import advance_turn
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.effects import CustomNoteOp, EffectProgram
@@ -60,6 +61,9 @@ logger = logging.getLogger(__name__)
 
 # Cards dealt to each player's hand when the game starts.
 STARTING_HAND_SIZE = 5
+
+# Most hooks fired for one event per action (excess logs a skip line).
+MAX_HOOKS_PER_EVENT = 8
 
 # Cards each player must author during the setup phase before the game can start.
 CARDS_TO_AUTHOR = BLANKS_PER_PLAYER
@@ -112,6 +116,11 @@ class Room:
         self._has_drawn: bool = False
         self._plays_this_turn: int = 0
         self._deck_exhausted: bool = False
+        # Per-room hook registry, a cache DERIVED from state.hooks (rebuilt when
+        # the hook id list changes) — hooks are serialized state, so they survive
+        # restarts and never leak across rooms. See engine.hooks.build_registry.
+        self._hook_registry = None
+        self._hook_fingerprint: tuple[str, ...] = ()
         # Card ids whose agent comment has already been appended to state.log this
         # session. A card that needs a target is resolved TWICE (resolve → prompt_choice
         # → follow-up play re-resolves), so this guards against double-logging the
@@ -416,6 +425,7 @@ class Room:
         """
         self._has_drawn = False
         self._plays_this_turn = 0
+        await self._emit_hooks(GameEvent.ON_TURN_START, player_id)
         await self._broadcast_state()
 
     async def _handle_draw(self, player_id: str) -> None:
@@ -446,6 +456,7 @@ class Room:
 
         self._draw_cards(player_id, amount)
         self._has_drawn = True
+        await self._emit_hooks(GameEvent.ON_DRAW_STEP, player_id)
         if evaluate_end_condition(self.state):
             # Met at draw time (classically: the last card was just drawn) —
             # the game ends when this player's turn ends.
@@ -490,6 +501,7 @@ class Room:
         """
         if not self.state.players:
             return
+        await self._emit_hooks(GameEvent.ON_TURN_END, self.state.active_player().id)
         if self._deck_exhausted or self._end_now() or win_condition_met(self.state):
             await self._end_game()
             return
@@ -500,6 +512,22 @@ class Room:
         """A met end condition that does NOT defer to the drawer-finishes-turn
         timing (everything except deck_empty ends play immediately)."""
         return self.state.rules.end_condition.type != "deck_empty" and evaluate_end_condition(self.state)
+
+    def _hook_bus(self) -> EventBus:
+        fingerprint = tuple(h.id for h in self.state.hooks)
+        if self._hook_registry is None or fingerprint != self._hook_fingerprint:
+            self._hook_registry = build_registry(self.state)
+            self._hook_fingerprint = fingerprint
+        return EventBus(self._hook_registry, max_hooks=MAX_HOOKS_PER_EVENT)
+
+    async def _emit_hooks(self, event: GameEvent, actor_id: str, *, card_id: str | None = None) -> None:
+        """Fire registered hooks for ``event`` (off-loop: each fire is a sandbox
+        subprocess) and adopt the resulting state. No-op when nothing subscribes."""
+        bus = self._hook_bus()
+        if not self._hook_registry.hooks_for_event(str(event)):
+            return
+        ctx = HookContext(event=event, actor_id=actor_id, card_id=card_id)
+        self.state = await asyncio.to_thread(bus.emit, event, self.state, ctx)
 
     def _name(self, player_id: str) -> str:
         """Human-readable display name for a player id (falls back to the id)."""
@@ -565,6 +593,8 @@ class Room:
            real players to vote (e.g. an all-spectator remnant) there is
            nothing to advance for, so we skip straight to ``ended``.
         """
+        actor = self.state.active_player().id if self.state.players else ""
+        await self._emit_hooks(GameEvent.ON_GAME_END, actor)
         self.state, applications = resolve_end_of_game(self.state)
         for application in applications:
             line = f"Game end: {application.holder_name}'s '{application.card_title}'"
@@ -957,8 +987,9 @@ class Room:
                 chosen_card_id=chosen_card_id,
             )
             before = {p.id: p.score for p in self.state.players}
-            self.state = apply_effect(self.state, program, ctx)
+            self.state = apply_effect(self.state, program, ctx, bus=self._hook_bus())
             await self._log_and_broadcast(self._describe_play(player_id, card, before))
+            await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id)
             game_ending = self._end_now() or win_condition_met(self.state)
 
         # Terminal apply path: the play is committed (all rejection / pending

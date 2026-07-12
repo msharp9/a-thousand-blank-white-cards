@@ -91,6 +91,24 @@ class EpilogueResultSummary(BaseModel):
     destroyed: list[EpilogueCardOutcome] = Field(default_factory=list)
 
 
+class HookSpec(BaseModel):
+    """A persistent, serialized hook: sandboxed code that fires on an event.
+
+    Hooks are STATE (docs/state-example.jsonc's "everything is dynamic"):
+    they ride ``model_dump`` into snapshots and the room store, so house
+    rules survive reconnects/restarts and never leak across rooms. The
+    per-room registry/EventBus is a cache DERIVED from this list (see
+    engine.hooks.build_registry) — never the source of truth.
+    """
+
+    id: str
+    source_card_id: str
+    event: str  # a GameEvent value, e.g. "on_turn_start"
+    scope: Literal["player", "center"] = "center"
+    owner_id: str | None = None  # player id for player-scoped hooks
+    code: str  # sandbox-validated snippet: def apply(state, ctx)
+
+
 class Spectator(BaseModel):
     """A watcher who joined AFTER the game left the lobby.
 
@@ -162,6 +180,9 @@ class GameState(BaseModel):
     house_rules: list[str] = Field(default_factory=list)
 
     phase: Literal["lobby", "setup", "playing", "results", "epilogue", "ended"] = "lobby"
+
+    # Persistent hooks registered by card plays, in registration order.
+    hooks: list[HookSpec] = Field(default_factory=list)
 
     # Winner ids forced by an EndGameOp with a resolved ``winner`` target
     # ("You win the game" cards). When non-empty, _end_game uses these instead

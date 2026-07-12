@@ -37,6 +37,7 @@ from models.effects import (
     EffectProgram,
     EndGameOp,
     ExtraTurnOp,
+    RegisterHookOp,
     Op,
     ReverseOrderOp,
     ScrambleOrderOp,
@@ -49,6 +50,7 @@ from models.effects import (
     StealPointsOp,
     SubtractPointsOp,
     Target,
+    UnregisterHookOp,
     is_known_target,
     map_authoring_target,
     op_requires_choice,
@@ -175,6 +177,17 @@ def _compile_op(name: str, args: dict) -> Op | None:
         if not path:
             raise ValueError("set_rule missing 'path'")
         return SetRuleOp(path=str(path), value=args.get("value"))
+    if name == "register_hook":
+        event = args.get("event")
+        code = args.get("code")
+        if not event or not code:
+            raise ValueError("register_hook missing 'event'/'code'")
+        return RegisterHookOp(event=str(event), scope=args.get("scope", "center"), code=str(code))
+    if name == "unregister_hook":
+        source = args.get("source_card_id") or args.get("card_id")
+        if not source:
+            raise ValueError("unregister_hook missing 'source_card_id'")
+        return UnregisterHookOp(source_card_id=str(source))
     if name == "set_condition":
         key = args.get("key")
         if not key:
