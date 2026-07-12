@@ -22,6 +22,7 @@ class EpilogueManager:
     def __init__(self, player_ids: list[str]) -> None:
         self._player_ids = list(player_ids)
         self._votes: dict[str, dict[str, str]] = {}  # card_id -> {player_id: "keep"|"destroy"}
+        self._done: set[str] = set()  # player_ids who have signalled epilogue_done
         self._cards: list[dict[str, Any]] = []
         self._connections: ConnectionManager | None = None
 
@@ -34,17 +35,31 @@ class EpilogueManager:
         await connections.broadcast({"type": "epilogue", "cards": cards})
         logger.info("epilogue started: %d cards to vote on", len(cards))
 
-    def record_vote(self, player_id: str, card_id: str, keep: bool) -> bool:
-        """Record a keep/destroy vote. Returns True once all expected votes are in."""
+    def record_vote(self, player_id: str, card_id: str, keep: bool) -> None:
+        """Record a keep/destroy vote for one card. Completion is driven
+        separately by :meth:`mark_done` — a vote no longer implicitly finalizes
+        anything, so a player can vote on some cards and skip the rest."""
         if card_id not in self._votes:
-            return False
+            return
         self._votes[card_id][player_id] = "keep" if keep else "destroy"
-        return self._all_votes_in()
 
-    def _all_votes_in(self) -> bool:
-        if not self._votes:
+    def mark_done(self, player_id: str) -> bool:
+        """Mark ``player_id`` as finished voting; any card they didn't vote on
+        abstains (``tally_votes`` already treats a missing vote as abstain).
+
+        Returns True once every expected (non-spectator) player is done, which
+        is the room's cue to finalize — this replaces the old full-coverage
+        gate so a player who walks away can't stall the room forever.
+        """
+        if player_id in self._player_ids:
+            self._done.add(player_id)
+        return self.all_done()
+
+    def all_done(self) -> bool:
+        """True once every expected player has signalled done."""
+        if not self._player_ids:
             return False
-        return all(len(v) >= len(self._player_ids) for v in self._votes.values())
+        return set(self._player_ids) <= self._done
 
     async def tally_and_persist(self) -> Any:
         """Tally votes, upsert kept cards into RAG, return the EpilogueResult."""

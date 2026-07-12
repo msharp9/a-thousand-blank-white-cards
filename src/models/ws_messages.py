@@ -104,8 +104,33 @@ class EpilogueVoteMsg(BaseModel):
     keep: bool
 
 
+class EpilogueDoneMsg(BaseModel):
+    """A player is done voting. Any card they never voted on abstains — this is
+    what makes voting skippable rather than requiring full coverage."""
+
+    type: Literal["epilogue_done"] = "epilogue_done"
+
+
+class EpilogueFinalizeMsg(BaseModel):
+    """Host-only: finalize the epilogue immediately, regardless of who's done."""
+
+    type: Literal["epilogue_finalize"] = "epilogue_finalize"
+
+
 ClientMsg = Annotated[
-    Union[JoinMsg, StartMsg, DrawMsg, PassMsg, EndTurnMsg, PlayMsg, CreateCardMsg, PreviewCardMsg, EpilogueVoteMsg],
+    Union[
+        JoinMsg,
+        StartMsg,
+        DrawMsg,
+        PassMsg,
+        EndTurnMsg,
+        PlayMsg,
+        CreateCardMsg,
+        PreviewCardMsg,
+        EpilogueVoteMsg,
+        EpilogueDoneMsg,
+        EpilogueFinalizeMsg,
+    ],
     Field(discriminator="type"),
 ]
 
