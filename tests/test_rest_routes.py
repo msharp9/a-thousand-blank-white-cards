@@ -105,6 +105,33 @@ def test_dev_skip_setup_on_playing_room_returns_409(dev_client: TestClient) -> N
     assert resp.status_code == 409
 
 
+def test_dev_end_game_opens_epilogue(dev_client: TestClient) -> None:
+    code = dev_client.post("/rooms").json()["code"]
+    dev_client.post(f"/rooms/{code}/join", json={"name": "Alice"})
+    dev_client.post(f"/rooms/{code}/join", json={"name": "Bob"})
+    assert dev_client.post(f"/rooms/{code}/dev/skip-setup").status_code == 200
+
+    resp = dev_client.post(f"/rooms/{code}/dev/end-game")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["phase"] in ("epilogue", "ended")
+    assert "winner_ids" in data
+
+
+def test_dev_end_game_on_lobby_returns_409(dev_client: TestClient) -> None:
+    code = dev_client.post("/rooms").json()["code"]
+    dev_client.post(f"/rooms/{code}/join", json={"name": "Alice"})
+    resp = dev_client.post(f"/rooms/{code}/dev/end-game")
+    assert resp.status_code == 409
+
+
+def test_dev_end_game_hidden_when_dev_mode_off(client: TestClient) -> None:
+    code = client.post("/rooms").json()["code"]
+    client.post(f"/rooms/{code}/join", json={"name": "Alice"})
+    resp = client.post(f"/rooms/{code}/dev/end-game")
+    assert resp.status_code == 404
+
+
 def test_dev_autofill_authoring_deals_hands() -> None:
     room = Room("DEVFF1")
     room.add_player("p1", "Alice")

@@ -493,6 +493,23 @@ class Room:
             self.state = self.state.model_copy(update={"phase": "ended"})
             await self._broadcast_state()
 
+    async def dev_force_end_game(self) -> None:
+        """DEV shortcut: end an in-progress game NOW via the real end-game path.
+
+        Runs the exact ``_end_game`` sequence (kept-card scoring → winners →
+        epilogue-open, or ``ended`` when no real players remain), so behaviour
+        matches a genuine deck-exhaustion end game. Raises ``ValueError`` if the
+        game is not playing (the endpoint maps that to a 409).
+
+        We take ``self._lock`` ourselves: this is invoked from a REST endpoint,
+        not through ``handle_action``, so we must reproduce its single-lock
+        serialization guarantee without re-entering the lock via ``handle_action``.
+        """
+        async with self._lock:
+            if self.state.phase != "playing":
+                raise ValueError("game is not in progress")
+            await self._end_game()
+
     def _is_blank(self, card) -> bool:
         """True if ``card`` is an un-authored blank (blank flag still set)."""
         if isinstance(card, dict):

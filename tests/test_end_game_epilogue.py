@@ -12,6 +12,9 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
+import pytest
+
+from engine.scoring import evaluate_win_condition, resolve_end_of_game
 from models.ws_messages import EpilogueVoteMsg, PassMsg
 from board.rooms.room import Room
 
@@ -63,6 +66,40 @@ def test_end_game_applies_kept_card_bonus_before_deciding_winner() -> None:
     assert room.state.get_player("p1").score == 13
     assert room.state.winner_ids == ["p1"]
     assert room.state.phase == "epilogue"
+
+
+def test_dev_force_end_game_uses_real_scoring_path() -> None:
+    # p1 trails 3-7 but holds a "worth 10 if kept" on_game_end card. Forcing the
+    # end game must run the real resolve_end_of_game → evaluate_win_condition path,
+    # so p1's +10 lands and p1 wins 13-7 with the epilogue opening.
+    kept = {
+        "id": "keep10",
+        "title": "Worth 10 If Kept",
+        "description": "Worth 10 points if still in your hand at game end.",
+        "canonical": {
+            "timing": "modifier",
+            "target": "self",
+            "placement": "self",
+            "trigger": "on_game_end",
+            "ops": [{"op": "add_points", "args": {"amount": 10, "target": "self"}}],
+        },
+    }
+    room = _ended_room(["keep10"], {"keep10": kept}, scores=(3, 7))
+    # Independently compute what a real deck-exhaustion end game would decide.
+    expected_winners = evaluate_win_condition(resolve_end_of_game(room.state))
+
+    asyncio.run(room.dev_force_end_game())
+
+    assert room.state.phase == "epilogue"
+    assert room.state.get_player("p1").score == 13
+    assert room.state.winner_ids == expected_winners == ["p1"]
+
+
+def test_dev_force_end_game_rejects_when_not_playing() -> None:
+    room = Room("LOBBY1")
+    room.add_player("p1", "Alice")
+    with pytest.raises(ValueError, match="game is not in progress"):
+        asyncio.run(room.dev_force_end_game())
 
 
 def test_epilogue_vote_completion_reaches_ended() -> None:

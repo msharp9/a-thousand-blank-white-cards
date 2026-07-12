@@ -235,6 +235,24 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=409, detail=str(exc))
         return room.snapshot()
 
+    @application.post("/rooms/{code}/dev/end-game", tags=["rooms"])
+    async def dev_end_game(code: str) -> dict:
+        """DEV-ONLY: force the current game to end now (real end-game path); opens the
+        epilogue when real players remain, else ends. Only active when dev_mode is set.
+        """
+        # 404 (not 403) when dev mode is off so the endpoint's very existence
+        # stays hidden in production.
+        if not get_settings().dev_mode:
+            raise HTTPException(status_code=404, detail="Not found")
+        room = room_manager.get(code)
+        if room is None:
+            raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
+        try:
+            await room.dev_force_end_game()
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        return room.snapshot()
+
     application.include_router(ws_router)
 
     return application
