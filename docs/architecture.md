@@ -315,24 +315,39 @@ a **new** `GameState`, never mutating the input:
 
 Genuinely novel effects that no combination of ops can express can be expressed
 as a generated Python hook (`SnippetEffect.code`: the body of
-`def apply(state, ctx)`). `engine/sandbox/` isolates that untrusted code:
+`def apply(state, ctx)`). This path is LIVE in the serving layer:
+`Room._resolve_program` executes an immediate (trigger-less) snippet through
+the pipeline below, and a snippet with a `trigger` becomes a persistent
+`HookSpec` on `GameState.hooks` via `RegisterHookOp` — serialized state, so
+house rules survive reloads, replay deterministically from a kept card's
+canonical ops, and never leak across rooms (each Room derives its registry
+from state via `engine.hooks.build_registry`). The Room fires
+`on_play`/`on_turn_start`/`on_turn_end`/`on_draw_step`/`on_score_change`/
+`on_game_end` (capped per event), and `on_validate_play` hooks may veto a play
+(`reject_play`) before it resolves. `engine/sandbox/` isolates the untrusted
+code:
 
 - **`validate.py`** — a static AST allowlist run *before* code is ever stored or
   executed: no `import`/`from`-import, no `exec`/`eval`/`open`/`compile`/
   `__import__`/`breakpoint` calls, no dunder attribute access, and exactly one
   top-level function named `apply`.
 - **`api_surface.py`** — the snippet's `apply` receives a restricted
-  `SandboxGame` façade, never raw `GameState`. It exposes read-only player views
-  and whitelisted mutators (`add_points`, `subtract_points`, `set_points`,
-  `skip`, `set_draw_count`, `note`) that only **record op dicts** — they cannot
-  touch real state.
+  `SandboxGame` façade, never raw `GameState`. It exposes reads (player views,
+  `my_hand`, `hand_size`, `deck_size`, `rules`, `conditions`, `card` metadata,
+  `turn_order`) and mutators at FULL op parity (points/turn ops plus
+  `draw_cards`, `destroy_card`, `set_win_condition`, `end_game`, `set_rule`,
+  `set_condition`, `set_card_attribute`, `create_card`, `register_hook`,
+  `reject_play`) that only **record op dicts** — they cannot touch real state.
 - **`runner.py`** — `execute_snippet` spawns an isolated subprocess
   (`python -I` via `_child_runner.py`) with a wall-clock timeout; the child
   emits the recorded op diff as JSON. **The subprocess is the security boundary**
   (in-process exec is not); production would swap in gVisor/Firecracker or a
   hosted exec service. Gated by `Settings.snippet_execution_enabled`.
 - **`revalidate.py`** — the final net: the child's op diff is re-parsed through
-  the same Pydantic `Op` union (capped at 50 ops) and applied through the
+  the same Pydantic `Op` union (capped at 50 ops; choice-requiring targets are
+  rejected, hook-produced diffs may not `register_hook` — no self-replicating
+  hooks — and `reject_play` only counts as a veto in `on_validate_play` fires)
+  and applied through the
   **same engine reducers** as a normal play. Snippets get no special mutation
   path — this is the documented lazy coupling `engine.sandbox → engine.apply`.
 

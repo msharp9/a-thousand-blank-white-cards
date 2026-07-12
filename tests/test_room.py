@@ -596,13 +596,13 @@ def test_play_blank_persists_authoring_before_interpretation_for_followup() -> N
         assert card["title"] == "Bless"
         assert "blank" not in card
         assert room.state.turn_index == 0  # held pending, no advance yet
-        # Follow-up play carries ONLY the choice (no title/description) — the
-        # persisted card lets it re-interpret correctly.
+        # The interpretation's structured ops are persisted as the card's
+        # canonical, so the follow-up (choice-only) play resolves
+        # DETERMINISTICALLY — no second LLM round-trip.
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="blank-0", chosen_player_id="p2")))
-    # Both plays re-interpreted the same authored text (title/description are the
-    # first two positional args; run_agent also receives state/actor/creator).
     assert mock_interp.call_args_list[0].args[:2] == ("Bless", "give points")
-    assert mock_interp.call_args_list[1].args[:2] == ("Bless", "give points")
+    assert len(mock_interp.call_args_list) == 1
+    assert room.state.cards["blank-0"]["canonical"]["ops"]
     assert room.state.get_player("p2").score == 5
     assert room.state.turn_index == 1
 

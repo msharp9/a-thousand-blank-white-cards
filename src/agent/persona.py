@@ -117,7 +117,7 @@ these keys:
 
   {
     "program":        an EffectProgram object {"ops": [...], "requires_choice": bool} or null,
-    "snippet":        a snippet object {"code": "...", "explanation": "..."} or null,
+    "snippet":        a snippet object {"code": "...", "explanation": "...", "trigger": null | "on_play" | "on_turn_start" | "on_turn_end" | "on_draw_step" | "on_score_change" | "on_game_end" | "on_validate_play", "scope": "center" | "player"} or null (trigger null = run once now; a GameEvent trigger = persistent hook),
     "verdict":        "ok" | "invalid" | "needs_choice",
     "comment":        a short funny string (ALWAYS present),
     "persona_action": "none" | "do_nothing" | "punish_author" | "chaos_monkey" | "random_solution"

@@ -182,6 +182,13 @@ def _compile_op(name: str, args: dict) -> Op | None:
         code = args.get("code")
         if not event or not code:
             raise ValueError("register_hook missing 'event'/'code'")
+        from engine.sandbox.validate import validate_snippet
+
+        result = validate_snippet(str(code))
+        if not result.ok:
+            # Validation rules may have tightened since this card was kept —
+            # degrade to a visible note instead of crashing deck build/play.
+            return CustomNoteOp(note=f"hook from this card no longer validates: {result.error}")
         return RegisterHookOp(event=str(event), scope=args.get("scope", "center"), code=str(code))
     if name == "unregister_hook":
         source = args.get("source_card_id") or args.get("card_id")
@@ -247,7 +254,11 @@ def compile_card(card: dict) -> EffectProgram | None:
         if not name:
             logger.warning("compile_card: skipping op entry with no name %r", entry)
             continue
-        args = entry.get("args") or {}
+        args = entry.get("args")
+        if args is None:
+            # Flat runtime-op dump ({"op": "add_points", "target": …, "amount": …})
+            # — a kept card whose canonical was serialized from live Op models.
+            args = {k: v for k, v in entry.items() if k != "op"}
         if not isinstance(args, dict):
             logger.warning("compile_card: skipping op %r with non-dict args %r", name, args)
             continue
