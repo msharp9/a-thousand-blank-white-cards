@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 
@@ -72,3 +73,67 @@ def test_missing_fields_do_not_raise() -> None:
 
     assert "Only Title" in result
     assert "n/a" in result
+
+
+def test_canonical_ops_are_included() -> None:
+    canonical = {"ops": [{"type": "steal_points", "amount": 3}]}
+    fake_hits = [
+        {
+            "title": "Steal 3 Points",
+            "description": "Steal 3 points from an opponent.",
+            "score": 0.88,
+            "canonical": json.dumps(canonical),
+        }
+    ]
+    with patch("agent.tools.card_rag.dense_retriever") as mock_factory:
+        mock_factory.return_value = lambda query, k: fake_hits
+        result = _invoke("steal points")
+
+    assert "ops=" in result
+    assert '"steal_points"' in result
+
+
+def test_missing_canonical_omits_ops_segment() -> None:
+    fake_hits = [{"title": "No Ops", "description": "desc", "score": 0.5}]
+    with patch("agent.tools.card_rag.dense_retriever") as mock_factory:
+        mock_factory.return_value = lambda query, k: fake_hits
+        result = _invoke("q")
+
+    assert "ops=" not in result
+
+
+def test_unparseable_canonical_omits_ops_segment() -> None:
+    fake_hits = [{"title": "Bad Ops", "description": "desc", "score": 0.5, "canonical": "{not json"}]
+    with patch("agent.tools.card_rag.dense_retriever") as mock_factory:
+        mock_factory.return_value = lambda query, k: fake_hits
+        result = _invoke("q")
+
+    assert "ops=" not in result
+
+
+def test_empty_canonical_omits_ops_segment() -> None:
+    fake_hits = [{"title": "Empty Ops", "description": "desc", "score": 0.5, "canonical": ""}]
+    with patch("agent.tools.card_rag.dense_retriever") as mock_factory:
+        mock_factory.return_value = lambda query, k: fake_hits
+        result = _invoke("q")
+
+    assert "ops=" not in result
+
+
+def test_long_canonical_is_truncated() -> None:
+    canonical = {"ops": [{"type": "note", "text": "x" * 1000}]}
+    fake_hits = [
+        {
+            "title": "Verbose Card",
+            "description": "desc",
+            "score": 0.5,
+            "canonical": json.dumps(canonical),
+        }
+    ]
+    with patch("agent.tools.card_rag.dense_retriever") as mock_factory:
+        mock_factory.return_value = lambda query, k: fake_hits
+        result = _invoke("q")
+
+    ops_segment = result.split("ops=", 1)[1]
+    assert ops_segment.endswith("…")
+    assert len(ops_segment) <= 500
