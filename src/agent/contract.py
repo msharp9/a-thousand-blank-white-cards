@@ -25,8 +25,8 @@ class SnippetEffect(BaseModel):
         description=(
             "Complete body of `def apply(state, ctx)` as a Python string. Must not contain "
             "imports, exec, eval, open, or dunder attribute access. The function receives "
-            "`state` (GameState) and `ctx` (a dict with keys 'player_id', 'card', 'event'). "
-            "It returns None (mutates state in place)."
+            "`state` (GameState) and `ctx` (a dict with keys 'actor_id', 'event', 'card_id', "
+            "'amount'). It returns None (mutates state in place)."
         )
     )
     explanation: str = Field(description="Plain-English explanation of what the snippet does.")

@@ -34,6 +34,7 @@ End game: there are TWO distinct end paths with distinct timing.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
 from collections.abc import Callable
@@ -68,6 +69,17 @@ CARDS_TO_AUTHOR = BLANKS_PER_PLAYER
 # so players can tell it apart from the plain "X played Y" effect lines. Kept as
 # a module constant so tests and any future styling share one source of truth.
 AGENT_COMMENT_PREFIX = "🤖 "
+
+
+def _program_is_effectless(program: EffectProgram | None) -> bool:
+    """True when `program` carries no mechanical ops (None, empty, or note-only).
+
+    Distinguishes a real compiled/agent program from the "nothing to apply" case so
+    a present snippet can supersede it (see Room._resolve_program).
+    """
+    if program is None:
+        return True
+    return all(isinstance(op, CustomNoteOp) for op in program.ops)
 
 
 class Room:
@@ -615,10 +627,16 @@ class Room:
            (do_nothing / punish_author / chaos_monkey / random_solution). This
            runs in a thread and is broadcast as ``brewing``/``card_interpreted``
            for UI feedback. If it yields a valid program we use it.
-        3. **Deterministic fallback** — if neither produced ops (no canonical AND
-           the agent was unavailable / returned nothing / an invalid verdict), we
-           return a single ``CustomNoteOp`` so the play still resolves with a log
-           line instead of silently doing nothing. A play NEVER silently no-ops.
+        2b. **Snippet execution** — when the agent escaped to a generated code
+           snippet instead of (or alongside a note-only) program, :meth:`_apply_snippet`
+           runs it through the sandbox (``execute_snippet`` -> ``apply_snippet_diff``)
+           so it mutates state via the same reducers as a compiled program. Gated by
+           ``Settings.snippet_execution_enabled``; sandbox failures log a visible
+           ``"[snippet error]"`` line and fall through to step 3.
+        3. **Deterministic fallback** — if nothing produced ops (no canonical, no
+           usable program, and no successfully-executed snippet), we return a
+           single ``CustomNoteOp`` so the play still resolves with a log line
+           instead of silently doing nothing. A play NEVER silently no-ops.
         """
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
         description = card["description"] if isinstance(card, dict) else getattr(card, "description", "")
@@ -672,9 +690,54 @@ class Room:
         if result.verdict == "ok" and program is not None and getattr(program, "ops", None):
             return program
 
+        # See step 2b in the docstring above.
+        if result.snippet is not None and _program_is_effectless(program):
+            if await self._apply_snippet(card_id, card, title, result.snippet.code, actor_id):
+                return EffectProgram(ops=[])
+
         # 3. Deterministic fallback — never a silent no-op.
         note = title or "Card"
         return EffectProgram(ops=[CustomNoteOp(note=f"Played {note} (no mechanical effect)")])
+
+    async def _apply_snippet(self, card_id: str, card, title: str, code: str, actor_id: str | None) -> bool:
+        """Execute a generated snippet in the sandbox and apply its diff to self.state.
+
+        Mirrors engine.hooks.make_snippet_handler's pipeline (execute_snippet ->
+        apply_snippet_diff) for the immediate, non-hook play path. Returns True when
+        the diff was applied (self.state now reflects it and a play-description log
+        line has been recorded); False when the feature flag is off or execution /
+        validation failed — callers fall back to the deterministic CustomNoteOp. A
+        failure is never silent: it logs a "[snippet error]" line before returning.
+        """
+        from config import get_settings
+
+        if not get_settings().snippet_execution_enabled:
+            return False
+
+        from engine.sandbox.revalidate import DiffValidationError, apply_snippet_diff
+        from engine.sandbox.runner import SnippetExecutionError, execute_snippet
+
+        ctx = HookContext(event=GameEvent.ON_PLAY, actor_id=actor_id, card_id=card_id)
+        ctx_dict = {
+            "actor_id": ctx.actor_id,
+            "event": str(ctx.event),
+            "card_id": ctx.card_id,
+            "amount": ctx.amount,
+        }
+        state_dict = json.loads(self.state.model_dump_json())
+        before = {p.id: p.score for p in self.state.players}
+        try:
+            raw_ops = await asyncio.to_thread(execute_snippet, code, state_dict, ctx_dict)
+            self.state = apply_snippet_diff(self.state, raw_ops, ctx)
+        except SnippetExecutionError as exc:
+            await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
+            return False
+        except DiffValidationError as exc:
+            await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
+            return False
+
+        await self._log_and_broadcast(self._describe_play(actor_id, card, before))
+        return True
 
     async def _handle_play(self, player_id: str, msg) -> None:
         """Resolve the played card to an EffectProgram, apply it, advance turn.
