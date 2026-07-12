@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
 
 from engine.apply import apply_effect
 from engine.compile import compile_card
@@ -61,12 +62,22 @@ AGENT_COMMENT_PREFIX = "🤖 "
 class Room:
     """One game session. Thread-safe via asyncio.Lock."""
 
-    def __init__(self, code: str, mode: str = "both", *, simple: bool = True) -> None:
+    def __init__(
+        self,
+        code: str,
+        mode: str = "both",
+        *,
+        simple: bool = True,
+        on_change: Callable[[Room], None] | None = None,
+    ) -> None:
         self.code = code
         self.state: GameState = GameState(room_code=code, mode=mode)
         self.connections: ConnectionManager = ConnectionManager()
         self._lock: asyncio.Lock = asyncio.Lock()
         self._epilogue: EpilogueManager | None = None
+        # Persistence callback fired after every serialized mutation; None keeps
+        # the room ephemeral (the default, and the only behaviour in production).
+        self.on_change = on_change
         # Whether to seed the pre-made pool from the deterministic point-only
         # simple deck (the basic no-AI game). Kept as an attribute so tests and
         # future modes can flip it; defaults True for the basic game.
@@ -115,6 +126,10 @@ class Room:
         """Serialised entry point for all client messages."""
         async with self._lock:
             await self._dispatch(player_id, msg)
+            # Inside the lock so persistence captures a snapshot consistent with
+            # the just-applied mutation, with no interleaving action changing it.
+            if self.on_change is not None:
+                self.on_change(self)
 
     async def _dispatch(self, player_id: str, msg) -> None:
         mtype = msg.type

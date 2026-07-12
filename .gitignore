@@ -199,6 +199,9 @@ data/eval/images/*
 models/
 !src/models/
 
+# Dev-only FileRoomStore persistence (dev_mode room snapshots)
+.devstate/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

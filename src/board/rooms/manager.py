@@ -10,8 +10,10 @@ import random
 import string
 import uuid
 
+from config import get_settings
+
 from board.rooms.room import Room
-from board.rooms.store import InMemoryRoomStore, RoomStore
+from board.rooms.store import FileRoomStore, InMemoryRoomStore, RoomStore
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +55,13 @@ class RoomManager:
     def create_room(self, mode: str = "both") -> str:
         """Create a new Room and return its 6-char join code."""
         code = self._unique_code()
-        self._store.put(code, Room(code, mode=mode))
+        room = Room(code, mode=mode, on_change=self._persist)
+        self._store.put(code, room)
         logger.info("room %s created (%d active rooms)", code, self._store.count())
         return code
+
+    def _persist(self, room: Room) -> None:
+        self._store.put(room.code, room)
 
     def get(self, code: str) -> Room | None:
         """Return the Room for this code, or None if it doesn't exist."""
@@ -136,6 +142,22 @@ def check_single_worker(worker_count: int | None = None) -> None:
         )
 
 
+def _build_room_manager() -> RoomManager:
+    """Pick the room store based on dev_mode.
+
+    In dev_mode a FileRoomStore persists rooms to disk and rehydrates them on
+    startup; the manager then rewires its persistence hook onto any room loaded
+    before it existed. Production keeps the process-local InMemoryRoomStore, so
+    no files are ever written.
+    """
+    if get_settings().dev_mode:
+        store = FileRoomStore()
+        manager = RoomManager(store=store)
+        store.rewire_on_change(manager._persist)
+        return manager
+    return RoomManager()
+
+
 # Process-level singleton imported by REST routes and the WS handler.
 # NOTE: single-worker only — see RoomManager docstring and check_single_worker().
-room_manager = RoomManager()
+room_manager = _build_room_manager()

@@ -9,13 +9,27 @@ note there.
 
 Codes are expected to already be normalised to upper-case by the caller
 (``RoomManager``); implementations key on the code as given.
+
+``FileRoomStore`` is a DEV-ONLY convenience (wired in only when
+``get_settings().dev_mode`` is true) that persists each room to JSON on disk so
+in-progress games survive an API reload. It is deliberately lossy: the two
+GameState PrivateAttrs (``_skip_next``, ``_extra_turn``) and the Room
+``_deck_exhausted`` latch are NOT persisted and reset on reload. That is
+acceptable for a dev loop; it is not a durable multi-worker backend.
 """
 
 from __future__ import annotations
 
+import json
+import logging
+from collections.abc import Callable
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from models.game_state import GameState
 from board.rooms.room import Room
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -66,3 +80,67 @@ class InMemoryRoomStore:
 
     def count(self) -> int:
         return len(self._rooms)
+
+
+class FileRoomStore:
+    """DEV-ONLY ``RoomStore`` that persists rooms to JSON on disk.
+
+    Live :class:`Room` objects (with their asyncio.Lock and ConnectionManager)
+    are cached in ``self._rooms`` and reused within one process — disk is only
+    the cold-start source of truth, rehydrated once via :meth:`load_all` at
+    construction. Writes are best-effort: a failure logs a warning and never
+    propagates, so persistence can never crash a live game action.
+    """
+
+    def __init__(self, directory: str | Path = ".devstate/rooms") -> None:
+        self._dir = Path(directory)
+        self._rooms: dict[str, Room] = {}
+        self._dir.mkdir(parents=True, exist_ok=True)
+        self.load_all()
+
+    def get(self, code: str) -> Room | None:
+        return self._rooms.get(code)
+
+    def put(self, code: str, room: Room) -> None:
+        self._rooms[code] = room
+        try:
+            path = self._dir / f"{code}.json"
+            path.write_text(json.dumps(_room_to_dict(room)))
+        except Exception:
+            logger.warning("failed to persist room %s to disk", code, exc_info=True)
+
+    def exists(self, code: str) -> bool:
+        return code in self._rooms
+
+    def count(self) -> int:
+        return len(self._rooms)
+
+    def load_all(self) -> None:
+        """Rehydrate every persisted room from disk, skipping unreadable files."""
+        for path in self._dir.glob("*.json"):
+            try:
+                data = json.loads(path.read_text())
+                room = _room_from_dict(data)
+            except Exception:
+                logger.warning("skipping unreadable room file %s", path, exc_info=True)
+                continue
+            self._rooms[room.code] = room
+
+    def rewire_on_change(self, cb: Callable[[Room], None]) -> None:
+        """Attach ``cb`` as the on_change hook on every already-loaded room.
+
+        Rooms rehydrated by :meth:`load_all` predate the RoomManager, so their
+        persistence hook must be wired after the manager exists.
+        """
+        for room in self._rooms.values():
+            room.on_change = cb
+
+
+def _room_to_dict(room: Room) -> dict:
+    return {"code": room.code, "simple": room._simple, "state": room.state.model_dump(mode="json")}
+
+
+def _room_from_dict(data: dict) -> Room:
+    room = Room(data["code"], mode=data["state"]["mode"], simple=data["simple"])
+    room.state = GameState.model_validate(data["state"])
+    return room
