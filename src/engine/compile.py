@@ -30,6 +30,7 @@ import logging
 from models.effects import (
     AddPointsOp,
     ChangeDrawCountOp,
+    CreateCardOp,
     CustomNoteOp,
     DestroyCardOp,
     DrawCardsOp,
@@ -39,6 +40,8 @@ from models.effects import (
     Op,
     ReverseOrderOp,
     ScrambleOrderOp,
+    SetCardAttributeOp,
+    SetConditionOp,
     SetPointsOp,
     SetRuleOp,
     SetWinConditionOp,
@@ -172,6 +175,36 @@ def _compile_op(name: str, args: dict) -> Op | None:
         if not path:
             raise ValueError("set_rule missing 'path'")
         return SetRuleOp(path=str(path), value=args.get("value"))
+    if name == "set_condition":
+        key = args.get("key")
+        if not key:
+            raise ValueError("set_condition missing 'key'")
+        return SetConditionOp(
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
+            key=str(key),
+            value=args.get("value"),
+        )
+    if name == "set_card_attribute":
+        key = args.get("key")
+        if not key:
+            raise ValueError("set_card_attribute missing 'key'")
+        return SetCardAttributeOp(
+            card_target=args.get("card_target", "this"),
+            key=str(key),
+            value=args.get("value"),
+        )
+    if name == "create_card":
+        title = args.get("title")
+        if not title:
+            raise ValueError("create_card missing 'title'")
+        return CreateCardOp(
+            title=str(title),
+            description=str(args.get("description") or ""),
+            ops=list(args.get("ops") or []),
+            attributes=dict(args.get("attributes") or {}),
+            destination=args.get("destination", "deck_shuffle"),
+            count=int(args.get("count", 1)),
+        )
     return None
 
 
