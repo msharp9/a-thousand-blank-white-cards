@@ -14,7 +14,7 @@ from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from engine.apply import apply_effect
 from engine.events import HookContext
-from models.effects import EffectProgram, Op
+from models.effects import EffectProgram, Op, op_requires_choice
 from models.game_state import GameState
 
 _MAX_OPS = 50
@@ -43,9 +43,12 @@ def parse_diff(raw_ops: list[dict[str, Any]]) -> EffectProgram:
         if not isinstance(raw, dict):
             raise DiffValidationError(f"Op[{i}] is not a dict: {raw!r}")
         try:
-            parsed.append(_op_adapter.validate_python(raw))
+            op = _op_adapter.validate_python(raw)
         except PydanticValidationError as exc:
             raise DiffValidationError(f"Op[{i}] failed validation: {exc}") from exc
+        if op_requires_choice(op):
+            raise DiffValidationError(f"Op[{i}] uses a choice-requiring target — snippets have no prompt_choice flow")
+        parsed.append(op)
 
     return EffectProgram(ops=parsed)
 

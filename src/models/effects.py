@@ -229,9 +229,14 @@ class EndGameOp(BaseModel):
     The reducer only marks ``GameState.game_over_requested``; Room is
     responsible for noticing the flag and routing to ``_end_game`` (see
     ``board.rooms.room``).
+
+    ``winner`` names who wins the ended game ("You win the game" cards resolve
+    to the card player via "self"). None keeps normal win-condition
+    evaluation, so a plain "end the game" card crowns the current leader.
     """
 
     op: Literal["end_game"] = "end_game"
+    winner: Target | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +261,29 @@ Op = Annotated[
     ],
     Field(discriminator="op"),
 ]
+
+# Player targets that mean "the actor picks at play time" — their presence on
+# an op flips EffectProgram.requires_choice.
+_CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
+
+# Op fields that hold a player Target address.
+_TARGET_FIELDS: tuple[str, ...] = ("target", "from_target", "to_target", "winner")
+
+
+def op_requires_choice(op: Op) -> bool:
+    """True if this op needs a play-time choice from the actor.
+
+    Any player-target field equal to "chooser"/"target_player", or a
+    card_target of "chosen_card". Choice-requiring ops are only resolvable
+    through the prompt_choice flow — contexts without one (snippet diffs,
+    hooks) must reject them up front.
+    """
+    for field in _TARGET_FIELDS:
+        value = getattr(op, field, None)
+        if isinstance(value, str) and value in _CHOICE_TARGETS:
+            return True
+    card_target = getattr(op, "card_target", None)
+    return isinstance(card_target, str) and card_target in _CHOICE_CARD_TARGETS
 
 
 # ---------------------------------------------------------------------------

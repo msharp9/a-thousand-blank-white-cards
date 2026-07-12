@@ -113,9 +113,6 @@ class GameState(BaseModel):
     # order (the authoritative design in docs/state-example.jsonc: `turnOrder`).
     # Empty means "not yet established" — callers read it via
     # ``effective_turn_order()``, which falls back to ``turn_players()`` order.
-    # Reducers (reverse_order, scramble_order) rewrite this list directly;
-    # unlike the old single-bit ``direction`` flag it can express ANY
-    # reordering (swap, insert, move-to-end, scramble), not just a flip.
     turn_order: list[str] = Field(default_factory=list)
 
     # Mutable loop configuration — cards can rewrite these
@@ -137,6 +134,11 @@ class GameState(BaseModel):
     # exhaustion. A future rules-as-data bead folds this into a generic
     # rules.end_condition; keep this a plain bool until then.
     game_over_requested: bool = False
+
+    # Winner ids forced by an EndGameOp with a resolved ``winner`` target
+    # ("You win the game" cards). When non-empty, _end_game uses these instead
+    # of evaluate_win_condition. Consumed (cleared) when the game ends.
+    winner_override: list[str] = Field(default_factory=list)
 
     # Winner player ids, populated when the game ends (phase == "ended"). A tie
     # yields multiple ids; an empty list means "no winner" (e.g. win_condition

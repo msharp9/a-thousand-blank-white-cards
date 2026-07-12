@@ -98,3 +98,23 @@ def test_win_condition_met_last_standing() -> None:
 def test_win_condition_met_none_never_live() -> None:
     st = _state("none", p1=10)
     assert win_condition_met(st) is False
+
+
+def test_win_condition_met_first_to_without_threshold_is_inert() -> None:
+    st = _state("first_to", threshold=None, p1=0, p2=0)
+    assert win_condition_met(st) is False
+
+
+def test_win_condition_met_first_to_zero_threshold_is_inert() -> None:
+    st = _state("first_to", threshold=0, p1=0, p2=0)
+    assert win_condition_met(st) is False
+
+
+def test_win_condition_met_first_to_negative_threshold_is_inert() -> None:
+    st = _state("first_to", threshold=-10, p1=0, p2=0)
+    assert win_condition_met(st) is False
+
+
+def test_win_condition_met_first_to_already_met_fires() -> None:
+    st = _state("first_to", threshold=10, p1=15, p2=0)
+    assert win_condition_met(st) is True

@@ -101,3 +101,39 @@ def test_snippet_execution_disabled_preserves_current_behavior() -> None:
     assert room.state.get_player("p1").score == 0
     assert any("no mechanical effect" in line for line in room.state.log)
     assert "c3" in room.state.discard
+
+
+def test_choice_target_snippet_diff_logs_error_instead_of_crashing() -> None:
+    card = _snippet_card("c4")
+    room = _room_with_card(card)
+    agent_result = InterpretResult(
+        program=None,
+        snippet=SnippetEffect(
+            code="def apply(state, ctx):\n    state.skip('target_player')\n", explanation="skip someone"
+        ),
+        verdict="ok",
+        comment="Pick a victim.",
+    )
+    score_before = room.state.get_player("p1").score
+    with patch("agent.runtime.run_agent", return_value=agent_result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c4")))
+
+    assert room.state.get_player("p1").score == score_before
+    assert any("[snippet error]" in line for line in room.state.log)
+
+
+def test_non_ok_verdict_never_executes_snippet() -> None:
+    card = _snippet_card("c5")
+    room = _room_with_card(card)
+    agent_result = InterpretResult(
+        program=None,
+        snippet=SnippetEffect(code=AWARD_SNIPPET, explanation="award"),
+        verdict="invalid",
+        comment="Nope.",
+    )
+    with patch("agent.runtime.run_agent", return_value=agent_result):
+        with patch("engine.sandbox.runner.execute_snippet") as exec_mock:
+            asyncio.run(room.handle_action("p1", PlayMsg(card_id="c5")))
+
+    exec_mock.assert_not_called()
+    assert room.state.get_player("p1").score == 0

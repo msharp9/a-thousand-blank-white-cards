@@ -134,23 +134,24 @@ def evaluate_win_condition(state: GameState) -> list[str]:
             return []
 
 
-# WinCondition kinds that describe a genuinely mid-game "met" event rather than
-# an always-decidable end-of-game ranking. "highest_points"/"lowest_points"
-# always have a winner as soon as any active player exists, so treating those
-# as "met" would end the game on turn one; "none" never triggers.
 _LIVE_WIN_KINDS = frozenset({"first_to", "last_standing"})
 
 
 def win_condition_met(state: GameState) -> bool:
     """True if the CURRENT win_condition is genuinely satisfied mid-play.
 
-    Used by Room to evaluate set_win_condition-driven endings (e.g. first_to a
-    threshold) DURING play, without also firing on "highest_points" /
-    "lowest_points" — those kinds always resolve to a winner once any active
-    player exists, so they are end-of-game-only and must stay gated behind
-    deck exhaustion / an explicit ``end_game`` op.
+    Used by Room to evaluate set_win_condition-driven endings DURING play.
+    Only kinds in ``_LIVE_WIN_KINDS`` can fire here: "highest_points" /
+    "lowest_points" always resolve to a winner once any active player exists,
+    so they stay end-of-game-only (deck exhaustion / an ``end_game`` op).
+    A ``first_to`` without a positive threshold is degenerate — every player
+    would qualify instantly ("threshold or 0" ≥ any non-negative score) — so
+    it is inert live and only decides winners once the game ends.
     """
-    if state.win_condition.kind not in _LIVE_WIN_KINDS:
+    wc = state.win_condition
+    if wc.kind not in _LIVE_WIN_KINDS:
+        return False
+    if wc.kind == "first_to" and (wc.threshold is None or wc.threshold < 1):
         return False
     return bool(evaluate_win_condition(state))
 

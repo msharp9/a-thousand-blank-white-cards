@@ -103,3 +103,83 @@ def test_set_win_condition_first_to_not_yet_reached_keeps_playing() -> None:
     assert room.state.win_condition.kind == "first_to"
     assert room.state.phase == "playing"
     assert room.state.turn_index == 1  # turn advanced normally, no early end
+
+
+def test_win_the_game_played_by_the_losing_player_crowns_that_player() -> None:
+    card = {
+        "id": "yolo",
+        "title": "YOLO",
+        "description": "You win the game.",
+        "canonical": {"ops": [{"op": "win_the_game", "args": {}}]},
+    }
+    room = _mid_deck_room(["yolo"], {"yolo": card}, deck=["d1"])
+    players = [
+        room.state.players[0].model_copy(update={"score": -9}),
+        room.state.players[1].model_copy(update={"score": 50}),
+    ]
+    room.state = room.state.model_copy(update={"players": players})
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="yolo")))
+
+    assert room.state.phase in ("results", "ended")
+    assert room.state.winner_ids == ["p1"]
+    assert room.state.winner_override == []
+
+
+def test_plain_end_game_with_unequal_scores_crowns_the_leader() -> None:
+    card = {
+        "id": "endit",
+        "title": "End The Game",
+        "description": "The game ends right now.",
+        "canonical": {"ops": [{"op": "end_game", "args": {}}]},
+    }
+    room = _mid_deck_room(["endit"], {"endit": card}, deck=["d1"])
+    players = [
+        room.state.players[0].model_copy(update={"score": -9}),
+        room.state.players[1].model_copy(update={"score": 50}),
+    ]
+    room.state = room.state.model_copy(update={"players": players})
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="endit")))
+
+    assert room.state.phase in ("results", "ended")
+    assert room.state.winner_ids == ["p2"]
+
+
+def test_post_end_actions_are_rejected_and_end_scoring_applies_once() -> None:
+    keeper = {
+        "id": "keep10",
+        "title": "Worth 10 If Kept",
+        "description": "Worth 10 points at game end.",
+        "trigger": "on_game_end",
+        "canonical": {"ops": [{"op": "add_points", "args": {"target": "self", "amount": 10}}]},
+    }
+    ender = {
+        "id": "endit",
+        "title": "End The Game",
+        "description": "The game ends right now.",
+        "canonical": {"ops": [{"op": "end_game", "args": {}}]},
+    }
+    room = _mid_deck_room(["endit"], {"endit": ender, "keep10": keeper}, deck=["d1", "d2"])
+    players = [
+        room.state.players[0].model_copy(update={"hand": ["endit"]}),
+        room.state.players[1].model_copy(update={"hand": ["keep10"]}),
+    ]
+    room.state = room.state.model_copy(update={"players": players})
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="endit")))
+    assert room.state.phase == "results"
+    assert room.state.get_player("p2").score == 10
+    assert room.state.game_over_requested is False
+
+    async def _post_end_actions() -> None:
+        from models.ws_messages import DrawMsg
+
+        await room.handle_action("p1", DrawMsg())
+        await room.handle_action("p1", PlayMsg(card_id="endit"))
+
+    asyncio.run(_post_end_actions())
+
+    assert room.state.get_player("p2").score == 10
+    assert room.state.deck == ["d1", "d2"]
+    assert room.state.phase == "results"

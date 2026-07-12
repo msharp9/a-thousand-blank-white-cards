@@ -162,8 +162,7 @@ def _reduce_reverse_order(state: GameState, op: ReverseOrderOp, ctx: HookContext
 def _reduce_scramble_order(
     state: GameState, op: ScrambleOrderOp, ctx: HookContext, *, rng: random.Random | None = None
 ) -> GameState:
-    """Randomize the turn rotation order (proves the list model is expressive
-    beyond a single reverse — swap, insert, move-to-end are equally possible).
+    """Randomize the turn rotation order.
 
     ``rng`` is dependency-injected for deterministic tests, mirroring
     ``board.rooms.deck.build_deck``'s convention; defaults to a fresh
@@ -257,7 +256,10 @@ def _reduce_custom_note(state: GameState, op: CustomNoteOp, ctx: HookContext) ->
 
 
 def _reduce_end_game(state: GameState, op: EndGameOp, ctx: HookContext) -> GameState:
-    return state.model_copy(update={"game_over_requested": True})
+    update: dict = {"game_over_requested": True}
+    if op.winner is not None:
+        update["winner_override"] = _resolve_targets(op.winner, ctx, state)
+    return state.model_copy(update=update)
 
 
 # ---------------------------------------------------------------------------
