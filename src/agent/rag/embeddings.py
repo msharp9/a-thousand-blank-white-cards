@@ -118,16 +118,23 @@ def embed_text_cached(text: str) -> list[float]:
 
 
 def embed_texts_cached(texts: list[str]) -> list[list[float]]:
-    """Embed many strings, calling the live API once for all cache misses.
+    """Embed many strings, calling the live API only for cache misses.
 
-    Returns vectors in input order. Duplicate misses within a batch are embedded once.
+    Returns vectors in input order; duplicate misses within a batch are embedded
+    once. Misses go through one batched ``embed_documents`` round-trip, falling
+    back to per-text embedding when a gateway returns a mismatched vector count
+    (some Bedrock-routed gateways do not honour list batching).
     """
     cache = _load_cache()
     keys = [_cache_key(text) for text in texts]
     missing = {key: text for key, text in zip(keys, texts) if key not in cache}
     if missing:
+        miss_keys = list(missing.keys())
         vectors = get_embeddings().embed_documents(list(missing.values()))
-        for key, vector in zip(missing.keys(), vectors):
-            cache[key] = vector
+        if len(vectors) == len(miss_keys):
+            cache.update(zip(miss_keys, vectors))
+        else:
+            for key, text in missing.items():
+                cache[key] = embed_text(text)
         _save_cache(cache)
     return [cache[key] for key in keys]

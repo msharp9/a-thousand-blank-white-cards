@@ -163,6 +163,24 @@ def test_embed_texts_cached_batches_misses(_cache_env, monkeypatch: pytest.Monke
     assert fake.document_calls == 1  # all served from cache
 
 
+def test_embed_texts_cached_falls_back_on_count_mismatch(_cache_env, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gateways that ignore list batching (e.g. some Bedrock routes) return the
+    wrong number of vectors; we must fall back to per-text embedding, not crash."""
+    mod, _ = _cache_env
+
+    class _ShortBatch(_CountingEmbeddings):
+        def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            self.document_calls += 1
+            return [[0.0, 0.0, 0.0]]  # one vector for many inputs
+
+    fake = _ShortBatch()
+    monkeypatch.setattr(mod, "get_embeddings", lambda: fake)
+
+    out = mod.embed_texts_cached(["a", "bb", "ccc"])
+    assert fake.query_calls == 3  # per-text fallback embedded each input
+    assert [v[0] for v in out] == [1.0, 2.0, 3.0]
+
+
 def test_changing_model_or_dimensions_misses(_cache_env, monkeypatch: pytest.MonkeyPatch) -> None:
     from config import get_settings
 

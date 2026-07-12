@@ -1,6 +1,8 @@
 """board.rooms.manager — registry of active game rooms.
 
-NOTE: rooms are NOT persisted — a server restart clears all games. Intentional for v1.
+NOTE: in production rooms are NOT persisted — a server restart clears all games.
+Under DEV_MODE the singleton uses FileRoomStore so games survive a --reload; see
+_build_room_manager and board.rooms.store.
 """
 
 from __future__ import annotations
@@ -85,6 +87,7 @@ class RoomManager:
         player_id = str(uuid.uuid4())
         spectator = room.state.phase != "lobby"
         room.add_player(player_id=player_id, name=name, spectator=spectator)
+        self._persist(room)
         logger.info(
             "%s %s ('%s') joined room %s",
             "spectator" if spectator else "player",

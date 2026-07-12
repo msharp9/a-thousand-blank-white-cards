@@ -122,15 +122,18 @@ class Room:
         idx = self.state.turn_index % len(self.state.players)
         return self.state.players[idx].id == player_id
 
+    def _notify_change(self) -> None:
+        """Fire the persistence hook, if wired. Callers hold the lock so the
+        snapshot is consistent with the just-applied mutation."""
+        if self.on_change is not None:
+            self.on_change(self)
+
     # ── main dispatch ──
     async def handle_action(self, player_id: str, msg) -> None:
         """Serialised entry point for all client messages."""
         async with self._lock:
             await self._dispatch(player_id, msg)
-            # Inside the lock so persistence captures a snapshot consistent with
-            # the just-applied mutation, with no interleaving action changing it.
-            if self.on_change is not None:
-                self.on_change(self)
+            self._notify_change()
 
     async def _dispatch(self, player_id: str, msg) -> None:
         mtype = msg.type
@@ -347,6 +350,7 @@ class Room:
                         pid, CreateCardMsg(title=f"dev-{pid}-{i}", description="gain 1 point")
                     )
                     i += 1
+            self._notify_change()
 
     # ── turn lifecycle (draw → play → end turn → advance) ──
     async def _start_turn(self, player_id: str) -> None:
@@ -509,6 +513,7 @@ class Room:
             if self.state.phase != "playing":
                 raise ValueError("game is not in progress")
             await self._end_game()
+            self._notify_change()
 
     def _is_blank(self, card) -> bool:
         """True if ``card`` is an un-authored blank (blank flag still set)."""

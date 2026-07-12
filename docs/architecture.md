@@ -67,14 +67,14 @@ process-local memory (see [§4](#4-request--websocket-flow)).
 
 ## 2. Module map
 
-All backend code lives flat under `src/` (there is **no `tbwc` package**).
+All backend code lives flat under `src/`.
 Imports are `board.*`, `models.*`, `agent.*`, `engine.*`, `evals.*`, and the
 top-level `config` / `logging_config` modules. Run the backend with
 `uvicorn board.app:app`.
 
 | Package | Responsibility | Key files |
 | --- | --- | --- |
-| **`config`** (`src/config.py`) | Single source of truth for all settings: the one OpenAI-compatible LLM gateway (`llm_base_url` / `llm_api_key` / `llm_extra_headers`, driving BOTH chat and embeddings), embedding dimensions, Qdrant, LangSmith, CORS, sandbox flag. Cached `get_settings()` singleton. | `config.py` (`Settings`, `get_settings`, `warn_if_no_llm_credentials`) |
+| **`config`** (`src/config.py`) | Single source of truth for all settings: the one OpenAI-compatible LLM gateway (`llm_base_url` / `llm_api_key` / `llm_extra_headers`, driving BOTH chat and embeddings), embedding dimensions, Qdrant, LangSmith, CORS, sandbox flag, and the `dev_mode` flag (gates room persistence + `/dev` endpoints). Cached `get_settings()` singleton. | `config.py` (`Settings`, `get_settings`, `warn_if_no_llm_credentials`) |
 | **`models`** | Pure data models, no game logic. `GameState`/`Player`/`WinCondition`; the runtime effect `Op` discriminated union + `EffectProgram` + `Target`/`CardTarget` + `map_authoring_target`; card authoring models; the client/server WebSocket envelopes. | `game_state.py`, `effects.py`, `card.py`, `cards.py`, `ws_messages.py` |
 | **`engine`** | The game "physics": pure reducers over `GameState`, the turn loop, scoring/win-condition, card compilation, the event bus + persistent hooks, and the untrusted-snippet execution sandbox. Never calls the LLM. | `facade.py` (`GameEngine`), `reducers.py` (`apply_op`), `apply.py` (`apply_effect`), `compile.py` (`compile_card`), `loop.py` (`advance_turn`, `draw_step`), `scoring.py`, `events.py`, `hooks.py`, `epilogue.py` (`tally_votes`), `sandbox/` |
 | **`agent`** | The single tool-calling interpretation agent: the persona system prompt, the interpretation result contract, the LLM factory, the RAG pipeline, and the bound toolbox. Reaches down into `engine`/`models` but never up into `board`. | `runtime.py` (`build_agent`, `run_agent`), `contract.py` (`InterpretResult`), `persona.py`, `llm.py` (`get_chat_model`), `rag/` (`embeddings`, `store`, `retrievers`, `seed`), `tools/` |
@@ -154,13 +154,22 @@ Rooms are created and joined over REST (`board.app.create_app`):
   has started becomes a spectator (observes, cannot act).
 - `GET /rooms/{code}/state` → read-only debug snapshot.
 - `GET /health` → liveness.
+- `POST /rooms/{code}/dev/skip-setup`, `POST /rooms/{code}/dev/end-game` →
+  dev-loop shortcuts, active only when `DEV_MODE` is set (they 404 otherwise).
+  Skip-setup auto-authors each player's cards and fast-forwards to `playing`;
+  end-game forces the current game through the real `_end_game` path so
+  end-game triggers, scoring, and the epilogue can be exercised on demand.
 
-Rooms are stored via the `RoomStore` protocol (`board/rooms/store.py`); the only
-implementation today is `InMemoryRoomStore` — **process-local, single-worker
-only**. Because REST-join and the WebSocket connect must hit the same worker to
-see the same room, `check_single_worker()` warns at startup if
-`WEB_CONCURRENCY > 1`. A distributed backend (Redis, etc.) can implement the
-same Protocol without touching `RoomManager`.
+Rooms are stored via the `RoomStore` protocol (`board/rooms/store.py`). The
+default is `InMemoryRoomStore` — **process-local, single-worker only** — cleared
+on restart. Under `DEV_MODE` the singleton swaps in `FileRoomStore`, which
+persists each room to `.devstate/rooms/<code>.json` after every mutation (via a
+`Room.on_change` hook) and rehydrates them on startup so games survive a
+`--reload`; it is a dev convenience, not a durable multi-worker backend. Because
+REST-join and the WebSocket connect must hit the same worker to see the same
+room, `check_single_worker()` warns at startup if `WEB_CONCURRENCY > 1`. A
+distributed backend (Redis, etc.) can implement the same Protocol without
+touching `RoomManager`.
 
 ### Live gameplay (WebSocket)
 
@@ -347,7 +356,11 @@ flowchart LR
   pointed at the configured gateway. The vector size is
   `Settings.embedding_dimensions` (default 1536 for `text-embedding-3-small`;
   override for other models), which is threaded into the Qdrant collection so
-  sizes always match.
+  sizes always match. `embed_text_cached` / `embed_texts_cached` add a
+  disk-backed content-hash cache (`.embedding_cache.json`, keyed by
+  model + dimensions + text) so unchanged cards are never re-embedded across
+  reloads; the model/dimensions in the key invalidate the cache automatically
+  when the embedding model changes.
 - **Store** (`rag/store.py`): an in-memory Qdrant client (`location=":memory:"`)
   managing one `cards` collection (cosine distance). `upsert_card` embeds
   `title + description` and stores `canonical`/`source` as payload (not
@@ -357,7 +370,9 @@ flowchart LR
   card source for deck building.
 - **Seeding** (`rag/seed.py`): at startup `board.app`'s lifespan best-effort
   calls `load_seed_cards`, which `init_store()`s and upserts
-  `data/seed_cards.json`. A missing file or offline gateway degrades gracefully.
+  `data/seed_cards.json` in one batched `upsert_cards` call (a single embedding
+  round-trip for cache misses). A missing file or offline gateway degrades
+  gracefully.
 - **Retrievers** (`rag/retrievers.py`): `dense_retriever()` is the baseline
   cosine retriever; `advanced_retriever()` is a `MultiQueryCardRetriever` that
   paraphrases the query via the chat model, retrieves each paraphrase, and
@@ -442,4 +457,3 @@ SVGs are the source of intent; these are notes, not contradictions):
    Game Rules, `read_engine_methods` → Read Game Engine Methods, `read_game_state`
    → Read Game State, `agent_memory` → Memory. (`mtg_lookup` is an additional
    tool not drawn in the sketch.)
-```

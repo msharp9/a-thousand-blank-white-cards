@@ -58,3 +58,15 @@ def test_non_dev_mode_uses_memory_store_and_writes_nothing(monkeypatch, tmp_path
     assert isinstance(mgr._store, InMemoryRoomStore)
     mgr.create_room()
     assert not (tmp_path / ".devstate").exists()
+
+
+def test_join_persists_to_disk(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DEV_MODE", "true")
+    mgr = _build_room_manager()
+    code = mgr.create_room()
+    mgr.join(code, "Alice")
+
+    rehydrated = _build_room_manager().get(code)
+    assert rehydrated is not None
+    assert any(p.name == "Alice" for p in rehydrated.state.players)
