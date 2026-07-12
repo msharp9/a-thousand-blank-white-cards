@@ -56,21 +56,29 @@ def test_advance_turn_direction_neg1() -> None:
 
 
 def test_skip_next_is_skipped_and_cleared() -> None:
-    st = _state(turn_index=0, direction=1)
-    st._skip_next = {"p2"}
+    players = [
+        Player(id="p1", name="A", score=0, hand=[]),
+        Player(id="p2", name="B", score=0, hand=[], conditions={"skip_next": True}),
+        Player(id="p3", name="C", score=0, hand=[]),
+    ]
+    st = _state(players=players, turn_index=0, direction=1)
     out = advance_turn(st)
     assert out.turn_index == 2  # p2 skipped -> lands on p3
-    assert "p2" not in out._skip_next
-    assert st._skip_next == {"p2"}  # original unchanged
+    assert out.get_player("p2").conditions == {}
+    assert st.get_player("p2").conditions == {"skip_next": True}  # original unchanged
 
 
 def test_extra_turn_keeps_index_and_clears() -> None:
-    st = _state(turn_index=1, direction=1)
-    st._extra_turn = {"p2"}
+    players = [
+        Player(id="p1", name="A", score=0, hand=[]),
+        Player(id="p2", name="B", score=0, hand=[], conditions={"extra_turn": True}),
+        Player(id="p3", name="C", score=0, hand=[]),
+    ]
+    st = _state(players=players, turn_index=1, direction=1)
     out = advance_turn(st)
     assert out.turn_index == 1  # stays on p2
-    assert "p2" not in out._extra_turn
-    assert st._extra_turn == {"p2"}  # original unchanged
+    assert out.get_player("p2").conditions == {}
+    assert st.get_player("p2").conditions == {"extra_turn": True}  # original unchanged
 
 
 def test_skip_predicate_registry() -> None:

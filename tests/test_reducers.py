@@ -89,28 +89,32 @@ class TestSkipTurn:
         state = make_state()
         ctx = make_ctx("p1", chosen="p2")
         new = apply_op(state, SkipTurnOp(target="target_player"), ctx)
-        assert new._skip_next == {"p2"}
-        assert state._skip_next == set()  # original untouched
+        assert new.get_player("p2").conditions == {"skip_next": True}
+        assert state.get_player("p2").conditions == {}  # original untouched
 
     def test_marks_multiple_targets(self):
         state = make_state()
         new = apply_op(state, SkipTurnOp(target="all_others"), make_ctx("p1"))
-        assert new._skip_next == {"p2", "p3"}
-        assert state._skip_next == set()
+        assert new.get_player("p2").conditions == {"skip_next": True}
+        assert new.get_player("p3").conditions == {"skip_next": True}
+        assert state.get_player("p2").conditions == {}
+        assert state.get_player("p3").conditions == {}
 
 
 class TestExtraTurn:
     def test_marks_target_and_leaves_original_unchanged(self):
         state = make_state()
         new = apply_op(state, ExtraTurnOp(target="self"), make_ctx("p1"))
-        assert new._extra_turn == {"p1"}
-        assert state._extra_turn == set()  # original untouched
+        assert new.get_player("p1").conditions == {"extra_turn": True}
+        assert state.get_player("p1").conditions == {}  # original untouched
 
     def test_marks_multiple_targets(self):
         state = make_state()
         new = apply_op(state, ExtraTurnOp(target="all"), make_ctx("p1"))
-        assert new._extra_turn == {"p1", "p2", "p3"}
-        assert state._extra_turn == set()
+        assert new.get_player("p1").conditions == {"extra_turn": True}
+        assert new.get_player("p2").conditions == {"extra_turn": True}
+        assert new.get_player("p3").conditions == {"extra_turn": True}
+        assert state.get_player("p1").conditions == {}
 
 
 class TestAddPoints:

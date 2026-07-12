@@ -41,42 +41,51 @@ def test_with_log_is_immutable() -> None:
     assert new is not state
 
 
-def test_private_attrs_default() -> None:
-    state = GameState(room_code="AAAA")
-    assert state._skip_next == set()
-    assert state._extra_turn == set()
-    state._skip_next.add("p1")
-    assert "p1" in state._skip_next
+def test_conditions_default_empty() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")])
+    assert state.get_player("p1").conditions == {}
 
 
-def test_copy_with_turn_flags_rebinds_both_sets() -> None:
-    state = GameState(room_code="AAAA", turn_index=1)
-    state._skip_next = {"p1"}
-    state._extra_turn = {"p2"}
-    new = state.copy_with_turn_flags()
-    # Values default to copies of the current values...
-    assert new._skip_next == {"p1"}
-    assert new._extra_turn == {"p2"}
-    # ...but BOTH are fresh objects, never shared with the source.
-    assert new._skip_next is not state._skip_next
-    assert new._extra_turn is not state._extra_turn
-    # turn_index unchanged when not provided.
-    assert new.turn_index == 1
+def test_with_condition_sets_key_immutably() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A"), Player(id="p2", name="B")])
+    new = state.with_condition("p1", "skip_next", True)
+    assert new.get_player("p1").conditions == {"skip_next": True}
+    assert new.get_player("p2").conditions == {}
+    # Source untouched.
+    assert state.get_player("p1").conditions == {}
+    assert new is not state
 
 
-def test_copy_with_turn_flags_updates_index_and_sets() -> None:
-    state = GameState(room_code="AAAA", turn_index=0)
-    state._skip_next = {"a"}
-    state._extra_turn = {"b"}
-    new = state.copy_with_turn_flags(turn_index=2, skip_next={"x"}, extra_turn={"y"})
-    assert new.turn_index == 2
-    assert new._skip_next == {"x"}
-    assert new._extra_turn == {"y"}
-    # A provided set is copied, not aliased.
-    assert new._skip_next is not state._skip_next
-    # Source is untouched.
-    assert state._skip_next == {"a"}
-    assert state._extra_turn == {"b"}
+def test_with_condition_preserves_other_keys() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A", conditions={"poisoned": 2})])
+    new = state.with_condition("p1", "extra_turn", True)
+    assert new.get_player("p1").conditions == {"poisoned": 2, "extra_turn": True}
+
+
+def test_without_condition_removes_key_immutably() -> None:
+    state = GameState(
+        room_code="AAAA", players=[Player(id="p1", name="A", conditions={"skip_next": True, "poisoned": 2})]
+    )
+    new = state.without_condition("p1", "skip_next")
+    assert new.get_player("p1").conditions == {"poisoned": 2}
+    # Source untouched.
+    assert state.get_player("p1").conditions == {"skip_next": True, "poisoned": 2}
+
+
+def test_without_condition_absent_key_is_noop() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")])
+    new = state.without_condition("p1", "skip_next")
+    assert new.get_player("p1").conditions == {}
+    assert new is not state
+
+
+def test_arbitrary_condition_round_trips_through_model_dump() -> None:
+    """An open-ended condition key (not one the engine special-cases) must be
+    visible in the WS snapshot, since Player.conditions is a serialized field."""
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")])
+    state = state.with_condition("p1", "poisoned", 2)
+    dumped = state.model_dump()
+    assert dumped["players"][0]["conditions"] == {"poisoned": 2}
 
 
 # ── card zones ──

@@ -12,10 +12,10 @@ Codes are expected to already be normalised to upper-case by the caller
 
 ``FileRoomStore`` is a DEV-ONLY convenience (wired in only when
 ``get_settings().dev_mode`` is true) that persists each room to JSON on disk so
-in-progress games survive an API reload. It is deliberately lossy: the two
-GameState PrivateAttrs (``_skip_next``, ``_extra_turn``) and the Room
-``_deck_exhausted`` latch are NOT persisted and reset on reload. That is
-acceptable for a dev loop; it is not a durable multi-worker backend.
+in-progress games survive an API reload. It is deliberately lossy: the Room
+``_deck_exhausted`` latch is NOT persisted and resets on reload (per-player
+``conditions``, being a regular serialized field, survive the round-trip).
+That is acceptable for a dev loop; it is not a durable multi-worker backend.
 """
 
 from __future__ import annotations

@@ -124,16 +124,18 @@ def _reduce_set_points(state: GameState, op: SetPointsOp, ctx: HookContext) -> G
 
 
 # ---------------------------------------------------------------------------
-# Turn-flow reducers (private-attr sets)
+# Turn-flow reducers (per-player conditions)
 # ---------------------------------------------------------------------------
 def _reduce_skip_turn(state: GameState, op: SkipTurnOp, ctx: HookContext) -> GameState:
-    ids = _resolve_targets(op.target, ctx, state)
-    return state.copy_with_turn_flags(skip_next=set(state._skip_next) | set(ids))
+    for pid in _resolve_targets(op.target, ctx, state):
+        state = state.with_condition(pid, "skip_next", True)
+    return state
 
 
 def _reduce_extra_turn(state: GameState, op: ExtraTurnOp, ctx: HookContext) -> GameState:
-    ids = _resolve_targets(op.target, ctx, state)
-    return state.copy_with_turn_flags(extra_turn=set(state._extra_turn) | set(ids))
+    for pid in _resolve_targets(op.target, ctx, state):
+        state = state.with_condition(pid, "extra_turn", True)
+    return state
 
 
 def _reduce_reverse_order(state: GameState, op: ReverseOrderOp, ctx: HookContext) -> GameState:
