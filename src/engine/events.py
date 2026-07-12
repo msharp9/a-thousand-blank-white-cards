@@ -16,6 +16,7 @@ class GameEvent(StrEnum):
     """All event names the engine can emit. Hooks subscribe by name."""
 
     ON_PLAY = "on_play"
+    ON_VALIDATE_PLAY = "on_validate_play"
     ON_SCORE_CHANGE = "on_score_change"
     ON_TURN_START = "on_turn_start"
     ON_TURN_END = "on_turn_end"

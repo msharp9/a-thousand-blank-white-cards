@@ -71,3 +71,75 @@ def test_hooks_survive_store_round_trip(tmp_path) -> None:
     assert got is not None
     assert [h.id for h in got.state.hooks] == [h.id for h in room.state.hooks]
     assert got.state.hooks[0].code == HOOK_CODE
+
+
+VALIDATE_COLOR_MATCH = (
+    "def apply(state, ctx):\n"
+    "    color = ctx.get('card_attributes', {}).get('color')\n"
+    "    if color != 'red':\n"
+    "        state.reject_play('only red cards may be played')\n"
+)
+
+
+def _validation_room() -> Room:
+    red = {"id": "red1", "title": "Red Card", "description": "x", "attributes": {"color": "red"}}
+    blue = {"id": "blue1", "title": "Blue Card", "description": "x", "attributes": {"color": "blue"}}
+    rule = {
+        "id": "rulec",
+        "title": "Color Law",
+        "description": "Only red cards may be played.",
+        "canonical": {
+            "ops": [{"op": "register_hook", "args": {"event": "on_validate_play", "code": VALIDATE_COLOR_MATCH}}]
+        },
+    }
+    return _room(
+        {"red1": red, "blue1": blue, "rulec": rule},
+        {"p1": ["rulec"], "p2": ["blue1", "red1"]},
+        deck=["d1", "d2", "d3"],
+    )
+
+
+def test_validate_play_hook_vetoes_and_returns_card() -> None:
+    room = _validation_room()
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="rulec")))
+    assert any(h.event == "on_validate_play" for h in room.state.hooks)
+
+    async def _p2_tries_blue_then_red() -> None:
+        await room.handle_action("p2", DrawMsg())
+        await room.handle_action("p2", PlayMsg(card_id="blue1"))
+
+    asyncio.run(_p2_tries_blue_then_red())
+    assert "blue1" in room.state.get_player("p2").hand
+    assert room.state.active_player().id == "p2"
+    assert any("rejected" in line for line in room.state.log)
+
+    asyncio.run(room.handle_action("p2", PlayMsg(card_id="red1")))
+    assert "red1" not in room.state.get_player("p2").hand
+    assert room.state.active_player().id == "p1"
+
+
+HAND_SCORER = (
+    "def apply(state, ctx):\n    state.draw_cards('self', 2)\n    state.add_points('self', len(state.my_hand()))\n"
+)
+
+
+def test_chess_shape_snippet_reads_hand_and_scores() -> None:
+    from unittest.mock import patch
+
+    from agent.contract import InterpretResult, SnippetEffect
+
+    chess = {"id": "chess", "title": "Chess", "description": "Draw 2, score per card in hand.", "creator_id": "p1"}
+    room = _room({"chess": chess}, {"p1": ["chess", "x1", "x2"]}, deck=["d1", "d2", "d3"])
+    result = InterpretResult(
+        program=None,
+        snippet=SnippetEffect(code=HAND_SCORER, explanation="draw then score per hand card"),
+        verdict="ok",
+        comment="Chess, sure.",
+    )
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="chess")))
+
+    # Hand at snippet time: chess, x1, x2 -> +3 points; then draw 2 and the
+    # played chess leaves the hand: 3 + 2 - 1 = 4 cards.
+    assert room.state.get_player("p1").score == 3
+    assert len(room.state.get_player("p1").hand) == 4

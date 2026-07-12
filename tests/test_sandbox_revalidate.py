@@ -72,3 +72,34 @@ def test_parse_rejects_end_game_chooser_winner() -> None:
 def test_parse_allows_end_game_self_winner() -> None:
     program = parse_diff([{"op": "end_game", "winner": "self"}])
     assert program.ops[0].winner == "self"
+
+
+def test_hook_origin_rejects_register_hook() -> None:
+    with pytest.raises(DiffValidationError, match="self-replicating"):
+        parse_diff(
+            [{"op": "register_hook", "event": "on_play", "code": "def apply(state, ctx):\n    pass\n"}],
+            origin="hook",
+        )
+
+
+def test_play_origin_allows_register_hook() -> None:
+    program = parse_diff(
+        [{"op": "register_hook", "event": "on_play", "code": "def apply(state, ctx):\n    pass\n"}],
+        origin="play",
+    )
+    assert program.ops[0].op == "register_hook"
+
+
+def test_reject_play_never_parses() -> None:
+    with pytest.raises(DiffValidationError, match="reject_play"):
+        parse_diff([{"op": "reject_play", "reason": "nope"}])
+
+
+def test_extract_veto_finds_reason() -> None:
+    from engine.sandbox.revalidate import extract_veto
+
+    assert (
+        extract_veto([{"op": "custom_note", "note": "x"}, {"op": "reject_play", "reason": "wrong color"}])
+        == "wrong color"
+    )
+    assert extract_veto([{"op": "custom_note", "note": "x"}]) is None

@@ -75,7 +75,45 @@ class SandboxGame:
 
     @property
     def draw_count(self) -> int:
-        return self._state.get("draw_count", 1)
+        return self.rules().get("draw", self._state.get("draw_count", 1))
+
+    def rules(self) -> dict[str, Any]:
+        """The current mutable rules (draw, play, end_condition, win_condition, extra…)."""
+        return dict(self._state.get("rules") or {})
+
+    @property
+    def deck_size(self) -> int:
+        return len(self._state.get("deck", []))
+
+    def my_hand(self) -> list[str]:
+        """Card ids in the ACTOR's hand (other hands expose only their size)."""
+        for p in self._state["players"]:
+            if p["id"] == self.actor_id:
+                return list(p.get("hand", []))
+        return []
+
+    def hand_size(self, player_id: str) -> int:
+        return self.player(player_id).hand_size
+
+    def conditions(self, player_id: str) -> dict[str, Any]:
+        """A player's open conditions bag (poisoned, skip_next, …)."""
+        for p in self._state["players"]:
+            if p["id"] == player_id:
+                return dict(p.get("conditions") or {})
+        raise KeyError(f"Player {player_id!r} not found")
+
+    def card(self, card_id: str) -> dict[str, Any] | None:
+        """Public metadata for a card: title, description, attributes, origin."""
+        card = (self._state.get("cards") or {}).get(card_id)
+        if not isinstance(card, dict):
+            return None
+        return {
+            "id": card.get("id", card_id),
+            "title": card.get("title"),
+            "description": card.get("description"),
+            "attributes": dict(card.get("attributes") or {}),
+            "origin": card.get("origin"),
+        }
 
     @property
     def turn_order(self) -> list[str]:
@@ -119,6 +157,92 @@ class SandboxGame:
     def note(self, message: str) -> None:
         """Log a flavour message (no mechanical effect)."""
         self._ops.append({"op": "custom_note", "note": str(message)[:500]})
+
+    def extra_turn(self, target: str) -> None:
+        """Grant player `target` an extra turn."""
+        self._ops.append({"op": "extra_turn", "target": target})
+
+    def reverse_order(self) -> None:
+        self._ops.append({"op": "reverse_order"})
+
+    def scramble_order(self) -> None:
+        self._ops.append({"op": "scramble_order"})
+
+    def steal_points(self, from_target: str, to_target: str, amount: int) -> None:
+        self._require_nonneg_int(amount)
+        self._ops.append({"op": "steal_points", "from_target": from_target, "to_target": to_target, "amount": amount})
+
+    def draw_cards(self, target: str, amount: int) -> None:
+        """Have player `target` draw `amount` cards from the deck."""
+        self._require_nonneg_int(amount)
+        self._ops.append({"op": "draw_cards", "target": target, "amount": amount})
+
+    def destroy_card(self, card_target: str | None = None, card_id: str | None = None) -> None:
+        """Destroy cards by CardTarget address ('this', 'all_in_play', 'id:…', 'attr:k=v')."""
+        op: dict[str, Any] = {"op": "destroy_card"}
+        if card_target is not None:
+            op["card_target"] = card_target
+        if card_id is not None:
+            op["card_id"] = card_id
+        self._ops.append(op)
+
+    def set_win_condition(self, kind: str, threshold: int | None = None) -> None:
+        self._ops.append({"op": "set_win_condition", "kind": kind, "threshold": threshold})
+
+    def end_game(self, winner: str | None = None) -> None:
+        """End the game now; `winner` (a Target, e.g. 'self') forces the winner."""
+        op: dict[str, Any] = {"op": "end_game"}
+        if winner is not None:
+            op["winner"] = winner
+        self._ops.append(op)
+
+    def set_rule(self, path: str, value: Any) -> None:
+        """Write a rules path: draw, play, end_condition.type, win_condition.kind, extra.<key>…"""
+        self._ops.append({"op": "set_rule", "path": str(path), "value": value})
+
+    def set_condition(self, target: str, key: str, value: Any = True) -> None:
+        """Set a free-form condition on targeted players (value=None removes it)."""
+        self._ops.append({"op": "set_condition", "target": target, "key": str(key), "value": value})
+
+    def set_card_attribute(self, card_target: str, key: str, value: Any) -> None:
+        """Tag targeted cards with open metadata (e.g. a color)."""
+        self._ops.append({"op": "set_card_attribute", "card_target": card_target, "key": str(key), "value": value})
+
+    def create_card(
+        self,
+        title: str,
+        description: str = "",
+        ops: list[dict[str, Any]] | None = None,
+        attributes: dict[str, Any] | None = None,
+        destination: str = "deck_shuffle",
+        count: int = 1,
+    ) -> None:
+        """Mint `count` copies of a new card (authoring ops compile when it is later played)."""
+        self._ops.append(
+            {
+                "op": "create_card",
+                "title": str(title),
+                "description": str(description),
+                "ops": list(ops or []),
+                "attributes": dict(attributes or {}),
+                "destination": destination,
+                "count": count,
+            }
+        )
+
+    def shuffle_into_deck(
+        self, title: str, description: str = "", ops: list[dict[str, Any]] | None = None, count: int = 1
+    ) -> None:
+        """Convenience alias: create_card with destination='deck_shuffle'."""
+        self.create_card(title, description, ops, destination="deck_shuffle", count=count)
+
+    def register_hook(self, event: str, code: str, scope: str = "center") -> None:
+        """Install a persistent sandboxed hook (rejected inside hook-produced diffs)."""
+        self._ops.append({"op": "register_hook", "event": str(event), "scope": scope, "code": str(code)})
+
+    def reject_play(self, reason: str) -> None:
+        """ON_VALIDATE_PLAY hooks only: veto the play being validated."""
+        self._ops.append({"op": "reject_play", "reason": str(reason)[:300]})
 
     # ------------------------------------------------------------------
     # Internal

@@ -105,7 +105,7 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
         }
         try:
             raw_ops = execute_snippet(_SNIPPET_CACHE.get(card_id, code), state_dict, ctx_dict)
-            return apply_snippet_diff(state, raw_ops, ctx)
+            return apply_snippet_diff(state, raw_ops, ctx, origin="hook")
         except (SnippetExecutionError, DiffValidationError) as exc:
             return state.with_log(f"[hook error] {card_id}: {exc}")
 

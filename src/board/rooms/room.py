@@ -529,6 +529,63 @@ class Room:
         ctx = HookContext(event=event, actor_id=actor_id, card_id=card_id)
         self.state = await asyncio.to_thread(bus.emit, event, self.state, ctx)
 
+    async def _check_play_veto(self, player_id: str, card_id: str, card) -> str | None:
+        """Fire ON_VALIDATE_PLAY hooks; return the first veto reason, or None.
+
+        Validation hooks are pure predicates: a hook's snippet calls
+        ``game.reject_play(reason)`` to veto; every other recorded op is
+        DISCARDED. Hook errors log and count as allow — a broken rule must
+        never brick the game. The vetoed card stays in hand and the turn is
+        not consumed.
+        """
+        specs = [h for h in self.state.hooks if h.event == str(GameEvent.ON_VALIDATE_PLAY)]
+        if not specs:
+            return None
+        from config import get_settings
+
+        if not get_settings().snippet_execution_enabled:
+            return None
+        from engine.sandbox.revalidate import extract_veto
+        from engine.sandbox.runner import SnippetExecutionError, execute_snippet
+
+        attributes = dict(card.get("attributes") or {}) if isinstance(card, dict) else {}
+        ctx_dict = {
+            "actor_id": player_id,
+            "event": str(GameEvent.ON_VALIDATE_PLAY),
+            "card_id": card_id,
+            "amount": None,
+            "card_title": self._card_title(card),
+            "card_attributes": attributes,
+        }
+        state_dict = json.loads(self.state.model_dump_json())
+        for spec in specs[:MAX_HOOKS_PER_EVENT]:
+            try:
+                raw_ops = await asyncio.to_thread(execute_snippet, spec.code, state_dict, ctx_dict)
+            except SnippetExecutionError as exc:
+                await self._log_and_broadcast(f"[hook error] {spec.source_card_id}: {exc}")
+                continue
+            reason = extract_veto(raw_ops)
+            if reason is not None:
+                return reason
+        return None
+
+    async def _apply_cannot_play(self, player_id: str) -> None:
+        """rules.cannot_play fallback: a player left without a legal play draws.
+
+        Exhaustively validating every card in hand would cost a sandbox run per
+        card per rule, so the pragmatic trigger is "the vetoed card was their
+        only card": then cannot_play.draw fires (default 1).
+        """
+        hand = self.state.get_player(player_id).hand
+        if len(hand) > 1 or not self.state.deck:
+            return
+        amount = int((self.state.rules.cannot_play or {}).get("draw", 0) or 0)
+        if amount <= 0:
+            return
+        self._draw_cards(player_id, amount)
+        await self._log_and_broadcast(f"{self._name(player_id)} cannot play and draws {amount}")
+        await self._broadcast_state()
+
     def _name(self, player_id: str) -> str:
         """Human-readable display name for a player id (falls back to the id)."""
         for p in self.state.players:
@@ -827,7 +884,7 @@ class Room:
         before = {p.id: p.score for p in self.state.players}
         try:
             raw_ops = await asyncio.to_thread(execute_snippet, code, state_dict, ctx_dict)
-            self.state = apply_snippet_diff(self.state, raw_ops, ctx)
+            self.state = apply_snippet_diff(self.state, raw_ops, ctx, origin="play")
         except SnippetExecutionError as exc:
             await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
             return False
@@ -895,6 +952,15 @@ class Room:
             merged = {**self.state.cards, card_id: authored}
             self.state = self.state.model_copy(update={"cards": merged})
             card = authored
+
+        veto = await self._check_play_veto(player_id, card_id, card)
+        if veto is not None:
+            await self.connections.send(player_id, {"type": "error", "message": f"Play rejected: {veto}"})
+            await self._log_and_broadcast(
+                f"[rule] {self._name(player_id)}'s {self._card_title(card)} was rejected: {veto}"
+            )
+            await self._apply_cannot_play(player_id)
+            return
 
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
         program = await self._resolve_program(card_id, card, actor_id=player_id)
