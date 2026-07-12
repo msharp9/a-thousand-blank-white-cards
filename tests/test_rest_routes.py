@@ -81,9 +81,8 @@ def test_dev_skip_setup_fast_forwards_to_playing(dev_client: TestClient) -> None
     assert resp.status_code == 200
     data = resp.json()
     assert data["phase"] == "playing"
-    real_players = [p for p in data["players"] if not p["spectator"]]
-    assert real_players
-    for p in real_players:
+    assert data["players"]
+    for p in data["players"]:
         assert len(p["hand"]) == STARTING_HAND_SIZE
     assert data["deck"]
 

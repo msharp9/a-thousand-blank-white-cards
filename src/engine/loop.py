@@ -107,17 +107,6 @@ def advance_turn(state: GameState) -> GameState:
                 next_id = _next_in_order(order, next_id)
                 next_player = state.get_player(next_id)
 
-    # Spectators (joined after the game started) NEVER take a turn: keep
-    # stepping past any spectator we'd otherwise land on. ``effective_turn_order``
-    # already excludes spectators by construction, so this only guards a
-    # degenerate explicit ``turn_order`` that names one; bounded by
-    # ``len(order)`` so an all-spectator ``order`` can't spin forever.
-    guard = 0
-    while next_player.spectator and guard < len(order):
-        next_id = _next_in_order(order, next_id)
-        next_player = state.get_player(next_id)
-        guard += 1
-
     next_idx = next(i for i, p in enumerate(state.players) if p.id == next_id)
     return state.model_copy(update={"turn_index": next_idx})
 

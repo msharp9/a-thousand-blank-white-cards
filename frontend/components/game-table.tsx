@@ -12,7 +12,7 @@ interface GameTableProps {
 }
 
 export function GameTable({ gameState, myPlayerId }: GameTableProps) {
-  const { players, turn_index, direction, deck, cards } = gameState;
+  const { players, spectators, turn_index, direction, deck, cards } = gameState;
   const activePlayer = players.length
     ? players[turn_index % players.length]
     : undefined;
@@ -34,11 +34,22 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
             key={player.id}
             player={player}
             cards={cards}
-            isActive={!player.spectator && player.id === activePlayer?.id}
+            isActive={player.id === activePlayer?.id}
             isMe={player.id === myPlayerId}
           />
         ))}
       </div>
+      {spectators.length > 0 && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Spectating:</span>
+          {spectators.map((s) => (
+            <Badge key={s.id} variant="outline" className="text-[10px]">
+              {s.name}
+              {s.id === myPlayerId && " (you)"}
+            </Badge>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -75,15 +86,10 @@ function PlayerTile({
             you
           </Badge>
         )}
-        {player.spectator && (
-          <Badge variant="outline" className="text-[10px]">
-            spectator
-          </Badge>
-        )}
       </div>
       <span className="text-2xl font-bold tabular-nums">{player.score}</span>
       <span className="text-[10px] text-muted-foreground">
-        {player.spectator ? "watching" : `${player.hand.length} cards`}
+        {player.hand.length} cards
       </span>
       {isActive && <Badge className="text-[10px]">active</Badge>}
       {!player.connected && (

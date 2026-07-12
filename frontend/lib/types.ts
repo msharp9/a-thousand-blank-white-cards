@@ -92,16 +92,22 @@ export type PlayerSnapshot = {
   // table). Resolve ids against GameStateSnapshot.cards to render them.
   in_play: string[];
   connected: boolean;
-  // True for a late joiner seated as a spectator (joined after the game left
-  // the lobby). Spectators appear on the table but take no turn and cannot
-  // author or play cards. Mirrors Player.spectator on the backend.
-  spectator: boolean;
+};
+
+// A late joiner who watches but never plays (joined after the game left the
+// lobby). Lives in GameStateSnapshot.spectators — a separate collection from
+// players — rather than as a flagged PlayerSnapshot. Mirrors
+// models.game_state.Spectator on the backend.
+export type SpectatorSnapshot = {
+  id: string;
+  name: string;
 };
 
 export type GameStateSnapshot = {
   room_code: string;
   phase: "lobby" | "setup" | "playing" | "epilogue" | "ended";
   players: PlayerSnapshot[];
+  spectators: SpectatorSnapshot[];
   turn_index: number;
   direction: 1 | -1;
   draw_count: number;

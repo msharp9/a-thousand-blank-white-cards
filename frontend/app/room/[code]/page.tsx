@@ -119,14 +119,17 @@ export default function RoomPage() {
   const me = gameState?.players.find((p) => p.id === myPlayerId);
   // A spectator joined after the game started: they observe but can't act, so
   // all play/pass/author controls are hidden and a banner is shown instead.
-  const isSpectator = Boolean(me?.spectator);
+  // Spectators live in their own snapshot collection, not `players`.
+  const isSpectator = Boolean(
+    gameState?.spectators.some((s) => s.id === myPlayerId),
+  );
   const isActive = useMemo(() => {
     if (!gameState || !gameState.players.length || !myPlayerId) return false;
-    if (me?.spectator) return false;
+    if (isSpectator) return false;
     const active =
       gameState.players[gameState.turn_index % gameState.players.length];
     return active?.id === myPlayerId;
-  }, [gameState, myPlayerId, me]);
+  }, [gameState, myPlayerId, isSpectator]);
 
   const myHandCards: CardSnapshot[] = useMemo(() => {
     if (!gameState || !me) return [];

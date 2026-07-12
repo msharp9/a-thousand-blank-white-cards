@@ -64,6 +64,29 @@ def test_first_message_must_be_join(client: TestClient) -> None:
         assert "join" in msg["message"].lower()
 
 
+def test_spectator_can_join_ws_and_receive_state(client: TestClient) -> None:
+    """A late joiner seated as a spectator still gets a valid player_id that
+    opens the WebSocket and replays state — spectators live in their own
+    GameState.spectators collection, not `players`, but must remain
+    connectable exactly like a real player."""
+    code = client.post("/rooms").json()["code"]
+    client.post(f"/rooms/{code}/join", json={"name": "Alice"})
+    # Start the game so the room leaves the lobby before the next joiner.
+    from board.rooms.manager import room_manager
+
+    room = room_manager.get(code)
+    room.state = room.state.model_copy(update={"phase": "playing"})
+
+    join_resp = client.post(f"/rooms/{code}/join", json={"name": "Late"}).json()
+    assert join_resp["spectator"] is True
+    pid = join_resp["player_id"]
+
+    with client.websocket_connect(f"/ws/{code}") as ws:
+        ws.send_json({"type": "join", "player_id": pid, "name": "Late"})
+        msg = ws.receive_json()
+        assert msg["type"] == "state"
+
+
 def test_two_players_stay_connected_with_distinct_ids(client: TestClient) -> None:
     """Two players with distinct player_ids can both connect and stay connected.
 

@@ -50,7 +50,7 @@ def test_turn_order_reads_explicit_list() -> None:
     assert g.turn_order == ["p1", "p2"]
 
 
-def test_turn_order_falls_back_to_non_spectator_players() -> None:
+def test_turn_order_falls_back_to_players_in_list_order() -> None:
     state = copy.deepcopy(STATE)
     del state["turn_order"]
     g = SandboxGame(state, dict(CTX))

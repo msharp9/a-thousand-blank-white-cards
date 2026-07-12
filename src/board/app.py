@@ -94,9 +94,9 @@ class JoinRoomResponse(BaseModel):
     code: str
     player_id: str
     # True when the game had already started at join time, so this joiner was
-    # seated as a spectator (no turn, cannot author/play). The client can also
-    # read its own PlayerSnapshot.spectator from the state snapshot; this field
-    # just surfaces it immediately at REST-join time.
+    # seated as a spectator (no turn, cannot author/play) in the state
+    # snapshot's separate `spectators` collection rather than `players`. This
+    # field just surfaces that immediately at REST-join time.
     spectator: bool = False
 
 

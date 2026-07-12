@@ -78,7 +78,6 @@ export function SetupPhase({
         {gameState.setup_progress && gameState.players.length > 0 && (
           <p className="mt-1 text-xs text-muted-foreground">
             {gameState.players
-              .filter((p) => !p.spectator)
               .map(
                 (p) =>
                   `${p.name} ${gameState.setup_progress[p.id] ?? 0}/${target}`,

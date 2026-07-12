@@ -54,7 +54,7 @@ def _game_end_trigger(card: dict) -> bool:
 def resolve_end_of_game(state: GameState, cards: dict | None = None) -> tuple[GameState, list[EndOfGameApplication]]:
     """Apply every ``on_game_end`` card's ops before the winner is decided.
 
-    For each non-spectator player, every card id in that player's ``hand`` or
+    For each player, every card id in that player's ``hand`` or
     ``in_play`` zone is looked up in the registry (``cards`` if given, else
     ``state.cards``). A card whose canonical (or top-level) ``trigger`` is
     ``on_game_end`` — e.g. "Worth 10 Points If You Keep It" — has its ops
@@ -108,11 +108,11 @@ def evaluate_win_condition(state: GameState) -> list[str]:
     """Return list of winner player ids given the current win_condition.
 
     Returns [] if no winner yet. Multiple ids = a tie. Only considers
-    connected, non-spectator players — spectators joined after the game
-    started, hold no score, and can never win.
+    connected players — spectators live in the separate ``spectators``
+    collection, so ``state.players`` is already the participating set.
     """
     wc = state.win_condition
-    active = [p for p in state.players if p.connected and not p.spectator]
+    active = [p for p in state.players if p.connected]
     if not active:
         return []
 

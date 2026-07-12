@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
 from engine.scoring import evaluate_win_condition, resolve_end_of_game
-from models.game_state import GameState, Player, WinCondition
+from models.game_state import GameState, Player, Spectator, WinCondition
 
 
 def _keep_card(amount: int = 10) -> dict:
@@ -70,13 +72,15 @@ def test_multiple_players_each_get_bonus() -> None:
 
 
 def test_spectators_are_skipped() -> None:
+    # A spectator has no hand/in_play at all (lives outside `players`), so it
+    # cannot hold an on_game_end card to score in the first place.
     cards = {"c1": _keep_card(10)}
     p1 = Player(id="p1", name="P1", score=0, hand=["c1"])
-    spec = Player(id="s1", name="Spec", score=0, hand=["c1"], spectator=True)
-    st = _state([p1, spec], cards)
+    st = _state([p1], cards, spectators=[Spectator(id="s1", name="Spec")])
     out, _apps = resolve_end_of_game(st)
     assert out.get_player("p1").score == 10
-    assert out.get_player("s1").score == 0
+    with pytest.raises(KeyError):
+        out.get_player("s1")
 
 
 def test_top_level_trigger_also_detected() -> None:
