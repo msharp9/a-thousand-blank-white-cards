@@ -27,8 +27,17 @@ class DiffValidationError(Exception):
 _op_adapter: TypeAdapter[Op] = TypeAdapter(Op)
 
 
-def parse_diff(raw_ops: list[dict[str, Any]]) -> EffectProgram:
+def parse_diff(raw_ops: list[dict[str, Any]], *, origin: str = "play") -> EffectProgram:
     """Parse a list of raw op dicts into a validated EffectProgram.
+
+    ``origin`` is where the diff came from and gates two pseudo/dangerous ops:
+      - "play": an immediate card-play snippet. register_hook allowed;
+        reject_play rejected (nothing to veto).
+      - "hook": a persistent hook fire. register_hook REJECTED (depth cap: no
+        self-replicating hooks); reject_play rejected.
+      - "validate": an ON_VALIDATE_PLAY fire. Handled by the caller via
+        ``extract_veto`` BEFORE parse_diff — any remaining ops are dropped by
+        the caller, so parse_diff never sees "validate".
 
     Raises DiffValidationError if the input is not a list, exceeds the op cap,
     contains a non-dict element, or any op fails Pydantic validation.
@@ -42,6 +51,10 @@ def parse_diff(raw_ops: list[dict[str, Any]]) -> EffectProgram:
     for i, raw in enumerate(raw_ops):
         if not isinstance(raw, dict):
             raise DiffValidationError(f"Op[{i}] is not a dict: {raw!r}")
+        if raw.get("op") == "reject_play":
+            raise DiffValidationError(f"Op[{i}] reject_play is only valid in ON_VALIDATE_PLAY hooks")
+        if raw.get("op") == "register_hook" and origin == "hook":
+            raise DiffValidationError(f"Op[{i}] register_hook inside a hook-produced diff (no self-replicating hooks)")
         try:
             op = _op_adapter.validate_python(raw)
         except PydanticValidationError as exc:
@@ -53,10 +66,27 @@ def parse_diff(raw_ops: list[dict[str, Any]]) -> EffectProgram:
     return EffectProgram(ops=parsed)
 
 
-def apply_snippet_diff(state: GameState, raw_ops: list[dict[str, Any]], ctx: HookContext) -> GameState:
+def extract_veto(raw_ops: list[dict[str, Any]]) -> str | None:
+    """Return the first reject_play reason in a raw diff, or None.
+
+    ON_VALIDATE_PLAY hooks are pure predicates: the caller checks the veto and
+    DISCARDS any other recorded ops (documented; keeps validation side-effect
+    free).
+    """
+    if not isinstance(raw_ops, list):
+        return None
+    for raw in raw_ops:
+        if isinstance(raw, dict) and raw.get("op") == "reject_play":
+            return str(raw.get("reason") or "play rejected")
+    return None
+
+
+def apply_snippet_diff(
+    state: GameState, raw_ops: list[dict[str, Any]], ctx: HookContext, *, origin: str = "play"
+) -> GameState:
     """Parse the child's op diff and apply it through the engine reducers.
 
     Single call-site for snippet-generated state changes; identical apply path to a card play.
     """
-    program = parse_diff(raw_ops)
+    program = parse_diff(raw_ops, origin=origin)
     return apply_effect(state, program, ctx)

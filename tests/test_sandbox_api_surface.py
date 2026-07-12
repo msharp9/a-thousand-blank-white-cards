@@ -106,3 +106,63 @@ def test_ops_returns_copy() -> None:
     snapshot = g.ops()
     snapshot.append({"op": "hacked"})
     assert len(g.ops()) == 1  # internal list unaffected
+
+
+class TestWideFacade:
+    def _game(self, state=None, ctx=None):
+        base_state = state or {
+            "players": [
+                {"id": "p1", "name": "A", "score": 0, "hand": ["c1", "c2"], "conditions": {"poisoned": 1}},
+                {"id": "p2", "name": "B", "score": 5, "hand": ["c3"], "conditions": {}},
+            ],
+            "turn_index": 0,
+            "deck": ["d1", "d2", "d3"],
+            "rules": {"draw": 2, "play": 1},
+            "cards": {"c1": {"id": "c1", "title": "One", "attributes": {"color": "red"}}},
+        }
+        return SandboxGame(base_state, ctx or {"actor_id": "p1"})
+
+    def test_reads(self):
+        g = self._game()
+        assert g.deck_size == 3
+        assert g.my_hand() == ["c1", "c2"]
+        assert g.hand_size("p2") == 1
+        assert g.conditions("p1") == {"poisoned": 1}
+        assert g.rules()["draw"] == 2
+        assert g.card("c1")["attributes"] == {"color": "red"}
+        assert g.card("missing") is None
+
+    def test_mutators_record_full_op_parity(self):
+        g = self._game()
+        g.draw_cards("self", 2)
+        g.destroy_card(card_target="attr:color=red")
+        g.set_win_condition("empty_hand")
+        g.end_game(winner="self")
+        g.set_rule("draw", 0)
+        g.set_condition("id:p2", "poisoned", 2)
+        g.set_card_attribute("all_in_hand", "color", "blue")
+        g.create_card("Draw 2", ops=[{"op": "draw_cards", "args": {"amount": 2}}], count=2)
+        g.shuffle_into_deck("Reverse")
+        g.register_hook("on_turn_start", "def apply(state, ctx):\n    pass\n")
+        g.reject_play("wrong color")
+        g.extra_turn("self")
+        g.reverse_order()
+        g.scramble_order()
+        g.steal_points("id:p2", "self", 3)
+        recorded = {op["op"] for op in g.ops()}
+        assert recorded == {
+            "draw_cards",
+            "destroy_card",
+            "set_win_condition",
+            "end_game",
+            "set_rule",
+            "set_condition",
+            "set_card_attribute",
+            "create_card",
+            "register_hook",
+            "reject_play",
+            "extra_turn",
+            "reverse_order",
+            "scramble_order",
+            "steal_points",
+        }
