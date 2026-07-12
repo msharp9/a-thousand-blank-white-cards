@@ -1,40 +1,78 @@
 # state-example.jsonc ↔ GameState reconciliation
 
-`docs/state-example.jsonc` is a hand-authored example of the game state. After the
-board/engine/agent rewrite it had drifted from the actual model in
-`src/models/game_state.py`. This note records each divergence and the decision made
-for it, per bead `82f.7`.
+`docs/state-example.jsonc` is the **authoritative, hand-authored design** for the game
+state. `src/models/game_state.py` is an *implementation* of that design, and it has
+**diverged** from it. This note reconciles the two.
 
-**Overall finding:** the old `state-example.jsonc` was a *pre-rewrite design sketch*,
-not aspirational design the code fails to implement. In every case the running engine
-is a **superset** of what the sketch described — every rule concept in the sketch is
-supported (often more flexibly) by the current code. So the resolution was to **update
-the doc to match the code**. No follow-up code beads were needed: there is no
-intended-but-unimplemented behavior here.
+**Authority direction: the doc wins.** Where the code disagrees with the doc, the
+code is the regression, not the doc. This file records each divergence and the code
+bead filed to bring the implementation back in line with the design. The doc is left
+exactly as authored (only whitespace/comments untouched).
 
-The authoritative shape is `GameState.model_dump()` — the exact JSON the backend
-broadcasts to clients over the WebSocket. The new `state-example.jsonc` was generated
-from a real `GameState(...)` instance and hand-annotated.
+An earlier pass in this session wrongly did the opposite — it rewrote the doc to match
+the code and declared "the engine is a superset." That was incorrect and has been
+reverted; the reasoning below replaces it.
 
-## Per-field decisions
+## Divergences (doc = design of record; code must change)
 
-| Old sketch | Current code | Decision | Rationale |
-|---|---|---|---|
-| `players` as a **map keyed by name** (`{"Player1": {...}}`) | `players: list[Player]`, each with a stable `id`; `turn_index` indexes the list | **Doc updated → list** | Turns and card targets key on `id`, not display name; names aren't unique and a list preserves seat order. |
-| Per-player `points`, `cardsInHand`, `conditions` | `score`, `hand`, `in_play`, `connected`, `spectator` | **Doc updated → real fields** | The rewrite added the `in_play` (in-front-of) zone, connection tracking, and the spectator flag; renamed points→score, cardsInHand→hand. |
-| Per-player `conditions: {skipNextTurn: 1}` | private `_skip_next` / `_extra_turn` sets (PrivateAttr, **not serialized**) | **Doc updated → noted as non-serialized** | Turn bookkeeping is engine-internal and deliberately kept out of the broadcast snapshot; the doc now says so instead of inventing a `conditions` field. |
-| Declarative `rules{}` block: `draw`, `play`, `cannotPlay`, `endCondition`, `winCondition` | flat `draw_count`, `direction`, `skip_predicate` + `win_condition{kind,threshold}`; end-of-deck end handled by the loop | **Doc updated → flat fields** | `draw_count` covers `draw` (mutable via the `change_draw_count` op). There is no separate `play`/`cannotPlay` config — a turn is draw-then-play with a draw-again fallback baked into `src/engine/loop.py`/`room.py`, not a config knob. `win_condition.kind` supports all four modes resolved in `src/engine/scoring.py` (`highest_points`, `lowest_points`, `first_to`, `last_standing`), a superset of the sketch's `maxPoints`. |
-| Nested `board{cardsInCenter, discardPile, deck}` | flat `deck`, `discard`, `house_rules` (= the CENTER zone) | **Doc updated → flat zones** | State is a flat `GameState`; the shared center zone is stored in `house_rules` and read via `center_cards()`. Card-zone taxonomy is documented on `GameState`. |
-| `turnOrder: [names]` | `turn_index` into `players[]` + `direction` | **Doc updated → turn_index/direction** | Order is the list order; rotation is an index plus a direction, so no separate array. |
-| `spectators: [names]` | `Player.spectator: bool` inside `players[]` | **Doc updated → spectator flag** | The rewrite folded spectators into `players` (single list through every layer) rather than a parallel collection. |
-| `history: [strings]` | `log: list[str]` | **Doc updated → log** | Renamed; same idea (human-readable event log the frontend renders). |
+### 1. Turn order — explicit `turnOrder`, NOT a `direction` flag
+- **Design:** `turnOrder: ["Player1", "Player2"]` — an explicit, ordered, *mutable*
+  list of who plays when.
+- **Code:** `turn_index: int` + `direction: Literal[1, -1]` (clockwise / CCW).
+- **Why the code is wrong:** direction can only express a *reverse*. It cannot express
+  a **scramble/randomize-order** card, an insert, a swap of two seats, or any other
+  reordering — all of which are legal made-up cards in this game. Turn order must be a
+  first-class mutable list, and "reverse" becomes just one operation on it.
+- **Action:** code bead — replace the `direction` model with an explicit `turn_order`
+  and make reverse/scramble/etc. operate on it.
 
-## Fields the sketch omitted (added by the doc)
+### 2. Per-player `conditions` — an open-ended map, NOT hardcoded private sets
+- **Design:** each player has `conditions` (e.g. `null`, or `{"skipNextTurn": 1}`) — an
+  **arbitrary, open-ended** bag of statuses.
+- **Code:** two hardcoded, non-serialized `PrivateAttr` sets: `_skip_next` and
+  `_extra_turn`. Nothing else can be represented.
+- **Why the code is wrong:** the entire premise of 1000 Blank White Cards is emergent,
+  player-invented effects. A player can be *poisoned*, *confused*, or *pertwiddled* —
+  conditions that don't exist until someone writes the card. Hardcoding two specific
+  statuses as private sets both (a) can't represent arbitrary conditions and (b) hides
+  them from the serialized snapshot the clients/agent see.
+- **Action:** code bead — model `conditions` as an open-ended, **serialized** per-player
+  map; fold the existing skip/extra-turn behavior into it as two well-known keys.
 
-`room_code`, `mode` (`online`/`in_person`/`both`), the `cards` registry (id → Card),
-`connected`, `phase` (`lobby`/`setup`/`playing`/`epilogue`/`ended`), and `winner_ids`
-— all present in `GameState` and now shown in the example.
+### 3. Spectators — a separate simple list, NOT entries in `players`
+- **Design:** `spectators: ["Person1", "Person2"]` — a flat list, separate from players.
+- **Code:** spectators live inside `players[]` as `Player(spectator=True)` and are
+  filtered out everywhere (`turn_players()`, scoring, dealing, …).
+- **Why the code is wrong:** players are **complex, dynamic** entities (hand, in_play,
+  score, conditions, turn position); spectators are **simple and deterministic** (just a
+  name/identity, watching). Modeling a simple deterministic thing as a complex dynamic
+  one forces a `spectator` guard into every player code path and invites bugs (a
+  spectator accidentally dealt to, scored, or given a turn). They should be their own
+  simple collection.
+- **Action:** code bead — split spectators back out into their own list; drop the
+  `Player.spectator` flag and its guards.
 
-## Follow-up beads filed
+### 4. Structure & naming (lower-stakes, but the doc is still the target)
+- **`board {cardsInCenter, discardPile, deck}`** (nested) vs flat `deck` / `discard` /
+  `house_rules` (center). The design groups the shared table zones under `board`; the
+  code flattened them and renamed center→`house_rules`.
+- **`rules {draw, play, cannotPlay, endCondition, winCondition}`** (declarative block)
+  vs scattered `draw_count`, implicit play/cannot-play logic, and `win_condition`.
+  Notably the design has an explicit **`cannotPlay: {draw: 1}`** rule and a **`play`**
+  count; the code buries these in loop logic rather than exposing them as configurable
+  rules.
+- **`history`** vs `log` (rename).
+- **Action:** roll these into the code beads above (or a small follow-up) so the
+  implementation's shape and names track the design.
 
-None. The code already implements everything the sketch gestured at.
+## Code beads filed
+
+See the `investigate/reconcile` bead's children / links (filed in this session) for the
+concrete code changes: explicit mutable turn order (#1), open-ended serialized
+conditions (#2), and separate spectator collection (#3). Item #4 rides along with them.
+
+## Note on tests
+
+Several tests currently encode the *diverged* shape (e.g. `direction`, `spectator`
+flag, private skip sets). Those tests must be updated alongside the code beads — they
+are asserting the regression, not the design.

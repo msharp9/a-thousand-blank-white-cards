@@ -1,82 +1,38 @@
-// Example GameState snapshot — the single object the whole engine reads/writes
-// and the backend broadcasts to every client over the WebSocket (state envelope).
-//
-// This is the JSON produced by `GameState.model_dump()`
-// (src/models/game_state.py). A card id lives in exactly ONE zone at a time:
-//   - deck            global draw pile (ordered), on GameState
-//   - <player>.hand   per-player private hand
-//   - <player>.in_play  per-player "in front of me" zone of persistent cards
-//   - house_rules     the shared CENTER zone (ids of CENTER-scoped cards in
-//                     effect); read via GameState.center_cards()
-//   - discard         global discard pile, on GameState
-//
-// See docs/state-example.RECONCILIATION.md for how this file was brought back in
-// line with the code (it had drifted to a pre-rewrite design sketch).
 {
-  "room_code": "ABCD",           // 4-char room/join code
-  "mode": "both",                // "online" | "in_person" | "both" — chosen at room creation
-
-  // Players are an ORDERED LIST (not a name-keyed map); turn_index points into it.
-  "players": [
-    {
-      "id": "p1",                // stable player id (turns/targets key on id, not name)
-      "name": "Ada",
-      "score": 2,
-      "hand": ["c7", "c8"],      // card ids in this player's private hand
-      "in_play": ["c11"],        // persistent cards played "in front of" this player
-      "connected": true,         // socket currently attached (false = dropped, seat held)
-      "spectator": false         // joined after lobby → in players[] but takes no turn
+  "state": {
+    "board": {
+      "cardsInCenter": ["Card1", "Card2"],  // Cards currently in play on the board
+      "discardPile": ["Card3", "Card4"],  // Cards that have been played and are no longer in the game
+      "deck": ["Card5", "Card6"]  // Cards that are yet to be drawn
     },
-    {
-      "id": "p2",
-      "name": "Boris",
-      "score": 5,
-      "hand": ["c9", "c10"],
-      "in_play": [],
-      "connected": true,
-      "spectator": false
+    "rules": {
+      "draw": 1,  // Number of cards a player must draw at the start of their turn
+      "play": 1,  // Number of cards a player can play during their turn
+      "cannotPlay": { "draw": 1 },  // If a player cannot play, they must draw 1 card
+      "endCondition": { "type": "deckEmpty" },  // The game ends when the deck is empty
+      "winCondition": { "type": "maxPoints" }  // The player with the most points wins
     },
-    {
-      "id": "p3",
-      "name": "Cleo",
-      "score": 0,
-      "hand": [],
-      "in_play": [],
-      "connected": true,
-      "spectator": true          // watches only: never dealt to, can't play, excluded from scoring
-    }
-  ],
-
-  "deck": ["c5", "c6"],          // global draw pile, ordered
-  "discard": ["c3", "c4"],       // global discard pile
-
-  // Card registry: id -> Card. Grows as blank cards are authored mid-game.
-  "cards": {
-    "c7": { "id": "c7", "title": "Windfall", "description": "Gain 5 points." }
-  },
-
-  "turn_index": 0,               // index into players[]; always kept on a non-spectator
-
-  // Mutable loop config — cards can rewrite these at runtime.
-  "direction": 1,                // 1 = clockwise, -1 = counter-clockwise
-  "draw_count": 1,               // cards drawn at the start of each turn (change_draw_count op)
-  "skip_predicate": null,        // name of a registered skip rule, or null
-
-  // Win condition (src/engine/scoring.py resolves all four kinds).
-  "win_condition": {
-    "kind": "highest_points",    // highest_points | lowest_points | first_to | last_standing | none
-    "threshold": null            // used only by "first_to"
-  },
-
-  "house_rules": ["c11"],        // the CENTER zone: CENTER-scoped card ids currently in effect
-  "phase": "playing",            // lobby | setup | playing | epilogue | ended
-  "winner_ids": [],              // populated when phase == "ended" (a tie yields several ids)
-
-  "log": [                       // human-readable event log the frontend renders
-    "Ada drew a card",
-    "Ada played Windfall (+5)",
-    "Boris passed"
-  ]
-
-  // NOT serialized (PrivateAttr turn bookkeeping): _skip_next, _extra_turn.
+    "turnOrder": ["Player1", "Player2"],  // The order in which players take their turns
+    "players": {
+      "Player1": {
+        "points": 2,  // Current points of Player1
+        "cardsInHand": ["Card7", "Card8"],  // Cards currently in Player1's hand
+        "conditions": null  // Any special conditions affecting Player1
+      },
+      "Player2": {
+        "points": 5,
+        "cardsInHand": ["Card9", "Card10"],
+        "conditions": { "skipNextTurn": 1 } 
+      }
+    },
+    "spectators": ["Person1", "Person2"],  // People watching the game but not participating
+    "history": [ // A log of actions taken during the game
+      "player1 turn starts",
+      "player1 draws 1",
+      "player1 plays <Card-name> card",
+      "player1 turn ends",
+      "player2 skips turn due to <Card-name>",
+      "player3 turn starts"
+    ]
+  }
 }
