@@ -25,11 +25,27 @@ class SnippetEffect(BaseModel):
         description=(
             "Complete body of `def apply(state, ctx)` as a Python string. Must not contain "
             "imports, exec, eval, open, or dunder attribute access. The function receives "
-            "`state` (GameState) and `ctx` (a dict with keys 'actor_id', 'event', 'card_id', "
-            "'amount'). It returns None (mutates state in place)."
+            "`state` (a SandboxGame facade — reads like my_hand()/rules()/conditions() and "
+            "op-recording mutators) and `ctx` (a dict with keys 'actor_id', 'event', "
+            "'card_id', 'amount'; ON_VALIDATE_PLAY fires additionally carry 'card_title' "
+            "and 'card_attributes'). It returns None (recorded ops are re-validated and "
+            "applied by the engine)."
         )
     )
     explanation: str = Field(description="Plain-English explanation of what the snippet does.")
+    trigger: str | None = Field(
+        default=None,
+        description=(
+            "None for an immediate one-shot effect (runs once, now). A GameEvent value "
+            "('on_play', 'on_turn_start', 'on_turn_end', 'on_draw_step', 'on_score_change', "
+            "'on_game_end', 'on_validate_play') declares a PERSISTENT hook: the room "
+            "registers it via RegisterHookOp and it fires on every such event."
+        ),
+    )
+    scope: Literal["player", "center"] = Field(
+        default="center",
+        description="Persistent hooks only: 'center' = table-wide house rule; 'player' = bound to the actor.",
+    )
 
 
 class InterpretResult(BaseModel):

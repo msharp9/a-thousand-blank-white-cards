@@ -143,3 +143,75 @@ def test_chess_shape_snippet_reads_hand_and_scores() -> None:
     # played chess leaves the hand: 3 + 2 - 1 = 4 cards.
     assert room.state.get_player("p1").score == 3
     assert len(room.state.get_player("p1").hand) == 4
+
+
+def test_triggered_snippet_interpretation_registers_hook_via_op_pipeline() -> None:
+    from unittest.mock import patch
+
+    from agent.contract import InterpretResult, SnippetEffect
+
+    card = {"id": "tax", "title": "Alice Tax", "description": "Every turn Alice gains 1.", "creator_id": "p1"}
+    room = _room({"tax": card}, {"p1": ["tax"]}, deck=["d1", "d2", "d3"])
+    result = InterpretResult(
+        program=None,
+        snippet=SnippetEffect(code=HOOK_CODE, explanation="alice tax", trigger="on_turn_start"),
+        verdict="ok",
+        comment="A tax!",
+    )
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="tax")))
+
+    assert len(room.state.hooks) == 1
+    assert room.state.hooks[0].event == "on_turn_start"
+    assert room.state.hooks[0].code == HOOK_CODE
+    # The card's canonical now carries the register_hook op — a kept copy
+    # replays deterministically in a future game.
+    assert room.state.cards["tax"]["canonical"]["ops"][0]["op"] == "register_hook"
+
+
+def test_kept_hook_card_replays_deterministically_next_game() -> None:
+    # Simulate game 2: a card whose canonical carries register_hook (as the RAG
+    # round-trip stores it) is played — no LLM involved, hook registers, fires.
+    kept = {
+        "id": "kept1",
+        "title": "Alice Tax",
+        "description": "Every turn Alice gains 1.",
+        "origin": "authored",
+        "canonical": {"ops": [{"op": "register_hook", "args": {"event": "on_turn_start", "code": HOOK_CODE}}]},
+    }
+    room = _room({"kept1": kept}, {"p1": ["kept1"]}, deck=["d1", "d2"])
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="kept1")))
+    assert room.state.hooks and room.state.hooks[0].event == "on_turn_start"
+    assert room.state.get_player("p1").score == 1  # fired on p2's turn start
+
+
+def test_epilogue_upsert_carries_structured_canonical(monkeypatch) -> None:
+    import agent.rag.store as rag_store
+    from board.rooms.epilogue import EpilogueManager
+
+    captured: dict = {}
+
+    def fake_upsert(card_id, *, title, description, canonical, source, keep_votes=0, destroy_votes=0):
+        captured[card_id] = canonical
+
+    monkeypatch.setattr(rag_store, "upsert_card", fake_upsert)
+    monkeypatch.setattr(rag_store, "get_card_totals", lambda cid: None)
+
+    from board.rooms.connections import ConnectionManager
+
+    mgr = EpilogueManager(player_ids=["p1"])
+    mgr._connections = ConnectionManager()
+    mgr._cards = [
+        {
+            "id": "c1",
+            "title": "T",
+            "description": "D",
+            "canonical": {"ops": [{"op": "register_hook", "args": {"event": "on_play", "code": HOOK_CODE}}]},
+        }
+    ]
+    mgr._votes = {"c1": {"p1": "keep"}}
+    asyncio.run(mgr.tally_and_persist())
+
+    import json as _json
+
+    assert _json.loads(captured["c1"])["ops"][0]["op"] == "register_hook"

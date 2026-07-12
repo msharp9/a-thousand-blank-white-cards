@@ -8,6 +8,7 @@ draw them. No UI concerns here (broadcast envelopes only).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -131,7 +132,9 @@ class EpilogueManager:
                     card_id=card["id"],
                     title=card.get("title", ""),
                     description=card.get("description", ""),
-                    canonical=str(card.get("program") or ""),
+                    canonical=json.dumps(card.get("canonical") or {})
+                    if card.get("canonical")
+                    else str(card.get("program") or ""),
                     source="player",
                     keep_votes=tally.keep_votes,
                     destroy_votes=tally.destroy_votes,

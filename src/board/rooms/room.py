@@ -45,7 +45,7 @@ from engine.events import EventBus, GameEvent, HookContext
 from engine.hooks import build_registry
 from engine.loop import advance_turn
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
-from models.effects import CustomNoteOp, EffectProgram
+from models.effects import CustomNoteOp, EffectProgram, RegisterHookOp
 from models.game_state import EndCondition, EpilogueCardOutcome, EpilogueResultSummary, GameState, Player, Spectator
 from models.ws_messages import CreateCardMsg
 from board.rooms.connections import ConnectionManager
@@ -842,18 +842,66 @@ class Room:
         # logs its comment exactly once across the round-trip.
         await self._log_agent_comment(card_id, result.comment)
 
+        canonical = self._canonicalize_interpretation(result)
+        if (
+            canonical
+            and isinstance(self.state.cards.get(card_id), dict)
+            and not self.state.cards[card_id].get("canonical")
+        ):
+            merged_card = {**self.state.cards[card_id], **canonical, "verdict": result.verdict}
+            self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: merged_card}})
+
         program = result.program
         if result.verdict == "ok" and program is not None and getattr(program, "ops", None):
             return program
 
         # See step 2b in the docstring above.
         if result.verdict == "ok" and result.snippet is not None and _program_is_effectless(program):
+            if result.snippet.trigger is not None:
+                # A triggered snippet is a PERSISTENT hook — route it through the
+                # one registration pipeline (RegisterHookOp) instead of running once.
+                return EffectProgram(
+                    ops=[
+                        RegisterHookOp(
+                            event=result.snippet.trigger,
+                            scope=result.snippet.scope,
+                            code=result.snippet.code,
+                        )
+                    ]
+                )
             if await self._apply_snippet(card_id, card, title, result.snippet.code, actor_id):
                 return EffectProgram(ops=[])
 
         # 3. Deterministic fallback — never a silent no-op.
         note = title or "Card"
         return EffectProgram(ops=[CustomNoteOp(note=f"Played {note} (no mechanical effect)")])
+
+    def _canonicalize_interpretation(self, result) -> dict:
+        """Build the structured ``canonical`` payload for an interpreted card.
+
+        Programs serialize their live ops; a triggered snippet becomes a
+        register_hook authoring op (single pipeline); an immediate snippet is
+        carried as canonical["snippet"] for the play path. Cards with neither
+        contribute nothing (fall back to the LLM next time).
+        """
+        result_program = result.program
+        if result_program is not None and getattr(result_program, "ops", None):
+            return {"canonical": {"ops": [op.model_dump() for op in result_program.ops]}}
+        snippet = result.snippet
+        if snippet is not None:
+            if snippet.trigger is not None:
+                return {
+                    "canonical": {
+                        "ops": [
+                            {
+                                "op": "register_hook",
+                                "args": {"event": snippet.trigger, "scope": snippet.scope, "code": snippet.code},
+                            }
+                        ]
+                    }
+                }
+            return {"canonical": {"ops": [], "snippet": snippet.code}}
+        return {}
 
     async def _apply_snippet(self, card_id: str, card, title: str, code: str, actor_id: str | None) -> bool:
         """Execute a generated snippet in the sandbox and apply its diff to self.state.
@@ -1149,12 +1197,15 @@ class Room:
             logger.exception("run_agent failed for %s; using deterministic fallback", card_id)
             result = InterpretResult(verdict="invalid", comment="", persona_action="none")
 
-        # store interpretation summary on the card
+        # Store the interpretation on the card: human-readable summary fields
+        # plus STRUCTURED canonical ops so the card replays deterministically
+        # (this game and, if kept, every future game — no LLM round-trip).
         card = {
             **self.state.cards[card_id],
             "program": str(result.program) if result.program is not None else None,
             "snippet": getattr(result.snippet, "code", None),
             "verdict": result.verdict,
+            **self._canonicalize_interpretation(result),
         }
         merged = {**self.state.cards, card_id: card}
         self.state = self.state.model_copy(update={"cards": merged})
