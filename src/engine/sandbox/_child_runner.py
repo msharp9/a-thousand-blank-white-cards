@@ -51,7 +51,11 @@ def _apply_rlimits() -> None:
         resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
         resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
         resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
-    except ImportError, ValueError, OSError:
+    except ImportError:
+        pass
+    except ValueError:
+        pass
+    except OSError:
         pass
 
 

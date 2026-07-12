@@ -71,6 +71,41 @@ def test_compile_call_rejected() -> None:
     assert not result.ok
 
 
+def test_getattr_call_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    getattr(state, 'x')")
+    assert not result.ok
+
+
+def test_getattr_dunder_bypass_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    getattr(state, '__class__')")
+    assert not result.ok
+
+
+def test_setattr_call_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    setattr(state, 'x', 1)")
+    assert not result.ok
+
+
+def test_delattr_call_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    delattr(state, 'x')")
+    assert not result.ok
+
+
+def test_vars_call_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    vars(state)")
+    assert not result.ok
+
+
+def test_globals_call_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    globals()")
+    assert not result.ok
+
+
+def test_locals_call_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    locals()")
+    assert not result.ok
+
+
 def test_validation_result_ok_field() -> None:
     result = validate_snippet(VALID_SNIPPET)
     assert result.ok is True
