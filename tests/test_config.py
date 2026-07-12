@@ -76,6 +76,19 @@ def test_accessors_follow_config(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.embedding_dimensions == 768
 
 
+def test_dev_mode_defaults_false() -> None:
+    get_settings.cache_clear()
+    assert get_settings().dev_mode is False
+    get_settings.cache_clear()
+
+
+def test_dev_mode_enabled_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("DEV_MODE", "true")
+    assert get_settings().dev_mode is True
+    get_settings.cache_clear()
+
+
 def test_warn_if_no_llm_credentials_warns(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

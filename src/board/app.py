@@ -139,6 +139,9 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
         )
     else:
         logger.warning("LangSmith tracing DISABLED — set LANGSMITH_TRACING=true to enable")
+
+    if _settings.dev_mode:
+        logger.warning("DEV_MODE enabled — room persistence and /dev endpoints are ACTIVE (do not use in production)")
     yield
     # shutdown
 

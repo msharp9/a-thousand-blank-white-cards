@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     # --- Sandbox ---
     snippet_execution_enabled: bool = True
 
+    # --- Developer experience ---
+    dev_mode: bool = False
+
     # --- Server / CORS ---
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
     host: str = "0.0.0.0"
