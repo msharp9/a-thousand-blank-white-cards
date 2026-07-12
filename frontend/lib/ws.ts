@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
+  CardSnapshot,
   ClientMsg,
   GameStateSnapshot,
   PromptChoiceMsg,
@@ -71,6 +72,10 @@ export interface GameSocketState {
   // clearPromptChoice once handled.
   promptChoice: PromptChoiceMsg | null;
   clearPromptChoice: () => void;
+  // The server-authoritative epilogue vote pool (authored cards only — never
+  // blanks or shipped seed cards), broadcast once when the epilogue opens.
+  // Empty until the 'epilogue' message arrives.
+  epilogueCards: CardSnapshot[];
   send: (msg: ClientMsg) => void;
 }
 
@@ -87,6 +92,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
   const [promptChoice, setPromptChoice] = useState<PromptChoiceMsg | null>(
     null,
   );
+  const [epilogueCards, setEpilogueCards] = useState<CardSnapshot[]>([]);
 
   // Pending auto-dismiss timer for the current transient error, so a newer
   // error resets the countdown instead of being cut short by an older one.
@@ -173,6 +179,9 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             setBrewing(null);
             setPromptChoice(msg);
             break;
+          case "epilogue":
+            setEpilogueCards(msg.cards);
+            break;
           case "error":
             // Message-level errors are recoverable gameplay/validation notices
             // (e.g. "You have already drawn this turn"). Surface them as a
@@ -254,6 +263,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     connected,
     promptChoice,
     clearPromptChoice,
+    epilogueCards,
     send,
   };
 }

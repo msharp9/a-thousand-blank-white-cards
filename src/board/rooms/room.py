@@ -137,6 +137,12 @@ class Room:
     def _is_spectator(self, player_id: str) -> bool:
         return any(p.id == player_id and p.spectator for p in self.state.players)
 
+    def _is_host(self, player_id: str) -> bool:
+        """True for the room's first joiner — mirrors the frontend's
+        ``players[0]`` host convention. Players are only ever appended (see
+        ``add_player``), so this is stable for the life of the room."""
+        return bool(self.state.players) and self.state.players[0].id == player_id
+
     # ── turn helpers ──
     def _is_active_player(self, player_id: str) -> bool:
         if not self.state.players:
@@ -218,6 +224,10 @@ class Room:
             await self._handle_preview_card(player_id, msg)
         elif mtype == "epilogue_vote":
             await self._handle_epilogue_vote(player_id, msg)
+        elif mtype == "epilogue_done":
+            await self._handle_epilogue_done(player_id)
+        elif mtype == "epilogue_finalize":
+            await self._handle_epilogue_finalize(player_id)
         else:
             await self.connections.send(player_id, {"type": "error", "message": f"Unknown message type: {mtype}"})
 
@@ -554,6 +564,18 @@ class Room:
             return bool(card.get("blank"))
         return bool(getattr(card, "blank", False))
 
+    def _is_authored_card(self, card) -> bool:
+        """True if ``card`` belongs in the epilogue vote pool.
+
+        Authored this game OR kept from a previous game (a RAG re-entry) —
+        never a shipped seed card, never an un-authored blank. Driven by the
+        ``origin`` field stamped at creation/deal time (see deck._normalise_card,
+        deck._make_blank_card, Room._handle_create_card, Room._handle_play).
+        """
+        if isinstance(card, dict):
+            return card.get("origin") == "authored"
+        return getattr(card, "origin", None) == "authored"
+
     def _card_is_playable(self, card) -> bool:
         """True if a card in hand can meaningfully be played.
 
@@ -774,7 +796,13 @@ class Room:
                     {"type": "error", "message": "A blank card must be given a title and description to play"},
                 )
                 return
-            authored = {**card, "title": title, "description": description, "creator_id": player_id}
+            authored = {
+                **card,
+                "title": title,
+                "description": description,
+                "creator_id": player_id,
+                "origin": "authored",
+            }
             authored.pop("blank", None)
             merged = {**self.state.cards, card_id: authored}
             self.state = self.state.model_copy(update={"cards": merged})
@@ -930,6 +958,7 @@ class Room:
                 "title": msg.title,
                 "description": msg.description,
                 "creator_id": player_id,
+                "origin": "authored",
             },
         }
         self.state = self.state.model_copy(update={"cards": new_cards})
@@ -999,8 +1028,16 @@ class Room:
         )
 
     async def start_epilogue(self) -> None:
-        """Begin the epilogue phase: gather created cards and open voting."""
-        cards = list(self.state.cards.values())
+        """Begin the epilogue phase: gather authored cards and open voting.
+
+        The vote pool is AUTHORED cards only — authored this game or kept from
+        a previous game (a RAG re-entry) — never shipped seed cards and never
+        un-authored blanks (see :meth:`_is_authored_card`). Voting on played vs.
+        unplayed authored cards is intentionally NOT distinguished here: the
+        decided policy is "every authored card gets a vote", regardless of
+        whether it ever left the deck.
+        """
+        cards = [c for c in self.state.cards.values() if self._is_authored_card(c)]
         # normalise to dicts with an 'id' key
         card_dicts = [c if isinstance(c, dict) else c.model_dump() for c in cards]
         # Only real players vote in the epilogue; spectators authored no cards
@@ -1014,12 +1051,39 @@ class Room:
         if self._epilogue is None:
             await self.connections.send(player_id, {"type": "error", "message": "No epilogue in progress"})
             return
-        all_in = self._epilogue.record_vote(player_id, msg.card_id, msg.keep)
-        if all_in:
-            result = await self._epilogue.tally_and_persist()
-            self.state = self.state.model_copy(update={"phase": "ended"})
-            await self._broadcast_state()
-            await self._log_and_broadcast(f"Epilogue complete. Kept: {len(result.kept)} cards.")
+        self._epilogue.record_vote(player_id, msg.card_id, msg.keep)
+
+    async def _handle_epilogue_done(self, player_id: str) -> None:
+        """A player is done voting — cards they never voted on abstain.
+
+        Finalizes once every non-spectator player has signalled done, so a
+        player who walks away (or never gets to every card) cannot stall the
+        room forever.
+        """
+        if self._epilogue is None:
+            await self.connections.send(player_id, {"type": "error", "message": "No epilogue in progress"})
+            return
+        if self._epilogue.mark_done(player_id):
+            await self._finalize_epilogue()
+
+    async def _handle_epilogue_finalize(self, player_id: str) -> None:
+        """Host-only: finalize the epilogue immediately, regardless of who's done."""
+        if self._epilogue is None:
+            await self.connections.send(player_id, {"type": "error", "message": "No epilogue in progress"})
+            return
+        if not self._is_host(player_id):
+            await self.connections.send(
+                player_id, {"type": "error", "message": "Only the host can finalize the epilogue early"}
+            )
+            return
+        await self._finalize_epilogue()
+
+    async def _finalize_epilogue(self) -> None:
+        """Tally votes, persist kept cards, and transition to ``ended``."""
+        result = await self._epilogue.tally_and_persist()
+        self.state = self.state.model_copy(update={"phase": "ended"})
+        await self._broadcast_state()
+        await self._log_and_broadcast(f"Epilogue complete. Kept: {len(result.kept)} cards.")
 
     # ── helpers ──
     def snapshot(self) -> dict:

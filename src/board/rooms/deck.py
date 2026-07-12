@@ -55,6 +55,7 @@ def _make_blank_card(n: int) -> dict:
         "description": "",
         "blank": True,
         "creator_id": "blank",
+        "origin": "blank",
     }
 
 
@@ -94,14 +95,21 @@ def _normalise_card(raw: dict, index: int) -> dict:
     id/title/description/creator_id, which stripped the ops off every card and
     forced every play through the LLM interpreter — the deterministic play path
     depends on these fields surviving into ``state.cards``.
+
+    Also stamps ``origin``: ``"seed"`` for shipped seed cards, ``"authored"``
+    for RAG-kept re-entries (``source == "player"``, upserted by a prior game's
+    epilogue). This is the provenance the epilogue vote pool filters on — see
+    Room.start_epilogue.
     """
     card_id = raw.get("id") or raw.get("card_id") or f"deck-{index:03d}"
     canonical = _coerce_canonical(raw.get("canonical"))
+    source = raw.get("source", "seed")
     card: dict = {
         "id": card_id,
         "title": raw.get("title", ""),
         "description": raw.get("description", ""),
-        "creator_id": raw.get("source", "seed"),
+        "creator_id": source,
+        "origin": "authored" if source == "player" else "seed",
     }
     if canonical is not None:
         card["canonical"] = canonical

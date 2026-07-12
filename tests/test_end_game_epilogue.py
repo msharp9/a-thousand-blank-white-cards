@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from engine.scoring import evaluate_win_condition, resolve_end_of_game
-from models.ws_messages import EpilogueVoteMsg, PassMsg
+from models.ws_messages import EpilogueDoneMsg, EpilogueVoteMsg, PassMsg
 from board.rooms.room import Room
 
 
@@ -103,12 +103,16 @@ def test_dev_force_end_game_rejects_when_not_playing() -> None:
 
 
 def test_epilogue_vote_completion_reaches_ended() -> None:
-    # After the epilogue opens, votes on the authored cards complete → phase="ended".
-    authored = {"a1": {"id": "a1", "title": "Custom", "description": "x", "creator_id": "p1"}}
+    # After the epilogue opens, both players voting then signalling done
+    # finalizes -> phase="ended".
+    authored = {"a1": {"id": "a1", "title": "Custom", "description": "x", "creator_id": "p1", "origin": "authored"}}
     room = _ended_room([], authored, scores=(1, 2))
     asyncio.run(room.handle_action("p1", PassMsg()))
     assert room.state.phase == "epilogue"
-    # Both real players vote on the single authored card.
+    # Both real players vote on the single authored card, then mark done.
     asyncio.run(room.handle_action("p1", EpilogueVoteMsg(card_id="a1", keep=True)))
     asyncio.run(room.handle_action("p2", EpilogueVoteMsg(card_id="a1", keep=True)))
+    asyncio.run(room.handle_action("p1", EpilogueDoneMsg()))
+    assert room.state.phase == "epilogue"  # p2 hasn't signalled done yet
+    asyncio.run(room.handle_action("p2", EpilogueDoneMsg()))
     assert room.state.phase == "ended"

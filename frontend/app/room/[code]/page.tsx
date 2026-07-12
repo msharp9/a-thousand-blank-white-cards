@@ -110,6 +110,7 @@ export default function RoomPage() {
     connected,
     promptChoice,
     clearPromptChoice,
+    epilogueCards,
     send,
   } = useGameSocket(nameSet ? code : "", name);
 
@@ -144,11 +145,6 @@ export default function RoomPage() {
 
   const isHost = Boolean(
     gameState && myPlayerId && gameState.players[0]?.id === myPlayerId,
-  );
-
-  const epilogueCards: CardSnapshot[] = useMemo(
-    () => (gameState ? Object.values(gameState.cards) : []),
-    [gameState],
   );
 
   // Winner names for the epilogue banner: the backend resolves scoring and sets
@@ -344,7 +340,7 @@ export default function RoomPage() {
                 </p>
               </div>
             )}
-            <EpilogueView cards={epilogueCards} send={send} />
+            <EpilogueView cards={epilogueCards} send={send} isHost={isHost} />
           </div>
         )}
 

@@ -54,6 +54,11 @@ export type EpilogueVoteMsg = {
   card_id: string;
   keep: boolean;
 };
+// A player is done voting; any card they never voted on abstains. This is
+// what makes voting skippable instead of requiring full coverage.
+export type EpilogueDoneMsg = { type: "epilogue_done" };
+// Host-only: finalize the epilogue immediately, regardless of who's done.
+export type EpilogueFinalizeMsg = { type: "epilogue_finalize" };
 
 export type ClientMsg =
   | JoinMsg
@@ -64,7 +69,9 @@ export type ClientMsg =
   | PlayMsg
   | CreateCardMsg
   | PreviewCardMsg
-  | EpilogueVoteMsg;
+  | EpilogueVoteMsg
+  | EpilogueDoneMsg
+  | EpilogueFinalizeMsg;
 
 // ─── server → client ──────────────────────────────────────────────────────
 
