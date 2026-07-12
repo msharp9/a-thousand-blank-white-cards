@@ -81,21 +81,26 @@ def _facade_methods() -> list[str]:
 
 def _build_reference() -> str:
     """Assemble the full introspected engine reference text."""
-    from models.effects import CardTarget, Target
+    from models.effects import _VALID_CARD_TARGETS, _VALID_TARGETS
 
     parts: list[str] = []
 
     parts.append('Available engine ops (compose these into an EffectProgram {"ops": [...]}):')
     parts.extend(_op_signatures())
 
-    targets = _literal_values(Target)
-    if targets:
-        parts.append("")
-        parts.append("Valid player Target values: " + ", ".join(targets) + ".")
-
-    card_targets = _literal_values(CardTarget)
-    if card_targets:
-        parts.append("Valid CardTarget values (for card-manipulating ops): " + ", ".join(card_targets) + ".")
+    parts.append("")
+    parts.append(
+        "Valid player Target values: "
+        + ", ".join(sorted(_VALID_TARGETS))
+        + ". Open prefixed forms are also valid: 'id:<player_id>' (one specific player) and "
+        "'has:<condition_key>' (every player whose conditions bag has a truthy key)."
+    )
+    parts.append(
+        "Valid CardTarget values (for card-manipulating ops): "
+        + ", ".join(sorted(_VALID_CARD_TARGETS))
+        + ". Open prefixed forms: 'id:<card_id>' and 'attr:<key>=<value>' (cards whose "
+        "attributes bag matches, e.g. attr:color=red)."
+    )
 
     methods = _facade_methods()
     if methods:

@@ -2,29 +2,49 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union, get_args
+from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Target addresses
 # ---------------------------------------------------------------------------
-Target = Literal[
-    "self",
-    "left_neighbor",
-    "right_neighbor",
-    "all",
-    "all_others",
-    "chooser",  # actor chooses at play-time (requires_choice=True)
-    "target_player",  # pre-resolved by engine from ctx.chosen_player_id
-    "player_with_most_points",
-    "player_with_least_points",
-    "player_with_empty_hand",
-]
+# The closed set of well-known player addresses. Beyond these, two OPEN,
+# validated prefix forms keep the vocabulary extensible without a frozen enum
+# (docs/state-example.jsonc's "everything is dynamic" mandate):
+#   "id:<player_id>"      — one specific player (missing id resolves to nobody)
+#   "has:<condition_key>" — every player whose conditions bag has a truthy key
+_VALID_TARGETS: frozenset[str] = frozenset(
+    {
+        "self",
+        "left_neighbor",
+        "right_neighbor",
+        "all",
+        "all_others",
+        "chooser",  # actor chooses at play-time (requires_choice=True)
+        "target_player",  # pre-resolved by engine from ctx.chosen_player_id
+        "player_with_most_points",
+        "player_with_least_points",
+        "player_with_empty_hand",
+    }
+)
 
-# The set of valid runtime Target literals (derived from the Literal above so it
-# never drifts). Used by map_authoring_target for passthrough detection.
-_VALID_TARGETS: frozenset[str] = frozenset(get_args(Target))
+_TARGET_PREFIXES: tuple[str, ...] = ("id:", "has:")
+
+
+def _validate_target(value: str) -> str:
+    if value in _VALID_TARGETS:
+        return value
+    for prefix in _TARGET_PREFIXES:
+        if value.startswith(prefix) and len(value) > len(prefix):
+            return value
+    raise ValueError(
+        f"invalid Target {value!r}: expected one of {sorted(_VALID_TARGETS)} "
+        f"or a prefixed form ({', '.join(p + '…' for p in _TARGET_PREFIXES)})"
+    )
+
+
+Target = Annotated[str, AfterValidator(_validate_target)]
 
 # ---------------------------------------------------------------------------
 # Card-target addresses
@@ -47,15 +67,33 @@ _VALID_TARGETS: frozenset[str] = frozenset(get_args(Target))
 #                   hand") is a documented future extension — it would pair a
 #                   CardTarget with a companion player Target rather than
 #                   overloading this literal.
-CardTarget = Literal[
-    "this",
-    "chosen_card",
-    "all_in_play",
-    "all_in_hand",
-]
+# Open, validated prefix forms (mirroring the player Target grammar):
+#   "id:<card_id>"   — one specific card (missing id resolves to nothing)
+#   "attr:<k>=<v>"   — every card whose attributes bag has key k stringifying to v
+_VALID_CARD_TARGETS: frozenset[str] = frozenset(
+    {
+        "this",
+        "chosen_card",
+        "all_in_play",
+        "all_in_hand",
+    }
+)
 
-# Valid CardTarget literals, derived from the Literal so it never drifts.
-_VALID_CARD_TARGETS: frozenset[str] = frozenset(get_args(CardTarget))
+
+def _validate_card_target(value: str) -> str:
+    if value in _VALID_CARD_TARGETS:
+        return value
+    if value.startswith("id:") and len(value) > 3:
+        return value
+    if value.startswith("attr:") and "=" in value[5:] and value[5:].split("=", 1)[0]:
+        return value
+    raise ValueError(
+        f"invalid CardTarget {value!r}: expected one of {sorted(_VALID_CARD_TARGETS)}, "
+        "'id:<card_id>', or 'attr:<key>=<value>'"
+    )
+
+
+CardTarget = Annotated[str, AfterValidator(_validate_card_target)]
 
 # CardTargets that mean "the actor picks a card at play time" — their presence
 # flips EffectProgram.requires_choice, mirroring the player _CHOICE_TARGETS.
@@ -113,9 +151,12 @@ def map_authoring_target(raw: str, *, default: Target | None = None) -> Target:
     (raises, or returns ``default``). Callers that need to route placement must
     special-case "center" before calling this function.
     """
-    key = raw.strip().lower()
+    stripped = raw.strip()
+    if stripped.startswith(_TARGET_PREFIXES):
+        return stripped  # ids/condition keys are case-sensitive — no lowering
+    key = stripped.lower()
     if key in _VALID_TARGETS:
-        return key  # type: ignore[return-value]  # narrowed by membership check
+        return key
     if key in _AUTHORING_TARGET_ALIASES:
         return _AUTHORING_TARGET_ALIASES[key]
     if default is not None:
@@ -135,7 +176,10 @@ def is_known_target(raw: str) -> bool:
     target — which ``map_authoring_target(..., default=...)`` would silently paper
     over — from an omitted one, so drift can be logged instead of swallowed.
     """
-    key = raw.strip().lower()
+    stripped = raw.strip()
+    if stripped.startswith(_TARGET_PREFIXES):
+        return True
+    key = stripped.lower()
     return key in _VALID_TARGETS or key in _AUTHORING_TARGET_ALIASES
 
 
@@ -216,6 +260,54 @@ class SetWinConditionOp(BaseModel):
     threshold: int | None = None
 
 
+class SetConditionOp(BaseModel):
+    """Write one key in each targeted player's open ``conditions`` bag.
+
+    The generic writer behind card-invented statuses ("poisoned", "confused",
+    …): reserved keys skip_next/extra_turn keep their loop semantics; any
+    other key is free-form state the UI/agent/hooks can read. ``value=None``
+    removes the key.
+    """
+
+    op: Literal["set_condition"] = "set_condition"
+    target: Target = "self"
+    key: str
+    value: Any = None
+
+
+class SetCardAttributeOp(BaseModel):
+    """Write one key in each targeted card's open ``attributes`` bag.
+
+    Attributes are card-invented metadata (e.g. a color assigned to every
+    card for an Uno variant) addressable later via the "attr:<k>=<v>"
+    CardTarget form. ``value=None`` removes the key.
+    """
+
+    op: Literal["set_card_attribute"] = "set_card_attribute"
+    card_target: CardTarget = "this"
+    key: str
+    value: Any = None
+
+
+class CreateCardOp(BaseModel):
+    """Register ``count`` copies of a new card and route them somewhere.
+
+    Created cards carry structured authoring ``ops`` (compiled deterministically
+    when later drawn/played — no LLM round-trip) plus optional ``attributes``.
+    ``destination``: "deck_shuffle" (random deck positions), "deck_top", or
+    "hand" (the actor's). Capped at 10 copies per op so one card cannot flood
+    the game.
+    """
+
+    op: Literal["create_card"] = "create_card"
+    title: str
+    description: str = ""
+    ops: list[dict[str, Any]] = Field(default_factory=list)
+    attributes: dict[str, Any] = Field(default_factory=dict)
+    destination: Literal["deck_shuffle", "deck_top", "hand"] = "deck_shuffle"
+    count: int = Field(default=1, ge=1, le=10)
+
+
 class SetRuleOp(BaseModel):
     """Write one path in ``GameState.rules`` (the mutable rules-as-data bag).
 
@@ -272,6 +364,9 @@ Op = Annotated[
         DestroyCardOp,
         SetWinConditionOp,
         SetRuleOp,
+        SetConditionOp,
+        SetCardAttributeOp,
+        CreateCardOp,
         CustomNoteOp,
         EndGameOp,
     ],

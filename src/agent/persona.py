@@ -59,10 +59,17 @@ effect for the game engine, given the live game state.
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, destroy_card, set_win_condition, set_rule, custom_note, end_game) into an
-  EffectProgram. set_rule writes game rules as data (paths: draw, play, end_condition.type,
-  win_condition.kind, extra.<anything>) — rule-changing cards ("draws are now 2", "game ends
-  when someone empties their hand") should compose set_rule ops, not snippets.
+  draw_cards, destroy_card, set_win_condition, set_rule, set_condition, set_card_attribute,
+  create_card, custom_note, end_game) into an EffectProgram.
+  * set_rule writes game rules as data (paths: draw, play, end_condition.type,
+    win_condition.kind, extra.<anything>) — rule-changing cards ("draws are now 2", "game
+    ends when someone empties their hand") compose set_rule ops, not snippets.
+  * set_condition writes free-form per-player statuses ("poisoned", "cursed"...); targets
+    accept open forms 'id:<player_id>' and 'has:<condition_key>' besides the named set.
+  * set_card_attribute tags cards with metadata (e.g. give every card a color); card
+    targets accept 'id:<card_id>' and 'attr:<key>=<value>'.
+  * create_card mints new cards (with their own ops!) into the deck or a hand — a card
+    can add Draw 2s / Reverses / whole new mechanics to the game.
 - Only for genuinely novel effects that no combination of ops can express should you
   fall back to a generated code snippet.
 - Use the tools you are given. `read_engine_methods` tells you exactly which ops and

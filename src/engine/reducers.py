@@ -23,6 +23,9 @@ from models.effects import (
     Op,
     ReverseOrderOp,
     ScrambleOrderOp,
+    CreateCardOp,
+    SetCardAttributeOp,
+    SetConditionOp,
     SetPointsOp,
     SetRuleOp,
     SetWinConditionOp,
@@ -48,6 +51,13 @@ def _resolve_targets(target: Target, ctx: HookContext, state: GameState) -> list
     changes who counts as a neighbor.
     """
     players = state.players
+
+    if target.startswith("id:"):
+        pid = target[3:]
+        return [pid] if any(p.id == pid for p in players) else []
+    if target.startswith("has:"):
+        key = target[4:]
+        return [p.id for p in players if p.conditions.get(key)]
 
     match target:
         case "self":
@@ -92,6 +102,17 @@ def _resolve_card_targets(card_target: CardTarget, ctx: HookContext, state: Game
     - ``"all_in_hand"`` -> the ACTOR's own hand (first-cut decision). Whose-hand
                            composition is a documented future extension.
     """
+    if card_target.startswith("id:"):
+        cid = card_target[3:]
+        return [cid] if cid in state.cards else []
+    if card_target.startswith("attr:"):
+        key, _, expected = card_target[5:].partition("=")
+        return [
+            cid
+            for cid, card in state.cards.items()
+            if isinstance(card, dict) and str((card.get("attributes") or {}).get(key)) == expected
+        ]
+
     match card_target:
         case "this":
             return [ctx.card_id] if ctx.card_id is not None else []
@@ -258,6 +279,76 @@ def _reduce_custom_note(state: GameState, op: CustomNoteOp, ctx: HookContext) ->
     return state.with_log(f"[note] {op.note}")
 
 
+def _reduce_set_condition(state: GameState, op: SetConditionOp, ctx: HookContext) -> GameState:
+    for pid in _resolve_targets(op.target, ctx, state):
+        if op.value is None:
+            state = state.without_condition(pid, op.key)
+        else:
+            state = state.with_condition(pid, op.key, op.value)
+    return state
+
+
+def _reduce_set_card_attribute(state: GameState, op: SetCardAttributeOp, ctx: HookContext) -> GameState:
+    cards = dict(state.cards)
+    for cid in _resolve_card_targets(op.card_target, ctx, state):
+        card = cards.get(cid)
+        if not isinstance(card, dict):
+            continue
+        attributes = dict(card.get("attributes") or {})
+        if op.value is None:
+            attributes.pop(op.key, None)
+        else:
+            attributes[op.key] = op.value
+        cards[cid] = {**card, "attributes": attributes}
+    return state.model_copy(update={"cards": cards})
+
+
+def _reduce_create_card(
+    state: GameState, op: CreateCardOp, ctx: HookContext, *, rng: random.Random | None = None
+) -> GameState:
+    """Register ``op.count`` copies and route them to the requested destination.
+
+    Ids are derived from the source card + a running per-state counter so the
+    reducer stays deterministic; deck_shuffle randomness comes from the
+    injected ``rng`` (same convention as scramble_order).
+    """
+    rng = rng or random.Random()
+    cards = dict(state.cards)
+    deck = list(state.deck)
+    players = list(state.players)
+    base = ctx.card_id or "card"
+    serial = sum(1 for cid in cards if cid.startswith("created-"))
+    new_ids: list[str] = []
+    for _ in range(op.count):
+        cid = f"created-{base}-{serial}"
+        while cid in cards:
+            serial += 1
+            cid = f"created-{base}-{serial}"
+        serial += 1
+        cards[cid] = {
+            "id": cid,
+            "title": op.title,
+            "description": op.description,
+            "creator_id": ctx.actor_id,
+            "origin": "authored",
+            "canonical": {"ops": [dict(o) for o in op.ops]},
+            "attributes": dict(op.attributes),
+        }
+        new_ids.append(cid)
+
+    if op.destination == "deck_top":
+        deck = [*new_ids, *deck]
+    elif op.destination == "deck_shuffle":
+        for cid in new_ids:
+            deck.insert(rng.randint(0, len(deck)), cid)
+    else:
+        players = [p.model_copy(update={"hand": [*p.hand, *new_ids]}) if p.id == ctx.actor_id else p for p in players]
+
+    return state.model_copy(update={"cards": cards, "deck": deck, "players": players}).with_log(
+        f"[created] {op.count}x '{op.title}' -> {op.destination}"
+    )
+
+
 _SCALAR_RULE_PATHS = frozenset({"draw", "play", "skip_predicate"})
 _NESTED_RULE_HEADS = frozenset({"end_condition", "win_condition", "cannot_play"})
 
@@ -310,17 +401,22 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
     "custom_note": _reduce_custom_note,
     "end_game": _reduce_end_game,
     "set_rule": _reduce_set_rule,
+    "set_condition": _reduce_set_condition,
+    "set_card_attribute": _reduce_set_card_attribute,
+    "create_card": _reduce_create_card,
 }
 
 
 def apply_op(state: GameState, op: Op, ctx: HookContext, *, rng: random.Random | None = None) -> GameState:
     """Dispatch a single op to its reducer, returning a new GameState.
 
-    ``rng`` is only consumed by ``scramble_order`` (dependency-injectable for
-    deterministic tests); every other op ignores it.
+    ``rng`` is only consumed by ``scramble_order`` and ``create_card``
+    (dependency-injectable for deterministic tests); every other op ignores it.
     """
     if op.op == "scramble_order":
         return _reduce_scramble_order(state, op, ctx, rng=rng)
+    if op.op == "create_card":
+        return _reduce_create_card(state, op, ctx, rng=rng)
     return _REDUCERS[op.op](state, op, ctx)
 
 

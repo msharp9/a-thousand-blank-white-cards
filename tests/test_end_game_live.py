@@ -234,3 +234,49 @@ def test_uno_v1_as_pure_rule_ops() -> None:
     asyncio.run(_next_turn_and_win())
     assert room.state.phase in ("results", "ended")
     assert "p2" in room.state.winner_ids
+
+
+def test_spicy_uno_colors_and_created_cards_without_a_snippet() -> None:
+    # Phase-B Uno: one card tags every in-hand card with a color AND mints
+    # Draw 2 / Reverse cards into the deck — no snippet, pure ops.
+    spicy = {
+        "id": "spicy",
+        "title": "House Rules: Spicy Uno",
+        "description": "Cards get colors; the deck grows Draw 2s and a Reverse.",
+        "canonical": {
+            "ops": [
+                {"op": "set_card_attribute", "args": {"card_target": "all_in_hand", "key": "color", "value": "red"}},
+                {
+                    "op": "create_card",
+                    "args": {
+                        "title": "Draw 2",
+                        "description": "Draw two cards.",
+                        "ops": [{"op": "draw_cards", "args": {"target": "self", "amount": 2}}],
+                        "attributes": {"color": "blue"},
+                        "destination": "deck_top",
+                        "count": 2,
+                    },
+                },
+                {
+                    "op": "create_card",
+                    "args": {
+                        "title": "Reverse",
+                        "description": "Reverse the turn order.",
+                        "ops": [{"op": "reverse_order", "args": {}}],
+                        "destination": "deck_top",
+                    },
+                },
+            ]
+        },
+    }
+    other = {"id": "o1", "title": "Other", "description": "x"}
+    room = _mid_deck_room(["spicy", "o1"], {"spicy": spicy, "o1": other}, deck=["d1"])
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="spicy")))
+
+    assert room.state.cards["o1"]["attributes"] == {"color": "red"}
+    created = [cid for cid in room.state.deck if cid.startswith("created-")]
+    assert len(created) == 3
+    titles = {room.state.cards[cid]["title"] for cid in created}
+    assert titles == {"Draw 2", "Reverse"}
+    assert all(room.state.cards[cid]["origin"] == "authored" for cid in created)

@@ -16,6 +16,9 @@ from models.effects import (
     ExtraTurnOp,
     ReverseOrderOp,
     ScrambleOrderOp,
+    CreateCardOp,
+    SetCardAttributeOp,
+    SetConditionOp,
     SetPointsOp,
     SetRuleOp,
     SetWinConditionOp,
@@ -375,3 +378,95 @@ class TestSetRule:
         new = apply_op(state, ChangeDrawCountOp(amount=2), make_ctx("p1"))
         assert new.rules.draw == 2
         assert new.draw_count == 2
+
+
+class TestOpenTargets:
+    def test_id_target_resolves_to_that_player(self):
+        state = make_state()
+        new = apply_op(state, AddPointsOp(target="id:p2", amount=4), make_ctx("p1"))
+        assert new.get_player("p2").score == state.get_player("p2").score + 4
+
+    def test_id_target_of_missing_player_resolves_to_nobody(self):
+        state = make_state()
+        new = apply_op(state, AddPointsOp(target="id:ghost", amount=4), make_ctx("p1"))
+        assert [p.score for p in new.players] == [p.score for p in state.players]
+
+    def test_has_target_resolves_by_condition(self):
+        state = make_state().with_condition("p2", "poisoned", 2)
+        new = apply_op(state, SubtractPointsOp(target="has:poisoned", amount=3), make_ctx("p1"))
+        assert new.get_player("p2").score == state.get_player("p2").score - 3
+        assert new.get_player("p1").score == state.get_player("p1").score
+
+    def test_attr_card_target_resolves_matching_cards(self):
+        state = make_state()
+        cards = {
+            "r1": {"id": "r1", "title": "Red", "attributes": {"color": "red"}},
+            "b1": {"id": "b1", "title": "Blue", "attributes": {"color": "blue"}},
+        }
+        players = [p.model_copy(update={"in_play": ["r1", "b1"]}) if p.id == "p1" else p for p in state.players]
+        state = state.model_copy(update={"cards": cards, "players": players})
+        new = apply_op(state, DestroyCardOp(card_target="attr:color=red"), make_ctx("p1"))
+        assert "r1" not in new.get_player("p1").in_play
+        assert "b1" in new.get_player("p1").in_play
+
+
+class TestSetCondition:
+    def test_sets_free_form_condition(self):
+        state = make_state()
+        new = apply_op(state, SetConditionOp(target="id:p2", key="poisoned", value=2), make_ctx("p1"))
+        assert new.get_player("p2").conditions == {"poisoned": 2}
+
+    def test_none_value_removes_condition(self):
+        state = make_state().with_condition("p1", "poisoned", 1)
+        new = apply_op(state, SetConditionOp(target="self", key="poisoned", value=None), make_ctx("p1"))
+        assert new.get_player("p1").conditions == {}
+
+
+class TestSetCardAttribute:
+    def test_tags_targeted_cards(self):
+        state = make_state()
+        cards = {"c1": {"id": "c1", "title": "X"}}
+        state = state.model_copy(update={"cards": cards})
+        new = apply_op(state, SetCardAttributeOp(card_target="id:c1", key="color", value="red"), make_ctx("p1"))
+        assert new.cards["c1"]["attributes"] == {"color": "red"}
+        assert "attributes" not in state.cards["c1"]
+
+
+class TestCreateCard:
+    def test_creates_into_deck_top_with_compilable_ops(self):
+        state = make_state()
+        op = CreateCardOp(
+            title="Draw 2",
+            description="Draw two cards.",
+            ops=[{"op": "draw_cards", "args": {"target": "self", "amount": 2}}],
+            destination="deck_top",
+            count=2,
+        )
+        new = apply_op(state, op, make_ctx("p1"))
+        assert len(new.deck) == len(state.deck) + 2
+        created_id = new.deck[0]
+        assert new.cards[created_id]["title"] == "Draw 2"
+        assert new.cards[created_id]["origin"] == "authored"
+        from engine.compile import compile_card
+
+        program = compile_card(new.cards[created_id])
+        assert program is not None and program.ops[0].op == "draw_cards"
+
+    def test_creates_into_hand(self):
+        state = make_state()
+        op = CreateCardOp(title="Gift", destination="hand")
+        new = apply_op(state, op, make_ctx("p1"))
+        assert any(cid.startswith("created-") for cid in new.get_player("p1").hand)
+
+    def test_deck_shuffle_is_rng_deterministic(self):
+        import random
+
+        state = make_state()
+        op = CreateCardOp(title="X", destination="deck_shuffle", count=3)
+        a = apply_op(state, op, make_ctx("p1"), rng=random.Random(7))
+        b = apply_op(state, op, make_ctx("p1"), rng=random.Random(7))
+        assert a.deck == b.deck
+
+    def test_count_capped_at_ten(self):
+        with pytest.raises(ValueError):
+            CreateCardOp(title="Flood", count=11)
