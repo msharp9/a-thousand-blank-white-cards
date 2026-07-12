@@ -1,8 +1,9 @@
 """engine.sandbox.validate — AST allowlist static safety checker for generated snippets.
 
 Generated `def apply(state, ctx)` snippets must pass this static check before they are
-ever stored or executed: no imports, no exec/eval/open/compile/__import__/breakpoint
-calls, no dunder attribute access, and exactly one top-level function named `apply`.
+ever stored or executed: no imports, no exec/eval/open/compile/__import__/breakpoint/
+getattr/setattr/delattr/vars/globals/locals calls, no dunder attribute access, and
+exactly one top-level function named `apply`.
 The subprocess RUNNER is a later phase; this is the static validator only.
 """
 
@@ -12,7 +13,22 @@ import ast
 from dataclasses import dataclass
 
 # Names forbidden as standalone calls or attributes.
-_FORBIDDEN_CALLS: frozenset[str] = frozenset({"exec", "eval", "open", "compile", "__import__", "breakpoint"})
+_FORBIDDEN_CALLS: frozenset[str] = frozenset(
+    {
+        "exec",
+        "eval",
+        "open",
+        "compile",
+        "__import__",
+        "breakpoint",
+        "getattr",
+        "setattr",
+        "delattr",
+        "vars",
+        "globals",
+        "locals",
+    }
+)
 
 
 @dataclass(frozen=True)

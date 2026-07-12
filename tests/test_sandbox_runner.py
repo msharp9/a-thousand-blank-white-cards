@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import py_compile
+from pathlib import Path
+
 import pytest
 
 from engine.sandbox.runner import SnippetExecutionError, execute_snippet
@@ -39,3 +42,17 @@ def test_timeout_raises() -> None:
     code = "def apply(s, c):\n    while True:\n        pass\n"
     with pytest.raises(SnippetExecutionError):
         execute_snippet(code, STATE, CTX, timeout=1.0)
+
+
+def test_child_runner_compiles() -> None:
+    child_runner = Path(__file__).parent.parent / "src" / "engine" / "sandbox" / "_child_runner.py"
+    py_compile.compile(str(child_runner), doraise=True)
+
+
+def test_execute_snippet_end_to_end_returns_valid_diff() -> None:
+    code = "def apply(s, c):\n    s.add_points(c['actor_id'], 2)\n    s.note('smoke')\n"
+    ops = execute_snippet(code, STATE, CTX)
+    assert ops == [
+        {"op": "add_points", "target": "p1", "amount": 2},
+        {"op": "custom_note", "note": "smoke"},
+    ]
