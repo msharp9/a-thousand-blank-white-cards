@@ -53,8 +53,9 @@ class EventBus:
     falls back to the module-level default registry, preserving behavior.
     """
 
-    def __init__(self, registry: Any = None) -> None:  # HookRegistry | None; Any avoids cycle
-        self._registry = registry
+    def __init__(self, registry: Any = None, *, max_hooks: int | None = None) -> None:
+        self._registry = registry  # HookRegistry | None; Any avoids cycle
+        self._max_hooks = max_hooks
 
     def emit(
         self,
@@ -64,4 +65,4 @@ class EventBus:
     ) -> Any:  # returns (potentially modified) GameState
         from engine.hooks import fire_hooks  # late import — avoids cycle
 
-        return fire_hooks(state, str(event), ctx, registry=self._registry)
+        return fire_hooks(state, str(event), ctx, registry=self._registry, max_hooks=self._max_hooks)

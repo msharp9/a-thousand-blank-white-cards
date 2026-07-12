@@ -24,6 +24,7 @@ from models.effects import (
     ReverseOrderOp,
     ScrambleOrderOp,
     CreateCardOp,
+    RegisterHookOp,
     SetCardAttributeOp,
     SetConditionOp,
     SetPointsOp,
@@ -33,10 +34,11 @@ from models.effects import (
     StealPointsOp,
     SubtractPointsOp,
     Target,
+    UnregisterHookOp,
 )
 from pydantic import ValidationError as PydanticValidationError
 
-from models.game_state import EndCondition, GameState, Rules, WinCondition
+from models.game_state import EndCondition, GameState, HookSpec, Rules, WinCondition
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +351,43 @@ def _reduce_create_card(
     )
 
 
+_MAX_HOOKS_PER_CARD = 3
+
+
+def _reduce_register_hook(state: GameState, op: RegisterHookOp, ctx: HookContext) -> GameState:
+    """Validate and append a serialized HookSpec (the ONE registration path)."""
+    from engine.events import GameEvent
+    from engine.sandbox.validate import validate_snippet
+
+    if op.event not in {e.value for e in GameEvent}:
+        raise ValueError(f"register_hook: unknown event {op.event!r}")
+    result = validate_snippet(op.code)
+    if not result.ok:
+        raise ValueError(f"register_hook: snippet failed validation: {result.error}")
+    source = ctx.card_id or "unknown"
+    existing = [h for h in state.hooks if h.source_card_id == source]
+    if len(existing) >= _MAX_HOOKS_PER_CARD:
+        raise ValueError(f"register_hook: card {source!r} already registered {_MAX_HOOKS_PER_CARD} hooks")
+    spec = HookSpec(
+        id=f"hook-{source}-{len(existing)}",
+        source_card_id=source,
+        event=op.event,
+        scope=op.scope,
+        owner_id=ctx.actor_id if op.scope == "player" else None,
+        code=op.code,
+    )
+    return state.model_copy(update={"hooks": [*state.hooks, spec]}).with_log(
+        f"[hook] registered on {op.event} by {source}"
+    )
+
+
+def _reduce_unregister_hook(state: GameState, op: UnregisterHookOp, ctx: HookContext) -> GameState:
+    remaining = [h for h in state.hooks if h.source_card_id != op.source_card_id]
+    if len(remaining) == len(state.hooks):
+        return state
+    return state.model_copy(update={"hooks": remaining}).with_log(f"[hook] unregistered {op.source_card_id}")
+
+
 _SCALAR_RULE_PATHS = frozenset({"draw", "play", "skip_predicate"})
 _NESTED_RULE_HEADS = frozenset({"end_condition", "win_condition", "cannot_play"})
 
@@ -401,6 +440,8 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
     "custom_note": _reduce_custom_note,
     "end_game": _reduce_end_game,
     "set_rule": _reduce_set_rule,
+    "register_hook": _reduce_register_hook,
+    "unregister_hook": _reduce_unregister_hook,
     "set_condition": _reduce_set_condition,
     "set_card_attribute": _reduce_set_card_attribute,
     "create_card": _reduce_create_card,

@@ -112,6 +112,33 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
     return _handler
 
 
+def build_registry(state: Any) -> HookRegistry:
+    """Build a HookRegistry from ``state.hooks`` (the serialized HookSpecs).
+
+    The registry is a DERIVED, per-room cache — state is the source of truth,
+    so hooks survive restarts/reconnects and never leak across rooms (the old
+    module-global registry could). Specs whose code no longer validates are
+    skipped (validation rules may have tightened since registration).
+    """
+    registry = HookRegistry()
+    for spec in getattr(state, "hooks", []):
+        try:
+            handler = make_snippet_handler(spec.source_card_id, spec.code)
+        except ValueError:
+            continue
+        registry.register(
+            RegisteredHook(
+                id=spec.id,
+                source_card_id=spec.source_card_id,
+                event=spec.event,
+                scope=spec.scope,
+                owner_id=spec.owner_id,
+            ),
+            handler,
+        )
+    return registry
+
+
 # Module-level default registry used by the engine.
 _default_registry = HookRegistry()
 
@@ -131,6 +158,7 @@ def fire_hooks(
     ctx: Any,  # HookContext
     *,
     registry: HookRegistry | None = None,
+    max_hooks: int | None = None,
 ) -> Any:  # returns GameState
     """Fire all hooks subscribed to `event` in the correct order.
 
@@ -149,6 +177,9 @@ def fire_hooks(
     player_hooks = [h for h in matching if h.scope == "player"]
     center_hooks = [h for h in matching if h.scope == "center"]
     ordered = player_hooks + center_hooks
+    if max_hooks is not None and len(ordered) > max_hooks:
+        state = state.with_log(f"[hook] {len(ordered) - max_hooks} hook(s) skipped on {event} (cap {max_hooks})")
+        ordered = ordered[:max_hooks]
 
     for hook in ordered:
         handler = reg.get_handler(hook.id)
@@ -156,7 +187,8 @@ def fire_hooks(
             continue
 
         card = _get_card(state, hook.source_card_id)
-        is_uncounterable = bool(card.properties.get("uncounterable", False)) if card is not None else False
+        props = card.get("properties") if isinstance(card, dict) else getattr(card, "properties", None)
+        is_uncounterable = bool((props or {}).get("uncounterable", False))
 
         state = handler(state, ctx)
 
