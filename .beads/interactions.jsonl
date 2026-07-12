@@ -283,3 +283,4 @@
 {"id":"int-83b68d82","kind":"field_change","created_at":"2026-07-12T07:15:38.212139Z","actor":"Matt Sharp","issue_id":"a-thousand-blank-white-cards-13v","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
 {"id":"int-37e12a0a","kind":"field_change","created_at":"2026-07-12T07:15:38.478248Z","actor":"Matt Sharp","issue_id":"a-thousand-blank-white-cards-as9","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
 {"id":"int-ac79024a","kind":"field_change","created_at":"2026-07-12T07:15:38.765459Z","actor":"Matt Sharp","issue_id":"a-thousand-blank-white-cards-bsv","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
+{"id":"int-1248b685","kind":"field_change","created_at":"2026-07-12T07:23:34.460457Z","actor":"Matt Sharp","issue_id":"a-thousand-blank-white-cards-bso","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
