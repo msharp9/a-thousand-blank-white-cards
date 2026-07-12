@@ -27,7 +27,12 @@ class ToolAwareFake(GenericFakeChatModel):
 
 
 class LoopingFake(GenericFakeChatModel):
-    """A fake model that ALWAYS emits another tool call, so the agent never stops."""
+    """A fake model that ALWAYS emits another tool call, so the agent never stops.
+
+    Unconditional: even the forced tools-disabled final-answer call gets an
+    (empty-content) tool-call message back, so the forced call also fails to
+    parse and the runtime must degrade to ``_fallback_result``.
+    """
 
     tool_name: str = "noop_tool"
 
@@ -39,6 +44,29 @@ class LoopingFake(GenericFakeChatModel):
             content="",
             tool_calls=[{"name": self.tool_name, "args": {}, "id": "loop-call"}],
         )
+        return ChatResult(generations=[ChatGeneration(message=msg)])
+
+
+class LoopingThenAnsweringFake(GenericFakeChatModel):
+    """Loops on tool calls UNTIL it sees the forced-final-answer instruction.
+
+    Models a budget-exhausted agent whose forced final call succeeds: the fake
+    inspects the last message for the "Budget exhausted" marker that
+    ``agent.runtime`` appends only for the tools-disabled forced call.
+    """
+
+    tool_name: str = "noop_tool"
+    final_payload: str = '{"verdict": "ok", "comment": "Forced answer.", "persona_action": "none"}'
+
+    def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ANN003
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001, ANN003
+        last = messages[-1] if messages else None
+        if last is not None and "Budget exhausted" in str(getattr(last, "content", "")):
+            msg = AIMessage(content=self.final_payload)
+        else:
+            msg = AIMessage(content="", tool_calls=[{"name": self.tool_name, "args": {}, "id": "loop-call"}])
         return ChatResult(generations=[ChatGeneration(message=msg)])
 
 
@@ -184,7 +212,27 @@ def test_build_agent_binds_passed_tools():
 # ---------------------------------------------------------------------------
 
 
-def test_run_agent_recursion_cap_returns_fallback():
+def test_run_agent_recursion_cap_forces_final_answer():
+    """Hitting the recursion cap makes one forced tools-disabled call; its parsed
+    JSON is returned instead of the deterministic give-up fallback."""
+    fake = LoopingThenAnsweringFake(messages=iter([]))
+    result = run_agent(
+        "Loop card",
+        "desc",
+        model=fake,
+        tools=[noop_tool],
+        max_tool_calls=4,  # small cap
+        timeout=10.0,
+    )
+    assert isinstance(result, InterpretResult)
+    assert result.verdict == "ok"
+    assert result.comment == "Forced answer."
+    assert result.persona_action == "none"
+
+
+def test_run_agent_recursion_cap_forced_call_also_fails_returns_fallback():
+    """When the forced call ALSO can't produce a parseable answer (still looping),
+    the runtime degrades to the deterministic bounded fallback."""
     fake = LoopingFake(messages=iter([]))
     result = run_agent(
         "Loop card",
@@ -201,19 +249,40 @@ def test_run_agent_recursion_cap_returns_fallback():
     assert result.persona_action == "do_nothing"
 
 
-def test_run_agent_timeout_returns_fallback():
-    class HangingFake(GenericFakeChatModel):
+def test_run_agent_timeout_forces_final_answer():
+    class HangingThenAnsweringFake(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ANN003
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001, ANN003
+            last = messages[-1] if messages else None
+            if last is not None and "Budget exhausted" in str(getattr(last, "content", "")):
+                payload = '{"verdict": "ok", "comment": "Forced answer after timeout.", "persona_action": "none"}'
+                return ChatResult(generations=[ChatGeneration(message=AIMessage(content=payload))])
+            import time
+
+            time.sleep(1.0)
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content="{}"))])
+
+    fake = HangingThenAnsweringFake(messages=iter([]))
+    result = run_agent("Slow card", "desc", model=fake, timeout=0.2)
+    assert result.verdict == "ok"
+    assert result.comment == "Forced answer after timeout."
+
+
+def test_run_agent_timeout_forced_call_also_times_out_returns_fallback():
+    class AlwaysHangingFake(GenericFakeChatModel):
         def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ANN003
             return self
 
         def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001, ANN003
             import time
 
-            time.sleep(5)
+            time.sleep(1.0)
             return ChatResult(generations=[ChatGeneration(message=AIMessage(content="{}"))])
 
-    fake = HangingFake(messages=iter([]))
-    result = run_agent("Slow card", "desc", model=fake, timeout=0.5)
+    fake = AlwaysHangingFake(messages=iter([]))
+    result = run_agent("Slow card", "desc", model=fake, timeout=0.1, forced_call_timeout=0.1)
     assert result.verdict == "invalid"
     assert result.comment
 
