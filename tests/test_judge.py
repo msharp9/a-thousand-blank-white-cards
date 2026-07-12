@@ -62,6 +62,17 @@ def test_judge_routes_through_get_chat_model(monkeypatch: pytest.MonkeyPatch) ->
         llm.with_structured_output.assert_called_once_with(Verdict)
 
 
+def test_judge_default_model_delegates_to_get_chat_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """JudgeLLM() with no model passes None through, so get_chat_model resolves
+    the configured LLM_CHAT_MODEL instead of a hardcoded id overriding it."""
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    with patch("evals.judge.get_chat_model") as mock_factory:
+        llm = MagicMock()
+        mock_factory.return_value = llm
+        JudgeLLM()
+        mock_factory.assert_called_once_with(None)
+
+
 def test_judge_evaluate_calls_structured_output(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_API_KEY", "test-key")
     expected = _verdict()

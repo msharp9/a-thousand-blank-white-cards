@@ -12,8 +12,9 @@ from pathlib import Path
 
 from evals.eval_core import EvalRunReport
 from evals.harness import run_harness
+from evals.paths import find_repo_root
 
-OUTPUT_PATH = Path(__file__).resolve().parents[3] / "data" / "eval" / "conclusions.md"
+OUTPUT_PATH = find_repo_root(Path(__file__)) / "data" / "eval" / "conclusions.md"
 
 
 def render_conclusions_md(report: EvalRunReport) -> str:
