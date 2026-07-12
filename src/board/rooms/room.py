@@ -45,7 +45,7 @@ from engine.events import GameEvent, HookContext
 from engine.loop import advance_turn
 from engine.scoring import evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.effects import CustomNoteOp, EffectProgram
-from models.game_state import GameState, Player
+from models.game_state import GameState, Player, Spectator
 from models.ws_messages import CreateCardMsg
 from board.rooms.connections import ConnectionManager
 from board.rooms.deck import (
@@ -118,24 +118,29 @@ class Room:
         self._comment_logged: set[str] = set()
 
     # ── player management ──
-    def add_player(self, player_id: str, name: str, spectator: bool = False) -> None:
-        """Append a player to the immutable GameState (reassigns self.state).
-
-        ``spectator=True`` flags a late joiner (game already left the lobby):
-        they still live in ``players`` so they receive state and appear on the
-        table, but they are excluded from the turn rotation, dealing, card
-        authoring and win scoring. The join *policy* (who becomes a spectator)
-        lives in :meth:`RoomManager.join`, which decides the flag from the
-        room's phase; this method just records it.
-        """
-        new_players = [*self.state.players, Player(id=player_id, name=name, spectator=spectator)]
+    def add_player(self, player_id: str, name: str) -> None:
+        """Append a real player to the immutable GameState (reassigns self.state)."""
+        new_players = [*self.state.players, Player(id=player_id, name=name)]
         self.state = self.state.model_copy(update={"players": new_players})
 
+    def add_spectator(self, player_id: str, name: str) -> None:
+        """Append a spectator (late joiner) to the immutable GameState.
+
+        Spectators live in ``state.spectators``, not ``players``: they take no
+        turn, are never dealt/auto-drawn to, cannot author or play cards, and
+        are excluded from win scoring — structurally, not by a guard. The join
+        *policy* (who becomes a spectator) lives in :meth:`RoomManager.join`,
+        which decides from the room's phase; this method just records it.
+        """
+        new_spectators = [*self.state.spectators, Spectator(id=player_id, name=name)]
+        self.state = self.state.model_copy(update={"spectators": new_spectators})
+
     def get_player_ids(self) -> list[str]:
-        return [p.id for p in self.state.players]
+        """All ids that may open a WebSocket for this room: players + spectators."""
+        return [p.id for p in self.state.players] + [s.id for s in self.state.spectators]
 
     def _is_spectator(self, player_id: str) -> bool:
-        return any(p.id == player_id and p.spectator for p in self.state.players)
+        return self.state.is_spectator(player_id)
 
     # ── turn helpers ──
     def _is_active_player(self, player_id: str) -> bool:
@@ -289,7 +294,7 @@ class Room:
         gate below never fires (we only auto-start when nobody is behind).
         """
         players = list(self.state.players)
-        dealt_to = [p for p in players if not p.spectator]
+        dealt_to = players
 
         # Gate: every real player must have authored the required number of cards.
         behind = [p for p in dealt_to if self._authored_count(p.id) < CARDS_TO_AUTHOR]

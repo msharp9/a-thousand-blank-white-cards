@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from models.game_state import GameState, Player, WinCondition
+from models.game_state import GameState, Player, Spectator, WinCondition
 
 
 def test_constructs_with_defaults() -> None:
@@ -19,8 +19,10 @@ def test_constructs_with_defaults() -> None:
 
 
 def test_effective_turn_order_falls_back_to_turn_players() -> None:
-    players = [Player(id="p1", name="A"), Player(id="s1", name="S", spectator=True), Player(id="p2", name="B")]
-    state = GameState(room_code="AAAA", players=players)
+    # Spectators live outside `players` entirely, so they're never part of the
+    # fallback order.
+    players = [Player(id="p1", name="A"), Player(id="p2", name="B")]
+    state = GameState(room_code="AAAA", players=players, spectators=[Spectator(id="s1", name="S")])
     assert state.effective_turn_order() == ["p1", "p2"]
 
 

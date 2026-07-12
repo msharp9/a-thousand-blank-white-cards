@@ -30,17 +30,26 @@ class Player(BaseModel):
     # Cards played and persisting "in front of" this player (the in-play zone).
     in_play: list[str] = Field(default_factory=list)  # card ids
     connected: bool = True
-    # A spectator joined AFTER the game left the lobby. They still live in
-    # `players` (so the WS layer, connection manager and snapshot keep working
-    # over a single list — no parallel `spectators` collection to thread
-    # through every layer), but they take no turn, are never dealt/auto-drawn
-    # to, cannot author or play cards, and are excluded from win scoring.
-    spectator: bool = False
     # Open-ended per-player status bag, e.g. {"skip_next": True, "poisoned": 2}.
     # "skip_next" and "extra_turn" are reserved keys consumed by
     # engine.loop.advance_turn; any other key is free-form status with no
     # engine-side meaning yet, surfaced as-is to the UI/agent via model_dump().
     conditions: dict[str, Any] = Field(default_factory=dict)
+
+
+class Spectator(BaseModel):
+    """A watcher who joined AFTER the game left the lobby.
+
+    Lives in ``GameState.spectators`` — a separate, flat collection from
+    ``players`` (per docs/state-example.jsonc) — rather than as a flagged
+    ``Player``. A spectator is simple and deterministic (just an identity):
+    it never takes a turn, is never dealt/auto-drawn to, cannot author or
+    play cards, and is excluded from win scoring, structurally rather than by
+    a per-call guard.
+    """
+
+    id: str
+    name: str
 
 
 class GameState(BaseModel):
@@ -70,6 +79,9 @@ class GameState(BaseModel):
     # snapshot via model_dump().
     mode: Literal["online", "in_person", "both"] = "both"
     players: list[Player] = Field(default_factory=list)
+    # Watchers who joined after the game left the lobby (see Spectator). Kept
+    # separate from ``players`` rather than merged in as a flagged Player.
+    spectators: list[Spectator] = Field(default_factory=list)
 
     # Card registry grows during play as new cards are invented
     deck: list[str] = Field(default_factory=list)  # card ids (ordered)
@@ -116,34 +128,28 @@ class GameState(BaseModel):
     log: list[str] = Field(default_factory=list)
 
     def turn_players(self) -> list[Player]:
-        """Players who participate in the turn rotation (non-spectators).
+        """Players who participate in the turn rotation.
 
-        Spectators join after the game leaves the lobby; they live in
-        ``players`` so they still receive state and appear on the table, but
-        they never take a turn. ``turn_index`` always points at a
-        non-spectator (guaranteed by game start and ``advance_turn``), so
-        ``active_player`` can still index ``players`` directly — this helper
-        exists for callers (scoring, tests) that need the participating set.
+        Spectators live in the separate ``spectators`` collection, not
+        ``players``, so every entry here already participates in turns,
+        dealing and scoring — this helper exists for callers (scoring, room
+        setup) that read "the participating set" by name.
         """
-        return [p for p in self.players if not p.spectator]
+        return list(self.players)
 
     def effective_turn_order(self) -> list[str]:
         """Return the turn rotation order: ``turn_order`` if set, else the
-        default (non-spectator ``players``, in list order).
+        default (``players``, in list order).
 
         This is the single read path ``advance_turn`` and neighbor-target
         resolution use to step through the rotation, so a still-unset
         ``turn_order`` (e.g. a game that hasn't started, or a state built
         without one) behaves exactly like the old players-list-order default.
         """
-        return list(self.turn_order) if self.turn_order else [p.id for p in self.turn_players()]
+        return list(self.turn_order) if self.turn_order else [p.id for p in self.players]
 
     def active_player(self) -> Player:
-        """Return the player whose turn it currently is.
-
-        ``turn_index`` is maintained (by game start and ``advance_turn``) to
-        always reference a non-spectator, so this indexes ``players`` directly.
-        """
+        """Return the player whose turn it currently is."""
         return self.players[self.turn_index % len(self.players)]
 
     def get_player(self, player_id: str) -> Player:
@@ -151,6 +157,10 @@ class GameState(BaseModel):
             if p.id == player_id:
                 return p
         raise KeyError(f"Player {player_id!r} not found")
+
+    def is_spectator(self, player_id: str) -> bool:
+        """True if ``player_id`` is a watcher (present in ``spectators``)."""
+        return any(s.id == player_id for s in self.spectators)
 
     # ── card-zone read helpers ──
     def cards_in_play(self) -> list[str]:

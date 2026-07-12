@@ -86,7 +86,10 @@ class RoomManager:
             return None
         player_id = str(uuid.uuid4())
         spectator = room.state.phase != "lobby"
-        room.add_player(player_id=player_id, name=name, spectator=spectator)
+        if spectator:
+            room.add_spectator(player_id=player_id, name=name)
+        else:
+            room.add_player(player_id=player_id, name=name)
         self._persist(room)
         logger.info(
             "%s %s ('%s') joined room %s",

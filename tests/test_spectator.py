@@ -1,8 +1,9 @@
 """Tests for the spectator concept: join-after-start becomes a spectator.
 
-Covers the join-gating policy (RoomManager.join), the model flag, turn-rotation
-exclusion (engine.loop.advance_turn), action guarding (Room._dispatch), scoring
-exclusion (engine.scoring), and dealing (Room._handle_start).
+Covers the join-gating policy (RoomManager.join), the model shape (a separate
+GameState.spectators collection), turn-rotation exclusion (engine.loop.advance_turn),
+action guarding (Room._dispatch), scoring exclusion (engine.scoring), and dealing
+(Room._handle_start).
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from unittest.mock import AsyncMock, patch
 from agent.contract import InterpretResult
 from engine.loop import advance_turn
 from engine.scoring import evaluate_win_condition
-from models.game_state import GameState, Player, WinCondition
+from models.game_state import GameState, Player, Spectator, WinCondition
 from conftest import drive_to_playing
 
 from models.ws_messages import CreateCardMsg, PassMsg, PlayMsg
@@ -31,7 +32,8 @@ def test_join_in_lobby_is_normal_player() -> None:
     _, pid, spectator = result
     assert spectator is False
     player = mgr.get(code).state.get_player(pid)
-    assert player.spectator is False
+    assert player.id == pid
+    assert not mgr.get(code).state.is_spectator(pid)
 
 
 def test_join_after_start_is_spectator() -> None:
@@ -46,9 +48,10 @@ def test_join_after_start_is_spectator() -> None:
     assert result is not None
     _, late_id, spectator = result
     assert spectator is True
-    assert room.state.get_player(late_id).spectator is True
+    assert room.state.is_spectator(late_id)
+    assert late_id not in [p.id for p in room.state.players]
     # The original player is unaffected.
-    assert room.state.get_player(p1).spectator is False
+    assert not room.state.is_spectator(p1)
 
 
 def test_join_in_each_started_phase_is_spectator() -> None:
@@ -62,47 +65,32 @@ def test_join_in_each_started_phase_is_spectator() -> None:
 
 
 # ── model / turn rotation ──
-def test_turn_players_excludes_spectators() -> None:
-    players = [
-        Player(id="p1", name="A"),
-        Player(id="s1", name="S", spectator=True),
-        Player(id="p2", name="B"),
-    ]
+def test_turn_players_is_all_players() -> None:
+    players = [Player(id="p1", name="A"), Player(id="p2", name="B")]
     state = GameState(room_code="AAAA", players=players)
     assert [p.id for p in state.turn_players()] == ["p1", "p2"]
 
 
-def test_advance_turn_skips_spectator() -> None:
-    # p1 (idx0), spectator (idx1), p2 (idx2). From p1, advancing must skip the
-    # spectator and land on p2 (idx2).
+def test_advance_turn_cycles_players_only() -> None:
+    # Spectators live outside `players` entirely, so advancing never needs to
+    # skip over one — they can't be landed on in the first place.
     players = [
         Player(id="p1", name="A"),
-        Player(id="s1", name="S", spectator=True),
         Player(id="p2", name="B"),
     ]
-    state = GameState(room_code="AAAA", players=players, turn_index=0, phase="playing")
+    state = GameState(
+        room_code="AAAA",
+        players=players,
+        spectators=[],
+        turn_index=0,
+        phase="playing",
+    )
     out = advance_turn(state)
-    assert out.turn_index == 2
+    assert out.turn_index == 1
     assert out.active_player().id == "p2"
-    # Advancing again wraps back to p1, never the spectator.
     out2 = advance_turn(out)
     assert out2.turn_index == 0
     assert out2.active_player().id == "p1"
-
-
-def test_advance_turn_never_lands_on_spectator_over_full_cycle() -> None:
-    players = [
-        Player(id="p1", name="A"),
-        Player(id="p2", name="B"),
-        Player(id="s1", name="S", spectator=True),
-    ]
-    state = GameState(room_code="AAAA", players=players, turn_index=0, phase="playing")
-    seen = set()
-    for _ in range(6):
-        state = advance_turn(state)
-        assert not state.active_player().spectator
-        seen.add(state.active_player().id)
-    assert seen == {"p1", "p2"}
 
 
 # ── dealing ──
@@ -125,10 +113,9 @@ def test_spectator_joining_mid_game_has_no_hand_and_is_not_active() -> None:
     room = _room_two_players_and_start()
     assert room.state.phase == "playing"
     # A spectator joins mid-game.
-    room.add_player("spec", "Watcher", spectator=True)
-    spec = room.state.get_player("spec")
-    assert spec.spectator is True
-    assert spec.hand == []
+    room.add_spectator("spec", "Watcher")
+    assert room.state.is_spectator("spec")
+    assert "spec" not in [p.id for p in room.state.players]
     # Active player is never the spectator across a full rotation.
     for _ in range(4):
         assert room.state.active_player().id != "spec"
@@ -137,13 +124,13 @@ def test_spectator_joining_mid_game_has_no_hand_and_is_not_active() -> None:
 
 def test_spectator_is_never_auto_drawn_to() -> None:
     room = _room_two_players_and_start()
-    room.add_player("spec", "Watcher", spectator=True)
+    room.add_spectator("spec", "Watcher")
     # Passing cycles turns; the spectator must never receive drawn cards.
     for _ in range(4):
         asyncio.run(room.handle_action(room.state.active_player().id, PassMsg()))
         if room.state.phase == "ended":
             break
-    assert room.state.get_player("spec").hand == []
+    assert "spec" not in [p.id for p in room.state.players]
 
 
 # ── action guarding ──
@@ -151,7 +138,7 @@ def _playing_room_with_spectator() -> Room:
     room = Room("ABCDEF")
     room.add_player("p1", "Alice")
     room.add_player("p2", "Bob")
-    room.add_player("spec", "Watcher", spectator=True)
+    room.add_spectator("spec", "Watcher")
     room.state = room.state.model_copy(update={"phase": "playing", "deck": ["d1", "d2", "d3"]})
     return room
 
@@ -195,15 +182,16 @@ def test_non_spectator_create_card_still_allowed_off_turn() -> None:
 
 # ── scoring ──
 def test_scoring_excludes_spectators() -> None:
+    # Spectators have no `score` field at all (they live outside `players`),
+    # so there is no way for one to outrank a real player's score.
     players = [
         Player(id="p1", name="A", score=5),
         Player(id="p2", name="B", score=3),
-        Player(id="spec", name="S", score=99, spectator=True),
     ]
     state = GameState(
         room_code="AAAA",
         players=players,
+        spectators=[Spectator(id="spec", name="S")],
         win_condition=WinCondition(kind="highest_points"),
     )
-    # The spectator has the highest score but must not win.
     assert evaluate_win_condition(state) == ["p1"]

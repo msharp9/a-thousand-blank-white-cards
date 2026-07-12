@@ -85,9 +85,10 @@ def _summarize_state(
     """Render a concise text summary of the board. Never raises.
 
     Surfaces, for each player: name, score, hand size, active-player marker,
-    spectator marker, and an ACTOR marker (via ``actor_id``). Also surfaces turn
-    order, deck size, phase, win condition, and center/house-rule cards, plus
-    an actor-vs-author line so the ``punish_author`` persona branch is decidable.
+    and an ACTOR marker (via ``actor_id``). Also surfaces turn order, deck
+    size, phase, win condition, center/house-rule cards, and the names of any
+    spectators (watchers, listed separately from the players), plus an
+    actor-vs-author line so the ``punish_author`` persona branch is decidable.
     """
     if state is None:
         return "Game state: (not provided)."
@@ -154,13 +155,16 @@ def _summarize_state(
             tags.append("active player")
         if actor_id and pid == actor_id:
             tags.append("ACTOR (played this card)")
-        if _p(p, "spectator"):
-            tags.append("spectator")
         suffix = f" [{', '.join(tags)}]" if tags else ""
         scored.append(f"  - {name}: {score} points, {hand_size} cards in hand{suffix}")
     if scored:
         lines.append("Players:")
         lines.extend(scored)
+
+    spectators = get("spectators") or []
+    spectator_names = [_p(s, "name") or _p(s, "id") for s in spectators]
+    if spectator_names:
+        lines.append(f"Spectators (watching only, cannot play): {', '.join(spectator_names)}.")
 
     # ── win condition ──
     win = get("win_condition")
