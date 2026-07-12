@@ -201,6 +201,17 @@ class CustomNoteOp(BaseModel):
     note: str
 
 
+class EndGameOp(BaseModel):
+    """Ends the game immediately, independent of deck state or win_condition.
+
+    The reducer only marks ``GameState.game_over_requested``; Room is
+    responsible for noticing the flag and routing to ``_end_game`` (see
+    ``board.rooms.room``).
+    """
+
+    op: Literal["end_game"] = "end_game"
+
+
 # ---------------------------------------------------------------------------
 # Discriminated union — Pydantic v2 uses Annotated + Field(discriminator=...)
 # ---------------------------------------------------------------------------
@@ -218,6 +229,7 @@ Op = Annotated[
         DestroyCardOp,
         SetWinConditionOp,
         CustomNoteOp,
+        EndGameOp,
     ],
     Field(discriminator="op"),
 ]

@@ -59,7 +59,7 @@ effect for the game engine, given the live game state.
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, change_draw_count, steal_points, draw_cards,
-  destroy_card, set_win_condition, custom_note) into an EffectProgram.
+  destroy_card, set_win_condition, custom_note, end_game) into an EffectProgram.
 - Only for genuinely novel effects that no combination of ops can express should you
   fall back to a generated code snippet.
 - Use the tools you are given. `read_engine_methods` tells you exactly which ops and

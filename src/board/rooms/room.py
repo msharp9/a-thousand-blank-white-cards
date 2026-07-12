@@ -14,11 +14,21 @@ they ``play`` a card OR (3) ``pass`` / ``end_turn`` to end without playing. Eith
 ending advances the turn; the next player's draw flag resets and they must draw
 themselves. There is no auto-draw.
 
-End game: when a player draws the LAST card of the deck, ``_deck_exhausted``
-latches. That player finishes their turn normally; when their turn ends the game
-transitions to ``phase="ended"`` with computed ``winner_ids`` broadcast to
-everyone. (Per the rules: the player who draws the last card completes their
-turn, then the game ends.)
+End game: there are TWO distinct end paths with distinct timing.
+
+- Deck exhaustion: when a player draws the LAST card of the deck,
+  ``_deck_exhausted`` latches. That player finishes their turn normally; only
+  once their turn ends (``_advance_turn``) does the game end (Per the rules:
+  the player who draws the last card completes their turn, then the game
+  ends).
+- Explicit end / live win condition: a card's ``end_game`` op sets
+  ``state.game_over_requested``, and ``set_win_condition`` can make
+  ``evaluate_win_condition`` (via ``win_condition_met``) become true mid-play
+  (e.g. a ``first_to`` threshold reached). Both are checked immediately after
+  the triggering play resolves (``_handle_play``) as well as in
+  ``_advance_turn`` (belt-and-suspenders for routes like ``_handle_pass`` that
+  advance the turn without an intervening play) — the game ends RIGHT AWAY
+  rather than waiting for the deck to run out.
 """
 
 from __future__ import annotations
@@ -32,7 +42,7 @@ from engine.apply import apply_effect
 from engine.compile import compile_card
 from engine.events import GameEvent, HookContext
 from engine.loop import advance_turn
-from engine.scoring import evaluate_win_condition, resolve_end_of_game
+from engine.scoring import evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.effects import CustomNoteOp, EffectProgram
 from models.game_state import GameState, Player
 from models.ws_messages import CreateCardMsg
@@ -406,22 +416,30 @@ class Room:
         self.state = self.state.model_copy(update={"deck": rest, "players": new_players})
 
     async def _advance_turn(self) -> None:
-        """End the current turn: end the game if the deck is exhausted, else
-        advance to the next player and start their turn.
+        """End the current turn: end the game if it's over, else advance to the
+        next player and start their turn.
 
         Reuses ``engine.loop.advance_turn`` so direction, skip-next, extra-turn
         and any registered skip predicate are all honoured — those flags are set
         by the reducers during a play's apply_effect. Runs under the caller's
         lock, so advance is a single serialized operation with no interleaving.
 
-        End-of-game timing: once the deck has been exhausted (the last card was
-        drawn this game), the player who drew it finishes their turn and THEN the
-        game ends here — matching the rule "the last card is drawn, that player
-        finishes their turn, then the game ends".
+        Three end triggers, all routed to ``_end_game`` here:
+
+        - ``_deck_exhausted``: the last card was drawn this game. Its drawer
+          finishes their turn and THEN the game ends here — matching the rule
+          "the last card is drawn, that player finishes their turn, then the
+          game ends".
+        - ``state.game_over_requested``: an ``end_game`` card op fired. Normally
+          already handled immediately in ``_handle_play``; kept here too as a
+          defensive catch-all for any other route (e.g. ``_handle_pass``) that
+          reaches ``_advance_turn``.
+        - ``win_condition_met(state)``: a live win condition (e.g. ``first_to``
+          a threshold) was satisfied. Same defensive-catch-all reasoning.
         """
         if not self.state.players:
             return
-        if self._deck_exhausted:
+        if self._deck_exhausted or self.state.game_over_requested or win_condition_met(self.state):
             await self._end_game()
             return
         self.state = advance_turn(self.state)
@@ -699,6 +717,12 @@ class Room:
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
         program = await self._resolve_program(card_id, card, actor_id=player_id)
 
+        # Set the moment apply_effect resolves an end_game op or makes a live
+        # win condition (e.g. first_to) true. Checked HERE, right after the
+        # triggering play, so the game ends immediately rather than waiting for
+        # deck exhaustion — see the module docstring for the two end paths.
+        game_ending = False
+
         if program is not None and program.ops:
             # Cards whose program targets "chooser"/"target_player"
             # need a chosen_player_id; those with a "chosen_card" CardTarget need
@@ -783,6 +807,7 @@ class Room:
             before = {p.id: p.score for p in self.state.players}
             self.state = apply_effect(self.state, program, ctx)
             await self._log_and_broadcast(self._describe_play(player_id, card, before))
+            game_ending = self.state.game_over_requested or win_condition_met(self.state)
 
         # Terminal apply path: the play is committed (all rejection / pending
         # early-returns above have already returned, so the card is NOT removed
@@ -792,11 +817,17 @@ class Room:
         dest = self._play_destination(card)
         self.state = self.state.move_card(card_id, "hand", dest, from_player_id=player_id, to_player_id=player_id)
 
-        # Playing a card ends the turn: advance (honouring skip/extra/direction
-        # flags the play may have set) and start the next player's turn, which
-        # auto-draws or ends the game on an empty deck.
         await self._broadcast_state()
-        await self._advance_turn()
+        if game_ending:
+            # end_game / a live win condition ends the game NOW — the deck may
+            # still hold cards, so this does not go through the deck-exhaustion
+            # "finish the turn, then _advance_turn ends it" path.
+            await self._end_game()
+        else:
+            # Playing a card ends the turn: advance (honouring skip/extra/direction
+            # flags the play may have set) and start the next player's turn, which
+            # auto-draws or ends the game on an empty deck.
+            await self._advance_turn()
 
     async def _handle_create_card(self, player_id: str, msg) -> None:
         """Author a new card (allowed off-turn / during setup).

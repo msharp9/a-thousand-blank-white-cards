@@ -12,6 +12,7 @@ from models.effects import (
     CustomNoteOp,
     DestroyCardOp,
     DrawCardsOp,
+    EndGameOp,
     ExtraTurnOp,
     ReverseOrderOp,
     SetPointsOp,
@@ -289,3 +290,12 @@ class TestCustomNote:
     def test_appends_log(self):
         new = apply_op(make_state(), CustomNoteOp(note="hello"), make_ctx("p1"))
         assert any("hello" in entry for entry in new.log)
+
+
+class TestEndGame:
+    def test_sets_game_over_requested(self):
+        state = make_state()
+        assert state.game_over_requested is False
+        new = apply_op(state, EndGameOp(), make_ctx("p1"))
+        assert new.game_over_requested is True
+        assert state.game_over_requested is False  # original untouched

@@ -32,6 +32,7 @@ from models.effects import (
     DestroyCardOp,
     DrawCardsOp,
     EffectProgram,
+    EndGameOp,
     ExtraTurnOp,
     Op,
     ReverseOrderOp,
@@ -50,6 +51,8 @@ logger = logging.getLogger(__name__)
 _CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
 # CardTarget values that require a play-time card choice.
 _CHOICE_CARD_TARGETS: frozenset[str] = frozenset({"chosen_card"})
+# Authoring-vocab synonyms a card/LLM may emit for "end the game right now".
+_END_GAME_OP_NAMES: frozenset[str] = frozenset({"end_game", "win_game", "win_the_game"})
 
 
 def _extract_ops(card: dict) -> list[dict] | None:
@@ -132,6 +135,8 @@ def _compile_op(name: str, args: dict) -> Op | None:
             card_target=args.get("card_target"),
             card_id=args.get("card_id"),
         )
+    if name in _END_GAME_OP_NAMES:
+        return EndGameOp()
     return None
 
 

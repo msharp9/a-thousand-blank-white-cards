@@ -92,6 +92,13 @@ class GameState(BaseModel):
 
     phase: Literal["lobby", "setup", "playing", "epilogue", "ended"] = "lobby"
 
+    # Serialized signal set by EndGameOp's reducer: a card said "end the game".
+    # Room checks this (and evaluate_win_condition) DURING play — see
+    # board.rooms.room._handle_play / _advance_turn — rather than only at deck
+    # exhaustion. A future rules-as-data bead folds this into a generic
+    # rules.end_condition; keep this a plain bool until then.
+    game_over_requested: bool = False
+
     # Winner player ids, populated when the game ends (phase == "ended"). A tie
     # yields multiple ids; an empty list means "no winner" (e.g. win_condition
     # "none"). Surfaced in the snapshot so the frontend can render a win/lose
