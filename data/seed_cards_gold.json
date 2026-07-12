@@ -233,5 +233,74 @@
       "placement": "center",
       "snippet": "The active player invents a rule, writes it on a blank card, shuffles it into the draw pile, and announces it. The rule takes effect immediately."
     }
+  },
+  {
+    "title": "Card Counter",
+    "description": "Draw 2 cards, then gain 1 point for every card now in your hand. The bigger your hand, the bigger the bonus.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "self",
+      "ops": [
+        {"op": "draw_cards", "args": {"amount": 2, "target": "self"}}
+      ],
+      "snippet": "def apply(state, ctx):\n    hand_size = state.player(state.actor_id).hand_size\n    state.add_points('self', hand_size)\n"
+    }
+  },
+  {
+    "title": "Sudden Death",
+    "description": "New rule, effective immediately: whoever has the most points right now wins. The game is over.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {"op": "set_win_condition", "args": {"kind": "highest_points"}},
+        {"op": "end_game", "args": {}}
+      ]
+    }
+  },
+  {
+    "title": "Total Chaos",
+    "description": "Absolute pandemonium: you gain 5 points, everyone else loses 3, everyone else skips their next turn, you take an extra turn, and every card currently in play is destroyed.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {"op": "add_points", "args": {"amount": 5, "target": "self"}},
+        {"op": "subtract_points", "args": {"amount": 3, "target": "all_others"}},
+        {"op": "skip_turn", "args": {"target": "all_others"}},
+        {"op": "extra_turn", "args": {"target": "self"}},
+        {"op": "destroy_card", "args": {"card_target": "all_in_play"}}
+      ]
+    }
+  },
+  {
+    "title": "House Rules: Uno",
+    "description": "For the rest of the game, follow Uno's rules: no automatic per-turn card draw, and the first player to empty their hand goes out. (Win-by-empty-hand isn't expressible in today's op vocabulary yet — a future rules-as-data bead should add a real empty_hand win-condition kind and end trigger; for now this only turns off the draw step.)",
+    "canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger": "on_empty_hand",
+      "ops": [
+        {"op": "set_win_condition", "args": {"kind": "none"}},
+        {"op": "change_draw_count", "args": {"amount": 0}}
+      ]
+    }
+  },
+  {
+    "title": "Shuffle and Snatch",
+    "description": "Scramble the turn order into chaos, then steal 4 points from whoever has the most.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {"op": "scramble_order", "args": {}},
+        {"op": "steal_points", "args": {"amount": 4, "from": "player_with_most_points", "to": "self"}}
+      ]
+    }
   }
 ]

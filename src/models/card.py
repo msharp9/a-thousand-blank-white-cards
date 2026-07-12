@@ -71,12 +71,15 @@ class CardCanonical(BaseModel):
     )
     ops: list[CardOp] | None = Field(
         default=None,
-        description="Sequence of CardOp to execute. Use ops OR snippet, not both.",
+        description="Sequence of CardOp to execute.",
     )
     snippet: str | None = Field(
         default=None,
         description=(
-            "Free-text rule description when ops cannot fully capture the effect. Use ops OR snippet, not both."
+            "Either free-text rule prose (when ops cannot capture the effect at all), or a real "
+            "`def apply(state, ctx): ...` snippet (validated by engine.sandbox.validate) when ops "
+            "capture a deterministic prefix but the rest needs dynamic state — e.g. draw_cards "
+            "followed by a snippet that scores points per card now in hand."
         ),
     )
 
