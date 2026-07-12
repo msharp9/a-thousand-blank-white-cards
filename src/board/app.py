@@ -214,6 +214,27 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
         return room.snapshot()
 
+    @application.post("/rooms/{code}/dev/skip-setup", tags=["rooms"])
+    async def dev_skip_setup(code: str) -> dict:
+        """DEV-ONLY shortcut: fast-forward a room to ``phase="playing"``.
+
+        Enters setup (if needed) and auto-authors each non-spectator's required
+        cards so the play phase can be exercised instantly. Returns the resulting
+        state snapshot. Only active when ``dev_mode`` is set.
+        """
+        # 404 (not 403) when dev mode is off so the endpoint's very existence
+        # stays hidden in production.
+        if not get_settings().dev_mode:
+            raise HTTPException(status_code=404, detail="Not found")
+        room = room_manager.get(code)
+        if room is None:
+            raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
+        try:
+            await room.dev_autofill_authoring()
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        return room.snapshot()
+
     application.include_router(ws_router)
 
     return application

@@ -35,6 +35,7 @@ from engine.loop import advance_turn
 from engine.scoring import evaluate_win_condition, resolve_end_of_game
 from models.effects import CustomNoteOp, EffectProgram
 from models.game_state import GameState, Player
+from models.ws_messages import CreateCardMsg
 from board.rooms.connections import ConnectionManager
 from board.rooms.deck import (
     BLANKS_PER_PLAYER,
@@ -319,6 +320,33 @@ class Room:
         if self.state.players:
             await self._start_turn(self.state.active_player().id)
         await self._broadcast_state()
+
+    async def dev_autofill_authoring(self) -> None:
+        """DEV shortcut: fast-forward lobby/setup straight to ``phase="playing"``.
+
+        Enters setup if still in the lobby, then authors placeholder cards for every
+        non-spectator until each has met ``CARDS_TO_AUTHOR`` — the last authored card
+        trips the existing auto-start into playing. Raises ``ValueError`` if the game
+        has already started (the endpoint maps that to a 409).
+
+        We take ``self._lock`` ourselves and call the internal (already-unlocked)
+        handlers directly: this is invoked from a REST endpoint, not through
+        ``handle_action``, so we must reproduce its single-lock serialization guarantee
+        without re-entering the lock via ``handle_action``.
+        """
+        async with self._lock:
+            if self.state.phase not in ("lobby", "setup"):
+                raise ValueError("game already started")
+            if self.state.phase == "lobby":
+                await self._enter_setup()
+            for player in self.state.turn_players():
+                pid = player.id
+                i = 0
+                while self._authored_count(pid) < CARDS_TO_AUTHOR:
+                    await self._handle_create_card(
+                        pid, CreateCardMsg(title=f"dev-{pid}-{i}", description="gain 1 point")
+                    )
+                    i += 1
 
     # ── turn lifecycle (draw → play → end turn → advance) ──
     async def _start_turn(self, player_id: str) -> None:
