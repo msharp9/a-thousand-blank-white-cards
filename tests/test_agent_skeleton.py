@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
 
 from agent.contract import InterpretResult
 from agent.persona import PERSONA_ACTIONS, build_system_prompt
-from agent.runtime import build_agent, run_agent
+from agent.runtime import _forced_final_result, build_agent, run_agent
 
 
 class ToolAwareFake(GenericFakeChatModel):
@@ -268,6 +268,51 @@ def test_run_agent_timeout_forces_final_answer():
     result = run_agent("Slow card", "desc", model=fake, timeout=0.2)
     assert result.verdict == "ok"
     assert result.comment == "Forced answer after timeout."
+
+
+def test_forced_call_sanitizes_dangling_tool_call_and_injects_system_prompt():
+    """_sanitize_forced_messages must drop a trailing AIMessage with unresolved
+    tool_calls, and the forced call must still carry the system prompt: it's
+    injected by create_agent at model-call time and never lands in
+    state["messages"], so _build_forced_messages has to re-add it."""
+    recorded = []
+
+    class RecordingFake(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ANN003
+            return self
+
+        def invoke(self, messages, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+            recorded.append(list(messages))
+            payload = '{"verdict": "ok", "comment": "Forced.", "persona_action": "none"}'
+            return AIMessage(content=payload)
+
+    system_prompt = "SYSTEM CONTRACT: respond with the InterpretResult JSON."
+    dangling_ai = AIMessage(
+        content="",
+        tool_calls=[{"name": "noop_tool", "args": {}, "id": "dangling-1"}],
+    )
+    progress = [
+        {
+            "messages": [
+                HumanMessage(content="Interpret the card titled 'Card' and produce the JSON result."),
+                dangling_ai,
+            ]
+        }
+    ]
+
+    fake = RecordingFake(messages=iter([]))
+    result = _forced_final_result(fake, system_prompt, "Card", progress, timeout=5.0)
+
+    assert result is not None
+    assert result.verdict == "ok"
+
+    sent = recorded[0]
+    # the dangling tool_calls message must be dropped, not forwarded to the model
+    assert not any(getattr(m, "tool_calls", None) for m in sent)
+    # the system prompt (the persona + InterpretResult contract) must reach the
+    # forced call even though it was never part of the streamed graph state
+    assert getattr(sent[0], "type", None) == "system"
+    assert sent[0].content == system_prompt
 
 
 def test_run_agent_timeout_forced_call_also_times_out_returns_fallback():

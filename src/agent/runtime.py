@@ -216,6 +216,11 @@ def _build_forced_messages(
     if progress:
         messages = _sanitize_forced_messages(list(progress[-1].get("messages") or []))
         if messages:
+            # create_agent injects the system prompt at model-call time; it is
+            # never written into state["messages"], so it must be re-added here
+            # or the forced call loses the persona and the InterpretResult contract.
+            if not any(getattr(m, "type", None) == "system" for m in messages):
+                messages = [SystemMessage(content=system_prompt), *messages]
             return [*messages, HumanMessage(content=FORCED_FINAL_INSTRUCTION)]
 
     return [
@@ -239,7 +244,11 @@ def _forced_final_result(
     """
     messages = _build_forced_messages(system_prompt, title, progress)
 
-    with ThreadPoolExecutor(max_workers=1) as pool:
+    # No context manager: __exit__ would call shutdown(wait=True) and block on
+    # the still-running invoke, defeating the timeout below. shutdown(wait=False)
+    # lets us return immediately and abandon the hung thread.
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
         future = pool.submit(chat_model.invoke, messages)
         try:
             response = future.result(timeout=timeout)
@@ -250,6 +259,8 @@ def _forced_final_result(
         except Exception:  # noqa: BLE001 — forced call is best-effort
             logger.exception("forced final-answer call failed")
             return None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     return _parse_result({"messages": [response]})
 
@@ -372,7 +383,11 @@ def run_agent(
 
     # Run the (synchronous) streaming loop on a worker thread so we can enforce a
     # hard wall-clock timeout even if the underlying call blocks on the network.
-    with ThreadPoolExecutor(max_workers=1) as pool:
+    # No context manager: __exit__ would call shutdown(wait=True) and block on
+    # the still-running stream, defeating the timeout below. shutdown(wait=False)
+    # lets us return immediately and abandon the hung thread.
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
         future = pool.submit(_stream_agent)
         try:
             result = future.result(timeout=timeout)
@@ -401,5 +416,7 @@ def run_agent(
                 comment="Something broke, and I'm choosing to blame that card.",
                 note="Interpretation error: no effect applied.",
             )
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     return _parse_result(result)
