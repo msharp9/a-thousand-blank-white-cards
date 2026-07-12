@@ -8,7 +8,7 @@ graph via asyncio.to_thread (with a "brewing" broadcast), applying resulting
 effects through the engine.
 
 Turn model (draw → play → end turn): drawing is EXPLICIT. A turn has three
-steps: (1) the active player sends ``draw`` to take ``draw_count`` card(s) — once
+steps: (1) the active player sends ``draw`` to take ``rules.draw`` card(s) — once
 per turn, and required before playing/ending while the deck is non-empty; (2)
 they ``play`` a card OR (3) ``pass`` / ``end_turn`` to end without playing. Either
 ending advances the turn; the next player's draw flag resets and they must draw
@@ -22,7 +22,7 @@ End game: there are TWO distinct end paths with distinct timing.
   the player who draws the last card completes their turn, then the game
   ends).
 - Explicit end / live win condition: a card's ``end_game`` op sets
-  ``state.game_over_requested``, and ``set_win_condition`` can make
+  ``rules.end_condition``, and ``set_win_condition`` can make
   ``evaluate_win_condition`` (via ``win_condition_met``) become true mid-play
   (e.g. a ``first_to`` threshold reached). Both are checked immediately after
   the triggering play resolves (``_handle_play``) as well as in
@@ -43,9 +43,9 @@ from engine.apply import apply_effect
 from engine.compile import compile_card
 from engine.events import GameEvent, HookContext
 from engine.loop import advance_turn
-from engine.scoring import evaluate_win_condition, resolve_end_of_game, win_condition_met
+from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.effects import CustomNoteOp, EffectProgram
-from models.game_state import EpilogueCardOutcome, EpilogueResultSummary, GameState, Player, Spectator
+from models.game_state import EndCondition, EpilogueCardOutcome, EpilogueResultSummary, GameState, Player, Spectator
 from models.ws_messages import CreateCardMsg
 from board.rooms.connections import ConnectionManager
 from board.rooms.deck import (
@@ -110,6 +110,7 @@ class Room:
         # follows draw-first; ``_deck_exhausted`` latches once the last card is
         # drawn so the game ends after the drawer finishes their turn.
         self._has_drawn: bool = False
+        self._plays_this_turn: int = 0
         self._deck_exhausted: bool = False
         # Card ids whose agent comment has already been appended to state.log this
         # session. A card that needs a target is resolved TWICE (resolve → prompt_choice
@@ -414,18 +415,26 @@ class Room:
         resets bookkeeping and broadcasts.
         """
         self._has_drawn = False
+        self._plays_this_turn = 0
         await self._broadcast_state()
 
     async def _handle_draw(self, player_id: str) -> None:
-        """Active player draws their ``draw_count`` card(s) — the first turn step.
+        """Active player draws their ``rules.draw`` card(s) — the first turn step.
 
-        Enforces one draw per turn. Drawing the last card of the deck latches
-        ``_deck_exhausted`` so the game ends after this player finishes their
-        turn (per the rules: the player who draws the last card completes their
-        turn, then the game ends).
+        Enforces one draw per turn. A draw rule of 0 (e.g. Uno-style house
+        rules) satisfies the draw step without touching the deck. When the
+        end condition is met right after drawing (deck_empty being the
+        classic case) the end latches so the game ends after this player
+        finishes their turn.
         """
         if self._has_drawn:
             await self.connections.send(player_id, {"type": "error", "message": "You have already drawn this turn"})
+            return
+        amount = self.state.rules.draw
+        if amount <= 0:
+            self._has_drawn = True
+            await self._log_and_broadcast(f"{self._name(player_id)} skips drawing (draw rule is 0)")
+            await self._broadcast_state()
             return
         if not self.state.deck:
             # Nothing left to draw; mark drawn so the player can still play/pass.
@@ -435,10 +444,11 @@ class Room:
             await self._broadcast_state()
             return
 
-        self._draw_cards(player_id, self.state.draw_count)
+        self._draw_cards(player_id, amount)
         self._has_drawn = True
-        if not self.state.deck:
-            # The last card(s) were just drawn — the game ends when this turn ends.
+        if evaluate_end_condition(self.state):
+            # Met at draw time (classically: the last card was just drawn) —
+            # the game ends when this player's turn ends.
             self._deck_exhausted = True
         await self._log_and_broadcast(f"{self._name(player_id)} drew a card")
         # Push a fresh snapshot so clients see the new hand + has_drawn without a refresh.
@@ -471,20 +481,25 @@ class Room:
           finishes their turn and THEN the game ends here — matching the rule
           "the last card is drawn, that player finishes their turn, then the
           game ends".
-        - ``state.game_over_requested``: an ``end_game`` card op fired. Normally
-          already handled immediately in ``_handle_play``; kept here too as a
-          defensive catch-all for any other route (e.g. ``_handle_pass``) that
-          reaches ``_advance_turn``.
+        - a non-deferred ``rules.end_condition`` is met (an ``end_game`` op set
+          {type: "now"}, or points_reached/empty_hand fired). Normally already
+          handled immediately in ``_handle_play``; kept here too as a defensive
+          catch-all for any other route (e.g. ``_handle_pass``).
         - ``win_condition_met(state)``: a live win condition (e.g. ``first_to``
           a threshold) was satisfied. Same defensive-catch-all reasoning.
         """
         if not self.state.players:
             return
-        if self._deck_exhausted or self.state.game_over_requested or win_condition_met(self.state):
+        if self._deck_exhausted or self._end_now() or win_condition_met(self.state):
             await self._end_game()
             return
         self.state = advance_turn(self.state)
         await self._start_turn(self.state.active_player().id)
+
+    def _end_now(self) -> bool:
+        """A met end condition that does NOT defer to the drawer-finishes-turn
+        timing (everything except deck_empty ends play immediately)."""
+        return self.state.rules.end_condition.type != "deck_empty" and evaluate_end_condition(self.state)
 
     def _name(self, player_id: str) -> str:
         """Human-readable display name for a player id (falls back to the id)."""
@@ -566,9 +581,10 @@ class Room:
         self.state = self.state.model_copy(update={"winner_ids": winners})
         await self._log_and_broadcast(log_line)
         next_phase = "results" if self.state.turn_players() else "ended"
-        self.state = self.state.model_copy(
-            update={"phase": next_phase, "game_over_requested": False, "winner_override": []}
-        )
+        update: dict = {"phase": next_phase, "winner_override": []}
+        if self.state.rules.end_condition.type == "now":
+            update["rules"] = self.state.rules.model_copy(update={"end_condition": EndCondition()})
+        self.state = self.state.model_copy(update=update)
         await self._broadcast_state()
 
     async def dev_force_end_game(self) -> None:
@@ -811,6 +827,14 @@ class Room:
         compiled-ops path and falls back to the LLM then to a CustomNoteOp, so a
         play always resolves to a program and never silently no-ops.
         """
+        if self.state.rules.play <= 0:
+            await self.connections.send(
+                player_id, {"type": "error", "message": "Playing cards is disabled by the current rules"}
+            )
+            return
+        if self._plays_this_turn >= self.state.rules.play:
+            await self.connections.send(player_id, {"type": "error", "message": "No plays left this turn"})
+            return
         card_id = msg.card_id
         card = self.state.cards.get(card_id)
         if card is None:
@@ -935,7 +959,7 @@ class Room:
             before = {p.id: p.score for p in self.state.players}
             self.state = apply_effect(self.state, program, ctx)
             await self._log_and_broadcast(self._describe_play(player_id, card, before))
-            game_ending = self.state.game_over_requested or win_condition_met(self.state)
+            game_ending = self._end_now() or win_condition_met(self.state)
 
         # Terminal apply path: the play is committed (all rejection / pending
         # early-returns above have already returned, so the card is NOT removed
@@ -945,11 +969,16 @@ class Room:
         dest = self._play_destination(card)
         self.state = self.state.move_card(card_id, "hand", dest, from_player_id=player_id, to_player_id=player_id)
 
+        self._plays_this_turn += 1
         await self._broadcast_state()
         if game_ending:
             # end_game / a live win condition ends the game NOW, deck or no deck —
             # unlike deck exhaustion, which lets the drawer finish their turn.
             await self._end_game()
+        elif self._plays_this_turn < self.state.rules.play:
+            # rules.play > 1: the turn continues until the play allowance is
+            # spent (or the player passes).
+            await self._broadcast_state()
         else:
             await self._advance_turn()
 

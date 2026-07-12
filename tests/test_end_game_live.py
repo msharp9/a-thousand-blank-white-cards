@@ -170,7 +170,7 @@ def test_post_end_actions_are_rejected_and_end_scoring_applies_once() -> None:
     asyncio.run(room.handle_action("p1", PlayMsg(card_id="endit")))
     assert room.state.phase == "results"
     assert room.state.get_player("p2").score == 10
-    assert room.state.game_over_requested is False
+    assert room.state.rules.end_condition.type == "deck_empty"
 
     async def _post_end_actions() -> None:
         from models.ws_messages import DrawMsg
@@ -183,3 +183,54 @@ def test_post_end_actions_are_rejected_and_end_scoring_applies_once() -> None:
     assert room.state.get_player("p2").score == 10
     assert room.state.deck == ["d1", "d2"]
     assert room.state.phase == "results"
+
+
+def test_uno_v1_as_pure_rule_ops() -> None:
+    # The Uno exemplar expressed entirely as data: win = empty hand, end = empty
+    # hand, draw step 0. Playing the card flips the rules; the actor then plays
+    # their remaining card, empties their hand, and wins immediately.
+    uno = {
+        "id": "uno",
+        "title": "House Rules: Uno",
+        "description": "Win by emptying your hand.",
+        "canonical": {
+            "ops": [
+                {"op": "set_rule", "args": {"path": "win_condition", "value": {"kind": "empty_hand"}}},
+                {"op": "set_rule", "args": {"path": "end_condition.type", "value": "empty_hand"}},
+                {"op": "set_rule", "args": {"path": "draw", "value": 0}},
+            ]
+        },
+    }
+    filler = {
+        "id": "f1",
+        "title": "Gain 1",
+        "description": "Gain 1 point.",
+        "canonical": {"ops": [{"op": "add_points", "args": {"target": "self", "amount": 1}}]},
+    }
+    filler2 = {
+        "id": "f2",
+        "title": "Gain 2",
+        "description": "Gain 2 points.",
+        "canonical": {"ops": [{"op": "add_points", "args": {"target": "self", "amount": 2}}]},
+    }
+    room = _mid_deck_room(["uno", "f1"], {"uno": uno, "f1": filler, "f2": filler2}, deck=["d1", "d2"])
+    players = [
+        room.state.players[0].model_copy(update={"hand": ["uno", "f1"]}),
+        room.state.players[1].model_copy(update={"hand": ["f2"]}),
+    ]
+    room.state = room.state.model_copy(update={"players": players})
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="uno")))
+    assert room.state.rules.draw == 0
+    assert room.state.rules.win_condition.kind == "empty_hand"
+    assert room.state.phase == "playing"
+
+    async def _next_turn_and_win() -> None:
+        from models.ws_messages import DrawMsg
+
+        await room.handle_action("p2", DrawMsg())
+        await room.handle_action("p2", PlayMsg(card_id="f2"))
+
+    asyncio.run(_next_turn_and_win())
+    assert room.state.phase in ("results", "ended")
+    assert "p2" in room.state.winner_ids

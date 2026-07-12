@@ -126,6 +126,8 @@ def evaluate_win_condition(state: GameState) -> list[str]:
         case "first_to":
             threshold = wc.threshold or 0
             return [p.id for p in active if p.score >= threshold]
+        case "empty_hand":
+            return [p.id for p in active if not p.hand]
         case "last_standing":
             return [active[0].id] if len(active) == 1 else []
         case "none":
@@ -134,7 +136,7 @@ def evaluate_win_condition(state: GameState) -> list[str]:
             return []
 
 
-_LIVE_WIN_KINDS = frozenset({"first_to", "last_standing"})
+_LIVE_WIN_KINDS = frozenset({"first_to", "empty_hand", "last_standing"})
 
 
 def win_condition_met(state: GameState) -> bool:
@@ -154,6 +156,29 @@ def win_condition_met(state: GameState) -> bool:
     if wc.kind == "first_to" and (wc.threshold is None or wc.threshold < 1):
         return False
     return bool(evaluate_win_condition(state))
+
+
+def evaluate_end_condition(state: GameState) -> bool:
+    """True when ``rules.end_condition`` is currently met.
+
+    Data-driven end-of-game check (docs/state-example.jsonc ``endCondition``).
+    The Room decides TIMING: "deck_empty" defers to the drawer finishing their
+    turn; every other type ends play immediately (see board.rooms.room).
+    """
+    ec = state.rules.end_condition
+    match ec.type:
+        case "deck_empty":
+            return not state.deck
+        case "empty_hand":
+            return any(not p.hand for p in state.players)
+        case "points_reached":
+            if ec.threshold is None:
+                return False
+            return any(p.score >= ec.threshold for p in state.players)
+        case "now":
+            return True
+        case _:
+            return False
 
 
 def check_win(state: GameState) -> GameState:

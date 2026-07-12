@@ -88,7 +88,11 @@ class TestFileRoomStore:
         drive_to_playing(room, ["p1", "p2"])
         room.state = room.state.with_condition("p2", "poisoned", 2)
         room.state = room.state.model_copy(
-            update={"turn_order": ["p2", "p1"], "game_over_requested": True, "winner_override": ["p1"]}
+            update={
+                "turn_order": ["p2", "p1"],
+                "winner_override": ["p1"],
+                "rules": room.state.rules.model_copy(update={"draw": 3, "extra": {"color_match": True}}),
+            }
         )
         store.put(code, room)
 
@@ -96,7 +100,8 @@ class TestFileRoomStore:
         assert got is not None
         assert got.state.get_player("p2").conditions == {"poisoned": 2}
         assert got.state.turn_order == ["p2", "p1"]
-        assert got.state.game_over_requested is True
+        assert got.state.rules.draw == 3
+        assert got.state.rules.extra == {"color_match": True}
         assert got.state.winner_override == ["p1"]
 
     def test_live_object_is_reused_within_process(self, tmp_path) -> None:

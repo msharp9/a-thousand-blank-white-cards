@@ -40,6 +40,7 @@ from models.effects import (
     ReverseOrderOp,
     ScrambleOrderOp,
     SetPointsOp,
+    SetRuleOp,
     SetWinConditionOp,
     SkipTurnOp,
     StealPointsOp,
@@ -166,6 +167,11 @@ def _compile_op(name: str, args: dict) -> Op | None:
         return EndGameOp()
     if name in _WIN_GAME_OP_NAMES:
         return EndGameOp(winner="self")
+    if name == "set_rule":
+        path = args.get("path")
+        if not path:
+            raise ValueError("set_rule missing 'path'")
+        return SetRuleOp(path=str(path), value=args.get("value"))
     return None
 
 

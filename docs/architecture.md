@@ -263,11 +263,19 @@ Key behaviours enforced in `Room`:
 A card's mechanical effect is an `EffectProgram` — a list of `Op`s from the
 discriminated union in `models/effects.py` (`add_points`, `subtract_points`,
 `set_points`, `steal_points`, `skip_turn`, `extra_turn`, `reverse_order`,
-`change_draw_count`, `draw_cards`, `destroy_card`, `set_win_condition`,
-`custom_note`). Each op addresses players via a `Target`
+`scramble_order`, `change_draw_count`, `draw_cards`, `destroy_card`,
+`set_win_condition`, `set_rule`, `custom_note`, `end_game`). Each op addresses players via a `Target`
 (`self`, `left_neighbor`, `all_others`, `chooser`, `player_with_most_points`, …)
 and, for card manipulation, a `CardTarget` (`this`, `chosen_card`,
 `all_in_play`, `all_in_hand`).
+
+Game rules are **data** (`GameState.rules`, per `docs/state-example.jsonc`):
+draw/play counts, the end condition (`deck_empty`/`empty_hand`/`points_reached`/`now`),
+the win condition, and an open `extra` bag for card-invented rules. `set_rule`
+writes any of these paths; `change_draw_count`/`set_win_condition` are
+specialized writers into the same structure; `end_game` sets
+`end_condition={type: "now"}`. The Room evaluates `evaluate_end_condition` /
+`win_condition_met` during play, so rule changes take effect live.
 
 Two paths produce a program:
 

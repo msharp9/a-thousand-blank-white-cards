@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 
 class WinCondition(BaseModel):
@@ -16,10 +16,45 @@ class WinCondition(BaseModel):
         "highest_points",
         "lowest_points",
         "first_to",
+        "empty_hand",
         "last_standing",
         "none",
     ] = "highest_points"
     threshold: int | None = None  # used by "first_to"
+
+
+class EndCondition(BaseModel):
+    """When the game ends, as data (docs/state-example.jsonc ``endCondition``).
+
+    - ``deck_empty``     — default: deck exhausted, drawer finishes their turn.
+    - ``empty_hand``     — a player's hand reaches zero cards (Uno-style).
+    - ``points_reached`` — any player's score reaches ``threshold``.
+    - ``now``            — end immediately (what EndGameOp's reducer sets).
+    """
+
+    type: Literal["deck_empty", "empty_hand", "points_reached", "now"] = "deck_empty"
+    threshold: int | None = None  # used by "points_reached"
+
+
+class Rules(BaseModel):
+    """Mutable, serialized game rules (docs/state-example.jsonc ``rules``).
+
+    Cards rewrite these via ``set_rule`` / ``change_draw_count`` /
+    ``set_win_condition`` reducers. ``extra`` is an open bag for card-invented
+    rules the engine has no special handling for yet — hooks/the agent/the UI
+    can still read them from the snapshot.
+    """
+
+    draw: int = Field(default=1, ge=0)  # cards drawn at start of each turn
+    play: int = Field(default=1, ge=0)  # plays allowed per turn
+    # What a player who cannot play must do instead (data only; the room's
+    # draw-before-pass flow is the current enforcement).
+    cannot_play: dict[str, Any] = Field(default_factory=lambda: {"draw": 1})
+    end_condition: EndCondition = Field(default_factory=EndCondition)
+    win_condition: WinCondition = Field(default_factory=WinCondition)
+    # None or a registered predicate name (see engine.loop.register_skip_predicate).
+    skip_predicate: str | None = None
+    extra: dict[str, Any] = Field(default_factory=dict)
 
 
 class Player(BaseModel):
@@ -115,25 +150,18 @@ class GameState(BaseModel):
     # ``effective_turn_order()``, which falls back to ``turn_players()`` order.
     turn_order: list[str] = Field(default_factory=list)
 
-    # Mutable loop configuration — cards can rewrite these
-    draw_count: int = 1  # cards drawn at start of each turn
-    # skip_predicate: None or a serializable rule-ref string.
-    skip_predicate: str | None = None
-
-    win_condition: WinCondition = Field(default_factory=WinCondition)
+    # Mutable game rules — cards rewrite these through reducers. The canonical
+    # home for draw/play counts, end/win conditions and card-invented extras
+    # (docs/state-example.jsonc). ``draw_count``/``win_condition``/
+    # ``skip_predicate`` remain readable (and serialized) as computed fields
+    # below for snapshot/back-compat; writes go through ``rules``.
+    rules: Rules = Field(default_factory=Rules)
 
     # House rules == the CENTER zone: ids of CENTER-scoped cards currently in
     # effect / placed in the shared table center. Read via center_cards().
     house_rules: list[str] = Field(default_factory=list)
 
     phase: Literal["lobby", "setup", "playing", "results", "epilogue", "ended"] = "lobby"
-
-    # Serialized signal set by EndGameOp's reducer: a card said "end the game".
-    # Room checks this (and evaluate_win_condition) DURING play — see
-    # board.rooms.room._handle_play / _advance_turn — rather than only at deck
-    # exhaustion. A future rules-as-data bead folds this into a generic
-    # rules.end_condition; keep this a plain bool until then.
-    game_over_requested: bool = False
 
     # Winner ids forced by an EndGameOp with a resolved ``winner`` target
     # ("You win the game" cards). When non-empty, _end_game uses these instead
@@ -153,6 +181,51 @@ class GameState(BaseModel):
     epilogue_result: EpilogueResultSummary | None = None
 
     log: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_legacy_rule_fields(cls, data: Any) -> Any:
+        """Accept pre-``rules`` inputs (old persisted states, terse test builders).
+
+        Top-level ``draw_count``/``win_condition``/``skip_predicate`` keys are
+        routed into ``rules`` unless the input already carries an explicit
+        ``rules`` value for them.
+        """
+        if not isinstance(data, dict):
+            return data
+        legacy = {
+            "draw_count": "draw",
+            "win_condition": "win_condition",
+            "skip_predicate": "skip_predicate",
+        }
+        present = [k for k in legacy if k in data]
+        if not present:
+            return data
+        data = dict(data)
+        rules = data.get("rules")
+        if isinstance(rules, Rules):
+            rules = rules.model_dump()
+        rules = dict(rules) if isinstance(rules, dict) else {}
+        for key in present:
+            rules.setdefault(legacy[key], data.pop(key))
+        data["rules"] = rules
+        return data
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def draw_count(self) -> int:
+        """Cards drawn at start of each turn (reads ``rules.draw``)."""
+        return self.rules.draw
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def win_condition(self) -> WinCondition:
+        """The current win condition (reads ``rules.win_condition``)."""
+        return self.rules.win_condition
+
+    @property
+    def skip_predicate(self) -> str | None:
+        return self.rules.skip_predicate
 
     def turn_players(self) -> list[Player]:
         """Players who participate in the turn rotation.
