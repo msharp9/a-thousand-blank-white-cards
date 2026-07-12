@@ -68,6 +68,38 @@ def test_end_game_applies_kept_card_bonus_before_deciding_winner() -> None:
     assert room.state.phase == "epilogue"
 
 
+def test_end_game_logs_kept_card_application_before_winner_line() -> None:
+    # Each on_game_end card application must be visible in state.log (one line
+    # per card, "Game end: <holder>'s '<title>' (<deltas>)") BEFORE the "Game
+    # over! Winner(s): ..." line — otherwise the score jump is silent.
+    kept = {
+        "id": "keep10",
+        "title": "Worth 10 If Kept",
+        "description": "Worth 10 points if still in your hand at game end.",
+        "canonical": {
+            "timing": "modifier",
+            "target": "self",
+            "placement": "self",
+            "trigger": "on_game_end",
+            "ops": [{"op": "add_points", "args": {"amount": 10, "target": "self"}}],
+        },
+    }
+    room = _ended_room([], {"keep10": kept}, scores=(3, 7))
+    p1 = room.state.players[0].model_copy(update={"hand": ["keep10"]})
+    room.state = room.state.model_copy(update={"players": [p1, room.state.players[1]], "turn_index": 1})
+
+    asyncio.run(room.handle_action("p2", PassMsg()))
+
+    game_end_lines = [line for line in room.state.log if line.startswith("Game end:")]
+    assert len(game_end_lines) == 1
+    assert "Alice's 'Worth 10 If Kept'" in game_end_lines[0]
+    assert "Alice +10" in game_end_lines[0]
+
+    game_end_index = room.state.log.index(game_end_lines[0])
+    winner_index = next(i for i, line in enumerate(room.state.log) if line.startswith("Game over!"))
+    assert game_end_index < winner_index
+
+
 def test_dev_force_end_game_uses_real_scoring_path() -> None:
     # p1 trails 3-7 but holds a "worth 10 if kept" on_game_end card. Forcing the
     # end game must run the real resolve_end_of_game → evaluate_win_condition path,
@@ -86,7 +118,8 @@ def test_dev_force_end_game_uses_real_scoring_path() -> None:
     }
     room = _ended_room(["keep10"], {"keep10": kept}, scores=(3, 7))
     # Independently compute what a real deck-exhaustion end game would decide.
-    expected_winners = evaluate_win_condition(resolve_end_of_game(room.state))
+    expected_state, _apps = resolve_end_of_game(room.state)
+    expected_winners = evaluate_win_condition(expected_state)
 
     asyncio.run(room.dev_force_end_game())
 

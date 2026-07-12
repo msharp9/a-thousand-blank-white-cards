@@ -2,12 +2,29 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from engine.apply import apply_effect
 from engine.compile import compile_card
 from engine.events import GameEvent, HookContext
 from models.game_state import GameState
+
+
+@dataclass(frozen=True)
+class EndOfGameApplication:
+    """One ``on_game_end`` card's effect, as actually applied to a GameState.
+
+    ``deltas`` maps player id to the score change caused by this single
+    card (only players whose score actually moved are included), computed by
+    diffing scores immediately before and after this card's ``apply_effect``.
+    """
+
+    holder_id: str
+    holder_name: str
+    card_id: str
+    card_title: str
+    deltas: dict[str, int] = field(default_factory=dict)
 
 
 def _as_card_dict(card: Any) -> dict | None:
@@ -34,7 +51,7 @@ def _game_end_trigger(card: dict) -> bool:
     return False
 
 
-def resolve_end_of_game(state: GameState, cards: dict | None = None) -> GameState:
+def resolve_end_of_game(state: GameState, cards: dict | None = None) -> tuple[GameState, list[EndOfGameApplication]]:
     """Apply every ``on_game_end`` card's ops before the winner is decided.
 
     For each non-spectator player, every card id in that player's ``hand`` or
@@ -48,8 +65,14 @@ def resolve_end_of_game(state: GameState, cards: dict | None = None) -> GameStat
     score adjustments only; setting ``winner_ids`` is left to the caller (which
     runs ``evaluate_win_condition`` next). Cards with no canonical/trigger, and
     cards that compile to ``None``, are skipped.
+
+    Returns the updated state alongside one :class:`EndOfGameApplication` per
+    card that actually moved a score, in application order, so callers (e.g.
+    Room) can surface each application to players instead of applying it
+    silently.
     """
     registry = cards if cards is not None else state.cards
+    applications: list[EndOfGameApplication] = []
 
     for player in state.turn_players():
         for card_id in (*player.hand, *player.in_play):
@@ -64,9 +87,21 @@ def resolve_end_of_game(state: GameState, cards: dict | None = None) -> GameStat
                 actor_id=player.id,
                 card_id=card_id,
             )
+            before = {p.id: p.score for p in state.players}
             state = apply_effect(state, program, ctx)
+            deltas = {p.id: p.score - before[p.id] for p in state.players if p.score != before[p.id]}
+            if deltas:
+                applications.append(
+                    EndOfGameApplication(
+                        holder_id=player.id,
+                        holder_name=player.name,
+                        card_id=card_id,
+                        card_title=card.get("title") or "a card",
+                        deltas=deltas,
+                    )
+                )
 
-    return state
+    return state, applications
 
 
 def evaluate_win_condition(state: GameState) -> list[str]:

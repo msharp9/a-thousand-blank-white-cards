@@ -473,6 +473,18 @@ class Room:
             return card.get("title") or "a card"
         return getattr(card, "title", None) or "a card"
 
+    def _format_score_deltas(self, deltas: dict[str, int]) -> str:
+        """Render {player_id: change} as "Alice +5, Bob -2", in player order.
+
+        Zero/absent changes are omitted; returns "" if nothing changed.
+        """
+        parts = []
+        for p in self.state.players:
+            change = deltas.get(p.id, 0)
+            if change:
+                parts.append(f"{p.name} {'+' if change > 0 else ''}{change}")
+        return ", ".join(parts)
+
     def _describe_play(self, player_id: str, card, before: dict[str, int]) -> str:
         """Build a human-readable play log line with the resulting score deltas.
 
@@ -481,14 +493,11 @@ class Room:
         the old raw ``Played <card_id>`` line so players can actually follow what
         happened.
         """
-        deltas = []
-        for p in self.state.players:
-            change = p.score - before.get(p.id, p.score)
-            if change:
-                deltas.append(f"{p.name} {'+' if change > 0 else ''}{change}")
+        deltas = {p.id: p.score - before.get(p.id, p.score) for p in self.state.players}
         line = f"{self._name(player_id)} played {self._card_title(card)}"
-        if deltas:
-            line += f" ({', '.join(deltas)})"
+        formatted = self._format_score_deltas(deltas)
+        if formatted:
+            line += f" ({formatted})"
         return line
 
     async def _handle_pass(self, player_id: str) -> None:
@@ -503,7 +512,8 @@ class Room:
 
         1. ``resolve_end_of_game`` applies any kept-in-hand / in-play end-of-game
            card effects (e.g. "worth 10 points if you keep it") so final scores
-           reflect what players held at the buzzer.
+           reflect what players held at the buzzer. Each application is logged
+           BEFORE the winner announcement, so the score jump is never silent.
         2. ``evaluate_win_condition`` computes ``winner_ids`` from those final
            scores (default: highest points). Winners are stored on the state and
            logged so ALL connected players see the result.
@@ -513,7 +523,13 @@ class Room:
            completes. This finally wires the previously-orphaned epilogue into
            the natural end of a game.
         """
-        self.state = resolve_end_of_game(self.state)
+        self.state, applications = resolve_end_of_game(self.state)
+        for application in applications:
+            line = f"Game end: {application.holder_name}'s '{application.card_title}'"
+            formatted = self._format_score_deltas(application.deltas)
+            if formatted:
+                line += f" ({formatted})"
+            await self._log_and_broadcast(line)
         winners = evaluate_win_condition(self.state)
         if winners:
             names = [self.state.get_player(w).name for w in winners]
