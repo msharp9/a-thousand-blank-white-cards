@@ -83,3 +83,80 @@ def test_reupsert_same_card_id_is_idempotent(monkeypatch: pytest.MonkeyPatch) ->
         upsert_card("c1", "Extra Turn", "Take an extra turn (v2).", '{"type":"extra_turn"}', "seed")
         # Re-seeding the same card_id must overwrite the same point, not duplicate it.
         assert client.count(COLLECTION_NAME).count == 1
+
+
+def test_upsert_card_defaults_vote_totals_to_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    fake_vector = [0.1] * 1536
+    with patch("agent.rag.store.embed_text_cached", return_value=fake_vector):
+        from agent.rag.store import get_card_totals, init_store, upsert_card
+
+        init_store()
+        upsert_card("c1", "Title", "desc", "{}", "seed")
+        assert get_card_totals("c1") == (0, 0)
+
+
+def test_upsert_card_carries_vote_totals_in_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    fake_vector = [0.1] * 1536
+    with patch("agent.rag.store.embed_text_cached", return_value=fake_vector):
+        from agent.rag.store import get_card_totals, init_store, list_all_cards, upsert_card
+
+        init_store()
+        upsert_card("c1", "Title", "desc", "{}", "player", keep_votes=6, destroy_votes=0)
+        assert get_card_totals("c1") == (6, 0)
+        cards = list_all_cards()
+        assert cards[0]["keep_votes"] == 6
+        assert cards[0]["destroy_votes"] == 0
+
+
+def test_upsert_replaces_prior_vote_totals(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Qdrant upsert replaces the whole payload — re-upserting without carrying
+    # forward the previous totals would silently reset them to 0.
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    fake_vector = [0.1] * 1536
+    with patch("agent.rag.store.embed_text_cached", return_value=fake_vector):
+        from agent.rag.store import get_card_totals, init_store, upsert_card
+
+        init_store()
+        upsert_card("c1", "Title", "desc", "{}", "player", keep_votes=6, destroy_votes=0)
+        prior = get_card_totals("c1")
+        assert prior == (6, 0)
+        keep, destroy = prior
+        upsert_card("c1", "Title", "desc", "{}", "player", keep_votes=keep + 2, destroy_votes=destroy + 3)
+        assert get_card_totals("c1") == (8, 3)
+
+
+def test_get_card_totals_returns_none_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    fake_vector = [0.1] * 1536
+    with patch("agent.rag.store.embed_text_cached", return_value=fake_vector):
+        from agent.rag.store import get_card_totals, init_store, upsert_card
+
+        init_store()
+        upsert_card("c1", "Title", "desc", "{}", "seed")
+        assert get_card_totals("never-seeded") is None
+
+
+def test_delete_card_removes_it_from_the_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    fake_vector = [0.1] * 1536
+    with patch("agent.rag.store.embed_text_cached", return_value=fake_vector):
+        from agent.rag.store import delete_card, get_card_totals, init_store, list_all_cards, upsert_card
+
+        init_store()
+        upsert_card("c1", "Title", "desc", "{}", "player")
+        upsert_card("c2", "Other", "desc", "{}", "player")
+        delete_card("c1")
+        assert {c["card_id"] for c in list_all_cards()} == {"c2"}
+        assert get_card_totals("c1") is None
+
+
+def test_delete_card_on_missing_id_is_a_no_op(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    fake_vector = [0.1] * 1536
+    with patch("agent.rag.store.embed_text_cached", return_value=fake_vector):
+        from agent.rag.store import delete_card, init_store
+
+        init_store()
+        delete_card("never-there")  # must not raise
