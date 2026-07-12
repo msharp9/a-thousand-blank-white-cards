@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from models.game_state import GameState
+from board.rooms.epilogue import EpilogueManager
 from board.rooms.room import Room
 
 logger = logging.getLogger(__name__)
@@ -137,10 +138,16 @@ class FileRoomStore:
 
 
 def _room_to_dict(room: Room) -> dict:
-    return {"code": room.code, "simple": room._simple, "state": room.state.model_dump(mode="json")}
+    data = {"code": room.code, "simple": room._simple, "state": room.state.model_dump(mode="json")}
+    if room._epilogue is not None:
+        data["epilogue"] = room._epilogue.to_dict()
+    return data
 
 
 def _room_from_dict(data: dict) -> Room:
     room = Room(data["code"], mode=data["state"]["mode"], simple=data["simple"])
     room.state = GameState.model_validate(data["state"])
+    epilogue_data = data.get("epilogue")
+    if epilogue_data is not None:
+        room._epilogue = EpilogueManager.from_dict(epilogue_data, room.connections)
     return room
