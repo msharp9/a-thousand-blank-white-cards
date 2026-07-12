@@ -37,6 +37,25 @@ class Player(BaseModel):
     conditions: dict[str, Any] = Field(default_factory=dict)
 
 
+class EpilogueCardOutcome(BaseModel):
+    """One voted-on card's outcome, as surfaced to the final results screen."""
+
+    id: str
+    title: str
+
+
+class EpilogueResultSummary(BaseModel):
+    """Kept/destroyed epilogue vote outcomes.
+
+    Carries id+title only (not full card bodies) so it rides every snapshot
+    (``GameState.epilogue_result``) and survives a reconnect, independent of
+    the transient ``EpilogueManager``.
+    """
+
+    kept: list[EpilogueCardOutcome] = Field(default_factory=list)
+    destroyed: list[EpilogueCardOutcome] = Field(default_factory=list)
+
+
 class Spectator(BaseModel):
     """A watcher who joined AFTER the game left the lobby.
 
@@ -110,7 +129,7 @@ class GameState(BaseModel):
     # effect / placed in the shared table center. Read via center_cards().
     house_rules: list[str] = Field(default_factory=list)
 
-    phase: Literal["lobby", "setup", "playing", "epilogue", "ended"] = "lobby"
+    phase: Literal["lobby", "setup", "playing", "results", "epilogue", "ended"] = "lobby"
 
     # Serialized signal set by EndGameOp's reducer: a card said "end the game".
     # Room checks this (and evaluate_win_condition) DURING play — see
@@ -124,6 +143,12 @@ class GameState(BaseModel):
     # "none"). Surfaced in the snapshot so the frontend can render a win/lose
     # result without parsing the log.
     winner_ids: list[str] = Field(default_factory=list)
+
+    # Populated once the epilogue vote finalizes (phase == "ended"). None
+    # before then (including during the pre-vote "results" phase). Rides the
+    # snapshot so the final results screen (and a reconnecting client) can
+    # render kept/destroyed outcomes without replaying the vote.
+    epilogue_result: EpilogueResultSummary | None = None
 
     log: list[str] = Field(default_factory=list)
 

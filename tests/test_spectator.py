@@ -55,7 +55,7 @@ def test_join_after_start_is_spectator() -> None:
 
 
 def test_join_in_each_started_phase_is_spectator() -> None:
-    for phase in ("setup", "playing", "epilogue", "ended"):
+    for phase in ("setup", "playing", "results", "epilogue", "ended"):
         mgr = RoomManager()
         code = mgr.create_room()
         room = mgr.get(code)

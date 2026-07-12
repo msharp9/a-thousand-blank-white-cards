@@ -44,7 +44,7 @@ def test_end_game_card_ends_immediately_without_deck_exhaustion() -> None:
 
     asyncio.run(room.handle_action("p1", PlayMsg(card_id="endit")))
 
-    assert room.state.phase in ("epilogue", "ended")
+    assert room.state.phase in ("results", "ended")
     assert room.state.deck == ["d1", "d2", "d3"]  # untouched — did not wait for exhaustion
     assert room._deck_exhausted is False
 
@@ -60,7 +60,7 @@ def test_end_game_authoring_synonym_win_the_game_compiles() -> None:
 
     asyncio.run(room.handle_action("p1", PlayMsg(card_id="win1")))
 
-    assert room.state.phase in ("epilogue", "ended")
+    assert room.state.phase in ("results", "ended")
     assert room.state.deck == ["d1"]
 
 
@@ -84,7 +84,7 @@ def test_set_win_condition_first_to_ends_the_moment_threshold_is_reached() -> No
 
     assert room.state.get_player("p1").score == 10
     assert room.state.win_condition.kind == "first_to"
-    assert room.state.phase in ("epilogue", "ended")
+    assert room.state.phase in ("results", "ended")
     assert room.state.deck == ["d1", "d2"]
     assert room._deck_exhausted is False
 

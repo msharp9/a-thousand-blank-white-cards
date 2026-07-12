@@ -59,6 +59,9 @@ export type EpilogueVoteMsg = {
 export type EpilogueDoneMsg = { type: "epilogue_done" };
 // Host-only: finalize the epilogue immediately, regardless of who's done.
 export type EpilogueFinalizeMsg = { type: "epilogue_finalize" };
+// Host-only: advance from the post-game results screen into the epilogue
+// vote. Only valid while phase === "results".
+export type EpilogueStartMsg = { type: "epilogue_start" };
 
 export type ClientMsg =
   | JoinMsg
@@ -69,6 +72,7 @@ export type ClientMsg =
   | PlayMsg
   | CreateCardMsg
   | PreviewCardMsg
+  | EpilogueStartMsg
   | EpilogueVoteMsg
   | EpilogueDoneMsg
   | EpilogueFinalizeMsg;
@@ -110,9 +114,19 @@ export type SpectatorSnapshot = {
   name: string;
 };
 
+// One card's epilogue vote outcome (id+title only — enough to render a list).
+// Mirrors models.game_state.EpilogueCardOutcome.
+export type EpilogueCardOutcome = { id: string; title: string };
+// Mirrors models.game_state.EpilogueResultSummary. Rides GameStateSnapshot so
+// it survives a reconnect after the vote finalizes.
+export type EpilogueResultSummary = {
+  kept: EpilogueCardOutcome[];
+  destroyed: EpilogueCardOutcome[];
+};
+
 export type GameStateSnapshot = {
   room_code: string;
-  phase: "lobby" | "setup" | "playing" | "epilogue" | "ended";
+  phase: "lobby" | "setup" | "playing" | "results" | "epilogue" | "ended";
   players: PlayerSnapshot[];
   spectators: SpectatorSnapshot[];
   turn_index: number;
@@ -137,6 +151,9 @@ export type GameStateSnapshot = {
   // exhausted and the game resolves scoring — i.e. populated from the "epilogue"
   // phase onward, not only at "ended". Mirrors GameState.winner_ids.
   winner_ids: string[];
+  // Populated once the epilogue vote finalizes (phase === "ended"); null
+  // before then, including during the pre-vote "results" phase.
+  epilogue_result: EpilogueResultSummary | null;
   log: string[];
 };
 

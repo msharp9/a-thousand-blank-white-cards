@@ -45,7 +45,7 @@ from engine.events import GameEvent, HookContext
 from engine.loop import advance_turn
 from engine.scoring import evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.effects import CustomNoteOp, EffectProgram
-from models.game_state import GameState, Player, Spectator
+from models.game_state import EpilogueCardOutcome, EpilogueResultSummary, GameState, Player, Spectator
 from models.ws_messages import CreateCardMsg
 from board.rooms.connections import ConnectionManager
 from board.rooms.deck import (
@@ -227,6 +227,8 @@ class Room:
             await self._handle_create_card(player_id, msg)
         elif mtype == "preview_card":
             await self._handle_preview_card(player_id, msg)
+        elif mtype == "epilogue_start":
+            await self._handle_epilogue_start(player_id)
         elif mtype == "epilogue_vote":
             await self._handle_epilogue_vote(player_id, msg)
         elif mtype == "epilogue_done":
@@ -521,7 +523,7 @@ class Room:
         await self._advance_turn()
 
     async def _end_game(self) -> None:
-        """Resolve end-of-game scoring, compute winners, then open the epilogue.
+        """Resolve end-of-game scoring, compute winners, then show results.
 
         Sequence (the deck was exhausted and the drawer finished their turn):
 
@@ -532,11 +534,12 @@ class Room:
         2. ``evaluate_win_condition`` computes ``winner_ids`` from those final
            scores (default: highest points). Winners are stored on the state and
            logged so ALL connected players see the result.
-        3. We then open the EPILOGUE (players vote which authored cards to keep
-           for future games) rather than jumping straight to ``ended`` —
-           ``_handle_epilogue_vote`` transitions to ``ended`` once voting
-           completes. This finally wires the previously-orphaned epilogue into
-           the natural end of a game.
+        3. We land on ``phase="results"`` (final scores + full history) rather
+           than opening the epilogue immediately — the host explicitly advances
+           into voting via ``epilogue_start`` (see ``_handle_epilogue_start``),
+           so players see the results screen BEFORE voting. If there are no
+           real players to vote (e.g. an all-spectator remnant) there is
+           nothing to advance for, so we skip straight to ``ended``.
         """
         self.state, applications = resolve_end_of_game(self.state)
         for application in applications:
@@ -553,19 +556,15 @@ class Room:
             log_line = "Game over! No winner."
         self.state = self.state.model_copy(update={"winner_ids": winners})
         await self._log_and_broadcast(log_line)
-        # Open the epilogue vote. If there are no real players to vote (e.g. an
-        # all-spectator remnant), fall straight through to ``ended``.
-        if self.state.turn_players():
-            await self.start_epilogue()
-        else:
-            self.state = self.state.model_copy(update={"phase": "ended"})
-            await self._broadcast_state()
+        next_phase = "results" if self.state.turn_players() else "ended"
+        self.state = self.state.model_copy(update={"phase": next_phase})
+        await self._broadcast_state()
 
     async def dev_force_end_game(self) -> None:
         """DEV shortcut: end an in-progress game NOW via the real end-game path.
 
         Runs the exact ``_end_game`` sequence (kept-card scoring → winners →
-        epilogue-open, or ``ended`` when no real players remain), so behaviour
+        results, or ``ended`` when no real players remain), so behaviour
         matches a genuine deck-exhaustion end game. Raises ``ValueError`` if the
         game is not playing (the endpoint maps that to a 409).
 
@@ -1068,6 +1067,23 @@ class Room:
         await self._epilogue.start(card_dicts, self.connections)
         await self._broadcast_state()
 
+    async def _handle_epilogue_start(self, player_id: str) -> None:
+        """Host-only: advance from the results screen into the epilogue vote.
+
+        Mirrors ``_handle_epilogue_finalize``'s host-only convention. Only
+        valid from ``phase == "results"`` — the state ``_end_game`` lands on
+        so players see final scores + history before voting starts.
+        """
+        if self.state.phase != "results":
+            await self.connections.send(
+                player_id, {"type": "error", "message": "Epilogue can only start from the results screen"}
+            )
+            return
+        if not self._is_host(player_id):
+            await self.connections.send(player_id, {"type": "error", "message": "Only the host can start the epilogue"})
+            return
+        await self.start_epilogue()
+
     async def _handle_epilogue_vote(self, player_id: str, msg) -> None:
         if self._epilogue is None:
             await self.connections.send(player_id, {"type": "error", "message": "No epilogue in progress"})
@@ -1100,9 +1116,24 @@ class Room:
         await self._finalize_epilogue()
 
     async def _finalize_epilogue(self) -> None:
-        """Tally votes, persist kept cards, and transition to ``ended``."""
+        """Tally votes, persist kept cards, and transition to ``ended``.
+
+        Surfaces the outcome as ``state.epilogue_result`` (id+title per card)
+        so the final results screen — and a client reconnecting after the
+        vote — can render kept/destroyed lists straight from the snapshot.
+        """
         result = await self._epilogue.tally_and_persist()
-        self.state = self.state.model_copy(update={"phase": "ended"})
+        epilogue_result = EpilogueResultSummary(
+            kept=[
+                EpilogueCardOutcome(id=cid, title=self._card_title(self.state.cards.get(cid, {})))
+                for cid in result.kept
+            ],
+            destroyed=[
+                EpilogueCardOutcome(id=cid, title=self._card_title(self.state.cards.get(cid, {})))
+                for cid in result.destroyed
+            ],
+        )
+        self.state = self.state.model_copy(update={"phase": "ended", "epilogue_result": epilogue_result})
         await self._broadcast_state()
         await self._log_and_broadcast(f"Epilogue complete. Kept: {len(result.kept)} cards.")
 
