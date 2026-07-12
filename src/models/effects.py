@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union, get_args
+from typing import Annotated, Any, Literal, Union, get_args
 
 from pydantic import BaseModel, Field
 
@@ -212,8 +212,23 @@ class DestroyCardOp(BaseModel):
 
 class SetWinConditionOp(BaseModel):
     op: Literal["set_win_condition"] = "set_win_condition"
-    kind: Literal["highest_points", "lowest_points", "first_to", "last_standing", "none"]
+    kind: Literal["highest_points", "lowest_points", "first_to", "empty_hand", "last_standing", "none"]
     threshold: int | None = None
+
+
+class SetRuleOp(BaseModel):
+    """Write one path in ``GameState.rules`` (the mutable rules-as-data bag).
+
+    Recognized paths: "draw", "play", "skip_predicate", the nested
+    "end_condition[.type|.threshold]" / "win_condition[.kind|.threshold]" /
+    "cannot_play[.<key>]" forms, and free-form "extra.<key>" entries. The
+    reducer validates the resulting Rules model; unknown paths or invalid
+    values raise (surfaced like an unresolvable target).
+    """
+
+    op: Literal["set_rule"] = "set_rule"
+    path: str
+    value: Any = None
 
 
 class CustomNoteOp(BaseModel):
@@ -226,8 +241,8 @@ class CustomNoteOp(BaseModel):
 class EndGameOp(BaseModel):
     """Ends the game immediately, independent of deck state or win_condition.
 
-    The reducer only marks ``GameState.game_over_requested``; Room is
-    responsible for noticing the flag and routing to ``_end_game`` (see
+    The reducer only sets ``rules.end_condition`` to ``{type: "now"}``; Room
+    notices the met end condition and routes to ``_end_game`` (see
     ``board.rooms.room``).
 
     ``winner`` names who wins the ended game ("You win the game" cards resolve
@@ -256,6 +271,7 @@ Op = Annotated[
         DrawCardsOp,
         DestroyCardOp,
         SetWinConditionOp,
+        SetRuleOp,
         CustomNoteOp,
         EndGameOp,
     ],

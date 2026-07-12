@@ -24,13 +24,16 @@ from models.effects import (
     ReverseOrderOp,
     ScrambleOrderOp,
     SetPointsOp,
+    SetRuleOp,
     SetWinConditionOp,
     SkipTurnOp,
     StealPointsOp,
     SubtractPointsOp,
     Target,
 )
-from models.game_state import GameState, WinCondition
+from pydantic import ValidationError as PydanticValidationError
+
+from models.game_state import EndCondition, GameState, Rules, WinCondition
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +178,7 @@ def _reduce_scramble_order(
 
 
 def _reduce_change_draw_count(state: GameState, op: ChangeDrawCountOp, ctx: HookContext) -> GameState:
-    return state.model_copy(update={"draw_count": op.amount})
+    return state.model_copy(update={"rules": state.rules.model_copy(update={"draw": op.amount})})
 
 
 # ---------------------------------------------------------------------------
@@ -248,15 +251,42 @@ def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) 
 
 def _reduce_set_win_condition(state: GameState, op: SetWinConditionOp, ctx: HookContext) -> GameState:
     wc = WinCondition(kind=op.kind, threshold=op.threshold)
-    return state.model_copy(update={"win_condition": wc})
+    return state.model_copy(update={"rules": state.rules.model_copy(update={"win_condition": wc})})
 
 
 def _reduce_custom_note(state: GameState, op: CustomNoteOp, ctx: HookContext) -> GameState:
     return state.with_log(f"[note] {op.note}")
 
 
+_SCALAR_RULE_PATHS = frozenset({"draw", "play", "skip_predicate"})
+_NESTED_RULE_HEADS = frozenset({"end_condition", "win_condition", "cannot_play"})
+
+
+def _reduce_set_rule(state: GameState, op: SetRuleOp, ctx: HookContext) -> GameState:
+    """Write one rule path. Unknown paths / invalid values raise ValueError so
+    callers surface them the same way as unresolvable targets."""
+    rules = state.rules.model_dump()
+    path, value = op.path, op.value
+    if path in _SCALAR_RULE_PATHS or path in _NESTED_RULE_HEADS:
+        rules[path] = value
+    elif path.startswith("extra."):
+        rules["extra"] = {**rules["extra"], path.removeprefix("extra."): value}
+    elif "." in path and path.split(".", 1)[0] in _NESTED_RULE_HEADS:
+        head, key = path.split(".", 1)
+        sub = dict(rules[head]) if isinstance(rules[head], dict) else {}
+        sub[key] = value
+        rules[head] = sub
+    else:
+        raise ValueError(f"set_rule: unknown rule path {path!r}")
+    try:
+        new_rules = Rules.model_validate(rules)
+    except PydanticValidationError as exc:
+        raise ValueError(f"set_rule: invalid value for {path!r}: {exc}") from exc
+    return state.model_copy(update={"rules": new_rules})
+
+
 def _reduce_end_game(state: GameState, op: EndGameOp, ctx: HookContext) -> GameState:
-    update: dict = {"game_over_requested": True}
+    update: dict = {"rules": state.rules.model_copy(update={"end_condition": EndCondition(type="now")})}
     if op.winner is not None:
         update["winner_override"] = _resolve_targets(op.winner, ctx, state)
     return state.model_copy(update=update)
@@ -279,6 +309,7 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
     "set_win_condition": _reduce_set_win_condition,
     "custom_note": _reduce_custom_note,
     "end_game": _reduce_end_game,
+    "set_rule": _reduce_set_rule,
 }
 
 

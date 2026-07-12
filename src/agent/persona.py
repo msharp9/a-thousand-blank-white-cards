@@ -59,7 +59,10 @@ effect for the game engine, given the live game state.
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, destroy_card, set_win_condition, custom_note, end_game) into an EffectProgram.
+  draw_cards, destroy_card, set_win_condition, set_rule, custom_note, end_game) into an
+  EffectProgram. set_rule writes game rules as data (paths: draw, play, end_condition.type,
+  win_condition.kind, extra.<anything>) — rule-changing cards ("draws are now 2", "game ends
+  when someone empties their hand") should compose set_rule ops, not snippets.
 - Only for genuinely novel effects that no combination of ops can express should you
   fall back to a generated code snippet.
 - Use the tools you are given. `read_engine_methods` tells you exactly which ops and

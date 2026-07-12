@@ -447,7 +447,7 @@ def test_draw_with_zero_draw_count_takes_nothing() -> None:
     # With draw_count=0 an explicit draw takes no cards (no rescue draw): the
     # draw step is still consumed (has_drawn) so the player can then play/pass.
     room = _playing_room(["d1", "d2"])
-    room.state = room.state.model_copy(update={"draw_count": 0})
+    room.state = room.state.model_copy(update={"rules": room.state.rules.model_copy(update={"draw": 0})})
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
     asyncio.run(room.handle_action("p1", DrawMsg()))
@@ -621,3 +621,60 @@ def test_play_blank_without_content_is_rejected() -> None:
     mock_interp.assert_not_called()
     assert room.state.cards["blank-0"]["blank"] is True
     assert room.state.turn_index == 0
+
+
+def test_play_allowance_of_two_keeps_turn_until_spent() -> None:
+    c1 = {
+        "id": "c1",
+        "title": "One",
+        "description": "x",
+        "canonical": {"ops": [{"op": "add_points", "args": {"target": "self", "amount": 1}}]},
+    }
+    c2 = {
+        "id": "c2",
+        "title": "Two",
+        "description": "x",
+        "canonical": {"ops": [{"op": "add_points", "args": {"target": "self", "amount": 1}}]},
+    }
+    room = _playing_room(["d1", "d2", "d3"])
+    room.state = room.state.model_copy(
+        update={
+            "cards": {**room.state.cards, "c1": c1, "c2": c2},
+            "players": [
+                room.state.players[0].model_copy(update={"hand": ["c1", "c2"]}),
+                room.state.players[1],
+            ],
+            "rules": room.state.rules.model_copy(update={"play": 2}),
+        }
+    )
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    room._has_drawn = True
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
+    assert room.state.active_player().id == "p1"
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="c2")))
+    assert room.state.active_player().id == "p2"
+
+
+def test_play_disabled_when_rule_is_zero() -> None:
+    c1 = {"id": "c1", "title": "One", "description": "x"}
+    room = _playing_room(["d1"])
+    room.state = room.state.model_copy(
+        update={
+            "cards": {**room.state.cards, "c1": c1},
+            "players": [
+                room.state.players[0].model_copy(update={"hand": ["c1"]}),
+                room.state.players[1],
+            ],
+            "rules": room.state.rules.model_copy(update={"play": 0}),
+        }
+    )
+    ws = AsyncMock()
+    room.connections.connect("p1", ws)
+    room._has_drawn = True
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
+    assert room.state.get_player("p1").hand == ["c1"]
+    assert room.state.active_player().id == "p1"

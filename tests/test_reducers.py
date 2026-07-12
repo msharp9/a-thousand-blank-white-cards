@@ -17,6 +17,7 @@ from models.effects import (
     ReverseOrderOp,
     ScrambleOrderOp,
     SetPointsOp,
+    SetRuleOp,
     SetWinConditionOp,
     SkipTurnOp,
     StealPointsOp,
@@ -326,9 +327,51 @@ class TestCustomNote:
 
 
 class TestEndGame:
-    def test_sets_game_over_requested(self):
+    def test_sets_end_condition_now(self):
         state = make_state()
-        assert state.game_over_requested is False
+        assert state.rules.end_condition.type == "deck_empty"
         new = apply_op(state, EndGameOp(), make_ctx("p1"))
-        assert new.game_over_requested is True
-        assert state.game_over_requested is False  # original untouched
+        assert new.rules.end_condition.type == "now"
+        assert state.rules.end_condition.type == "deck_empty"  # original untouched
+
+
+class TestSetRule:
+    def test_sets_scalar_rule(self):
+        state = make_state()
+        new = apply_op(state, SetRuleOp(path="draw", value=3), make_ctx("p1"))
+        assert new.rules.draw == 3
+        assert state.rules.draw == 1
+
+    def test_sets_nested_rule_path(self):
+        state = make_state()
+        new = apply_op(state, SetRuleOp(path="end_condition.type", value="empty_hand"), make_ctx("p1"))
+        assert new.rules.end_condition.type == "empty_hand"
+
+    def test_sets_whole_nested_rule(self):
+        state = make_state()
+        new = apply_op(
+            state, SetRuleOp(path="win_condition", value={"kind": "first_to", "threshold": 20}), make_ctx("p1")
+        )
+        assert new.rules.win_condition.kind == "first_to"
+        assert new.rules.win_condition.threshold == 20
+
+    def test_sets_free_form_extra(self):
+        state = make_state()
+        new = apply_op(state, SetRuleOp(path="extra.color_match", value=True), make_ctx("p1"))
+        assert new.rules.extra == {"color_match": True}
+
+    def test_unknown_path_raises(self):
+        state = make_state()
+        with pytest.raises(ValueError, match="unknown rule path"):
+            apply_op(state, SetRuleOp(path="deck", value=[]), make_ctx("p1"))
+
+    def test_invalid_value_raises(self):
+        state = make_state()
+        with pytest.raises(ValueError, match="invalid value"):
+            apply_op(state, SetRuleOp(path="draw", value=-1), make_ctx("p1"))
+
+    def test_change_draw_count_writes_rules(self):
+        state = make_state()
+        new = apply_op(state, ChangeDrawCountOp(amount=2), make_ctx("p1"))
+        assert new.rules.draw == 2
+        assert new.draw_count == 2
