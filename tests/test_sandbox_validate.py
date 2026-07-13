@@ -6,8 +6,7 @@ from engine.sandbox.validate import validate_snippet
 
 VALID_SNIPPET = """
 def apply(state, ctx):
-    player_id = ctx["player_id"]
-    state.scores[player_id] = state.scores.get(player_id, 0) + 3
+    state.add_points('self', 3)
 """
 
 
@@ -110,3 +109,24 @@ def test_validation_result_ok_field() -> None:
     result = validate_snippet(VALID_SNIPPET)
     assert result.ok is True
     assert result.error is None
+
+
+def test_unknown_sandbox_method_rejected_with_recommendation() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    state.draw('self', 2)\n")
+
+    assert result.ok is False
+    assert "draw_cards" in result.error
+
+
+def test_private_sandbox_state_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    state._ops.append({})\n")
+
+    assert result.ok is False
+    assert "private attribute" in result.error
+
+
+def test_invalid_sandbox_method_arguments_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    state.add_points('self')\n")
+
+    assert result.ok is False
+    assert "invalid call" in result.error

@@ -1,24 +1,13 @@
-"""agent.tools.read_engine_methods — CONTEXT-FREE engine-introspection tool.
+"""Build the agent's exact, runtime-introspected sandbox API reference.
 
-Before the agent can translate a card into an effect it needs to know WHAT it can
-express. This tool answers that by INTROSPECTING the engine at call time rather
-than hardcoding a list that would silently drift as ops change:
-
-- It walks the :data:`models.effects.Op` discriminated union, reading each member
-  model's ``op`` literal + its non-default field names to print op signatures like
-  ``add_points(target, amount)``.
-- It reads the valid :data:`~models.effects.Target` / :data:`~models.effects.CardTarget`
-  literal values.
-- It introspects the public method names on :class:`engine.facade.GameEngine`.
-- It notes that genuinely novel effects can be a sandboxed ``def apply(state, ctx)``
-  snippet (no imports, no I/O), referencing the sandbox validator at a high level.
-
-Layering: imports only ``models`` / ``engine`` / stdlib / LangChain — never
-``board``. It NEVER raises: any introspection failure degrades to a short string.
+The reference pairs every effect op with its canonical ``SandboxGame`` method,
+lists the read-only helpers and target values, and explains ordered plans and dry
+runs. It never imports the board layer and degrades safely if introspection fails.
 """
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any, get_args, get_origin
 
@@ -27,13 +16,14 @@ from langchain_core.tools import tool
 logger = logging.getLogger(__name__)
 
 
-def _op_signatures() -> list[str]:
-    """Introspect the ``Op`` union and return ``op_literal(field, field)`` strings.
+def _call_signature(member: object) -> inspect.Signature:
+    signature = inspect.signature(member)
+    return signature.replace(parameters=list(signature.parameters.values())[1:])
 
-    Reads the union members programmatically (``get_args`` on the annotated union),
-    then for each pydantic model reads ``model_fields`` and prints the ``op`` literal
-    plus every non-``op`` field name. This stays correct as ops are added/removed.
-    """
+
+def _op_signatures() -> list[str]:
+    """Return exact SandboxGame mutator signatures for every Op."""
+    from engine.sandbox.api_surface import SandboxGame
     from models.effects import Op
 
     # Op is Annotated[Union[...], Field(discriminator=...)]; the first arg of the
@@ -58,8 +48,9 @@ def _op_signatures() -> list[str]:
                 op_literal = literal_args[0] if literal_args else None
         if op_literal is None:
             op_literal = getattr(model, "__name__", "op")
-        arg_names = [name for name in fields if name != "op"]
-        signatures.append(f"  - {op_literal}({', '.join(arg_names)})")
+        method = getattr(SandboxGame, str(op_literal), None)
+        signature = _call_signature(method) if method is not None else "(unavailable)"
+        signatures.append(f"  - state.{op_literal}{signature}")
     return signatures
 
 
@@ -70,13 +61,22 @@ def _literal_values(annotation: Any) -> list[str]:
     return []
 
 
-def _facade_methods() -> list[str]:
-    """Introspect the public method names of ``engine.facade.GameEngine``."""
-    from engine.facade import GameEngine
+def _read_signatures() -> list[str]:
+    from engine.sandbox.api_surface import SandboxGame
+    from models.effects import Op
 
-    return sorted(
-        name for name in vars(GameEngine) if not name.startswith("_") and callable(getattr(GameEngine, name, None))
-    )
+    union = get_args(Op)[0]
+    op_names = {model.model_fields["op"].default for model in get_args(union)}
+    excluded = {"ops", "skip", "set_draw_count", "note", "shuffle_into_deck", "reject_play"}
+    reads = []
+    for name, member in inspect.getmembers(SandboxGame):
+        if name.startswith("_") or name in op_names or name in excluded:
+            continue
+        if isinstance(member, property):
+            reads.append(f"  - state.{name}")
+        elif callable(member):
+            reads.append(f"  - state.{name}{_call_signature(member)}")
+    return reads
 
 
 def _build_reference() -> str:
@@ -85,8 +85,12 @@ def _build_reference() -> str:
 
     parts: list[str] = []
 
-    parts.append('Available engine ops (compose these into an EffectProgram {"ops": [...]}):')
+    parts.append("Sandbox mutators (these exact names/signatures record validated engine ops):")
     parts.extend(_op_signatures())
+
+    parts.append("")
+    parts.append("Sandbox read-only helpers:")
+    parts.extend(_read_signatures())
 
     parts.append("")
     parts.append(
@@ -102,24 +106,24 @@ def _build_reference() -> str:
         "attributes bag matches, e.g. attr:color=red)."
     )
 
-    methods = _facade_methods()
-    if methods:
-        parts.append("")
-        parts.append("GameEngine facade methods (the engine's physics surface): " + ", ".join(methods) + ".")
-
     parts.append("")
     parts.append(
-        "For genuinely novel effects that no combination of ops can express, you may return a "
-        "Python snippet defining `def apply(state, ctx)`. It runs in a locked-down sandbox "
-        "(engine.sandbox.validate): NO imports, NO I/O (open/exec/eval), NO dunder access — "
-        "just plain state/ctx manipulation. Prefer ops; use a snippet only as a last resort."
+        "A snippet defines def apply(state, ctx) and receives SandboxGame, not GameEngine. "
+        "state.draw is invalid; use "
+        "state.draw_cards(target, amount). Mutators record ops, so reads within one snippet see "
+        "the state at that step's start. For post-effect values, return an ordered ResolutionPlan "
+        "with an ops step followed by a snippet step."
+    )
+    parts.append(
+        "Before returning any snippet or hook, call dry_run_effect with the code or complete plan. "
+        "No imports, I/O, private attributes, exec, eval, or open are allowed."
     )
     return "\n".join(parts)
 
 
 @tool
 def read_engine_methods() -> str:
-    """Look up what the game engine can do — the available effect ops and their fields, the valid targets, the engine facade methods, and the sandboxed-snippet escape hatch — so you know how to express a card's effect."""
+    """Read the exact engine-op and SandboxGame API available to interpreted cards."""
     try:
         return _build_reference()
     except Exception:  # noqa: BLE001 — introspection failure must never break the agent

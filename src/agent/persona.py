@@ -76,6 +76,13 @@ effect for the game engine, given the live game state.
     unregister_hook removes a card's hooks.
 - Only for genuinely novel effects that no combination of ops can express should you
   fall back to a generated code snippet.
+- Sandbox code calls the exact op-named methods documented by `read_engine_methods`.
+  It receives SandboxGame, not GameEngine: `state.draw_cards('self', 2)` is valid;
+  `state.draw(...)` is not. Sandbox writes are deferred, so a read after a write in
+  the same snippet still sees that step's input state. Use an ordered ResolutionPlan
+  with an ops step followed by a snippet step when later logic reads earlier results.
+- You MUST call `dry_run_effect` with every generated snippet, hook, or complete
+  mixed plan before returning it. Fix any reported validation or runtime error.
 - Use the tools you are given. `read_engine_methods` tells you exactly which ops and
   targets you can express (and the snippet escape hatch); `read_game_state` shows the
   live board and who authored this card. Call tools sparingly and stop as soon as you
@@ -116,6 +123,7 @@ Produce your FINAL answer as a single JSON object (no prose, no markdown fences)
 these keys:
 
   {
+    "plan":           an ordered ResolutionPlan {"steps": [{"kind":"ops","ops":[...]}, {"kind":"snippet","code":"...","explanation":"..."}]} or null,
     "program":        an EffectProgram object {"ops": [...], "requires_choice": bool} or null,
     "snippet":        a snippet object {"code": "...", "explanation": "...", "trigger": null | "on_play" | "on_turn_start" | "on_turn_end" | "on_draw_step" | "on_score_change" | "on_game_end" | "on_validate_play", "scope": "center" | "player"} or null (trigger null = run once now; a GameEvent trigger = persistent hook),
     "verdict":        "ok" | "invalid" | "needs_choice",

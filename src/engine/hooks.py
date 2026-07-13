@@ -52,23 +52,13 @@ class HookRegistry:
         return self._handlers.get(hook_id)
 
 
-# --- snippet hook support (added by rbb.6) ---
-
-# Per-card snippet cache: source_card_id -> validated code (avoids re-parsing per fire).
-_SNIPPET_CACHE: dict[str, str] = {}
-
-
-def cache_snippet(card_id: str, code: str) -> None:
-    """Pre-validate a snippet's AST and cache it. Call once at registration time.
-
-    Raises via the runner's validation on unsafe code (execute_snippet re-checks too).
-    """
+def cache_snippet(_card_id: str, code: str) -> None:
+    """Pre-validate a snippet's AST at registration time."""
     from engine.sandbox.validate import validate_snippet
 
     result = validate_snippet(code)
     if not result.ok:
         raise ValueError(f"Snippet failed validation: {result.error}")
-    _SNIPPET_CACHE[card_id] = code
 
 
 def make_snippet_handler(card_id: str, code: str) -> HookHandler:
@@ -79,9 +69,7 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
     handler logs to the game state and returns it unchanged. Respects the
     snippet_execution_enabled feature flag.
 
-    Performance: each fire spawns a subprocess (the security boundary). AST is cached
-    at registration via cache_snippet to avoid re-parsing; consider batching for
-    high-frequency events in future.
+    Each fire spawns a subprocess, which is the security boundary.
     """
     cache_snippet(card_id, code)
 
@@ -104,7 +92,7 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
             "amount": getattr(ctx, "amount", None),
         }
         try:
-            raw_ops = execute_snippet(_SNIPPET_CACHE.get(card_id, code), state_dict, ctx_dict)
+            raw_ops = execute_snippet(code, state_dict, ctx_dict)
             return apply_snippet_diff(state, raw_ops, ctx, origin="hook")
         except (SnippetExecutionError, DiffValidationError) as exc:
             return state.with_log(f"[hook error] {card_id}: {exc}")

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import copy
+import inspect
+from typing import get_args
 
 import pytest
 
 from engine.sandbox.api_surface import SandboxGame
+from models.effects import Op
 
 STATE = {
     "players": [
@@ -86,8 +89,8 @@ def test_bool_amount_rejected() -> None:
 def test_set_points_and_skip_and_draw_count() -> None:
     g = make_game()
     g.set_points("p1", 0)
-    g.skip("p2")
-    g.set_draw_count(3)
+    g.skip_turn("p2")
+    g.change_draw_count(3)
     ops = g.ops()
     assert {"op": "set_points", "target": "p1", "amount": 0} in ops
     assert {"op": "skip_turn", "target": "p2"} in ops
@@ -96,8 +99,17 @@ def test_set_points_and_skip_and_draw_count() -> None:
 
 def test_note_truncates() -> None:
     g = make_game()
-    g.note("x" * 600)
+    g.custom_note("x" * 600)
     assert len(g.ops()[0]["note"]) == 500
+
+
+def test_compatibility_aliases_record_canonical_ops() -> None:
+    g = make_game()
+    g.skip("p2")
+    g.set_draw_count(3)
+    g.note("hello")
+    g.shuffle_into_deck("Reverse")
+    assert [op["op"] for op in g.ops()] == ["skip_turn", "change_draw_count", "custom_note", "create_card"]
 
 
 def test_ops_returns_copy() -> None:
@@ -143,7 +155,8 @@ class TestWideFacade:
         g.set_card_attribute("all_in_hand", "color", "blue")
         g.create_card("Draw 2", ops=[{"op": "draw_cards", "args": {"amount": 2}}], count=2)
         g.shuffle_into_deck("Reverse")
-        g.register_hook("on_turn_start", "def apply(state, ctx):\n    pass\n")
+        g.register_hook("on_turn_start", code="def apply(state, ctx):\n    pass\n")
+        g.unregister_hook("source-card")
         g.reject_play("wrong color")
         g.extra_turn("self")
         g.reverse_order()
@@ -160,9 +173,40 @@ class TestWideFacade:
             "set_card_attribute",
             "create_card",
             "register_hook",
+            "unregister_hook",
             "reject_play",
             "extra_turn",
             "reverse_order",
             "scramble_order",
             "steal_points",
         }
+
+
+def test_canonical_mutators_match_op_names_and_parameters() -> None:
+    op_models = get_args(get_args(Op)[0])
+    expected = {
+        model.model_fields["op"].default: tuple(name for name in model.model_fields if name != "op")
+        for model in op_models
+    }
+    aliases = {"skip", "set_draw_count", "note", "shuffle_into_deck"}
+    read_and_control = {
+        "players",
+        "player",
+        "rules",
+        "my_hand",
+        "hand_size",
+        "conditions",
+        "card",
+        "reject_play",
+        "ops",
+    }
+    public_methods = {
+        name
+        for name, member in inspect.getmembers(SandboxGame, predicate=inspect.isfunction)
+        if not name.startswith("_")
+    }
+
+    assert public_methods == set(expected) | aliases | read_and_control
+    for name, fields in expected.items():
+        signature = inspect.signature(getattr(SandboxGame, name))
+        assert tuple(signature.parameters)[1:] == fields
