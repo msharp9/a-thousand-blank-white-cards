@@ -1,16 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Permanent_Marker, Patrick_Hand, Nunito } from "next/font/google";
 import "./globals.css";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const fontMarker = Permanent_Marker({
+  variable: "--font-marker",
+  weight: "400",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const fontHand = Patrick_Hand({
+  variable: "--font-hand",
+  weight: "400",
+  subsets: ["latin"],
+});
+
+const fontNunito = Nunito({
+  variable: "--font-nunito",
+  weight: ["400", "600", "700", "800", "900"],
   subsets: ["latin"],
 });
 
@@ -27,7 +35,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${fontMarker.variable} ${fontHand.variable} ${fontNunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <TooltipProvider>{children}</TooltipProvider>
