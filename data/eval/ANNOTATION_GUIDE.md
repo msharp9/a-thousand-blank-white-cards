@@ -80,6 +80,30 @@ Rules of thumb:
   `trigger` naming the event that re-fires them. Reactions: `discard` +
   `"on_reaction"`.
 
+## Note-only cards vs interaction-steps upgrades
+
+Cards whose effect is a real-world action the engine cannot execute default to
+an honest `custom_note` ops + note-only sandbox annotation. A subset carries an
+interaction-`steps` plan instead (`ops: null`, `sandbox: null` — see
+CANONICAL_SPEC STEPS) when the card text implies mechanics the engine can
+check at resolution time:
+
+- **Tiered scoring** ("A-mur-ica": correct +1000 / incorrect +200 / refuse
+  -500) → a `choice` barrier whose recorded tier drives the point swing.
+- **Succeed/fail dares with explicit stakes** ("milk mustache for 500 or lose
+  200") → a `confirm` barrier ("did it happen?") branching the consequences.
+- **Counting/number prompts** ("+50 per president named", "-10 × your weekly
+  count") → a `number` barrier whose value scales the points.
+- **Score/name-computable effects** ("if you're in the negative, +500") stay
+  sandbox-only but with real computed code instead of a note.
+
+Leave as note-only: dares resolved after the current play (a round or longer —
+barrier timeouts cap at 300s), ongoing table-adjudicated rules, card-zone
+manipulations with no clean ops mapping, and pure flavour. Do not force
+mechanics onto vibes. Snippet-step code never targets `"chooser"` (snippet
+diffs have no prompt_choice flow); address a chosen player defensively as
+`'id:' + (ctx.get('chosen_player_id') or ctx.get('actor_id') or '')`.
+
 ## How to spot-check transcriptions
 
 1. Open the `image_url` and compare it to `title` + `description` + `alt_text`.

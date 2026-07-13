@@ -1427,15 +1427,39 @@
       "venue": "all",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Choose: churn it for +20 points, or let it stew for -50 points."
+          "kind": "interaction",
+          "result_key": "prep",
+          "request": {
+            "kind": "choice",
+            "schema_version": 1,
+            "prompt": "Stewing Beef: churn it (+20) or let it stew (-50)?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 60,
+            "options": [
+              {
+                "id": "churn",
+                "label": "Churn it (+20)"
+              },
+              {
+                "id": "stew",
+                "label": "Let it stew (-50)"
+              }
+            ],
+            "min_selections": 1,
+            "max_selections": 1
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picks = ctx.get('interactions', {}).get('prep', {})\n    chosen = [oid for values in picks.values() for oid in values]\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if 'churn' in chosen:\n        state.add_points('id:' + pid, 20)\n    else:\n        state.subtract_points('id:' + pid, 50)\n",
+          "explanation": "Two-tier choice: the recorded pick decides which point swing the played-on player takes."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Choose: churn it for +20 points, or let it stew for -50 points.')"
+      "sandbox": null
     }
   },
   {
@@ -1533,15 +1557,30 @@
       "venue": "all",
       "magnitude_sign": "negative",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Lose 10 points times the number of times you masturbate per week (self-reported)."
+          "kind": "interaction",
+          "result_key": "times",
+          "request": {
+            "kind": "number",
+            "schema_version": 1,
+            "prompt": "Candy Corn: how many times a week? (-10 points each)",
+            "audience": "active",
+            "sealed": true,
+            "timeout_seconds": 60,
+            "minimum": 0,
+            "maximum": 100,
+            "integer": true
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    counts = ctx.get('interactions', {}).get('times', {})\n    n = int(counts.get(ctx.get('actor_id', ''), 0))\n    if n:\n        state.subtract_points('self', 10 * n)\n",
+          "explanation": "Counting prompt: the sealed self-reported count scales the point loss."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Lose 10 points times the number of times you masturbate per week (self-reported).')"
+      "sandbox": null
     }
   },
   {
@@ -1648,15 +1687,43 @@
       "venue": "all",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Sing the Star-Spangled Banner: all correct words = +1000, incorrect = +200, refuse = -500."
+          "kind": "interaction",
+          "result_key": "performance",
+          "request": {
+            "kind": "choice",
+            "schema_version": 1,
+            "prompt": "Sing the Star-Spangled Banner. How did it go?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 300,
+            "options": [
+              {
+                "id": "correct",
+                "label": "All correct words (+1000)"
+              },
+              {
+                "id": "incorrect",
+                "label": "Sang it, words wrong (+200)"
+              },
+              {
+                "id": "nope",
+                "label": "Refused to sing (-500)"
+              }
+            ],
+            "min_selections": 1,
+            "max_selections": 1
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picks = ctx.get('interactions', {}).get('performance', {})\n    chosen = [oid for values in picks.values() for oid in values]\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if 'correct' in chosen:\n        state.add_points('id:' + pid, 1000)\n    elif 'incorrect' in chosen:\n        state.add_points('id:' + pid, 200)\n    else:\n        state.subtract_points('id:' + pid, 500)\n",
+          "explanation": "Tiered scoring: the table records which tier the performance hit and the singer is paid accordingly."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Sing the Star-Spangled Banner: all correct words = +1000, incorrect = +200, refuse = -500.')"
+      "sandbox": null
     }
   },
   {
@@ -1724,15 +1791,29 @@
       "venue": "all",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "If you have loaded a dishwasher in the past week: +500 points, otherwise -500 points."
+          "kind": "interaction",
+          "result_key": "dishwasher",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Has the player this was played on loaded a dishwasher in the past week?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 60,
+            "confirm_label": "Yes",
+            "decline_label": "No"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    answers = ctx.get('interactions', {}).get('dishwasher', {})\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if any(answers.values()):\n        state.add_points('id:' + pid, 500)\n    else:\n        state.subtract_points('id:' + pid, 500)\n",
+          "explanation": "Yes/no self-report barrier with symmetric score consequences."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('If you have loaded a dishwasher in the past week: +500 points, otherwise -500 points.')"
+      "sandbox": null
     }
   },
   {
@@ -2889,15 +2970,30 @@
       "venue": "in_person",
       "magnitude_sign": "neutral",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Everyone holds up 1-5 fingers at the same time; any players showing matching numbers must sit on each other's laps for one round."
+          "kind": "interaction",
+          "result_key": "fingers",
+          "request": {
+            "kind": "number",
+            "schema_version": 1,
+            "prompt": "Hold up 1-5 fingers - enter the number you are holding up.",
+            "audience": "all",
+            "sealed": true,
+            "timeout_seconds": 60,
+            "minimum": 1,
+            "maximum": 5,
+            "integer": true
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    fingers = ctx.get('interactions', {}).get('fingers', {})\n    seen = {}\n    for pid, n in fingers.items():\n        seen.setdefault(int(n), []).append(pid)\n    matched = [pids for pids in seen.values() if len(pids) > 1]\n    if not matched:\n        state.note('No matching numbers - nobody sits on laps.')\n        return\n    for pids in matched:\n        names = ', '.join(state.player(pid).name for pid in pids)\n        state.note('Matched fingers: ' + names + ' must sit on each other laps for one round.')\n",
+          "explanation": "Sealed simultaneous number pick; the engine finds matching numbers and names who owes the physical forfeit."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note(\"Everyone holds up 1-5 fingers at the same time; any players showing matching numbers must sit on each other's laps for one round.\")"
+      "sandbox": null
     }
   },
   {
@@ -3184,7 +3280,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Add up current scores; the player with the highest score has their score turned negative, and if it is already negative it is doubled.')"
+      "sandbox": "def apply(state, ctx):\n    best = None\n    for p in state.players():\n        if best is None or p.score > best.score:\n            best = p\n    if best is None:\n        return\n    if best.score > 0:\n        state.subtract_points('id:' + best.id, 2 * best.score)\n    elif best.score < 0:\n        state.subtract_points('id:' + best.id, -best.score)\n"
     }
   },
   {
@@ -3395,16 +3491,31 @@
       "placement": "discard",
       "venue": "all",
       "magnitude_sign": "positive",
-      "ops": [
+      "trigger": null,
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Name the U.S. presidents in order; gain 50 points per president correctly named."
+          "kind": "interaction",
+          "result_key": "presidents",
+          "request": {
+            "kind": "number",
+            "schema_version": 1,
+            "prompt": "Name the presidents in order. How many did you get before breaking order?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 300,
+            "minimum": 0,
+            "maximum": 47,
+            "integer": true
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    counts = ctx.get('interactions', {}).get('presidents', {})\n    n = int(counts.get(ctx.get('actor_id', ''), 0))\n    if n:\n        state.add_points('self', 50 * n)\n",
+          "explanation": "Counting prompt: the table-verified count scales the reward."
         }
       ],
-      "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    state.note('Name the U.S. presidents in order; gain 50 points per president correctly named.')"
+      "sandbox": null
     }
   },
   {
@@ -4012,15 +4123,39 @@
       "venue": "all",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Choose: bark twice ('two woofs') for +600 points, or take +200 points with no barking."
+          "kind": "interaction",
+          "result_key": "doggy",
+          "request": {
+            "kind": "choice",
+            "schema_version": 1,
+            "prompt": "+600 and two woofs, or +200 quietly. You choose.",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 60,
+            "options": [
+              {
+                "id": "woofs",
+                "label": "+600 and two woofs"
+              },
+              {
+                "id": "quiet",
+                "label": "+200, no woofs"
+              }
+            ],
+            "min_selections": 1,
+            "max_selections": 1
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picks = ctx.get('interactions', {}).get('doggy', {})\n    chosen = [oid for values in picks.values() for oid in values]\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if 'woofs' in chosen:\n        state.add_points('id:' + pid, 600)\n        state.note('Two woofs, please.')\n    else:\n        state.add_points('id:' + pid, 200)\n",
+          "explanation": "Two-tier choose-your-reward card; the woof forfeit stays a table note."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note(\"Choose: bark twice ('two woofs') for +600 points, or take +200 points with no barking.\")"
+      "sandbox": null
     }
   },
   {
@@ -4427,15 +4562,29 @@
       "venue": "in_person",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Keep a pen suspended between your elbow and the elbow of the player to your right; if you succeed both gain 500 points, otherwise both lose 500 points."
+          "kind": "interaction",
+          "result_key": "held",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Did you keep the pen suspended between your elbow and your right neighbor's elbow?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 180,
+            "confirm_label": "Yes",
+            "decline_label": "No"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    answers = ctx.get('interactions', {}).get('held', {})\n    if any(answers.values()):\n        state.add_points('self', 500)\n        state.add_points('right_neighbor', 500)\n    else:\n        state.subtract_points('self', 500)\n        state.subtract_points('right_neighbor', 500)\n",
+          "explanation": "Succeed/fail dare confirm; both participants swing +/-500 together."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Keep a pen suspended between your elbow and the elbow of the player to your right; if you succeed both gain 500 points, otherwise both lose 500 points.')"
+      "sandbox": null
     }
   },
   {
@@ -6580,15 +6729,29 @@
       "venue": "all",
       "magnitude_sign": "neutral",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Lose 300 points if you've ever been part of a sex train; otherwise gain 300 points."
+          "kind": "interaction",
+          "result_key": "sex_train",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Night Train: has the player this was played on ever been part of a sex train?",
+            "audience": "active",
+            "sealed": true,
+            "timeout_seconds": 60,
+            "confirm_label": "Yes",
+            "decline_label": "No"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    answers = ctx.get('interactions', {}).get('sex_train', {})\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if any(answers.values()):\n        state.subtract_points('id:' + pid, 300)\n    else:\n        state.add_points('id:' + pid, 300)\n",
+          "explanation": "Yes/no self-report with a point swing on each branch."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note(\"Lose 300 points if you've ever been part of a sex train; otherwise gain 300 points.\")"
+      "sandbox": null
     }
   },
   {
@@ -7704,15 +7867,29 @@
       "venue": "all",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Challenge the player two seats to your right to spell a word: if they succeed they get 800 points, if they fail you get 600 points."
+          "kind": "interaction",
+          "result_key": "spelled",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Did the player two seats to your right spell the word correctly?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 120,
+            "confirm_label": "They spelled it",
+            "decline_label": "They failed"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    answers = ctx.get('interactions', {}).get('spelled', {})\n    order = state.turn_order\n    actor = ctx.get('actor_id', '')\n    speller = order[(order.index(actor) + 2) % len(order)] if actor in order else actor\n    if any(answers.values()):\n        state.add_points('id:' + speller, 800)\n    else:\n        state.add_points('self', 600)\n",
+          "explanation": "Succeed/fail challenge: turn order locates the challenged speller two seats right; the outcome routes the reward."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Challenge the player two seats to your right to spell a word: if they succeed they get 800 points, if they fail you get 600 points.')"
+      "sandbox": null
     }
   },
   {
@@ -10139,15 +10316,30 @@
       "venue": "all",
       "magnitude_sign": "negative",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "The chosen player loses 100 points for every animal-related card in front of them."
+          "kind": "interaction",
+          "result_key": "animal_cards",
+          "request": {
+            "kind": "number",
+            "schema_version": 1,
+            "prompt": "How many animal-related cards are in front of the player this was played on?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 60,
+            "minimum": 0,
+            "maximum": 50,
+            "integer": true
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    counts = ctx.get('interactions', {}).get('animal_cards', {})\n    values = list(counts.values())\n    n = int(values[0]) if values else 0\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if n:\n        state.subtract_points('id:' + pid, 100 * n)\n",
+          "explanation": "Counting prompt: the table counts qualifying cards and the loss scales with the count."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('The chosen player loses 100 points for every animal-related card in front of them.')"
+      "sandbox": null
     }
   },
   {
@@ -10256,15 +10448,30 @@
       "venue": "all",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Name every state capital; gain 25 points for each capital correctly paired with its state."
+          "kind": "interaction",
+          "result_key": "capitals",
+          "request": {
+            "kind": "number",
+            "schema_version": 1,
+            "prompt": "Name state capitals with their states. How many did you get?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 300,
+            "minimum": 0,
+            "maximum": 50,
+            "integer": true
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    counts = ctx.get('interactions', {}).get('capitals', {})\n    values = list(counts.values())\n    n = int(values[0]) if values else 0\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if n:\n        state.add_points('id:' + pid, 25 * n)\n",
+          "explanation": "Counting prompt: verified capital count scales the reward."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Name every state capital; gain 25 points for each capital correctly paired with its state.')"
+      "sandbox": null
     }
   },
   {
@@ -10327,15 +10534,30 @@
       "venue": "all",
       "magnitude_sign": "negative",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Everyone loses 200 points multiplied by their number of cups of tea times their number of pees."
+          "kind": "interaction",
+          "result_key": "tea_times_pee",
+          "request": {
+            "kind": "number",
+            "schema_version": 1,
+            "prompt": "Multiply the cups of tea you drank today by the times you peed today. Enter the product.",
+            "audience": "all",
+            "sealed": true,
+            "timeout_seconds": 90,
+            "minimum": 0,
+            "maximum": 1000,
+            "integer": true
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    products = ctx.get('interactions', {}).get('tea_times_pee', {})\n    for pid, n in products.items():\n        if int(n):\n            state.subtract_points('id:' + pid, 200 * int(n))\n",
+          "explanation": "Everyone submits their own count product; each loses 200 per unit."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Everyone loses 200 points multiplied by their number of cups of tea times their number of pees.')"
+      "sandbox": null
     }
   },
   {
@@ -10696,15 +10918,29 @@
       "venue": "all",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Make the stupidest face you can: if anyone laughs, you gain 1000 points; otherwise everyone else gains 300 points."
+          "kind": "interaction",
+          "result_key": "laughed",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Did the stupidest face make you laugh?",
+            "audience": "all_others",
+            "sealed": true,
+            "timeout_seconds": 90,
+            "confirm_label": "Yes",
+            "decline_label": "No"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    laughs = ctx.get('interactions', {}).get('laughed', {})\n    if any(laughs.values()):\n        state.add_points('self', 1000)\n    else:\n        state.add_points('all_others', 300)\n",
+          "explanation": "The audience votes whether they laughed: any laugh pays the actor, a stone-faced table pays everyone else."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Make the stupidest face you can: if anyone laughs, you gain 1000 points; otherwise everyone else gains 300 points.')"
+      "sandbox": null
     }
   },
   {
@@ -10832,15 +11068,29 @@
       "venue": "in_person",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Give yourself a milk mustache to gain 500 points, or lose 200 points if you decline."
+          "kind": "interaction",
+          "result_key": "mustache",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Did you give yourself a milk mustache?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 120,
+            "confirm_label": "Yes",
+            "decline_label": "No"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    answers = ctx.get('interactions', {}).get('mustache', {})\n    if any(answers.values()):\n        state.add_points('self', 500)\n    else:\n        state.subtract_points('self', 200)\n",
+          "explanation": "Succeed/fail dare confirm with asymmetric stakes."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Give yourself a milk mustache to gain 500 points, or lose 200 points if you decline.')"
+      "sandbox": null
     }
   },
   {
@@ -11326,7 +11576,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('If the target is currently in the negative, +500 points; if in the positive, -500 points.')"
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    score = state.player(pid).score\n    if score < 0:\n        state.add_points('id:' + pid, 500)\n    elif score > 0:\n        state.subtract_points('id:' + pid, 500)\n"
     }
   },
   {
@@ -12127,15 +12377,29 @@
       "venue": "all",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "If you have a TEA card, gain 500 points; otherwise lose a turn."
+          "kind": "interaction",
+          "result_key": "has_tea",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Do you have tea?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 60,
+            "confirm_label": "Yes",
+            "decline_label": "No"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    answers = ctx.get('interactions', {}).get('has_tea', {})\n    if any(answers.values()):\n        state.add_points('self', 500)\n    else:\n        state.skip_turn('self')\n",
+          "explanation": "Confirm barrier that branches between a reward and a skipped turn."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('If you have a TEA card, gain 500 points; otherwise lose a turn.')"
+      "sandbox": null
     }
   },
   {
@@ -12293,15 +12557,43 @@
       "venue": "in_person",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "If the person to your right has a beverage, feed them a sip from their cup for +400; if not, -100; if they resist, they lose 1000."
+          "kind": "interaction",
+          "result_key": "sip",
+          "request": {
+            "kind": "choice",
+            "schema_version": 1,
+            "prompt": "If the player to your right has a beverage, feed them a sip from their cup. What happened?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 180,
+            "options": [
+              {
+                "id": "fed",
+                "label": "Fed them a sip (+400)"
+              },
+              {
+                "id": "none",
+                "label": "They have no beverage (-100)"
+              },
+              {
+                "id": "resisted",
+                "label": "They resisted (they lose 1000)"
+              }
+            ],
+            "min_selections": 1,
+            "max_selections": 1
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picks = ctx.get('interactions', {}).get('sip', {})\n    chosen = [oid for values in picks.values() for oid in values]\n    if 'fed' in chosen:\n        state.add_points('self', 400)\n    elif 'resisted' in chosen:\n        state.subtract_points('right_neighbor', 1000)\n    else:\n        state.subtract_points('self', 100)\n",
+          "explanation": "Three-way outcome choice covering the dare's branches, including the resistance penalty on the neighbor."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('If the person to your right has a beverage, feed them a sip from their cup for +400; if not, -100; if they resist, they lose 1000.')"
+      "sandbox": null
     }
   },
   {
@@ -12440,15 +12732,43 @@
       "venue": "in_person",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Pick your own nose for 200 points, or pick a friend's nose for 500 points and take 1 of their cards; otherwise lose 700 points."
+          "kind": "interaction",
+          "result_key": "pick",
+          "request": {
+            "kind": "choice",
+            "schema_version": 1,
+            "prompt": "Boogie Picker: whose nose did you pick?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 120,
+            "options": [
+              {
+                "id": "own",
+                "label": "My own (+200)"
+              },
+              {
+                "id": "friend",
+                "label": "A friend's (+500, take one of their cards)"
+              },
+              {
+                "id": "nobody",
+                "label": "Nobody's (-700)"
+              }
+            ],
+            "min_selections": 1,
+            "max_selections": 1
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picks = ctx.get('interactions', {}).get('pick', {})\n    chosen = [oid for values in picks.values() for oid in values]\n    if 'own' in chosen:\n        state.add_points('self', 200)\n    elif 'friend' in chosen:\n        state.add_points('self', 500)\n        state.note('Take one card from the friend whose nose you picked.')\n    else:\n        state.subtract_points('self', 700)\n",
+          "explanation": "Tiered dare choice; the card-taking rider stays a table note."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note(\"Pick your own nose for 200 points, or pick a friend's nose for 500 points and take 1 of their cards; otherwise lose 700 points.\")"
+      "sandbox": null
     }
   },
   {
@@ -12887,15 +13207,30 @@
       "venue": "all",
       "magnitude_sign": "negative",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Lose 100 points for every 50 pounds you weigh."
+          "kind": "interaction",
+          "result_key": "weight",
+          "request": {
+            "kind": "number",
+            "schema_version": 1,
+            "prompt": "Enter your weight in pounds (-100 points per 50 pounds).",
+            "audience": "active",
+            "sealed": true,
+            "timeout_seconds": 60,
+            "minimum": 0,
+            "maximum": 1000,
+            "integer": true
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    weights = ctx.get('interactions', {}).get('weight', {})\n    values = list(weights.values())\n    n = int(values[0]) if values else 0\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if n // 50:\n        state.subtract_points('id:' + pid, 100 * (n // 50))\n",
+          "explanation": "Counting prompt: the sealed weight report scales the loss in 50-pound increments."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Lose 100 points for every 50 pounds you weigh.')"
+      "sandbox": null
     }
   },
   {
@@ -14806,15 +15141,29 @@
       "venue": "all",
       "magnitude_sign": "neutral",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "If your most recent meal included meat, gain 200 points; otherwise lose 200 points."
+          "kind": "interaction",
+          "result_key": "meat",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Did the most recent meal of the player this was played on include meat?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 60,
+            "confirm_label": "Yes",
+            "decline_label": "No"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    answers = ctx.get('interactions', {}).get('meat', {})\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if any(answers.values()):\n        state.add_points('id:' + pid, 200)\n    else:\n        state.subtract_points('id:' + pid, 200)\n",
+          "explanation": "Yes/no self-report with symmetric score consequences."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('If your most recent meal included meat, gain 200 points; otherwise lose 200 points.')"
+      "sandbox": null
     }
   },
   {
@@ -14829,15 +15178,42 @@
       "venue": "in_person",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Name a color; if anyone is wearing underwear of that color, you and each of them gain 500 points."
+          "kind": "interaction",
+          "result_key": "color",
+          "request": {
+            "kind": "text",
+            "schema_version": 1,
+            "prompt": "Name a color out loud and enter it here.",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 60,
+            "max_length": 40
           }
+        },
+        {
+          "kind": "interaction",
+          "result_key": "wearing",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Are you wearing underwear of the named color?",
+            "audience": "all",
+            "sealed": true,
+            "timeout_seconds": 90,
+            "confirm_label": "Yes",
+            "decline_label": "No"
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    named = ctx.get('interactions', {}).get('color', {})\n    color = ''\n    for value in named.values():\n        color = str(value)\n    if color:\n        state.note('Color named: ' + color)\n    wearing = ctx.get('interactions', {}).get('wearing', {})\n    actor = ctx.get('actor_id', '')\n    matched = [pid for pid, yes in wearing.items() if yes]\n    for pid in matched:\n        state.add_points('id:' + pid, 500)\n    if matched and actor not in matched:\n        state.add_points('self', 500)\n",
+          "explanation": "Text barrier records the named color, a sealed table-wide confirm finds matches, and every match (plus the namer) scores."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Name a color; if anyone is wearing underwear of that color, you and each of them gain 500 points.')"
+      "sandbox": null
     }
   },
   {
@@ -17209,7 +17585,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note(\"If the target player's name begins with a vowel, they gain 800 points; otherwise they lose 300 points.\")"
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    name = state.player(pid).name\n    if name and name[0].upper() in 'AEIOU':\n        state.add_points('id:' + pid, 800)\n    else:\n        state.subtract_points('id:' + pid, 300)\n"
     }
   },
   {
@@ -17224,15 +17600,43 @@
       "venue": "in_person",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "The target player gains 200 points if they have a cold beverage, or 800 points if they have a Pepsi."
+          "kind": "interaction",
+          "result_key": "beverage",
+          "request": {
+            "kind": "choice",
+            "schema_version": 1,
+            "prompt": "What are you drinking?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 60,
+            "options": [
+              {
+                "id": "pepsi",
+                "label": "A Pepsi (+800)"
+              },
+              {
+                "id": "cold",
+                "label": "Another cold beverage (+200)"
+              },
+              {
+                "id": "none",
+                "label": "No cold beverage"
+              }
+            ],
+            "min_selections": 1,
+            "max_selections": 1
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picks = ctx.get('interactions', {}).get('beverage', {})\n    chosen = [oid for values in picks.values() for oid in values]\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if 'pepsi' in chosen:\n        state.add_points('id:' + pid, 800)\n    elif 'cold' in chosen:\n        state.add_points('id:' + pid, 200)\n    else:\n        state.note('No cold beverage - no bonus.')\n",
+          "explanation": "Tiered reward keyed to a verifiable beverage check."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('The target player gains 200 points if they have a cold beverage, or 800 points if they have a Pepsi.')"
+      "sandbox": null
     }
   },
   {
@@ -17592,15 +17996,29 @@
       "venue": "in_person",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Push out a fart to gain 200 points, or lose 2000 points if you cannot."
+          "kind": "interaction",
+          "result_key": "gas",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Did you push out a fart?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 120,
+            "confirm_label": "It happened",
+            "decline_label": "Nothing"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    answers = ctx.get('interactions', {}).get('gas', {})\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if any(answers.values()):\n        state.add_points('id:' + pid, 200)\n    else:\n        state.subtract_points('id:' + pid, 2000)\n",
+          "explanation": "Succeed/fail dare confirm with the card's lopsided stakes."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Push out a fart to gain 200 points, or lose 2000 points if you cannot.')"
+      "sandbox": null
     }
   },
   {
@@ -17753,15 +18171,29 @@
       "venue": "in_person",
       "magnitude_sign": "positive",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Take off all your clothes for +900 points, or keep them on for -100 points."
+          "kind": "interaction",
+          "result_key": "clothes",
+          "request": {
+            "kind": "confirm",
+            "schema_version": 1,
+            "prompt": "Did you take off all your clothes?",
+            "audience": "active",
+            "sealed": false,
+            "timeout_seconds": 180,
+            "confirm_label": "They came off (+900)",
+            "decline_label": "Kept them on (-100)"
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    answers = ctx.get('interactions', {}).get('clothes', {})\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if any(answers.values()):\n        state.add_points('id:' + pid, 900)\n    else:\n        state.subtract_points('id:' + pid, 100)\n",
+          "explanation": "Succeed/fail dare confirm with score consequences on both branches."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Take off all your clothes for +900 points, or keep them on for -100 points.')"
+      "sandbox": null
     }
   },
   {
@@ -17776,15 +18208,30 @@
       "venue": "all",
       "magnitude_sign": "neutral",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "The target player gains or loses any amount from 0 to 1000 points."
+          "kind": "interaction",
+          "result_key": "check",
+          "request": {
+            "kind": "number",
+            "schema_version": 1,
+            "prompt": "Blank check: write yourself any amount from -1000 to 1000.",
+            "audience": "active",
+            "sealed": true,
+            "timeout_seconds": 60,
+            "minimum": -1000,
+            "maximum": 1000,
+            "integer": true
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    amounts = ctx.get('interactions', {}).get('check', {})\n    values = list(amounts.values())\n    n = int(values[0]) if values else 0\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if n >= 0:\n        state.add_points('id:' + pid, n)\n    else:\n        state.subtract_points('id:' + pid, -n)\n",
+          "explanation": "Number barrier: the written check amount is applied verbatim, sign and all."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('The target player gains or loses any amount from 0 to 1000 points.')"
+      "sandbox": null
     }
   },
   {
