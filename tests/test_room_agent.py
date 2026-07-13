@@ -6,9 +6,9 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
-from agent.contract import InterpretResult
+from agent.contract import InterpretResult, SnippetEffect
 from models.effects import AddPointsOp, EffectProgram
-from models.ws_messages import CreateCardMsg, Placement, PlayMsg
+from models.ws_messages import CreateCardMsg, Placement, PlayMsg, PreviewCardMsg
 from board.rooms.room import Room
 
 
@@ -67,3 +67,49 @@ def test_create_card_interprets(monkeypatch) -> None:
     assert len(room.state.cards) == 1
     card = next(iter(room.state.cards.values()))
     assert card["verdict"] == "invalid"
+    assert card["mechanical_status"] == "fallback"
+    assert card["mechanical_reason"]
+    assert card["correlation_id"]
+
+
+def test_play_status_is_durable_in_snapshot() -> None:
+    room = _room()
+    room.state = room.state.model_copy(
+        update={"cards": {"c1": {"id": "c1", "title": "Gain 3", "description": "Gain 3 points."}}}
+    )
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    result = InterpretResult(program=EffectProgram(ops=[AddPointsOp(target="self", amount=3)]), verdict="ok")
+
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
+
+    card = room.snapshot()["cards"]["c1"]
+    assert card["mechanical_status"] == "applied"
+    assert card["mechanical_reason"] is None
+    assert card["correlation_id"]
+
+
+def test_preview_interprets_and_dry_runs_without_mutating_room() -> None:
+    room = _room()
+    ws = AsyncMock()
+    room.connections.connect("p1", ws)
+    before = room.state.model_dump()
+    invalid_runtime = InterpretResult(
+        snippet=SnippetEffect(
+            code="def apply(state, ctx):\n    state.draw('self', 2)\n",
+            explanation="uses a nonexistent method",
+        ),
+        verdict="ok",
+    )
+
+    with patch("agent.runtime.run_agent", return_value=invalid_runtime) as run:
+        asyncio.run(room.handle_action("p1", PreviewCardMsg(title="Bad", description="Draw two")))
+
+    assert room.state.model_dump() == before
+    messages = [json.loads(call.args[0]) for call in ws.send_text.call_args_list]
+    preview = next(message for message in messages if message["type"] == "preview_result")
+    assert preview["mechanical_status"] == "rejected"
+    assert "draw_cards" in preview["mechanical_reason"] or "draw" in preview["mechanical_reason"]
+    assert preview["correlation_id"]
+    assert run.call_args.kwargs["allow_persistent_tools"] is False

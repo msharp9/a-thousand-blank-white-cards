@@ -359,6 +359,8 @@ def _assemble_tools(
     creator_id: str | None,
     extra: list[Any] | None,
     card_id: str | None = None,
+    *,
+    allow_persistent_tools: bool = True,
 ) -> list[Any]:
     """Build the final bound tool list for one interpretation.
 
@@ -377,7 +379,7 @@ def _assemble_tools(
     try:
         from agent.tools import get_default_tools
 
-        tools.extend(get_default_tools())
+        tools.extend(get_default_tools(allow_persistent_tools=allow_persistent_tools))
     except Exception:  # noqa: BLE001 — a broken default toolbox must not break the agent
         logger.warning("default tools unavailable; continuing with a reduced toolbox")
 
@@ -422,6 +424,7 @@ def run_agent(
     timeout: float | None = None,
     max_tool_calls: int | None = None,
     forced_call_timeout: float | None = None,
+    allow_persistent_tools: bool = True,
 ) -> InterpretResult:
     """Interpret one card into an :class:`InterpretResult`. Never hangs, never raises.
 
@@ -439,6 +442,8 @@ def run_agent(
         forced_call_timeout: Wall-clock ceiling for the forced tools-disabled
             final-answer call made on recursion-cap/timeout (default
             :data:`FORCED_FINAL_CALL_TIMEOUT_SECONDS`).
+        allow_persistent_tools: Whether tools that write decision memory or
+            capability telemetry may be bound. Preview callers disable them.
 
     Returns:
         A well-formed InterpretResult. On recursion cap or timeout, one forced
@@ -461,7 +466,14 @@ def run_agent(
         creator_id=creator_id,
     )
 
-    bound_tools = _assemble_tools(state, actor_id, creator_id, tools, card_id)
+    bound_tools = _assemble_tools(
+        state,
+        actor_id,
+        creator_id,
+        tools,
+        card_id,
+        allow_persistent_tools=allow_persistent_tools,
+    )
 
     try:
         chat_model = model if model is not None else get_chat_model()

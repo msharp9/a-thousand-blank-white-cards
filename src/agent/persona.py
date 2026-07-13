@@ -204,6 +204,11 @@ def build_system_prompt(
             INTERPRETER_JOB,
             PERSONA_DECISION_LOGIC,
             COMMENT_REQUIREMENT,
+            (
+                "CAPABILITY GAPS: Prefer ordered ops, SandboxGame code, hooks, and supported interactions. "
+                "If none can express the card, call wish exactly once with the missing capability, then return "
+                "a visible fallback. The wish tool records telemetry only; it never edits game source."
+            ),
             OUTPUT_CONTRACT,
             "--- The card that was just played ---",
             f"Title: {title}",

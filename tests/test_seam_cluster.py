@@ -200,6 +200,21 @@ def test_assemble_tools_excludes_read_game_state_when_state_none():
     assert "read_engine_methods" in names
 
 
+def test_assemble_tools_read_only_mode_excludes_persistent_writers():
+    tools = _assemble_tools(
+        _sample_state(),
+        "p1",
+        "p1",
+        None,
+        allow_persistent_tools=False,
+    )
+    names = {tool.name for tool in tools}
+    assert "remember_decision" not in names
+    assert "recall_decisions" not in names
+    assert "wish" not in names
+    assert "dry_run_effect" in names
+
+
 def test_assemble_tools_appends_extra_tools():
     from langchain_core.tools import tool
 

@@ -60,6 +60,15 @@ export function SketchCard({
   const cardText = description ?? card?.description ?? "";
   const isBlank = Boolean(card?.blank);
   const verdict = card?.verdict;
+  const mechanicalStatus = card?.mechanical_status;
+  const diagnosticLabel =
+    mechanicalStatus ?? (verdict && verdict !== "ok" ? verdict : undefined);
+  const diagnosticTitle = [
+    card?.mechanical_reason,
+    card?.correlation_id ? `Reference: ${card.correlation_id}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const pad = Math.round(w * 0.08);
   const gap = Math.round(w * 0.035);
@@ -317,8 +326,9 @@ export function SketchCard({
         </div>
       )}
 
-      {!faceDown && verdict && verdict !== "ok" && (
+      {!faceDown && diagnosticLabel && (
         <div
+          title={diagnosticTitle || undefined}
           style={{
             position: "absolute",
             top: Math.round(w * 0.06),
@@ -335,7 +345,7 @@ export function SketchCard({
             boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
           }}
         >
-          {verdict}
+          {diagnosticLabel}
         </div>
       )}
 
