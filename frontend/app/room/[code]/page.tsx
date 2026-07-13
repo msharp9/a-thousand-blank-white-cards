@@ -531,8 +531,10 @@ export default function RoomPage() {
                     )}
                   </div>
                   {/* End turn only when the player may pass (holds no playable
-                      card); the server drew for them at turn start. */}
-                  {isActive && gameState.can_pass && (
+                      card); the server drew for them at turn start. Hidden
+                      while a play is brewing — the server freezes game
+                      actions during interpretation. */}
+                  {isActive && !brewing && gameState.can_pass && (
                     <Button
                       variant="outline"
                       onClick={() => send({ type: "pass" })}
@@ -561,6 +563,7 @@ export default function RoomPage() {
                 <Hand
                   cards={myHandCards}
                   canPlay={isActive}
+                  brewing={brewing}
                   send={send}
                   roomCode={code}
                 />

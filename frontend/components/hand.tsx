@@ -12,14 +12,28 @@ interface HandProps {
   cards: CardSnapshot[];
   /** Is it this player's turn? Play controls only show when true. */
   canPlay: boolean;
+  /**
+   * Card id currently being interpreted by the arbiter (the server's
+   * "brewing" broadcast), or null. While set the hand is locked — cards are
+   * not selectable and the Play action is hidden, exactly like off-turn — so
+   * a second card cannot be played while a play is still resolving.
+   */
+  brewing?: string | null;
   send: (msg: ClientMsg) => void;
   roomCode?: string;
 }
 
-export function Hand({ cards, canPlay, send, roomCode }: HandProps) {
+export function Hand({
+  cards,
+  canPlay,
+  brewing = null,
+  send,
+  roomCode,
+}: HandProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [blankDialogOpen, setBlankDialogOpen] = useState(false);
 
+  const playable = canPlay && !brewing;
   const selectedCard = cards.find((c) => c.id === selectedId) ?? null;
 
   // The player just picks a card and plays it. The interpreter reads the card
@@ -74,18 +88,19 @@ export function Hand({ cards, canPlay, send, roomCode }: HandProps) {
                 card={card}
                 w={130}
                 rot={(i - (cards.length - 1) / 2) * 3}
-                selectable={canPlay && !isReaction}
+                selectable={playable && !isReaction}
                 selected={isSelected}
                 onClick={() => {
                   if (!isReaction) setSelectedId(card.id);
                 }}
+                brewing={brewing === card.id}
                 artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
                 className={cn(
                   i > 0 && "-ml-[34px]",
                   "hover:z-30",
                   isSelected && "z-30",
                   selectedId && !isSelected && "opacity-55",
-                  isReaction && canPlay && "opacity-70 saturate-50",
+                  isReaction && playable && "opacity-70 saturate-50",
                 )}
               />
             );
@@ -93,7 +108,7 @@ export function Hand({ cards, canPlay, send, roomCode }: HandProps) {
         </div>
       )}
 
-      {canPlay && selectedId && (
+      {playable && selectedId && (
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={playSelected}>
             {selectedCard?.blank ? "Fill in & play" : "Play"}
