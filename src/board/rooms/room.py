@@ -36,17 +36,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 import uuid
 from collections.abc import Callable
 
 from engine.apply import apply_effect
-from engine.compile import compile_card
+from engine.compile import compile_card_plan
 from engine.events import EventBus, GameEvent, HookContext
 from engine.hooks import build_registry
 from engine.loop import advance_turn
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.card import MAX_ROOM_ART_BYTES
-from models.effects import CustomNoteOp, EffectProgram, RegisterHookOp
+from models.effects import CustomNoteOp, EffectProgram, OpsStep, ResolutionPlan, SnippetStep
 from models.game_state import EndCondition, EpilogueCardOutcome, EpilogueResultSummary, GameState, Player, Spectator
 from models.ws_messages import CreateCardMsg
 from board.rooms.connections import ConnectionManager
@@ -76,15 +77,8 @@ CARDS_TO_AUTHOR = BLANKS_PER_PLAYER
 AGENT_COMMENT_PREFIX = "🤖 "
 
 
-def _program_is_effectless(program: EffectProgram | None) -> bool:
-    """True when `program` carries no mechanical ops (None, empty, or note-only).
-
-    Distinguishes a real compiled/agent program from the "nothing to apply" case so
-    a present snippet can supersede it (see Room._resolve_program).
-    """
-    if program is None:
-        return True
-    return all(isinstance(op, CustomNoteOp) for op in program.ops)
+class PlanExecutionError(Exception):
+    pass
 
 
 class Room:
@@ -134,7 +128,7 @@ class Room:
         # Card ids whose agent comment has already been appended to state.log this
         # session. A card that needs a target is resolved TWICE (resolve → prompt_choice
         # → follow-up play re-resolves), so this guards against double-logging the
-        # arbiter comment for one played card. See _resolve_program.
+        # arbiter comment for one played card. See _resolve_plan.
         self._comment_logged: set[str] = set()
 
     # ── player management ──
@@ -755,7 +749,7 @@ class Room:
         """True if a card in hand can meaningfully be played.
 
         A card is playable if it is a blank (blanks are ALWAYS playable — they're
-        authored on play), OR it compiles to a non-empty program, OR it carries
+        authored on play), OR it compiles to a non-empty plan, OR it carries
         free text the LLM could interpret. In practice nearly every card is
         playable; the only truly inert card is an empty, canonical-less,
         description-less entry. This deliberately errs toward "playable" so we
@@ -764,8 +758,8 @@ class Room:
         if self._is_blank(card):
             return True
         card_dict = card if isinstance(card, dict) else card.model_dump()
-        program = compile_card(card_dict)
-        if program is not None and program.ops:
+        plan = compile_card_plan(card_dict)
+        if plan is not None and plan.steps:
             return True
         # A free-text card (description present) can still be interpreted/played.
         description = card_dict.get("description") or ""
@@ -806,47 +800,15 @@ class Room:
             return "in_play"
         return "discard"
 
-    async def _resolve_program(self, card_id: str, card, actor_id: str | None = None) -> EffectProgram:
-        """Return the EffectProgram to apply for a played card — NEVER None.
-
-        Resolution order (the deterministic basic game must not depend on the LLM):
-
-        1. **Compiled ops** — if the card carries structured ops (a gold/simple
-           card, or a blank authored with a canonical), ``compile_card`` turns
-           them into a runtime program. This path is fully deterministic and
-           never calls the agent; the simple seed deck lives entirely here.
-        2. **Agent interpretation (best-effort)** — for free-text cards with no
-           compilable ops (most authored blanks), we ask the single tool-calling
-           agent (:func:`agent.runtime.run_agent`) to interpret the card. Unlike
-           the old title/description-only graph entry, the agent receives the live
-           ``GameState`` plus the ``actor_id`` (who played it) and ``creator_id``
-           (who authored it) so it can read the board and apply its persona
-           (do_nothing / punish_author / chaos_monkey / random_solution). This
-           runs in a thread and is broadcast as ``brewing``/``card_interpreted``
-           for UI feedback. If it yields a valid program we use it.
-        2b. **Snippet execution** — when the agent escaped to a generated code
-           snippet instead of (or alongside a note-only) program, :meth:`_apply_snippet`
-           runs it through the sandbox (``execute_snippet`` -> ``apply_snippet_diff``)
-           so it mutates state via the same reducers as a compiled program. Gated by
-           ``Settings.snippet_execution_enabled``; sandbox failures log a visible
-           ``"[snippet error]"`` line and fall through to step 3.
-        3. **Deterministic fallback** — if nothing produced ops (no canonical, no
-           usable program, and no successfully-executed snippet), we return a
-           single ``CustomNoteOp`` so the play still resolves with a log line
-           instead of silently doing nothing. A play NEVER silently no-ops.
-        """
+    async def _resolve_plan(self, card_id: str, card, actor_id: str | None = None) -> ResolutionPlan:
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
         description = card["description"] if isinstance(card, dict) else getattr(card, "description", "")
         creator_id = card.get("creator_id") if isinstance(card, dict) else getattr(card, "creator_id", None)
 
-        # 1. Deterministic compiled path — no agent.
-        compiled = compile_card(card if isinstance(card, dict) else card.model_dump())
-        if compiled is not None and compiled.ops:
+        compiled = compile_card_plan(card if isinstance(card, dict) else card.model_dump())
+        if compiled is not None and compiled.steps:
             return compiled
 
-        # 2. Best-effort agent interpretation for free-text cards. Pass the live
-        # GameState (a value, immutable-by-convention — read_game_state handles a
-        # GameState directly) plus actor/creator so the persona can act.
         from agent.contract import InterpretResult
         from agent.runtime import run_agent
 
@@ -856,8 +818,6 @@ class Room:
                 run_agent, title, description, self.state, actor_id, creator_id=creator_id
             )
         except Exception:
-            # run_agent is designed never to raise, but keep the guard so a
-            # surprise never breaks a play — fall back deterministically.
             logger.exception("run_agent failed for %s; using deterministic fallback", card_id)
             result = InterpretResult(verdict="invalid", comment="", persona_action="none")
 
@@ -868,19 +828,10 @@ class Room:
                 "program": str(result.program) if result.program is not None else None,
                 "snippet": getattr(result.snippet, "code", None),
                 "verdict": result.verdict,
-                # Carry the in-character comment so the frontend/D1 can surface it.
-                # (D1 owns persisting it to state.log; here we only broadcast it.)
                 "comment": result.comment,
             }
         )
 
-        # D1: persist the arbiter's comment to the PERSISTENT game log so it
-        # survives a reconnect/refresh (a rejoining client only gets the state
-        # snapshot, not the transient card_interpreted broadcast above). Only when
-        # non-empty — the deterministic compiled path never reaches here, so cards
-        # resolved deterministically produce no arbiter line (intended). Guarded by
-        # card_id so a target-requiring card (resolve → prompt_choice → re-resolve)
-        # logs its comment exactly once across the round-trip.
         await self._log_agent_comment(card_id, result.comment)
 
         canonical = self._canonicalize_interpretation(result)
@@ -892,30 +843,12 @@ class Room:
             merged_card = {**self.state.cards[card_id], **canonical, "verdict": result.verdict}
             self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: merged_card}})
 
-        program = result.program
-        if result.verdict == "ok" and program is not None and getattr(program, "ops", None):
-            return program
+        plan = result.to_plan()
+        if result.verdict == "ok" and plan.steps:
+            return plan
 
-        # See step 2b in the docstring above.
-        if result.verdict == "ok" and result.snippet is not None and _program_is_effectless(program):
-            if result.snippet.trigger is not None:
-                # A triggered snippet is a PERSISTENT hook — route it through the
-                # one registration pipeline (RegisterHookOp) instead of running once.
-                return EffectProgram(
-                    ops=[
-                        RegisterHookOp(
-                            event=result.snippet.trigger,
-                            scope=result.snippet.scope,
-                            code=result.snippet.code,
-                        )
-                    ]
-                )
-            if await self._apply_snippet(card_id, card, title, result.snippet.code, actor_id):
-                return EffectProgram(ops=[])
-
-        # 3. Deterministic fallback — never a silent no-op.
         note = title or "Card"
-        return EffectProgram(ops=[CustomNoteOp(note=f"Played {note} (no mechanical effect)")])
+        return ResolutionPlan(steps=[OpsStep(ops=[CustomNoteOp(note=f"Played {note} (no mechanical effect)")])])
 
     def _canonicalize_interpretation(self, result) -> dict:
         """Build the structured ``canonical`` payload for an interpreted card.
@@ -925,67 +858,56 @@ class Room:
         carried as canonical["snippet"] for the play path. Cards with neither
         contribute nothing (fall back to the LLM next time).
         """
-        result_program = result.program
-        if result_program is not None and getattr(result_program, "ops", None):
-            return {"canonical": {"ops": [op.model_dump() for op in result_program.ops]}}
-        snippet = result.snippet
-        if snippet is not None:
-            if snippet.trigger is not None:
-                return {
-                    "canonical": {
-                        "ops": [
-                            {
-                                "op": "register_hook",
-                                "args": {"event": snippet.trigger, "scope": snippet.scope, "code": snippet.code},
-                            }
-                        ]
-                    }
-                }
-            return {"canonical": {"ops": [], "snippet": snippet.code}}
-        return {}
+        plan = result.to_plan()
+        if not plan.steps:
+            return {}
+        canonical: dict = {"steps": [step.model_dump() for step in plan.steps]}
+        ops = [op.model_dump() for step in plan.steps if isinstance(step, OpsStep) for op in step.ops]
+        snippets = [step for step in plan.steps if isinstance(step, SnippetStep)]
+        if ops:
+            canonical["ops"] = ops
+        if len(snippets) == 1 and isinstance(plan.steps[-1], SnippetStep):
+            canonical["snippet"] = snippets[0].code
+        return {"canonical": canonical}
 
-    async def _apply_snippet(self, card_id: str, card, title: str, code: str, actor_id: str | None) -> bool:
-        """Execute a generated snippet in the sandbox and apply its diff to self.state.
-
-        Mirrors engine.hooks.make_snippet_handler's pipeline (execute_snippet ->
-        apply_snippet_diff) for the immediate, non-hook play path. Returns True when
-        the diff was applied (self.state now reflects it and a play-description log
-        line has been recorded); False when the feature flag is off or execution /
-        validation failed — callers fall back to the deterministic CustomNoteOp. A
-        failure is never silent: it logs a "[snippet error]" line before returning.
-        """
+    async def _execute_plan(
+        self,
+        base_state: GameState,
+        plan: ResolutionPlan,
+        ctx: HookContext,
+        card,
+    ) -> GameState:
         from config import get_settings
+        from engine.sandbox.revalidate import apply_snippet_diff
+        from engine.sandbox.runner import execute_snippet
 
-        if not get_settings().snippet_execution_enabled:
-            return False
-
-        from engine.sandbox.revalidate import DiffValidationError, apply_snippet_diff
-        from engine.sandbox.runner import SnippetExecutionError, execute_snippet
-
-        ctx = HookContext(event=GameEvent.ON_PLAY, actor_id=actor_id, card_id=card_id)
+        card_id = ctx.card_id or ""
+        destination = self._play_destination(card)
+        working = base_state.move_card(
+            card_id,
+            "hand",
+            destination,
+            from_player_id=ctx.actor_id,
+            to_player_id=ctx.actor_id,
+        )
+        rng = random.Random()
         ctx_dict = {
             "actor_id": ctx.actor_id,
             "event": str(ctx.event),
             "card_id": ctx.card_id,
             "amount": ctx.amount,
         }
-        state_dict = json.loads(self.state.model_dump_json())
-        before = {p.id: p.score for p in self.state.players}
-        try:
-            raw_ops = await asyncio.to_thread(execute_snippet, code, state_dict, ctx_dict)
-            self.state = apply_snippet_diff(self.state, raw_ops, ctx, origin="play")
-        except SnippetExecutionError as exc:
-            await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
-            return False
-        except DiffValidationError as exc:
-            await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
-            return False
-        except ValueError as exc:
-            await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
-            return False
-
-        await self._log_and_broadcast(self._describe_play(actor_id, card, before))
-        return True
+        for step in plan.steps:
+            bus = EventBus(build_registry(working), max_hooks=MAX_HOOKS_PER_EVENT)
+            if isinstance(step, OpsStep):
+                working = apply_effect(working, EffectProgram(ops=step.ops), ctx, bus=bus, rng=rng)
+                continue
+            if not get_settings().snippet_execution_enabled:
+                raise PlanExecutionError("snippet execution is disabled")
+            state_dict = json.loads(working.model_dump_json())
+            raw_ops = await asyncio.to_thread(execute_snippet, step.code, state_dict, ctx_dict)
+            working = apply_snippet_diff(working, raw_ops, ctx, origin="play", bus=bus, rng=rng)
+        return working
 
     async def _handle_play(self, player_id: str, msg) -> None:
         """Resolve the played card to an EffectProgram, apply it, advance turn.
@@ -999,9 +921,8 @@ class Room:
         title/description). By the time that follow-up arrives the card is already
         a real, authored card in state.cards, so re-resolution behaves identically.
 
-        Resolution (see :meth:`_resolve_program`) prefers the deterministic
-        compiled-ops path and falls back to the LLM then to a CustomNoteOp, so a
-        play always resolves to a program and never silently no-ops.
+        Resolution prefers a deterministic stored plan and falls back to the LLM
+        then to a CustomNoteOp, so a play never silently no-ops.
         """
         if self.state.rules.play <= 0:
             await self.connections.send(
@@ -1060,108 +981,93 @@ class Room:
             return
 
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
-        program = await self._resolve_program(card_id, card, actor_id=player_id)
-
-        # Set the moment apply_effect resolves an end_game op or makes a live
-        # win condition (e.g. first_to) true. Checked HERE, right after the
-        # triggering play, so the game ends immediately rather than waiting for
-        # deck exhaustion — see the module docstring for the two end paths.
+        plan = await self._resolve_plan(card_id, card, actor_id=player_id)
         game_ending = False
+        chosen_player_id = getattr(msg, "chosen_player_id", None)
+        chosen_card_id = getattr(msg, "chosen_card_id", None)
+        valid_player_ids = {p.id for p in self.state.players}
+        valid_card_ids = set(self.state.cards_in_play()) | set(self.state.get_player(player_id).hand)
+        ops = plan.operations()
+        needs_player_choice = any(
+            getattr(op, field, None) in ("chooser", "target_player")
+            for op in ops
+            for field in ("target", "from_target", "to_target")
+        )
+        needs_card_choice = any(getattr(op, "card_target", None) == "chosen_card" for op in ops)
 
-        if program is not None and program.ops:
-            # Cards whose program targets "chooser"/"target_player"
-            # need a chosen_player_id; those with a "chosen_card" CardTarget need
-            # a chosen_card_id. Validate BEFORE applying so a missing/bogus choice
-            # yields a clean error rather than a 500 out of the reducers'
-            # _resolve_targets / _resolve_card_targets — and does NOT advance the
-            # turn. We inspect the ops to tell WHICH kind of choice is needed
-            # (requires_choice alone conflates the two axes).
-            chosen_player_id = getattr(msg, "chosen_player_id", None)
-            chosen_card_id = getattr(msg, "chosen_card_id", None)
-            valid_player_ids = {p.id for p in self.state.players}
-            # A card the actor may pick: anything currently in play or in their hand.
-            valid_card_ids = set(self.state.cards_in_play()) | set(self.state.get_player(player_id).hand)
-
-            ops = getattr(program, "ops", [])
-            needs_player_choice = any(
-                getattr(op, field, None) in ("chooser", "target_player")
-                for op in ops
-                for field in ("target", "from_target", "to_target")
+        if needs_player_choice and chosen_player_id is None:
+            await self.connections.send(
+                player_id,
+                {
+                    "type": "prompt_choice",
+                    "card_id": card_id,
+                    "prompt": f"Choose a target player for {title}",
+                    "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                },
             )
-            needs_card_choice = any(getattr(op, "card_target", None) == "chosen_card" for op in ops)
-
-            if needs_player_choice and chosen_player_id is None:
-                # Instead of erroring, ask the active player who to target. The
-                # play is held PENDING: the turn does NOT advance and the card is
-                # not consumed. The client answers with a second `play` message
-                # carrying chosen_player_id, which re-runs this handler (we do NOT
-                # keep server-side pending state — see module note / bead jcc).
-                await self.connections.send(
-                    player_id,
-                    {
-                        "type": "prompt_choice",
-                        "card_id": card_id,
-                        "prompt": f"Choose a target player for {title}",
-                        "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
-                    },
-                )
-                return
-            if chosen_player_id is not None and chosen_player_id not in valid_player_ids:
-                await self.connections.send(
-                    player_id,
-                    {"type": "error", "message": f"Invalid target player: {chosen_player_id}"},
-                )
-                return
-            if needs_card_choice and chosen_card_id is None:
-                # Card-target axis: also prompt rather than error. Choices are the
-                # cards the actor may legally pick (in-play zone + their hand).
-                await self.connections.send(
-                    player_id,
-                    {
-                        "type": "prompt_choice",
-                        "card_id": card_id,
-                        "prompt": f"Choose a target card for {title}",
-                        "choices": [
-                            {
-                                "card_id": cid,
-                                "name": (
-                                    self.state.cards[cid].get("title", cid)
-                                    if isinstance(self.state.cards.get(cid), dict)
-                                    else getattr(self.state.cards.get(cid), "title", cid)
-                                ),
-                            }
-                            for cid in valid_card_ids
-                        ],
-                    },
-                )
-                return
-            if needs_card_choice and chosen_card_id not in valid_card_ids:
-                await self.connections.send(
-                    player_id,
-                    {"type": "error", "message": f"Invalid target card: {chosen_card_id}"},
-                )
-                return
-
-            ctx = HookContext(
-                event=GameEvent.ON_PLAY,
-                actor_id=player_id,
-                card_id=card_id,
-                chosen_player_id=chosen_player_id,
-                chosen_card_id=chosen_card_id,
+            return
+        if chosen_player_id is not None and chosen_player_id not in valid_player_ids:
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": f"Invalid target player: {chosen_player_id}"},
             )
-            before = {p.id: p.score for p in self.state.players}
-            self.state = apply_effect(self.state, program, ctx, bus=self._hook_bus())
+            return
+        if needs_card_choice and chosen_card_id is None:
+            await self.connections.send(
+                player_id,
+                {
+                    "type": "prompt_choice",
+                    "card_id": card_id,
+                    "prompt": f"Choose a target card for {title}",
+                    "choices": [
+                        {
+                            "card_id": cid,
+                            "name": (
+                                self.state.cards[cid].get("title", cid)
+                                if isinstance(self.state.cards.get(cid), dict)
+                                else getattr(self.state.cards.get(cid), "title", cid)
+                            ),
+                        }
+                        for cid in valid_card_ids
+                    ],
+                },
+            )
+            return
+        if needs_card_choice and chosen_card_id not in valid_card_ids:
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": f"Invalid target card: {chosen_card_id}"},
+            )
+            return
+
+        ctx = HookContext(
+            event=GameEvent.ON_PLAY,
+            actor_id=player_id,
+            card_id=card_id,
+            chosen_player_id=chosen_player_id,
+            chosen_card_id=chosen_card_id,
+        )
+        before = {p.id: p.score for p in self.state.players}
+        try:
+            self.state = await self._execute_plan(self.state, plan, ctx, card)
+        except Exception as exc:
+            logger.warning("resolution plan failed for %s: %s", card_id, exc)
+            destination = self._play_destination(card)
+            self.state = self.state.move_card(
+                card_id,
+                "hand",
+                destination,
+                from_player_id=player_id,
+                to_player_id=player_id,
+            )
+            await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
+            fallback = EffectProgram(ops=[CustomNoteOp(note=f"Played {title or 'Card'} (no mechanical effect)")])
+            self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
+            await self._log_and_broadcast(self._describe_play(player_id, card, before))
+        else:
             await self._log_and_broadcast(self._describe_play(player_id, card, before))
             await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id)
             game_ending = self._end_now() or win_condition_met(self.state)
-
-        # Terminal apply path: the play is committed (all rejection / pending
-        # early-returns above have already returned, so the card is NOT removed
-        # when the play is rejected or held for a prompt_choice). Move the played
-        # card out of the hand into its destination zone. to_player_id only
-        # matters for the in_play destination; it is harmless for center/discard.
-        dest = self._play_destination(card)
-        self.state = self.state.move_card(card_id, "hand", dest, from_player_id=player_id, to_player_id=player_id)
 
         self._plays_this_turn += 1
         await self._broadcast_state()
@@ -1279,7 +1185,7 @@ class Room:
             }
         )
         # D1: persist the arbiter comment so it survives a reconnect (see
-        # _resolve_program). create_card interprets a card_id exactly once, so no
+        # _resolve_plan). create_card interprets a card_id exactly once, so no
         # round-trip guard is needed, but we route through the same helper for a
         # single consistent format + prefix.
         await self._log_agent_comment(card_id, result.comment)

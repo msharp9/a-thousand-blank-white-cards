@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, patch
 
 from config import Settings
 from agent.contract import InterpretResult, SnippetEffect
+from models.effects import DrawCardsOp, EffectProgram
+from models.game_state import HookSpec
 from models.ws_messages import PlayMsg
 from board.rooms.room import Room
 
@@ -35,6 +37,7 @@ def _room_with_card(card: dict, *, hand_owner: str = "p1") -> Room:
         for p in r.state.players
     ]
     r.state = r.state.model_copy(update={"cards": {card["id"]: card}, "players": new_players})
+    r._has_drawn = True
     r.connections.connect("p1", AsyncMock())
     r.connections.connect("p2", AsyncMock())
     return r
@@ -137,3 +140,128 @@ def test_non_ok_verdict_never_executes_snippet() -> None:
 
     exec_mock.assert_not_called()
     assert room.state.get_player("p1").score == 0
+
+
+def test_failing_suffix_rolls_back_prefix_but_consumes_card() -> None:
+    card = _snippet_card("c6")
+    room = _room_with_card(card)
+    room.state = room.state.model_copy(update={"deck": ["d1", "d2", "d3"]})
+    agent_result = InterpretResult(
+        program=EffectProgram(ops=[DrawCardsOp(target="self", amount=2)]),
+        snippet=SnippetEffect(code=BROKEN_SNIPPET, explanation="fails after drawing"),
+        verdict="ok",
+        comment="Nope.",
+    )
+
+    with patch("agent.runtime.run_agent", return_value=agent_result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c6")))
+
+    assert room.state.deck == ["d1", "d2", "d3"]
+    assert room.state.get_player("p1").hand == []
+    assert "c6" in room.state.discard
+    assert any("no mechanical effect" in line for line in room.state.log)
+
+
+def test_snippet_score_change_uses_room_hooks() -> None:
+    card = _snippet_card("c7")
+    room = _room_with_card(card)
+    room.state = room.state.model_copy(
+        update={
+            "hooks": [
+                HookSpec(
+                    id="score-hook",
+                    source_card_id="source",
+                    event="on_score_change",
+                    code="def apply(state, ctx):\n    state.add_points('id:p2', 1)\n",
+                )
+            ]
+        }
+    )
+    agent_result = InterpretResult(
+        snippet=SnippetEffect(code=AWARD_SNIPPET, explanation="award"),
+        verdict="ok",
+        comment="Points.",
+    )
+
+    with patch("agent.runtime.run_agent", return_value=agent_result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c7")))
+
+    assert room.state.get_player("p1").score == 7
+    assert room.state.get_player("p2").score == 1
+
+
+def test_snippet_end_game_is_immediate() -> None:
+    card = _snippet_card("c8")
+    room = _room_with_card(card)
+    room.state = room.state.model_copy(update={"deck": ["d1", "d2"]})
+    agent_result = InterpretResult(
+        snippet=SnippetEffect(
+            code="def apply(state, ctx):\n    state.end_game(winner='self')\n",
+            explanation="end now",
+        ),
+        verdict="ok",
+        comment="Done.",
+    )
+
+    with patch("agent.runtime.run_agent", return_value=agent_result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c8")))
+
+    assert room.state.phase == "results"
+    assert room.state.winner_ids == ["p1"]
+
+
+def test_hybrid_plan_persists_and_replays_without_agent() -> None:
+    card = _snippet_card("c9")
+    first = _room_with_card(card)
+    first.state = first.state.model_copy(update={"deck": ["d1", "d2"]})
+    scorer = "def apply(state, ctx):\n    state.add_points('self', len(state.my_hand()))\n"
+    agent_result = InterpretResult(
+        program=EffectProgram(ops=[DrawCardsOp(target="self", amount=2)]),
+        snippet=SnippetEffect(code=scorer, explanation="score post-draw hand"),
+        verdict="ok",
+        comment="Count them.",
+    )
+
+    with patch("agent.runtime.run_agent", return_value=agent_result):
+        asyncio.run(first.handle_action("p1", PlayMsg(card_id="c9")))
+
+    stored = first.state.cards["c9"]
+    assert [step["kind"] for step in stored["canonical"]["steps"]] == ["ops", "snippet"]
+    assert first.state.get_player("p1").score == 2
+
+    second = _room_with_card(stored)
+    second.state = second.state.model_copy(update={"deck": ["e1", "e2"]})
+    with patch("agent.runtime.run_agent", side_effect=AssertionError("agent should not run")) as run_agent:
+        asyncio.run(second.handle_action("p1", PlayMsg(card_id="c9")))
+
+    run_agent.assert_not_called()
+    assert second.state.get_player("p1").score == 2
+
+
+def test_hybrid_plan_emits_on_play_once() -> None:
+    card = _snippet_card("c10")
+    room = _room_with_card(card)
+    room.state = room.state.model_copy(
+        update={
+            "deck": ["d1"],
+            "hooks": [
+                HookSpec(
+                    id="play-hook",
+                    source_card_id="source",
+                    event="on_play",
+                    code="def apply(state, ctx):\n    state.add_points('id:p2', 1)\n",
+                )
+            ],
+        }
+    )
+    agent_result = InterpretResult(
+        program=EffectProgram(ops=[DrawCardsOp(target="self", amount=1)]),
+        snippet=SnippetEffect(code=AWARD_SNIPPET, explanation="award"),
+        verdict="ok",
+        comment="Once.",
+    )
+
+    with patch("agent.runtime.run_agent", return_value=agent_result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c10")))
+
+    assert room.state.get_player("p2").score == 1

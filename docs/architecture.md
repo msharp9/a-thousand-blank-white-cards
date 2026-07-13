@@ -75,7 +75,7 @@ top-level `config` / `logging_config` modules. Run the backend with
 | Package | Responsibility | Key files |
 | --- | --- | --- |
 | **`config`** (`src/config.py`) | Single source of truth for all settings: the one OpenAI-compatible LLM gateway (`llm_base_url` / `llm_api_key` / `llm_extra_headers`, driving BOTH chat and embeddings), embedding dimensions, Qdrant, LangSmith, CORS, sandbox flag, and the `dev_mode` flag (gates room persistence + `/dev` endpoints). Cached `get_settings()` singleton. | `config.py` (`Settings`, `get_settings`, `warn_if_no_llm_credentials`) |
-| **`models`** | Pure data models, no game logic. `GameState`/`Player`/`WinCondition`; the runtime effect `Op` discriminated union + `EffectProgram` + `Target`/`CardTarget` + `map_authoring_target`; card authoring models; the client/server WebSocket envelopes. | `game_state.py`, `effects.py`, `card.py`, `cards.py`, `ws_messages.py` |
+| **`models`** | Pure data models, no game logic. `GameState`/`Player`/`WinCondition`; the runtime `ResolutionPlan`/step and `Op` discriminated unions + `EffectProgram` + `Target`/`CardTarget` + `map_authoring_target`; card authoring models; the client/server WebSocket envelopes. | `game_state.py`, `effects.py`, `card.py`, `cards.py`, `ws_messages.py` |
 | **`engine`** | The game "physics": pure reducers over `GameState`, the turn loop, scoring/win-condition, card compilation, the event bus + persistent hooks, and the untrusted-snippet execution sandbox. Never calls the LLM. | `facade.py` (`GameEngine`), `reducers.py` (`apply_op`), `apply.py` (`apply_effect`), `compile.py` (`compile_card`), `loop.py` (`advance_turn`, `draw_step`), `scoring.py`, `events.py`, `hooks.py`, `epilogue.py` (`tally_votes`), `sandbox/` |
 | **`agent`** | The single tool-calling interpretation agent: the persona system prompt, the interpretation result contract, the LLM factory, the RAG pipeline, and the bound toolbox. Reaches down into `engine`/`models` but never up into `board`. | `runtime.py` (`build_agent`, `run_agent`), `contract.py` (`InterpretResult`), `persona.py`, `llm.py` (`get_chat_model`), `rag/` (`embeddings`, `store`, `retrievers`, `seed`), `tools/` |
 | **`board`** | The server surface: FastAPI app factory + REST routes, the WebSocket endpoint, and the room state machine (turn enforcement, deck building, epilogue voting, connection registry). The only layer that orchestrates engine + agent together. | `app.py` (`create_app`), `ws.py` (`ws_handler`), `rooms/` (`room.py`, `manager.py`, `connections.py`, `deck.py`, `epilogue.py`, `store.py`) |
@@ -297,7 +297,9 @@ to every client on every action.
 
 ### Ops, compilation, and reducers
 
-A card's mechanical effect is an `EffectProgram` — a list of `Op`s from the
+A card resolves as a `ResolutionPlan`: an ordered sequence of `OpsStep` and
+`SnippetStep` computation stages. An `OpsStep` contains an `EffectProgram`-style
+list of `Op`s from the
 discriminated union in `models/effects.py` (`add_points`, `subtract_points`,
 `set_points`, `steal_points`, `skip_turn`, `extra_turn`, `reverse_order`,
 `scramble_order`, `change_draw_count`, `draw_cards`, `destroy_card`,
@@ -314,16 +316,27 @@ specialized writers into the same structure; `end_game` sets
 `end_condition={type: "now"}`. The Room evaluates `evaluate_end_condition` /
 `win_condition_met` during play, so rule changes take effect live.
 
-Two paths produce a program:
+Two paths produce a plan:
 
-1. **Deterministic compile** (`engine/compile.py::compile_card`) lowers a card's
+1. **Deterministic compile** (`engine/compile.py::compile_card_plan`) lowers a card's
+   canonical `steps`, or the legacy `ops` followed by `snippet`, into an ordered
+   plan. The compatibility `compile_card` function still lowers only
    authoring-vocabulary ops (`card["ops"]` or `card["canonical"]["ops"]`) onto
    the runtime `Op` union. Target aliasing is delegated entirely to
    `models.effects.map_authoring_target`; unknown or malformed ops are skipped
    with a debug log. If nothing compiles, it returns `None` (signalling the
    caller to try the LLM). Choice targets flip `EffectProgram.requires_choice`.
-2. **Agent interpretation** (§6) produces an `InterpretResult` whose `program`
-   is an `EffectProgram` (or a `snippet`).
+2. **Agent interpretation** (§6) produces an `InterpretResult` with an explicit
+   plan or legacy `program`/`snippet` fields. Legacy fields lower to ops first,
+   then the snippet, so a later snippet reads the actual state produced by the
+   deterministic prefix.
+
+The Room validates all choices before execution, moves the played card out of
+the hand in a cloned working state, and applies each stage in order. A complete
+success commits the working state; any stage failure discards every mechanical
+change, consumes the played card as a visible no-op, and advances normally.
+This gives post-effect reads a real computation boundary without teaching the
+sandbox to simulate reducers.
 
 Application is pure and immutable — reducers take `(state, op, ctx)` and return
 a **new** `GameState`, never mutating the input:
@@ -353,7 +366,7 @@ a **new** `GameState`, never mutating the input:
 Genuinely novel effects that no combination of ops can express can be expressed
 as a generated Python hook (`SnippetEffect.code`: the body of
 `def apply(state, ctx)`). This path is LIVE in the serving layer:
-`Room._resolve_program` executes an immediate (trigger-less) snippet through
+`Room._execute_plan` executes an immediate (trigger-less) snippet through
 the pipeline below, and a snippet with a `trigger` becomes a persistent
 `HookSpec` on `GameState.hooks` via `RegisterHookOp` — serialized state, so
 house rules survive reloads, replay deterministically from a kept card's

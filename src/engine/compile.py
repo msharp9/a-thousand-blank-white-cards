@@ -38,6 +38,8 @@ from models.effects import (
     EndGameOp,
     ExtraTurnOp,
     RegisterHookOp,
+    ResolutionPlan,
+    OpsStep,
     Op,
     ReverseOrderOp,
     ScrambleOrderOp,
@@ -51,6 +53,7 @@ from models.effects import (
     SubtractPointsOp,
     Target,
     UnregisterHookOp,
+    SnippetStep,
     is_known_target,
     map_authoring_target,
     op_requires_choice,
@@ -277,3 +280,37 @@ def compile_card(card: dict) -> EffectProgram | None:
     if not compiled:
         return None
     return EffectProgram(ops=compiled, requires_choice=requires_choice)
+
+
+def compile_card_plan(card: dict) -> ResolutionPlan | None:
+    canonical = card.get("canonical") or {}
+    raw_steps = canonical.get("steps") if isinstance(canonical, dict) else None
+    steps: list[OpsStep | SnippetStep] = []
+
+    if raw_steps:
+        for raw_step in raw_steps:
+            if not isinstance(raw_step, dict):
+                continue
+            kind = raw_step.get("kind")
+            if kind == "ops":
+                program = compile_card({"ops": raw_step.get("ops")})
+                if program is not None and program.ops:
+                    steps.append(OpsStep(ops=program.ops))
+            elif kind == "snippet" and isinstance(raw_step.get("code"), str):
+                steps.append(
+                    SnippetStep(
+                        code=raw_step["code"],
+                        explanation=str(raw_step.get("explanation") or ""),
+                    )
+                )
+        return ResolutionPlan(steps=steps) if steps else None
+
+    program = compile_card(card)
+    if program is not None and program.ops:
+        steps.append(OpsStep(ops=program.ops))
+
+    snippet = canonical.get("snippet") if isinstance(canonical, dict) else None
+    if isinstance(snippet, str) and snippet.strip():
+        steps.append(SnippetStep(code=snippet))
+
+    return ResolutionPlan(steps=steps) if steps else None

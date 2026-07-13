@@ -103,6 +103,13 @@ class CardCanonical(BaseModel):
         default=None,
         description="Sequence of CardOp to execute.",
     )
+    steps: list[dict] | None = Field(
+        default=None,
+        description=(
+            "Ordered runtime resolution steps. New persisted interpretations use this field; "
+            "legacy ops and snippet fields remain readable."
+        ),
+    )
     snippet: str | None = Field(
         default=None,
         description=(

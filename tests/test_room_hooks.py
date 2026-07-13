@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
-from models.ws_messages import DrawMsg, PlayMsg
 from board.rooms.room import Room
+from models.effects import DrawCardsOp, EffectProgram
+from models.ws_messages import DrawMsg, PlayMsg
 
 HOOK_CODE = "def apply(state, ctx):\n    state.add_points('id:p1', 1)\n"
 
@@ -118,9 +119,7 @@ def test_validate_play_hook_vetoes_and_returns_card() -> None:
     assert room.state.active_player().id == "p1"
 
 
-HAND_SCORER = (
-    "def apply(state, ctx):\n    state.draw_cards('self', 2)\n    state.add_points('self', len(state.my_hand()))\n"
-)
+HAND_SCORER = "def apply(state, ctx):\n    state.add_points('self', len(state.my_hand()))\n"
 
 
 def test_chess_shape_snippet_reads_hand_and_scores() -> None:
@@ -131,7 +130,7 @@ def test_chess_shape_snippet_reads_hand_and_scores() -> None:
     chess = {"id": "chess", "title": "Chess", "description": "Draw 2, score per card in hand.", "creator_id": "p1"}
     room = _room({"chess": chess}, {"p1": ["chess", "x1", "x2"]}, deck=["d1", "d2", "d3"])
     result = InterpretResult(
-        program=None,
+        program=EffectProgram(ops=[DrawCardsOp(target="self", amount=2)]),
         snippet=SnippetEffect(code=HAND_SCORER, explanation="draw then score per hand card"),
         verdict="ok",
         comment="Chess, sure.",
@@ -139,9 +138,7 @@ def test_chess_shape_snippet_reads_hand_and_scores() -> None:
     with patch("agent.runtime.run_agent", return_value=result):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="chess")))
 
-    # Hand at snippet time: chess, x1, x2 -> +3 points; then draw 2 and the
-    # played chess leaves the hand: 3 + 2 - 1 = 4 cards.
-    assert room.state.get_player("p1").score == 3
+    assert room.state.get_player("p1").score == 4
     assert len(room.state.get_player("p1").hand) == 4
 
 

@@ -429,3 +429,28 @@ class EffectProgram(BaseModel):
     # "chooser"/"target_player" target OR a "chosen_card" CardTarget. Set when
     # the agent's emitted program is compiled (see engine.compile).
     requires_choice: bool = False
+
+
+class OpsStep(BaseModel):
+    kind: Literal["ops"] = "ops"
+    ops: list[Op] = Field(default_factory=list)
+
+
+class SnippetStep(BaseModel):
+    kind: Literal["snippet"] = "snippet"
+    code: str
+    explanation: str = ""
+
+
+ResolutionStep = Annotated[Union[OpsStep, SnippetStep], Field(discriminator="kind")]
+
+
+class ResolutionPlan(BaseModel):
+    steps: list[ResolutionStep] = Field(default_factory=list)
+
+    def operations(self) -> list[Op]:
+        return [op for step in self.steps if isinstance(step, OpsStep) for op in step.ops]
+
+    @property
+    def requires_choice(self) -> bool:
+        return any(op_requires_choice(op) for op in self.operations())

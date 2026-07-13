@@ -8,12 +8,13 @@ get no special mutation path.
 
 from __future__ import annotations
 
+import random
 from typing import Any
 
 from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from engine.apply import apply_effect
-from engine.events import HookContext
+from engine.events import EventBus, HookContext
 from models.effects import EffectProgram, Op, op_requires_choice
 from models.game_state import GameState
 
@@ -82,11 +83,17 @@ def extract_veto(raw_ops: list[dict[str, Any]]) -> str | None:
 
 
 def apply_snippet_diff(
-    state: GameState, raw_ops: list[dict[str, Any]], ctx: HookContext, *, origin: str = "play"
+    state: GameState,
+    raw_ops: list[dict[str, Any]],
+    ctx: HookContext,
+    *,
+    origin: str = "play",
+    bus: EventBus | None = None,
+    rng: random.Random | None = None,
 ) -> GameState:
     """Parse the child's op diff and apply it through the engine reducers.
 
     Single call-site for snippet-generated state changes; identical apply path to a card play.
     """
     program = parse_diff(raw_ops, origin=origin)
-    return apply_effect(state, program, ctx)
+    return apply_effect(state, program, ctx, bus=bus, rng=rng)
