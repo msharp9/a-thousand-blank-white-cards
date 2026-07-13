@@ -33,7 +33,7 @@ export function EffectLog({ log, brewing, className }: EffectLogProps) {
         <span className="shrink-0 pt-1.5 font-marker text-sm">Play Log</span>
         <div className="flex max-h-[180px] min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto py-1">
           {brewing && (
-            <span className="flex items-center gap-1.5 self-start rounded-[10px] border-[1.5px] border-dashed border-ink/50 bg-white/60 px-2.5 py-1 font-hand text-[15px] text-muted-foreground">
+            <span className="flex items-center gap-1.5 self-start rounded-[10px] border-[1.5px] border-dashed border-ink/50 bg-card/60 px-2.5 py-1 font-hand text-[15px] text-muted-foreground">
               <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
               <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
               <span className="size-1.5 animate-bounce rounded-full bg-current" />
@@ -41,7 +41,7 @@ export function EffectLog({ log, brewing, className }: EffectLogProps) {
             </span>
           )}
           {isEmpty && (
-            <span className="font-hand text-[16px] text-[#999]">
+            <span className="font-hand text-[16px] text-muted-foreground">
               No cards played yet.
             </span>
           )}
@@ -54,9 +54,9 @@ export function EffectLog({ log, brewing, className }: EffectLogProps) {
                 <span
                   key={log.length - 1 - i}
                   className={cn(
-                    "animate-popin rounded-[10px] border-[1.5px] border-ink bg-white px-2.5 py-1.5 font-hand text-[15px] leading-snug break-words whitespace-pre-wrap",
+                    "animate-popin rounded-[10px] border-[1.5px] border-ink bg-card px-2.5 py-1.5 font-hand text-[15px] leading-snug break-words whitespace-pre-wrap",
                     isArbiter &&
-                      "border-[#E24A3B] bg-ink font-medium text-[#f2efe6] italic",
+                      "border-primary bg-ink font-medium text-background italic",
                   )}
                 >
                   {entry}

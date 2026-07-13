@@ -151,11 +151,11 @@ export default function LandingPage() {
         <br />
         White Cards
       </h1>
-      <p className="mb-8 max-w-[520px] text-center font-hand text-[clamp(17px,2.4vw,24px)] text-[#555]">
+      <p className="mb-8 max-w-[520px] text-center font-hand text-[clamp(17px,2.4vw,24px)] text-muted-foreground">
         The card game where you make the rules.
       </p>
 
-      <div className="w-full max-w-sm rounded-2xl border-[2.5px] border-ink bg-white p-5 panel-shadow -rotate-[0.5deg]">
+      <div className="w-full max-w-sm rounded-2xl border-[2.5px] border-ink bg-card p-5 panel-shadow -rotate-[0.5deg]">
         <div className="flex flex-col gap-4">
           <Input
             placeholder="Your name"
@@ -214,7 +214,7 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <div className="mt-10 flex flex-wrap justify-center gap-x-7 gap-y-2 font-hand text-lg text-[#444]">
+      <div className="mt-10 flex flex-wrap justify-center gap-x-7 gap-y-2 font-hand text-lg text-muted-foreground">
         {HOW_TO_STEPS.map((step, i) => (
           <div key={step} className="flex items-center gap-2">
             <span className="text-[22px]">{i + 1}.</span> {step}

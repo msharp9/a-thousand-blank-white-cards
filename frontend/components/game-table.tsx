@@ -47,7 +47,7 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
           {spectators.map((s) => (
             <span
               key={s.id}
-              className="rounded-lg border-[1.5px] border-ink bg-white px-2 py-0.5 text-ink"
+              className="rounded-lg border-[1.5px] border-ink bg-card px-2 py-0.5 text-ink"
             >
               {s.name}
               {s.id === myPlayerId && " (you)"}
@@ -81,7 +81,7 @@ function OpponentPanel({
   return (
     <div
       className={cn(
-        "flex flex-col items-center gap-1.5 rounded-[14px] bg-white/60 px-3 py-2",
+        "flex flex-col items-center gap-1.5 rounded-[14px] bg-card/60 px-3 py-2",
         !player.connected && "opacity-50",
       )}
       style={{ border: `2px dashed ${color}` }}
@@ -122,7 +122,7 @@ function OpponentPanel({
       )}
       {inPlayCards.length > 0 && (
         <div className="mt-0.5 flex items-center gap-1.5 border-t-[1.5px] border-dashed border-ink/20 pt-1.5">
-          <span className="whitespace-nowrap font-hand text-xs text-[#888]">
+          <span className="whitespace-nowrap font-hand text-xs text-muted-foreground">
             in front:
           </span>
           {inPlayCards.map((card) => (

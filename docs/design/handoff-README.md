@@ -155,3 +155,39 @@ Data fetching / real logic to connect: card effect resolution, authoritative sco
 - `support.js` — the Design-Component runtime that renders the above. **Reference only** — do not port it; it is replaced by your framework's rendering.
 
 Open either HTML file directly in a browser to see the live prototype.
+
+## Dark Mode — "Night Table" (implemented variant)
+
+The production frontend adds a dark variant of the sketchbook palette: the same
+paper-and-marker language in a dark room. Physical paper artifacts — every card
+face, the card back, and the drawing canvas — **stay white** in dark mode, like
+real cards on a dark table; only the room around them darkens. Toggled by a
+`dark` class on `<html>` (sun/moon sticker button, persisted in
+`localStorage["tbwc_theme"]`, initial value falls back to
+`prefers-color-scheme`, applied pre-paint by an inline script in
+`app/layout.tsx`).
+
+### Dark color tokens (`.dark` in `frontend/app/globals.css`)
+
+| Token | Light | Dark | Notes |
+|---|---|---|---|
+| Background | `#f2efe6` | `#1e1b16` | near-black warm paper; dot grid `rgba(236,229,211,0.06)` |
+| Ink / foreground | `#1a1a1a` | `#ece5d3` | cream ink for borders + text on dark surfaces |
+| Card / panel | `#ffffff` | `#27231c` | UI panels; **card faces stay `#ffffff`** (`--card-face`) |
+| Panel paper | `#efe9da` | `#2b261e` | play-log strip, chips, target chooser |
+| Felt | `#2f7d5b` | `#1d4f39` | deep night green |
+| Primary / marker red | `#e24a3b` | `#e6553f` | ≥3:1 on dark panels; white button text |
+| Secondary / ballpoint blue | `#2e5eaa` | `#4e7ecd` | lifted for contrast on dark |
+| Marker green | `#1f9e6b` | `#2ab37c` | |
+| Amber | `#e8a33d` | `#ecac49` | |
+| Highlighter yellow (accent) | `#f5d547` | `#f5d547` | already pops on dark; ink text |
+| Muted / muted-foreground | `#efe9da` / `#666` | `#332d23` / `#a89e8b` | |
+| Tape | `rgba(238,214,120,0.6)` | `rgba(238,214,120,0.55)` | sits on white card faces in both themes |
+| Sticker shadow | `#1a1a1a` | `rgba(0,0,0,0.9)` | hard offset shadow still reads on dark panels |
+| Panel shadow | `rgba(26,26,26,0.11)` | `rgba(0,0,0,0.45)` | |
+| Player identity | `#E24A3B` / `#2E5EAA` / `#1F9E6B` / `#E8A33D` | `#e8564a` / `#4e7ecd` / `#2ab37c` / `#ecac49` | via `--player-0..3`; `playerColor()` returns the var so identities track the theme |
+
+Drawn card art is ink strokes exported onto a white PNG background, so it stays
+legible in both themes because card faces never darken. The `paper-scope`
+utility re-scopes ink tokens to light-paper values inside white card faces
+(e.g. the card creator).

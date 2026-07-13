@@ -105,7 +105,7 @@ function DrawingPreview({ payload }: { payload: unknown }) {
       viewBox="0 0 100 100"
       role="img"
       aria-label="Drawing submission"
-      className="h-28 w-full rounded-lg border border-ink/30 bg-white"
+      className="h-28 w-full rounded-lg border border-ink/30 bg-card-face"
     >
       {strokes.map((stroke, index) => (
         <polyline
@@ -190,7 +190,7 @@ function DrawingInput({
         viewBox="0 0 100 100"
         role="img"
         aria-label="Drawing canvas"
-        className="aspect-[4/3] w-full touch-none rounded-xl border-2 border-ink bg-white shadow-inner"
+        className="aspect-[4/3] w-full touch-none rounded-xl border-2 border-ink bg-card-face shadow-inner"
         onPointerDown={startStroke}
         onPointerMove={extendStroke}
         onPointerUp={finishStroke}
@@ -282,7 +282,7 @@ function InteractionForm({
         return (
           <p
             role="status"
-            className="rounded-xl border-2 border-dashed border-ink/40 bg-white p-4 font-hand"
+            className="rounded-xl border-2 border-dashed border-ink/40 bg-card p-4 font-hand"
           >
             No choices are available. The server will resolve this card safely.
           </p>
@@ -302,7 +302,7 @@ function InteractionForm({
                 className={`rounded-xl border-2 p-3 text-left font-hand text-lg transition ${
                   active
                     ? "border-primary bg-primary/10"
-                    : "border-ink bg-white hover:bg-accent/30"
+                    : "border-ink bg-card hover:bg-accent/30"
                 }`}
               >
                 <DrawingPreview payload={option.payload} />
@@ -403,7 +403,7 @@ function InteractionForm({
       ) : (
         <p
           role="status"
-          className="rounded-xl border-2 border-dashed border-ink/40 bg-white p-4 font-hand"
+          className="rounded-xl border-2 border-dashed border-ink/40 bg-card p-4 font-hand"
         >
           No cards are available to pick. The server will resolve this card
           safely.
@@ -440,7 +440,7 @@ function InteractionForm({
       return (
         <div
           role="status"
-          className="rounded-xl border-2 border-dashed border-ink/40 bg-white p-4"
+          className="rounded-xl border-2 border-dashed border-ink/40 bg-card p-4"
         >
           <p className="font-hand text-lg">
             This interaction needs a newer game client.
@@ -496,7 +496,7 @@ export function InteractionPanel({
   const submitted = Boolean(progress?.submitted);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/45 p-4 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(20,18,14,0.45)] p-4 backdrop-blur-[2px]">
       <section
         role="dialog"
         aria-modal="true"
@@ -510,7 +510,7 @@ export function InteractionPanel({
                 Card interaction
               </h2>
               {activeRequest?.descriptor.sealed && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-ink/30 bg-white px-2 py-0.5 font-hand text-sm">
+                <span className="inline-flex items-center gap-1 rounded-full border border-ink/30 bg-card px-2 py-0.5 font-hand text-sm">
                   <EyeOffIcon className="size-3.5" /> Sealed
                 </span>
               )}
@@ -535,7 +535,7 @@ export function InteractionPanel({
         {submitted || !activeRequest || expired ? (
           <div
             role="status"
-            className="rounded-xl border-2 border-dashed border-ink/40 bg-white p-5 text-center"
+            className="rounded-xl border-2 border-dashed border-ink/40 bg-card p-5 text-center"
           >
             <p className="font-hand text-xl">
               {expired

@@ -46,7 +46,7 @@ export function EpilogueView({ cards, send, isHost, roomCode }: EpilogueProps) {
           Game over. Decide which cards deserve to live in the deck forever —
           and which get retired.
         </p>
-        <p className="mt-2 text-center font-hand text-base text-[#444]">
+        <p className="mt-2 text-center font-hand text-base text-muted-foreground">
           <span className="text-marker-green">{keepCount} kept</span> ·{" "}
           <span className="text-primary">{cutCount} cut</span> · {unvotedCount}{" "}
           to decide

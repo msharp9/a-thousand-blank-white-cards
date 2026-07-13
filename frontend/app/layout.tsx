@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { Permanent_Marker, Patrick_Hand, Nunito } from "next/font/google";
 import "./globals.css";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { TooltipProvider } from "@/components/ui/tooltip";
+
+// Runs before first paint (parser-blocking inline script) so the persisted —
+// or OS-preferred — theme applies without a flash of the wrong palette.
+const themeInitScript = `try{var t=localStorage.getItem("tbwc_theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}`;
 
 const fontMarker = Permanent_Marker({
   variable: "--font-marker",
@@ -35,10 +40,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${fontMarker.variable} ${fontHand.variable} ${fontNunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <TooltipProvider>{children}</TooltipProvider>
+        <ThemeToggle />
       </body>
     </html>
   );
