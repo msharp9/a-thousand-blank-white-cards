@@ -60,7 +60,7 @@ export interface GameSocketState {
   // screen. Cleared only when a fresh socket opens successfully.
   fatalError: string | null;
   // A recoverable, message-level error from the server ({type:'error'}), e.g.
-  // "You have already drawn this turn". The game stays mounted; the UI shows a
+  // "Not your turn". The game stays mounted; the UI shows a
   // dismissible banner. Auto-clears after a few seconds or on the next state
   // update, and can be dismissed manually via clearTransientError.
   transientError: string | null;
@@ -266,7 +266,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             break;
           case "error":
             // Message-level errors are recoverable gameplay/validation notices
-            // (e.g. "You have already drawn this turn"). Surface them as a
+            // (e.g. "Not your turn"). Surface them as a
             // transient banner — never tear down the game — and auto-dismiss
             // after a short delay. Reset any pending timer so a newer error
             // gets the full window.

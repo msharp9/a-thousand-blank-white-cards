@@ -27,7 +27,7 @@ def _mid_deck_room(p1_hand: list[str], cards: dict, deck: list[str]) -> Room:
         r.state.players[1],
     ]
     r.state = r.state.model_copy(update={"phase": "playing", "deck": deck, "cards": cards, "players": players})
-    r._has_drawn = True  # skip the draw-first gate; unrelated to what's under test
+    r._has_drawn = True  # mirrors the turn-start auto-draw bookkeeping
     r.connections.connect("p1", AsyncMock())
     r.connections.connect("p2", AsyncMock())
     return r
@@ -173,9 +173,6 @@ def test_post_end_actions_are_rejected_and_end_scoring_applies_once() -> None:
     assert room.state.rules.end_condition.type == "deck_empty"
 
     async def _post_end_actions() -> None:
-        from models.ws_messages import DrawMsg
-
-        await room.handle_action("p1", DrawMsg())
         await room.handle_action("p1", PlayMsg(card_id="endit"))
 
     asyncio.run(_post_end_actions())
@@ -226,9 +223,6 @@ def test_uno_v1_as_pure_rule_ops() -> None:
     assert room.state.phase == "playing"
 
     async def _next_turn_and_win() -> None:
-        from models.ws_messages import DrawMsg
-
-        await room.handle_action("p2", DrawMsg())
         await room.handle_action("p2", PlayMsg(card_id="f2"))
 
     asyncio.run(_next_turn_and_win())
@@ -275,8 +269,14 @@ def test_spicy_uno_colors_and_created_cards_without_a_snippet() -> None:
     asyncio.run(room.handle_action("p1", PlayMsg(card_id="spicy")))
 
     assert room.state.cards["o1"]["attributes"] == {"color": "red"}
-    created = [cid for cid in room.state.deck if cid.startswith("created-")]
+    created = [cid for cid in room.state.cards if cid.startswith("created-")]
     assert len(created) == 3
+    # The minted cards landed on deck_top; the play advanced the turn, so p2's
+    # turn-start auto-draw took one of them into their hand.
+    in_deck = [cid for cid in room.state.deck if cid.startswith("created-")]
+    in_p2_hand = [cid for cid in room.state.get_player("p2").hand if cid.startswith("created-")]
+    assert len(in_deck) == 2
+    assert len(in_p2_hand) == 1
     titles = {room.state.cards[cid]["title"] for cid in created}
     assert titles == {"Draw 2", "Reverse"}
     assert all(room.state.cards[cid]["origin"] == "authored" for cid in created)

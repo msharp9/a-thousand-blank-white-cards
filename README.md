@@ -26,7 +26,8 @@ A game runs in these steps:
    - **5 blank cards per player** are shuffled in, to be written later.
 4. **Deal.** The deck is shuffled and **5 cards are dealt to each player**.
 5. **Take turns.** Play passes around the table. Each turn is exactly:
-   1. **Draw** one card from the deck.
+   1. **Draw** one card from the deck (the app draws for you automatically at
+      the start of your turn).
    2. **Play** one card from your hand.
       - If it's a **blank card**, you write it *as you play it* — give it a title
         and effect, then it resolves. (Blanks are the only cards you author

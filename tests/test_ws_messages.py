@@ -8,7 +8,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from models.card import MAX_CARD_DESCRIPTION, MAX_CARD_TITLE
-from models.ws_messages import ClientMsg, DrawMsg, EndTurnMsg, JoinMsg, PassMsg, PlayMsg, StateMsg
+from models.ws_messages import ClientMsg, EndTurnMsg, JoinMsg, PassMsg, PlayMsg, StateMsg
 
 
 def test_join_msg_json() -> None:
@@ -26,17 +26,16 @@ def test_client_msg_discriminates_pass() -> None:
     assert msg.type == "pass"
 
 
-def test_client_msg_discriminates_draw() -> None:
-    # The draw→play→end model has an explicit `draw` client message: the active
-    # player draws before they may play or end their turn.
+def test_client_msg_rejects_draw() -> None:
+    # Drawing is automatic at turn start (auto-draw→play→end model); the
+    # protocol has no `draw` client message any more.
     ta = TypeAdapter(ClientMsg)
-    msg = ta.validate_python({"type": "draw"})
-    assert isinstance(msg, DrawMsg)
-    assert msg.type == "draw"
+    with pytest.raises(ValidationError):
+        ta.validate_python({"type": "draw"})
 
 
 def test_client_msg_discriminates_end_turn() -> None:
-    # `end_turn` is an accepted alias for `pass` in the draw→play→end model.
+    # `end_turn` is an accepted alias for `pass` in the auto-draw→play→end model.
     ta = TypeAdapter(ClientMsg)
     msg = ta.validate_python({"type": "end_turn"})
     assert isinstance(msg, EndTurnMsg)

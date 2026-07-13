@@ -14,7 +14,7 @@ from engine.sandbox.revalidate import apply_snippet_diff
 from engine.sandbox.runner import execute_snippet
 from models.effects import AddPointsOp, ChangeDrawCountOp, DrawCardsOp, EffectProgram
 from models.game_state import GameState, Player
-from models.ws_messages import DrawMsg, PlayMsg
+from models.ws_messages import PlayMsg
 
 
 def _state() -> GameState:
@@ -77,7 +77,7 @@ def test_room_turn_draw_records_once_and_snapshot_reconnects() -> None:
     room.state = room.state.model_copy(update={"deck": ["d1", "d2"], "phase": "playing"})
     room.connections.connect("p1", AsyncMock())
 
-    asyncio.run(room.handle_action("p1", DrawMsg()))
+    asyncio.run(room._start_turn("p1"))
 
     draws = [event for event in room.state.history_events if event.kind == "draw"]
     assert len(draws) == 1

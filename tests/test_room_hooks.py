@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 from board.rooms.room import Room
 from models.effects import DrawCardsOp, EffectProgram
-from models.ws_messages import DrawMsg, PlayMsg
+from models.ws_messages import PlayMsg
 
 HOOK_CODE = "def apply(state, ctx):\n    state.add_points('id:p1', 1)\n"
 
@@ -52,7 +52,6 @@ def test_hooks_do_not_leak_across_rooms() -> None:
     assert room_a.state.hooks
 
     async def _turn_in_b() -> None:
-        await room_b.handle_action("p1", DrawMsg())
         await room_b.handle_action("p1", PlayMsg(card_id="nope"))
 
     asyncio.run(_turn_in_b())
@@ -106,7 +105,6 @@ def test_validate_play_hook_vetoes_and_returns_card() -> None:
     assert any(h.event == "on_validate_play" for h in room.state.hooks)
 
     async def _p2_tries_blue_then_red() -> None:
-        await room.handle_action("p2", DrawMsg())
         await room.handle_action("p2", PlayMsg(card_id="blue1"))
 
     asyncio.run(_p2_tries_blue_then_red())

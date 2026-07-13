@@ -33,8 +33,8 @@ COMMENT = "Wow, gain 5 points, how original."
 def _playing_room(card: dict, *, hand_owner: str = "p1") -> Room:
     """Two-player playing room with ``card`` in ``hand_owner``'s hand.
 
-    A non-empty deck plus ``_has_drawn`` keeps the play path clear of the
-    draw-first gate and the end-of-game latch.
+    A non-empty deck keeps the play path clear of the end-of-game latch;
+    ``_has_drawn`` mirrors what the turn-start auto-draw would have set.
     """
     r = Room("ABCDEF")
     r.add_player("p1", "Alice")

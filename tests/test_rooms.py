@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 from conftest import drive_to_playing
 
 from agent.contract import InterpretResult
-from models.ws_messages import CreateCardMsg, DrawMsg, PassMsg, PlayMsg, Placement
+from models.ws_messages import CreateCardMsg, PassMsg, PlayMsg, Placement
 from board.rooms.connections import ConnectionManager
 from board.rooms.manager import RoomManager
 from board.rooms.room import Room
@@ -102,28 +102,21 @@ class TestRoomTurnEnforcement:
         assert room.state.turn_index == 0
         assert room.state.deck == ["c1", "c2"]
 
-    def test_pass_advances_turn_and_next_player_must_draw(self) -> None:
+    def test_pass_advances_turn_and_next_player_is_auto_drawn(self) -> None:
         room = _room_two_players()
         room.state = room.state.model_copy(update={"deck": ["c1", "c2"], "phase": "playing"})
         ws1, ws2 = AsyncMock(), AsyncMock()
         room.connections.connect("p1", ws1)
         room.connections.connect("p2", ws2)
-        # p1 draws first (draw→play→end model), then ends their turn.
-        asyncio.run(room.handle_action("p1", DrawMsg()))
+        # p1 ends their turn; starting p2's turn auto-draws for them.
         asyncio.run(room.handle_action("p1", PassMsg()))
-        # Turn moved to p2. There is NO auto-draw at turn start: p2's hand is
-        # untouched and has_drawn resets so they must draw themselves.
         assert room.state.turn_index == 1
-        assert room.state.deck == ["c2"]  # only p1's draw removed a card
-        assert room.state.get_player("p2").hand == []
-        assert room.state.get_player("p1").hand == ["c1"]  # p1 drew, kept it
-        assert room._has_drawn is False
+        assert room.state.deck == ["c2"]
+        assert room.state.get_player("p2").hand == ["c1"]
+        assert room.state.get_player("p1").hand == []
+        assert room._has_drawn is True
         ws1.send_text.assert_called()
         ws2.send_text.assert_called()
-        # p2 then draws explicitly and gets the next card.
-        asyncio.run(room.handle_action("p2", DrawMsg()))
-        assert room.state.get_player("p2").hand == ["c2"]
-        assert room.state.deck == []
 
     def test_pass_on_empty_deck_opens_results(self) -> None:
         room = _room_two_players()

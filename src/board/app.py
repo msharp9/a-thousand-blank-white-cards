@@ -48,11 +48,15 @@ with a full `state` snapshot. All messages are JSON objects with a `type` field.
 
 ### Client → server messages
 
+The turn model is **auto-draw → play → end turn**: at the start of each turn the
+server automatically draws `rules.draw` card(s) for the new active player — there
+is no client `draw` message. Drawing the last card arms end-of-game (the drawer
+finishes their turn, then the game ends).
+
 | type | fields | purpose |
 | --- | --- | --- |
 | `join` | `player_id` (null on first join), `name` | Authenticate the socket into the room; must be the first message. |
-| `start` | — | Build/shuffle the deck, deal starting hands, begin play. |
-| `draw` | — | Draw your card(s) for the turn (active player only). The turn model is **draw → play → end turn**: drawing is EXPLICIT and is the first step; playing or passing before drawing is rejected while the deck has cards. Drawing the last card arms end-of-game. |
+| `start` | — | Build/shuffle the deck, deal starting hands, begin play (the first player is auto-drawn to immediately). |
 | `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?`, `art?` | Play a card; the AI arbiter interprets it and applies the effect (active player only). Ends the turn. For a BLANK card, the first play carries the authored `title`+`description` (the card is filled in and persisted before interpretation) and optionally `art` (a PNG data-URL, stored out-of-band and served via `GET /rooms/{code}/cards/{card_id}/art`); a prompt_choice follow-up re-sends only `card_id`+the choice. |
 | `pass` / `end_turn` | — | End your turn without playing a card (active player only). `end_turn` is an accepted alias for `pass`, handled identically. |
 | `create_card` | `title`, `description`, `art?` | Author a new card and interpret it immediately (allowed off-turn). `art` is an optional PNG data-URL; cards carry only a `has_art` flag in state and the image is served via `GET /rooms/{code}/cards/{card_id}/art`. |

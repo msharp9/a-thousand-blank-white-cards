@@ -13,10 +13,8 @@ export type Placement = {
 
 export type JoinMsg = { type: "join"; player_id: string | null; name: string };
 export type StartMsg = { type: "start" };
-// A turn begins with an explicit draw step; the active player then plays a card
-// OR ends their turn. Drawing is no longer automatic — the client sends `draw`
-// at turn start (gated by has_drawn), and the Play action is blocked until then.
-export type DrawMsg = { type: "draw" };
+// A turn begins with an automatic server-side draw (there is no client `draw`
+// message); the active player then plays a card OR ends their turn.
 // A turn ends by playing a card OR ending the turn. `pass` and `end_turn` are
 // aliases; the backend only lets the active player end without playing when they
 // hold no playable card (can_pass).
@@ -100,7 +98,6 @@ export type InteractionResponseMsg = {
 export type ClientMsg =
   | JoinMsg
   | StartMsg
-  | DrawMsg
   | PassMsg
   | EndTurnMsg
   | PlayMsg
@@ -229,8 +226,9 @@ export type GameStateSnapshot = {
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
   hooks: HookSnapshot[];
-  // Whether the active player has taken their draw step this turn. The Draw
-  // button shows while false; the Play action is gated until true.
+  // Whether the active player's turn-start auto-draw has happened. Drawing is
+  // automatic, so this is true for the whole turn in practice; kept in the
+  // snapshot for compatibility.
   has_drawn: boolean;
   // Whether the active player may end their turn without playing. True only when
   // they hold NO playable card (e.g. no blank to author), so the Pass/End turn

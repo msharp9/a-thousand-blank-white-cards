@@ -22,7 +22,7 @@ def _playing_room(p1_hand: list[str], cards: dict) -> Room:
     r.add_player("p2", "Bob")
     new_players = [p.model_copy(update={"hand": p1_hand}) if p.id == "p1" else p for p in r.state.players]
     r.state = r.state.model_copy(update={"phase": "playing", "deck": [], "cards": cards, "players": new_players})
-    r._has_drawn = True  # deck empty; draw step not required
+    r._has_drawn = True  # mirrors the turn-start auto-draw bookkeeping
     return r
 
 
