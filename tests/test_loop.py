@@ -47,7 +47,9 @@ def test_draw_step_empty_deck_ends_game() -> None:
 
 def test_advance_turn_default_order() -> None:
     st = _state(turn_index=0)
-    assert advance_turn(st).turn_index == 1
+    out = advance_turn(st)
+    assert out.turn_index == 1
+    assert out.turn_number == st.turn_number + 1
 
 
 def test_advance_turn_follows_explicit_turn_order() -> None:
@@ -74,11 +76,20 @@ def test_extra_turn_keeps_index_and_clears() -> None:
         Player(id="p2", name="B", score=0, hand=[], conditions={"extra_turn": True}),
         Player(id="p3", name="C", score=0, hand=[]),
     ]
-    st = _state(players=players, turn_index=1)
+    st = _state(players=players, turn_index=1, turn_number=5)
     out = advance_turn(st)
     assert out.turn_index == 1  # stays on p2
     assert out.get_player("p2").conditions == {}
     assert st.get_player("p2").conditions == {"extra_turn": True}  # original unchanged
+    assert out.turn_number == 5  # unchanged: same player's turn continues
+
+
+def test_advance_turn_increments_turn_number_on_new_player() -> None:
+    st = _state(turn_index=0, turn_number=1)
+    out = advance_turn(st)
+    assert out.turn_number == 2
+    out2 = advance_turn(out)
+    assert out2.turn_number == 3
 
 
 def test_skip_predicate_registry() -> None:

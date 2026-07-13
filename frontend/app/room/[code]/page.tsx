@@ -347,6 +347,11 @@ export default function RoomPage() {
         <span className="font-hand text-[17px] text-[#444]">
           {PHASE_LABELS[phase]}
         </span>
+        {phase === "playing" && gameState && (
+          <span className="font-hand text-[17px] text-[#444]">
+            Turn {gameState.turn_number}
+          </span>
+        )}
         {isSpectator && (
           <span className="rounded-lg border-[1.5px] border-ink bg-panel-paper px-2 py-0.5 font-hand text-sm">
             Spectating

@@ -218,6 +218,11 @@ export type GameStateSnapshot = {
   players: PlayerSnapshot[];
   spectators: SpectatorSnapshot[];
   turn_index: number;
+  // Monotonic count of turns played: 0 before the game starts, 1 once it
+  // enters "playing", incrementing each time play advances to a new active
+  // player (an extra "go again" turn does not bump it). Mirrors
+  // GameState.turn_number; drives the "Turn N" top-bar display.
+  turn_number: number;
   turn_order: string[];
   rules: RulesSnapshot;
   draw_count: number;

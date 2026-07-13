@@ -83,6 +83,10 @@ def advance_turn(state: GameState) -> GameState:
     the skipped player), and a registered skip predicate. Consumed conditions
     are removed via ``GameState.without_condition``, which always returns a
     fresh copy.
+
+    ``turn_number`` increments whenever this call lands on a new active
+    player; an extra-turn early-return leaves it unchanged since the same
+    player's turn continues.
     """
     current_player = state.active_player()
 
@@ -110,7 +114,7 @@ def advance_turn(state: GameState) -> GameState:
                 next_player = state.get_player(next_id)
 
     next_idx = next(i for i, p in enumerate(state.players) if p.id == next_id)
-    return state.model_copy(update={"turn_index": next_idx})
+    return state.model_copy(update={"turn_index": next_idx, "turn_number": state.turn_number + 1})
 
 
 # ---------------------------------------------------------------------------

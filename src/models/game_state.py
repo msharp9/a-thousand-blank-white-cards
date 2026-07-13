@@ -177,6 +177,14 @@ class GameState(BaseModel):
 
     turn_index: int = 0  # index into players list
 
+    # Monotonic count of turns played: 0 before the game starts, set to 1 when
+    # phase becomes "playing" (Room._start_playing), then incremented by
+    # engine.loop.advance_turn each time it moves to a new active player. An
+    # extra-turn ("go again") leaves it unchanged, since the same player's
+    # turn continues rather than a new one starting. Rides the snapshot for
+    # the "Turn N" top-bar display (docs/design/handoff-README.md).
+    turn_number: int = 0
+
     # Explicit, ordered, MUTABLE list of player ids describing turn rotation
     # order (the authoritative design in docs/state-example.jsonc: `turnOrder`).
     # Empty means "not yet established" — callers read it via

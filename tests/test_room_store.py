@@ -77,6 +77,7 @@ class TestFileRoomStore:
         assert got is not None
         assert got.state.phase == "playing"
         assert got.state.turn_index == room.state.turn_index
+        assert got.state.turn_number == room.state.turn_number == 1
         assert got.get_player_ids() == room.get_player_ids()
         assert len(got.state.cards) == len(room.state.cards)
 

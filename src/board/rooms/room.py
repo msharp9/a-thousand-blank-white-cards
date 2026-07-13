@@ -560,6 +560,7 @@ class Room:
                 "players": new_players,
                 "turn_order": turn_order,
                 "turn_index": turn_index,
+                "turn_number": 1,
             }
         )
         # Begin the first player's turn — _start_turn auto-draws for them, so

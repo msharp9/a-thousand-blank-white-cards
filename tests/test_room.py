@@ -451,6 +451,42 @@ def test_pass_advances_turn_and_next_player_is_auto_drawn() -> None:
     ws2.send_text.assert_called()
 
 
+def test_game_start_sets_turn_number_to_one() -> None:
+    room = _room_with_two_players()
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+
+    import agent.rag.store as store
+
+    store._client = None
+    drive_to_playing(room, ["p1", "p2"])
+    assert room.state.turn_number == 1
+    assert room.snapshot()["turn_number"] == 1
+
+
+def test_pass_increments_turn_number_each_new_active_player() -> None:
+    room = _playing_room(["d1", "d2", "d3"])
+    room.state = room.state.model_copy(update={"turn_number": 1})
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    asyncio.run(room.handle_action("p1", PassMsg()))
+    assert room.state.turn_number == 2
+    asyncio.run(room.handle_action("p2", PassMsg()))
+    assert room.state.turn_number == 3
+
+
+def test_extra_turn_does_not_increment_turn_number() -> None:
+    # The current player's "go again" leaves turn_index AND turn_number alone
+    # since the same turn continues rather than a new one starting.
+    room = _playing_room(["d1", "d2", "d3"])
+    room.state = room.state.model_copy(update={"turn_number": 1}).with_condition("p1", "extra_turn", True)
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    asyncio.run(room.handle_action("p1", PassMsg()))
+    assert room.state.turn_index == 0  # still p1
+    assert room.state.turn_number == 1  # unchanged
+
+
 def test_auto_draw_takes_exactly_draw_count_cards() -> None:
     # The turn-start auto-draw takes exactly draw_count (default 1) card(s) —
     # there is no pragmatic "extra card" rescue.
