@@ -21,3 +21,15 @@ export function playerColor(index: number): string {
 export function playerInitial(name: string): string {
   return name.trim().charAt(0).toUpperCase() || "?";
 }
+
+/** Resolve an id (e.g. a card's `creator_id`) to a display name, or undefined
+ * when the id is absent or nobody in `people` matches (e.g. a player who left
+ * the room). Callers typically pass `[...players, ...spectators]` so both
+ * active players and late-joining spectators resolve. */
+export function resolvePlayerName(
+  people: { id: string; name: string }[],
+  id: string | null | undefined,
+): string | undefined {
+  if (!id) return undefined;
+  return people.find((p) => p.id === id)?.name;
+}
