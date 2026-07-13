@@ -74,7 +74,7 @@ top-level `config` / `logging_config` modules. Run the backend with
 
 | Package | Responsibility | Key files |
 | --- | --- | --- |
-| **`config`** (`src/config.py`) | Single source of truth for all settings: the one OpenAI-compatible LLM gateway (`llm_base_url` / `llm_api_key` / `llm_extra_headers`, driving BOTH chat and embeddings), embedding dimensions, Qdrant, LangSmith, CORS, sandbox flag, and the `dev_mode` flag (gates room persistence + `/dev` endpoints). Cached `get_settings()` singleton. | `config.py` (`Settings`, `get_settings`, `warn_if_no_llm_credentials`) |
+| **`config`** (`src/config.py`) | Single source of truth for all settings: the one OpenAI-compatible LLM gateway (`llm_base_url` / `llm_api_key` / `llm_extra_headers`, driving BOTH chat and embeddings), embedding dimensions, the `vision_enabled` flag (attach card art to the arbiter's model input), Qdrant, LangSmith, CORS, sandbox flag, and the `dev_mode` flag (gates room persistence + `/dev` endpoints). Cached `get_settings()` singleton. | `config.py` (`Settings`, `get_settings`, `warn_if_no_llm_credentials`) |
 | **`models`** | Pure data models, no game logic. `GameState`/`Player`/`WinCondition`; the runtime `ResolutionPlan`/step and `Op` discriminated unions + `EffectProgram` + `Target`/`CardTarget` + `map_authoring_target`; card authoring models; the client/server WebSocket envelopes. | `game_state.py`, `effects.py`, `card.py`, `cards.py`, `ws_messages.py` |
 | **`engine`** | The game "physics": pure reducers over `GameState`, the turn loop, scoring/win-condition, card compilation, the event bus + persistent hooks, and the untrusted-snippet execution sandbox. Never calls the LLM. | `facade.py` (`GameEngine`), `reducers.py` (`apply_op`), `apply.py` (`apply_effect`), `compile.py` (`compile_card`), `loop.py` (`advance_turn`, `draw_step`), `scoring.py`, `events.py`, `hooks.py`, `epilogue.py` (`tally_votes`), `sandbox/` |
 | **`agent`** | The single tool-calling interpretation agent: the persona system prompt, the interpretation result contract, the LLM factory, the RAG pipeline, and the bound toolbox. Reaches down into `engine`/`models` but never up into `board`. | `runtime.py` (`build_agent`, `run_agent`), `contract.py` (`InterpretResult`), `persona.py`, `llm.py` (`get_chat_model`), `rag/` (`embeddings`, `store`, `retrievers`, `seed`), `tools/` |
@@ -337,6 +337,14 @@ to every client on every action.
 - **Dev persistence** (`board/rooms/store.py`): `FileRoomStore` does NOT
   persist the registry; restore resets `has_art` on any card whose art did not
   survive the restart so clients never fetch a 404.
+- **Arbiter vision** (`agent/runtime.py`): with `VISION_ENABLED=true`
+  (`Settings.vision_enabled`, default off), the played/authored card's
+  data-URL rides `run_agent`'s `card_art` side-channel argument and is
+  attached to the model input as an `image_url` content block, so the drawing
+  can influence interpretation (the system prompt tells the persona how to
+  weigh it: text wins on conflict). Art still never enters `GameState` or any
+  snapshot; if the configured model rejects image input, the interpretation
+  retries text-only rather than failing the play.
 
 ---
 
