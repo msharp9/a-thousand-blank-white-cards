@@ -101,7 +101,7 @@ export function ResultsScreen({
           >
             <span
               className="w-11 shrink-0 text-center font-marker text-3xl"
-              style={{ color: rank === 0 ? "#E8A33D" : "#999" }}
+              style={{ color: rank === 0 ? "var(--color-amber)" : "#999" }}
             >
               #{rank + 1}
             </span>

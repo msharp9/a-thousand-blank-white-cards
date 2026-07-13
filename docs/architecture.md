@@ -153,6 +153,8 @@ Rooms are created and joined over REST (`board.app.create_app`):
   in the `lobby` phase becomes a real player; a joiner arriving after the game
   has started becomes a spectator (observes, cannot act).
 - `GET /rooms/{code}/state` → read-only debug snapshot.
+- `GET /rooms/{code}/cards/{card_id}/art` → a card's hand-drawn art as PNG
+  bytes (see [Card art](#card-art-out-of-band-transport)).
 - `GET /health` → liveness.
 - `POST /rooms/{code}/dev/skip-setup`, `POST /rooms/{code}/dev/end-game` →
   dev-loop shortcuts, active only when `DEV_MODE` is set (they 404 otherwise).
@@ -253,6 +255,41 @@ Key behaviours enforced in `Room`:
 - **End game → epilogue**: `resolve_end_of_game` applies any `on_game_end` card
   effects, `evaluate_win_condition` computes `winner_ids`, then voting opens
   (`EpilogueManager`); kept cards are upserted back into the RAG corpus.
+
+### Card art (out-of-band transport)
+
+Players can draw art for a card (the canvas creator in the frontend). Art is a
+PNG data-URL, and it deliberately never rides `GameState` or any WebSocket
+broadcast — a few sketches would otherwise multiply every `state` snapshot sent
+to every client on every action.
+
+- **Inbound** (`models/ws_messages.py` → `models/card.py`): `create_card` and
+  `play` (author-on-play) accept an optional `art` field, validated at the
+  message boundary — `data:image/png;base64,` prefix, ≤ `MAX_CARD_ART_BYTES`
+  (128 KiB) for the whole data-URL, and a base64-decode + PNG magic-byte check
+  (`decode_card_art`, the single decode path), so a prefix claim alone never
+  smuggles arbitrary content through.
+- **Storage** (`board/rooms/room.py`): `Room.card_art` is an out-of-band
+  registry (`card_id → data-URL`); the card in `GameState` carries only a
+  `has_art` boolean. A per-room running budget (`MAX_ROOM_ART_BYTES`, 4 MiB)
+  guards the registry: rooms are never evicted and mid-game creation is
+  uncapped, so once the budget is hit new art is dropped — the card is still
+  created/played, just artless (`has_art: false`).
+- **Serving** (`board/app.py`): clients fetch
+  `GET /rooms/{code}/cards/{card_id}/art`, which decodes the registry entry and
+  returns raw `image/png` with `X-Content-Type-Options: nosniff` and
+  `Cache-Control: public, max-age=31536000, immutable` — card ids are immutable
+  and art is written once at authoring time, so the browser cache does all
+  repeat work (the frontend uses a plain `<img src>`, `lib/art.ts`).
+- **RAG carry** (`board/rooms/epilogue.py`, `board/rooms/deck.py`): a kept
+  card's data-URL rides its Qdrant payload at the epilogue upsert, and a
+  prior-game card re-entering a new deck surfaces it as a transient `art` key
+  that `Room._absorb_card_art` moves back into the registry (re-checking the
+  budget) — so hand-drawn art survives across games without ever touching
+  game state.
+- **Dev persistence** (`board/rooms/store.py`): `FileRoomStore` does NOT
+  persist the registry; restore resets `has_art` on any card whose art did not
+  survive the restart so clients never fetch a 404.
 
 ---
 
@@ -481,3 +518,50 @@ SVGs are the source of intent; these are notes, not contradictions):
    Game Rules, `read_engine_methods` → Read Game Engine Methods, `read_game_state`
    → Read Game State, `agent_memory` → Memory. (`mtg_lookup` is an additional
    tool not drawn in the sketch.)
+
+---
+
+## 8. Frontend design system — "Sketchbook Tabletop"
+
+The frontend's visual language is a hand-drawn sketchbook on a table: paper
+background with a dot grid, marker-lettered headings, taped-down white cards,
+sticker-style buttons, and a green felt play surface.
+
+**Provenance.** The system was designed in Claude Design and exported to
+`docs/design/`: `1000-blank-white-cards.dc.html` (the full screen-by-screen
+prototype), `Card.dc.html` (the card face spec whose sizing math `SketchCard`
+follows), and `handoff-README.md` (tokens, typography, and component notes).
+Those files are the source of intent; the code below is the implementation.
+
+**Tokens** (`frontend/app/globals.css`): all colors and fonts are CSS custom
+properties bridged into Tailwind via `@theme inline`. The shadcn/ui semantic
+set (`--primary` red `#e24a3b`, `--secondary` blue, `--accent` yellow, paper
+`--background`, ink `--border`/`--input`) is joined by sketch-specific tokens —
+`--color-felt`, `--color-panel-paper`, `--color-marker-green`, `--color-amber`,
+`--color-tape`, `--color-ink` — plus utility classes for the paper dot grid,
+`sticker-shadow` (the offset hard shadow under buttons), `panel-shadow`, and
+the `floaty`/`popin`/`wig` keyframes. Fonts load via `next/font`
+(`app/layout.tsx`): Permanent Marker (`--font-marker`, headings), Patrick Hand
+(`--font-hand`, all body/game text), Nunito (`--font-sans`).
+
+**SketchCard** (`frontend/components/sketch-card.tsx`): the single card face
+used on every card surface — hand fan, table center, opponent minis, setup
+lists, epilogue vote, results. All dimensions derive from the `w` prop; it
+renders face-up text, face-down card backs, un-authored blanks, art (via
+`lib/art.ts` URLs), verdict stickers, and the brewing overlay. `stableRotation`
+(exported from the same module) derives a deterministic resting tilt from the
+card id so layouts don't shuffle between renders.
+
+**Player identity** (`frontend/lib/players.ts`): `PLAYER_COLORS` +
+`playerColor(index)` are the single source for identity colors, keyed to the
+original turn-order index everywhere (avatars, score numbers, target buttons,
+results bars) so a player's color never changes between views. The card
+creator's pen palette reuses the same constants.
+
+**Card creator** (`frontend/components/card-creator.tsx`): the authoring
+studio — title input, freehand pointer-drawn canvas (vector strokes redrawn at
+device pixel ratio), ink/nib pickers, undo/clear, and an emoji stamp grid.
+`getArt()` exports a PNG data-URL, retrying at smaller scales until it fits the
+backend's 128 KiB art cap. It is a pure authoring surface with no WS knowledge;
+`CreateCardDialog` (setup / mid-game authoring) and `PlayBlankDialog`
+(author-on-play) own submission and pass a flow-specific caption.

@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { PLAYER_COLORS } from "@/lib/players";
 import { cn } from "@/lib/utils";
 
 // Backend WS frame budget: a data-URL longer than this is rejected server-side,
@@ -22,9 +23,9 @@ const EXPORT_SCALES = [2, 1.5, 1, 0.75, 0.5];
 
 const INKS = [
   { name: "Ink", color: "#1a1a1a" },
-  { name: "Red", color: "#E24A3B" },
-  { name: "Blue", color: "#2E5EAA" },
-  { name: "Green", color: "#1F9E6B" },
+  { name: "Red", color: PLAYER_COLORS[0] },
+  { name: "Blue", color: PLAYER_COLORS[1] },
+  { name: "Green", color: PLAYER_COLORS[2] },
   { name: "Yellow", color: "#F5D547" },
 ];
 
@@ -256,7 +257,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
                 "size-8 cursor-pointer rounded-full border-2 border-ink",
                 ink === pen.color &&
                   !armedStamp &&
-                  "ring-[3px] ring-[#E24A3B] ring-offset-1",
+                  "ring-[3px] ring-ring ring-offset-1",
               )}
               style={{ background: pen.color }}
             />
@@ -275,7 +276,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
               }}
               className={cn(
                 "flex size-8 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-white",
-                nib === n.size && "ring-[3px] ring-[#E24A3B] ring-offset-1",
+                nib === n.size && "ring-[3px] ring-ring ring-offset-1",
               )}
             >
               <span
@@ -368,7 +369,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
                 }
                 className={cn(
                   "flex aspect-square cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-white text-lg",
-                  armedStamp === emoji && "border-2 border-[#E24A3B] bg-accent",
+                  armedStamp === emoji && "border-2 border-ring bg-accent",
                 )}
               >
                 {emoji}

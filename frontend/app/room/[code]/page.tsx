@@ -132,7 +132,6 @@ export default function RoomPage() {
 
   const phase = gameState?.phase ?? "lobby";
 
-  // Resolve helpers.
   const me = gameState?.players.find((p) => p.id === myPlayerId);
   const myIndex =
     gameState?.players.findIndex((p) => p.id === myPlayerId) ?? -1;
