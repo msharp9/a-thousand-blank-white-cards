@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { CreateCardDialog } from "@/components/create-card-dialog";
+import { DiscardPile } from "@/components/discard-pile";
 import { EffectLog } from "@/components/effect-log";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
 import { EpilogueView } from "@/components/epilogue";
@@ -485,21 +486,11 @@ export default function RoomPage() {
                     </Button>
                   </div>
                 )}
-                {topDiscard && (
-                  <div className="text-center">
-                    <SketchCard
-                      card={topDiscard}
-                      w={80}
-                      rot={-4}
-                      showTape={false}
-                      artUrl={getCardArtUrl(code, topDiscard)}
-                      className="mx-auto"
-                    />
-                    <p className="mt-1 font-hand text-sm text-white">
-                      Discard · {gameState.discard.length}
-                    </p>
-                  </div>
-                )}
+                <DiscardPile
+                  topCard={topDiscard}
+                  count={gameState.discard.length}
+                  roomCode={code}
+                />
               </div>
             </div>
 
