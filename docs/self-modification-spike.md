@@ -1,7 +1,8 @@
 # Spike: should the agent ever edit real engine source at runtime?
 
 Bead `a-thousand-blank-white-cards-35y.6` (parent epic `35y`, the sandboxed
-dynamic registry). Research only — no production code.
+dynamic registry). This began as a research spike; the implementation status
+below was reconciled after the generic interaction protocol landed.
 
 **Answer up front: no.** Runtime source self-modification buys almost nothing
 that a *generic interaction-descriptor protocol* doesn't buy cheaper, and it
@@ -34,17 +35,17 @@ what they actually need:
 | --- | --- | --- |
 | "Uno mode": empty-hand win, draw 0, color-match veto | rule data + hooks | **Yes** (the epic's exemplar ladder) |
 | "Steal from whoever you point at" | active-player single choice | **Yes today** — `requires_choice` → `prompt_choice` |
-| "Auction this card to the highest bidder" | numeric input from **every** player, collected before resolution | No — protocol ceiling |
+| "Auction this card to the highest bidder" | numeric input from **every** player, collected before resolution | **Yes now** — sealed `number` barrier + ordered follow-up mechanics |
 | "Trade: offer a card; they accept or counter" | two-party offer/accept round-trip | No — protocol ceiling |
-| "Everyone secretly picks a card; reveal simultaneously" | hidden commitment from all players, reveal barrier | No — protocol ceiling |
-| "Everyone writes a caption; funniest (judged) wins 5" | free-text input from all + a judge pick | No — protocol ceiling |
+| "Everyone secretly picks a card; reveal simultaneously" | hidden commitment from all players, reveal barrier | **Yes now** — sealed `card_pick` barrier |
+| "Everyone writes a caption; funniest (judged) wins 5" | free-text input from all + a judge pick | **Yes now** — sealed `text` followed by a choice barrier |
 | "First player to click gains 3" | client-side timer / race semantics | No — protocol ceiling |
 | "Add a draft phase every 3 rounds" | a phase string the frontend's phase switch doesn't know | Half — backend phase is just data once rules-as-data lands; frontend router is the blocker |
-| "Draw a picture on this card" (the soul of physical 1KBWC) | canvas/image input on authoring | No — but it's a *fixed* feature, not a dynamic one: build it as a normal frontend feature, no self-modification involved |
+| "Draw a picture on this card" (the soul of physical 1KBWC) | canvas/image input on authoring | **Yes now** — fixed card-art authoring plus bounded vector `drawing` interactions; neither executes agent-authored UI code |
 
 Two observations that shape everything else:
 
-1. Every "No" row is the same missing primitive repeated: **ask a described
+1. Every former protocol-ceiling row used the same missing primitive: **ask a described
    audience for a described input, wait for all of them, feed the answers back
    into resolution as data.** `prompt_choice` is exactly this primitive
    restricted to (audience = active player, input = pick-one). None of the
@@ -135,9 +136,9 @@ approves, plugin loads at **room creation**, never mid-game.
 **Verdict: skip. If §3's descriptors grow a real vocabulary, the descriptor
 schema *is* the plugin API, data-shaped, with no code loading.**
 
-## 3. The cheap middle grounds (this is where the value is)
+## 3. The implemented middle grounds (this is where the value is)
 
-### 3a. Wish-note channel — build first, trivially cheap
+### 3a. Wish-note channel
 
 Give the interpretation agent a `wish` tool (sibling to `read_engine_methods`
 in `agent/tools/`): when it cannot express a card even with the full registry
@@ -153,7 +154,7 @@ as today (persona action /
   table can't do that yet — I've filed a complaint with management," which is
   extremely on-brand for this game.
 
-### 3b. Interaction descriptors — the real answer to the ceiling
+### 3b. Interaction descriptors — the answer to the protocol ceiling
 
 Generalize the existing `prompt_choice` pattern into a small data language
 for interactions. Today's flow (the seed): `EffectProgram.requires_choice` →
@@ -167,19 +168,21 @@ with three axes widened:
    player:<id>`, with per-audience privacy (a secret pick is only revealed in
    the post-barrier state).
 2. **Input kind** — not just pick-one: `choice | number (bid) | text
-   (caption) | card_pick | confirm (accept/decline)`, each a small declared
+   (caption) | card_pick | confirm (accept/decline) | drawing`, each a small declared
    field, optionally with `min/max`, `timeout_s`, `hidden_until_complete`.
-3. **Collection** — not just one answer: a server-side pending-interaction
+3. **Collection** — not just one answer: a persisted server-side pending-interaction
    table on `Room` keyed by interaction id, with a completion barrier
    (all-responded or timeout) before resolution continues. This is the one
-   real backend change: today's design deliberately keeps *no* server-side
-   pending state (the follow-up `play` re-resolves; see the bead-jcc note in
-   `room.py`), which is exactly what multi-party interactions cannot do.
+   real backend change from the original design: the legacy `prompt_choice`
+   follow-up re-resolves a play, while generic interactions store the plan
+   cursor, cloned state, responses, deadline, and turn bookkeeping so they can
+   resume exactly once after reconnect or process restart.
 
-Wire shape: one new `ServerMsg` (`interaction_request {id, kind, audience,
-prompt, fields, choices?, timeout_s?}`) and one new `ClientMsg`
-(`interaction_response {id, values}`) — added **once, by humans**, and never
-again per card. Resolution consumes the collected responses as data (the way
+The live wire shape is a versioned `interaction_request` carrying an id,
+descriptor, deadline, and safe progress plus an authenticated
+`interaction_response` carrying the same id and a discriminated payload.
+`interaction_progress` broadcasts counts without sealed values. These messages
+were added **once, by humans**, and are not extended per card. Resolution consumes the collected responses as data (the way
 `chosen_player_id` already threads into `HookContext`), so determinism holds:
 player inputs are inputs, the reducers stay pure, replay = state + the
 recorded response set. `_MAX_OPS`-style caps bound fan-out (max concurrent
@@ -219,8 +222,9 @@ The minimum story is **a generic renderer for a closed descriptor vocabulary
 Explicitly rejected for the frontend: `eval`ing agent-shipped JS, remote
 components, iframe micro-apps, module federation. The Next.js client stays a
 fixed, reviewed program; all dynamism arrives as data over the socket. If a
-card genuinely needs a new widget (canvas drawing), that's a wish note → a
-human-merged PR (2c) that *extends the descriptor vocabulary*.
+card genuinely needs a new widget outside the v1 vocabulary (for example live
+audio recording), that's a wish note → a human-merged PR (2c) that *extends the
+descriptor vocabulary*.
 
 ## 5. Recommendation and phased adoption
 

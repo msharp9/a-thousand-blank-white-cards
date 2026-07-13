@@ -268,18 +268,20 @@ sequenceDiagram
   WS->>R: handle_action(player_id, msg)
   Note over R: turn / draw-first / spectator guards
   R->>R: author-on-play (fill blank if needed)
-  R->>CO: compile_card(card)
-  alt compiled ops exist (deterministic)
-    CO-->>R: EffectProgram
+  R->>CO: compile_card_plan(card)
+  alt compiled plan exists (deterministic)
+    CO-->>R: ResolutionPlan
   else free-text card
     R->>CM: broadcast "brewing"
     R->>AG: run_agent(title, desc, state, actor, creator)
-    AG-->>R: InterpretResult (program | fallback)
+    AG-->>R: InterpretResult (plan | legacy fields | fallback)
     R->>CM: broadcast "card_interpreted"
   end
-  Note over R: if program needs a target →<br/>send "prompt_choice", hold play
-  R->>AP: apply_effect(state, program, ctx)
-  AP-->>R: new GameState
+  Note over R: validate and dry-run complete ordered plan
+  loop ops / snippet / interaction steps
+    R->>AP: execute next step against cloned state
+    AP-->>R: cloned state or persisted barrier
+  end
   R->>R: move card hand→(center|in_play|discard)
   R->>CM: broadcast "state" + "effect_applied"
   R->>R: advance_turn (or end game)

@@ -59,6 +59,22 @@ Do these against the **live Vercel URL** with two devices.
       reflected in game state / the effect log.
 - [ ] **Reconnect** — Refresh one device mid-game and confirm it reconnects to
       the same room and restores state (no lost session).
+- [ ] **Ordered post-draw effect** — Play or author a Chess Master-style card
+      that draws two cards and then scores from the resulting hand. Confirm the
+      draw happens once and the score uses the post-draw hand size.
+- [ ] **Rule replacement** — Play an Uno-style card and confirm draw count 0,
+      empty-hand end/win rules, and any color-alignment rule appear in the
+      dynamic-state panel and affect later turns.
+- [ ] **Sealed auction** — Play `Going Once, Going Twice`, bid from both
+      devices, and confirm no values leak before completion. Confirm the winner
+      pays, receives the played card, and tied bids follow visible turn order.
+- [ ] **Drawing and vote chain** — Play `Cat Show`, submit a drawing from both
+      devices, and confirm the vote appears only after both submissions. Vote,
+      then confirm every tied winning artist receives 3 points.
+- [ ] **Reconnect during interaction** — Refresh one device after submitting a
+      sealed bid or drawing. Confirm it returns to the same barrier marked as
+      submitted without revealing values, then complete the interaction from
+      the other device exactly once.
 - [ ] **Epilogue + vote** — Play through to the epilogue and confirm the voting
       UI appears and a vote can be cast and recorded on both devices.
 
