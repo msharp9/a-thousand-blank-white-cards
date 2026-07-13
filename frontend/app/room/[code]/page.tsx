@@ -20,11 +20,13 @@ import { EpilogueView } from "@/components/epilogue";
 import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
 import { HouseRulesZone } from "@/components/house-rules-zone";
+import { InteractionPanel } from "@/components/interaction-panel";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { ResultsScreen } from "@/components/results-screen";
 import { SetupPhase } from "@/components/setup-phase";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
 import { getCardArtUrl } from "@/lib/art";
+import { interactionResponseMessage } from "@/lib/interactions";
 import { playerColor } from "@/lib/players";
 import type {
   CardSnapshot,
@@ -128,6 +130,8 @@ export default function RoomPage() {
     promptChoice,
     clearPromptChoice,
     epilogueCards,
+    interactionRequest,
+    interactionProgress,
     send,
   } = useGameSocket(nameSet ? code : "", name);
 
@@ -270,6 +274,15 @@ export default function RoomPage() {
           </Button>
         </div>
       )}
+      <InteractionPanel
+        pending={gameState?.pending_interaction}
+        request={interactionRequest}
+        progressMessage={interactionProgress}
+        cards={gameState?.cards ?? {}}
+        onSubmit={(interactionId, payload) =>
+          send(interactionResponseMessage(interactionId, payload))
+        }
+      />
       <header className="sticky top-0 z-40 flex items-center gap-3.5 border-b-[2.5px] border-ink bg-white px-5 py-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)]">
         <Link
           href="/"

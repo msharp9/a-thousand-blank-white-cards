@@ -206,7 +206,7 @@ effect line is persisted there and not only broadcast live).
 
 Snapshots expose the active data-driven game rather than a fixed board model:
 `turn_order`, `rules`, player `conditions`, card `attributes`, and registered
-hook metadata. The frontend derives the active player from `turn_order` and
+hook metadata. The frontend mirrors the engine's active seat from `players[turn_index]` and
 renders these values in a generic dynamic-state panel; there is no legacy
 direction flag. Cards also retain a bounded mechanical diagnostic (`pending`,
 `applied`, `fallback`, or `rejected`), a public reason, and a correlation id, so
@@ -244,6 +244,15 @@ mechanics are rolled back, the played card is consumed as a visible no-op, and
 the turn continues. `FileRoomStore` persists pending resolutions and turn
 bookkeeping for dev reloads; application startup recreates timeout tasks without
 requiring a client to reconnect.
+
+The frontend keeps lifecycle phases fixed and renders card-defined interaction
+stages in one global `InteractionPanel` overlay. It has typed renderers for all
+v1 descriptors, counts-only waiting/sealed states, an authoritative deadline
+countdown, reconnect replay, and a visible fallback for unknown future kinds.
+Drawing input is normalized vector geometry (never image data), re-bounded to
+the server's stroke, point, and coordinate limits plus a conservative 48 KiB
+browser wire budget for the server's 65 KiB post-parse cap; completed
+drawing submissions can then render as choice previews in a later vote stage.
 
 ```mermaid
 sequenceDiagram

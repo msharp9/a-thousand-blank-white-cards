@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
@@ -53,6 +55,26 @@ def test_drawing_payload_is_normalized_and_bounded() -> None:
         DrawingResponse.model_validate({"strokes": [{"points": [{"x": 2, "y": 0}]}]})
     with pytest.raises(ValidationError):
         DrawingResponse.model_validate({"strokes": [{"points": [{"x": 0.5, "y": 0.5}]} for _ in range(65)]})
+
+
+def test_dense_frontend_wire_budget_survives_float_reserialization() -> None:
+    """48 KiB of compact JS-shaped edge coordinates stays below the typed 65 KiB cap."""
+    strokes: list[dict] = []
+    payload = {"kind": "drawing", "strokes": strokes}
+    for _ in range(64):
+        stroke = {"color": "#1a1a1a", "width": 0.01, "points": []}
+        strokes.append(stroke)
+        for index in range(256):
+            stroke["points"].append({"x": index % 2, "y": (index + 1) % 2})
+            encoded = json.dumps(payload, separators=(",", ":"))
+            if len(encoded.encode()) > 48 * 1024:
+                stroke["points"].pop()
+                encoded = json.dumps(payload, separators=(",", ":"))
+                break
+        if len(encoded.encode()) >= 47 * 1024:
+            break
+    assert len(encoded.encode()) >= 47 * 1024
+    DrawingResponse.model_validate_json(encoded)
 
 
 def test_resolution_plan_requires_unique_ordered_interaction_refs() -> None:

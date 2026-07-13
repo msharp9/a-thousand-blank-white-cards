@@ -4,7 +4,7 @@ The Next.js frontend for **1000 Blank White Cards** — a digital, AI-supported 
 
 ## What it is
 
-A phase-router UI for a game room. `app/room/[code]/page.tsx` renders the appropriate view — **lobby / setup / playing / epilogue / ended** — based on the game's current phase. State is driven by a live WebSocket connection to the backend via `useGameSocket` in `lib/ws.ts`.
+A phase-router UI for a game room. `app/room/[code]/page.tsx` renders the appropriate view — **lobby / setup / playing / epilogue / ended** — based on the game's current phase. State is driven by a live WebSocket connection to the backend via `useGameSocket` in `lib/ws.ts`. Card-defined player input stays inside those phases as a global `InteractionPanel` overlay, with choice, number, text, card-pick, confirmation, and bounded vector-drawing renderers.
 
 ## Local development
 
@@ -26,14 +26,16 @@ Environment variables:
 
 ## Scripts
 
-| Command             | Description                 |
-| ------------------- | --------------------------- |
-| `npm run dev`       | Start the dev server        |
-| `npm run build`     | Production build            |
-| `npm run start`     | Serve the production build  |
-| `npm run typecheck` | Type-check (`tsc --noEmit`) |
-| `npm run lint`      | Lint (`eslint`)             |
-| `npm run format`    | Format (`prettier --write`) |
+| Command              | Description                 |
+| -------------------- | --------------------------- |
+| `npm run dev`        | Start the dev server        |
+| `npm run build`      | Production build            |
+| `npm run start`      | Serve the production build  |
+| `npm run typecheck`  | Type-check (`tsc --noEmit`) |
+| `npm run lint`       | Lint (`eslint`)             |
+| `npm run format`     | Format (`prettier --write`) |
+| `npm test`           | Run Vitest + RTL tests      |
+| `npm run test:watch` | Run tests in watch mode     |
 
 ## Deployment
 
