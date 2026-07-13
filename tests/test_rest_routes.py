@@ -148,8 +148,12 @@ def test_dev_skip_setup_fast_forwards_to_playing(dev_client: TestClient) -> None
     data = resp.json()
     assert data["phase"] == "playing"
     assert data["players"]
+    # The first player's turn began with the automatic draw on top of the deal.
+    draw_count = data["draw_count"]
+    active_id = data["players"][data["turn_index"]]["id"]
     for p in data["players"]:
-        assert len(p["hand"]) == STARTING_HAND_SIZE
+        expected = STARTING_HAND_SIZE + (draw_count if p["id"] == active_id else 0)
+        assert len(p["hand"]) == expected
     assert data["deck"]
 
 
@@ -205,6 +209,6 @@ def test_dev_autofill_authoring_deals_hands() -> None:
     asyncio.run(room.dev_autofill_authoring())
 
     assert room.state.phase == "playing"
-    assert len(room.state.get_player("p1").hand) == STARTING_HAND_SIZE
+    assert len(room.state.get_player("p1").hand) == STARTING_HAND_SIZE + room.state.draw_count
     assert len(room.state.get_player("p2").hand) == STARTING_HAND_SIZE
     assert all(room._authored_count(pid) >= CARDS_TO_AUTHOR for pid in ("p1", "p2"))

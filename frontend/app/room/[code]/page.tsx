@@ -288,9 +288,9 @@ export default function RoomPage() {
 
   return (
     <main className="flex h-dvh flex-col">
-      {/* Recoverable, message-level errors (e.g. "You have already drawn this
-          turn") show as a dismissible banner over the live game — the table
-          stays mounted and interactive. Auto-clears from the socket layer. */}
+      {/* Recoverable, message-level errors (e.g. "Not your turn") show as a
+          dismissible banner over the live game — the table stays mounted and
+          interactive. Auto-clears from the socket layer. */}
       {transientError && (
         <div
           role="alert"
@@ -477,18 +477,6 @@ export default function RoomPage() {
                 </div>
                 {!isSpectator && (
                   <div className="flex w-32 flex-col gap-2">
-                    {/* Turn begins with an explicit draw step: show Draw while
-                        the active player hasn't drawn and the deck isn't empty. */}
-                    {isActive &&
-                      !gameState.has_drawn &&
-                      gameState.deck.length > 0 && (
-                        <Button
-                          variant="accent"
-                          onClick={() => send({ type: "draw" })}
-                        >
-                          ↓ Draw a Card
-                        </Button>
-                      )}
                     <Button
                       variant="outline"
                       onClick={() => setDialogOpen(true)}
@@ -552,24 +540,16 @@ export default function RoomPage() {
                     )}
                   </div>
                   {/* End turn only when the player may pass (holds no playable
-                      card) and has taken their draw step (or the deck is empty
-                      so there's nothing to draw). */}
-                  {isActive &&
-                    gameState.can_pass &&
-                    (gameState.has_drawn || gameState.deck.length === 0) && (
-                      <Button
-                        variant="outline"
-                        onClick={() => send({ type: "pass" })}
-                      >
-                        End Turn ⟳
-                      </Button>
-                    )}
+                      card); the server drew for them at turn start. */}
+                  {isActive && gameState.can_pass && (
+                    <Button
+                      variant="outline"
+                      onClick={() => send({ type: "pass" })}
+                    >
+                      End Turn ⟳
+                    </Button>
+                  )}
                 </div>
-                {isActive && !gameState.has_drawn && (
-                  <p className="font-hand text-base text-primary">
-                    Your turn — draw a card to begin.
-                  </p>
-                )}
                 {myInPlayCards.length > 0 && (
                   <div className="mb-1 flex items-center gap-2">
                     <span className="font-hand text-sm text-[#888]">
@@ -587,10 +567,9 @@ export default function RoomPage() {
                     ))}
                   </div>
                 )}
-                {/* Playing is gated until the draw step is taken. */}
                 <Hand
                   cards={myHandCards}
-                  canPlay={isActive && gameState.has_drawn}
+                  canPlay={isActive}
                   send={send}
                   roomCode={code}
                 />

@@ -156,11 +156,15 @@ def test_failing_suffix_rolls_back_prefix_but_consumes_card() -> None:
     with patch("agent.runtime.run_agent", return_value=agent_result):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c6")))
 
-    assert room.state.deck == ["d1", "d2", "d3"]
+    # The failed plan's own draws rolled back; the only deck movement is the
+    # NEXT player's turn-start auto-draw (the play consumed the turn).
+    assert room.state.deck == ["d2", "d3"]
     assert room.state.get_player("p1").hand == []
+    assert "d1" in room.state.get_player("p2").hand
     assert "c6" in room.state.discard
     assert any("no mechanical effect" in line for line in room.state.log)
-    assert not [event for event in room.state.history_events if event.kind == "draw"]
+    draws = [event for event in room.state.history_events if event.kind == "draw"]
+    assert [(event.target_player_ids, event.amount) for event in draws] == [(["p2"], 1)]
     assert len([event for event in room.state.history_events if event.kind == "play"]) == 1
 
 

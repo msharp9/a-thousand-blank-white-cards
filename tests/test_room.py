@@ -10,7 +10,7 @@ from conftest import drive_to_playing
 
 from agent.contract import InterpretResult
 from models.effects import AddPointsOp, DestroyCardOp, EffectProgram
-from models.ws_messages import CreateCardMsg, DrawMsg, PassMsg, PlayMsg, Placement, StartMsg
+from models.ws_messages import CreateCardMsg, PassMsg, PlayMsg, Placement, StartMsg
 from board.rooms.room import Room
 
 
@@ -46,78 +46,49 @@ def test_pass_off_turn_sends_error() -> None:
     assert room.state.turn_index == 0
 
 
-def test_draw_action_draws_for_active_player() -> None:
-    # The draw→play→end model has an explicit draw: the active player draws
-    # draw_count card(s) off the top of the deck and has_drawn is set.
+def test_turn_start_auto_draws_for_active_player() -> None:
+    # The auto-draw→play→end model: starting a turn draws draw_count card(s)
+    # off the top of the deck for the active player, no client message needed.
     room = _room_with_two_players()
     room.state = room.state.model_copy(update={"deck": ["c1", "c2"], "phase": "playing"})
-    ws1 = AsyncMock()
-    room.connections.connect("p1", ws1)
-    asyncio.run(room.handle_action("p1", DrawMsg()))
+    room.connections.connect("p1", AsyncMock())
+    asyncio.run(room._start_turn("p1"))
     assert room.state.get_player("p1").hand == ["c1"]  # draw_count == 1
     assert room.state.deck == ["c2"]
     assert room._has_drawn is True
 
 
-def test_draw_broadcasts_state_with_updated_hand() -> None:
-    # Regression (bm9): drawing must push a fresh 'state' snapshot so the client
+def test_auto_draw_broadcasts_state_with_updated_hand() -> None:
+    # The turn-start auto-draw must push a fresh 'state' snapshot so the client
     # sees the new hand and has_drawn=true immediately, without a reconnect.
     room = _room_with_two_players()
     room.state = room.state.model_copy(update={"deck": ["c1", "c2"], "phase": "playing"})
     ws1 = AsyncMock()
     room.connections.connect("p1", ws1)
-    asyncio.run(room.handle_action("p1", DrawMsg()))
+    asyncio.run(room._start_turn("p1"))
     states = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
     state_msgs = [m for m in states if m["type"] == "state"]
-    assert state_msgs, "draw did not broadcast a state snapshot"
+    assert state_msgs, "auto-draw did not broadcast a state snapshot"
     latest = state_msgs[-1]["state"]
     assert latest["has_drawn"] is True
     p1 = next(p for p in latest["players"] if p["id"] == "p1")
     assert p1["hand"] == ["c1"]
 
 
-def test_draw_from_empty_deck_broadcasts_has_drawn() -> None:
-    # Regression (bm9): the empty-deck path latches has_drawn=True so the player
-    # can still play/pass — that flag change must reach clients via a broadcast.
+def test_turn_start_on_empty_deck_latches_has_drawn() -> None:
+    # An empty deck satisfies the draw step without touching anything: the
+    # snapshot still reports has_drawn=True so clients unlock Play/Pass.
     room = _room_with_two_players()
     room.state = room.state.model_copy(update={"deck": [], "phase": "playing"})
     ws1 = AsyncMock()
     room.connections.connect("p1", ws1)
-    asyncio.run(room.handle_action("p1", DrawMsg()))
+    asyncio.run(room._start_turn("p1"))
     assert room._has_drawn is True
+    assert room.state.get_player("p1").hand == []
     msgs = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
     state_msgs = [m for m in msgs if m["type"] == "state"]
-    assert state_msgs, "empty-deck draw did not broadcast a state snapshot"
+    assert state_msgs, "empty-deck turn start did not broadcast a state snapshot"
     assert state_msgs[-1]["state"]["has_drawn"] is True
-
-
-def test_second_draw_in_same_turn_is_rejected() -> None:
-    # Drawing is once per turn; a second draw errors and draws nothing more.
-    room = _room_with_two_players()
-    room.state = room.state.model_copy(update={"deck": ["c1", "c2"], "phase": "playing"})
-    ws1 = AsyncMock()
-    room.connections.connect("p1", ws1)
-    asyncio.run(room.handle_action("p1", DrawMsg()))
-    asyncio.run(room.handle_action("p1", DrawMsg()))
-    sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
-    assert "error" in sent_types
-    # Only the first draw took a card.
-    assert room.state.get_player("p1").hand == ["c1"]
-    assert room.state.deck == ["c2"]
-
-
-def test_draw_off_turn_is_rejected() -> None:
-    # Only the active player may draw; an off-turn draw errors and draws nothing.
-    room = _room_with_two_players()
-    room.state = room.state.model_copy(update={"deck": ["c1", "c2"], "phase": "playing"})
-    ws2 = AsyncMock()
-    room.connections.connect("p2", ws2)  # p2 is NOT active (turn_index 0 -> p1)
-    asyncio.run(room.handle_action("p2", DrawMsg()))
-    sent_types = [json.loads(c.args[0])["type"] for c in ws2.send_text.call_args_list]
-    assert "error" in sent_types
-    assert room.state.deck == ["c1", "c2"]
-    assert room.state.get_player("p2").hand == []
-    assert room._has_drawn is False
 
 
 def test_effect_log_persists_in_state_for_refresh() -> None:
@@ -131,9 +102,6 @@ def test_effect_log_persists_in_state_for_refresh() -> None:
     room.connections.connect("p2", AsyncMock())
 
     assert room.state.log == []
-    # Draw-first rule (deck non-empty): mark drawn so the pass is accepted, and
-    # keep the log to just the pass line this test asserts on.
-    room._has_drawn = True
     asyncio.run(room.handle_action("p1", PassMsg()))
     # The pass line is captured in the persistent snapshot log, and the snapshot
     # exposes it so a rejoining client rebuilds history.
@@ -181,14 +149,13 @@ def test_start_builds_deck_of_at_least_30_and_deals_hands() -> None:
 
     assert room.state.phase == "playing"
     # Deck was finalised: 30 premade + 10 authored + 10 blanks = 50, minus the
-    # 10 cards dealt (5 each) = 40 left in the deck.
+    # 10 cards dealt (5 each) and the first player's turn-start auto-draw = 39.
     total_hands = sum(len(p.hand) for p in room.state.players)
     assert len(room.state.deck) + total_hands == 50
-    assert len(room.state.deck) == 40
-    # Starting hands were dealt from the top of the deck. There is no auto-draw
-    # at turn start, so both players hold exactly the dealt STARTING_HAND_SIZE;
-    # the first player must send an explicit `draw` to take their turn's card.
-    assert len(room.state.get_player("p1").hand) == 5
+    assert len(room.state.deck) == 39
+    # Starting hands were dealt from the top of the deck; the first player's
+    # turn then began with the automatic draw of their draw_count card(s).
+    assert len(room.state.get_player("p1").hand) == 5 + room.state.draw_count
     assert len(room.state.get_player("p2").hand) == 5
     # Every dealt/deck card id resolves in the registry.
     for p in room.state.players:
@@ -196,10 +163,10 @@ def test_start_builds_deck_of_at_least_30_and_deals_hands() -> None:
     assert all(cid in room.state.cards for cid in room.state.deck)
 
 
-def test_first_player_not_auto_drawn_then_explicit_draw_adds_cards() -> None:
-    # No auto-draw at game start: the first player begins with exactly the dealt
-    # STARTING_HAND_SIZE and has_drawn is False. An explicit `draw` then adds
-    # draw_count card(s) on top of the starting hand.
+def test_first_player_auto_drawn_at_game_start() -> None:
+    # The setup→playing transition starts the first player's turn, which
+    # auto-draws for them: they begin holding STARTING_HAND_SIZE + draw_count
+    # cards with has_drawn already latched; the next player holds only the deal.
     room = _room_with_two_players()
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
@@ -209,15 +176,9 @@ def test_first_player_not_auto_drawn_then_explicit_draw_adds_cards() -> None:
     store._client = None
     drive_to_playing(room, ["p1", "p2"])
 
-    # Both players hold only the dealt hand; the active player has not drawn yet.
-    assert len(room.state.get_player("p1").hand) == 5
-    assert len(room.state.get_player("p2").hand) == 5
     assert room.state.turn_index == 0
-    assert room._has_drawn is False
-
-    # p1 draws explicitly -> STARTING_HAND_SIZE + draw_count.
-    asyncio.run(room.handle_action("p1", DrawMsg()))
     assert len(room.state.get_player("p1").hand) == 5 + room.state.draw_count
+    assert len(room.state.get_player("p2").hand) == 5
     assert room._has_drawn is True
 
 
@@ -238,8 +199,7 @@ def _chooser_room() -> Room:
         update={
             "phase": "playing",
             # Non-empty deck so drawing the last card doesn't latch end-of-game;
-            # the active player has already taken their draw step (_has_drawn) so
-            # these play tests exercise the play path, not the draw-first gate.
+            # _has_drawn mirrors the turn-start auto-draw bookkeeping.
             "deck": ["d1", "d2"],
             "cards": {"c1": {"id": "c1", "title": "Bless", "description": "give a chosen player points"}},
         }
@@ -404,56 +364,65 @@ def test_play_card_choice_with_invalid_card_errors_cleanly() -> None:
     assert room.state.turn_index == 0
 
 
-# ── draw → play → pass turn model ──
+# ── auto-draw → play → pass turn model ──
 def _playing_room(deck: list[str]) -> Room:
     room = _room_with_two_players()
     room.state = room.state.model_copy(update={"phase": "playing", "deck": list(deck)})
     return room
 
 
-def test_pass_advances_turn_and_next_player_must_draw() -> None:
+def test_pass_advances_turn_and_next_player_is_auto_drawn() -> None:
     room = _playing_room(["d1", "d2", "d3"])
     ws1, ws2 = AsyncMock(), AsyncMock()
     room.connections.connect("p1", ws1)
     room.connections.connect("p2", ws2)
-    # p1 draws (draw→play→end), then ends their turn.
-    asyncio.run(room.handle_action("p1", DrawMsg()))
+    # p1 ends their turn; advancing starts p2's turn, which auto-draws for them.
     asyncio.run(room.handle_action("p1", PassMsg()))
-    # Turn advanced to p2. No auto-draw at turn start: p2's hand is untouched and
-    # has_drawn resets, so they must draw themselves.
     assert room.state.turn_index == 1
-    assert room.state.get_player("p2").hand == []
-    assert room.state.deck == ["d2", "d3"]  # only p1's draw removed a card
-    assert room.state.get_player("p1").hand == ["d1"]
-    assert room._has_drawn is False
+    assert room.state.get_player("p2").hand == ["d1"]
+    assert room.state.deck == ["d2", "d3"]
+    assert room._has_drawn is True
     ws2.send_text.assert_called()
-    # p2 then draws explicitly.
-    asyncio.run(room.handle_action("p2", DrawMsg()))
-    assert room.state.get_player("p2").hand == ["d2"]
 
 
-def test_draw_takes_exactly_draw_count_cards() -> None:
-    # An explicit draw takes exactly draw_count (default 1) card(s) — there is no
-    # auto-draw and no pragmatic "extra card" rescue in the draw→play→end model.
+def test_auto_draw_takes_exactly_draw_count_cards() -> None:
+    # The turn-start auto-draw takes exactly draw_count (default 1) card(s) —
+    # there is no pragmatic "extra card" rescue.
     room = _playing_room(["d1", "d2", "d3", "d4"])
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
-    asyncio.run(room.handle_action("p1", DrawMsg()))
+    asyncio.run(room._start_turn("p1"))
     assert room.state.get_player("p1").hand == ["d1"]  # only draw_count=1 card
     assert room.state.deck == ["d2", "d3", "d4"]
 
 
-def test_draw_with_zero_draw_count_takes_nothing() -> None:
-    # With draw_count=0 an explicit draw takes no cards (no rescue draw): the
-    # draw step is still consumed (has_drawn) so the player can then play/pass.
+def test_auto_draw_with_zero_draw_count_takes_nothing() -> None:
+    # With draw_count=0 the turn-start auto-draw takes no cards: the draw step
+    # is still marked done (has_drawn) so the player can play/pass.
     room = _playing_room(["d1", "d2"])
     room.state = room.state.model_copy(update={"rules": room.state.rules.model_copy(update={"draw": 0})})
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
-    asyncio.run(room.handle_action("p1", DrawMsg()))
+    asyncio.run(room._start_turn("p1"))
     assert room.state.get_player("p1").hand == []
     assert room.state.deck == ["d1", "d2"]
     assert room._has_drawn is True
+
+
+def test_hand_grows_by_draw_count_each_turn() -> None:
+    # Hand-size accounting over several turns: every turn start auto-draws
+    # exactly draw_count, so after two full rounds of passing each player holds
+    # exactly the cards drawn for them.
+    room = _playing_room(["d1", "d2", "d3", "d4", "d5", "d6"])
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    asyncio.run(room._start_turn("p1"))  # turn 1: p1 auto-draws d1
+    asyncio.run(room.handle_action("p1", PassMsg()))  # turn 2: p2 auto-draws d2
+    asyncio.run(room.handle_action("p2", PassMsg()))  # turn 3: p1 auto-draws d3
+    asyncio.run(room.handle_action("p1", PassMsg()))  # turn 4: p2 auto-draws d4
+    assert room.state.get_player("p1").hand == ["d1", "d3"]
+    assert room.state.get_player("p2").hand == ["d2", "d4"]
+    assert room.state.deck == ["d5", "d6"]
 
 
 def test_pass_on_empty_deck_ends_game_with_winner() -> None:
@@ -485,13 +454,13 @@ def test_pass_on_empty_deck_ends_game_with_winner() -> None:
 
 
 def test_last_card_drawer_finishes_turn_before_end() -> None:
-    # A turn with exactly one card left: the active player draws it (deck now
-    # empty, exhaustion latched) and the game does NOT end yet — they still get
-    # to act. Ending is deferred until this turn ends (see _advance_turn).
+    # A turn starting with exactly one card left: the auto-draw takes it (deck
+    # now empty, exhaustion latched) and the game does NOT end yet — the drawer
+    # still gets to act. Ending is deferred until this turn ends (_advance_turn).
     room = _playing_room(["last"])
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
-    asyncio.run(room.handle_action("p1", DrawMsg()))
+    asyncio.run(room._start_turn("p1"))
     assert room.state.phase == "playing"
     assert room.state.deck == []
     assert room.state.get_player("p1").hand == ["last"]
@@ -499,9 +468,9 @@ def test_last_card_drawer_finishes_turn_before_end() -> None:
 
 
 def test_deck_exhaustion_end_to_end_via_pass() -> None:
-    # p1 draws the last card (exhaustion latches), then passes -> the turn ends
-    # and the game ends. p1's own turn completed first (its draw+pass did not
-    # error).
+    # p1's turn-start auto-draw takes the last card (exhaustion latches), then
+    # they pass -> the turn ends and the game ends. p1's own turn completed
+    # first (the pass did not error).
     room = _playing_room(["last"])
     ws1, ws2 = AsyncMock(), AsyncMock()
     room.connections.connect("p1", ws1)
@@ -514,7 +483,7 @@ def test_deck_exhaustion_end_to_end_via_pass() -> None:
             ],
         }
     )
-    asyncio.run(room.handle_action("p1", DrawMsg()))  # draws 'last', latches exhaustion
+    asyncio.run(room._start_turn("p1"))  # auto-draws 'last', latches exhaustion
     assert room.state.get_player("p1").hand == ["last"]
     asyncio.run(room.handle_action("p1", PassMsg()))  # ends turn -> end-of-game
     # End-of-game shows the results screen with winners already computed.

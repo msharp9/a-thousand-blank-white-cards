@@ -7,12 +7,11 @@ preview are allowed off-turn. Play and create_card run the agent interpretation
 graph via asyncio.to_thread (with a "brewing" broadcast), applying resulting
 effects through the engine.
 
-Turn model (draw → play → end turn): drawing is EXPLICIT. A turn has three
-steps: (1) the active player sends ``draw`` to take ``rules.draw`` card(s) — once
-per turn, and required before playing/ending while the deck is non-empty; (2)
-they ``play`` a card OR (3) ``pass`` / ``end_turn`` to end without playing. Either
-ending advances the turn; the next player's draw flag resets and they must draw
-themselves. There is no auto-draw.
+Turn model (auto-draw → play → end turn): drawing is AUTOMATIC. When a turn
+begins (``_start_turn``) the server draws ``rules.draw`` card(s) for the new
+active player — there is no client ``draw`` message. The player then ``play``s
+a card OR ``pass``es / ``end_turn``s to end without playing. Either ending
+advances the turn; the next player is auto-drawn to in the same way.
 
 End game: there are TWO distinct end paths with distinct timing.
 
@@ -184,10 +183,11 @@ class Room:
         # simple deck (the basic no-AI game). Kept as an attribute so tests and
         # future modes can flip it; defaults True for the basic game.
         self._simple = simple
-        # Per-turn bookkeeping for the draw→play→end model. Reset at the start of
-        # every turn (see _start_turn). ``_has_drawn`` gates play/pass so a turn
-        # follows draw-first; ``_deck_exhausted`` latches once the last card is
-        # drawn so the game ends after the drawer finishes their turn.
+        # Per-turn bookkeeping for the auto-draw→play→end model. Reset at the
+        # start of every turn (see _start_turn). ``_has_drawn`` records the
+        # turn's auto-draw for the client snapshot; ``_deck_exhausted`` latches
+        # once the last card is drawn so the game ends after the drawer
+        # finishes their turn.
         self._has_drawn: bool = False
         self._plays_this_turn: int = 0
         self._deck_exhausted: bool = False
@@ -268,7 +268,6 @@ class Room:
         # but every write/authoring path is gated here.
         if self._is_spectator(player_id) and mtype in {
             "start",
-            "draw",
             "pass",
             "end_turn",
             "play",
@@ -282,10 +281,10 @@ class Room:
         # Phase gate: once the game leaves "playing" (results/epilogue/ended —
         # e.g. an end_game card fired mid-deck), in-game actions must not run;
         # a stray play would re-trigger _end_game and double-apply end scoring.
-        if mtype in {"draw", "pass", "end_turn", "play", "pass_reaction"} and self.state.phase != "playing":
+        if mtype in {"pass", "end_turn", "play", "pass_reaction"} and self.state.phase != "playing":
             await self.connections.send(player_id, {"type": "error", "message": "The game is not in play"})
             return
-        # Reaction routing comes BEFORE the active-player/has-drawn gates below:
+        # Reaction routing comes BEFORE the active-player gates below:
         # reaction plays are made by non-active players, and normal turn actions
         # are frozen while a play is suspended behind an open window.
         if mtype == "play" and getattr(msg, "as_reaction", False):
@@ -294,14 +293,13 @@ class Room:
         if mtype == "pass_reaction":
             await self._handle_pass_reaction(player_id, msg)
             return
-        if self._pending is not None and mtype in {"draw", "pass", "end_turn", "play"}:
+        if self._pending is not None and mtype in {"pass", "end_turn", "play"}:
             await self.connections.send(
                 player_id, {"type": "error", "message": "Waiting for reactions to the pending play"}
             )
             return
         if self._pending_resolution is not None and mtype in {
             "start",
-            "draw",
             "pass",
             "end_turn",
             "play",
@@ -317,22 +315,9 @@ class Room:
             return
         if mtype == "start":
             await self._handle_start(player_id)
-        elif mtype == "draw":
-            if not self._is_active_player(player_id):
-                await self.connections.send(player_id, {"type": "error", "message": "Not your turn"})
-                return
-            await self._handle_draw(player_id)
         elif mtype in ("pass", "end_turn"):
             if not self._is_active_player(player_id):
                 await self.connections.send(player_id, {"type": "error", "message": "Not your turn"})
-                return
-            # Draw-first rule: while the deck has cards you must draw before you
-            # can end your turn. (An empty deck can't be drawn from, so passing
-            # is always allowed then — it's how the final turns wind down.)
-            if not self._has_drawn and self.state.deck:
-                await self.connections.send(
-                    player_id, {"type": "error", "message": "Draw a card before ending your turn"}
-                )
                 return
             # Pass is only allowed when the player has nothing playable. If they
             # hold a playable card (any blank, or a card with an effect), they
@@ -346,9 +331,6 @@ class Room:
         elif mtype == "play":
             if not self._is_active_player(player_id):
                 await self.connections.send(player_id, {"type": "error", "message": "Not your turn"})
-                return
-            if not self._has_drawn and self.state.deck:
-                await self.connections.send(player_id, {"type": "error", "message": "Draw a card before playing"})
                 return
             await self._handle_play(player_id, msg)
         elif mtype == "create_card":
@@ -522,7 +504,8 @@ class Room:
                 "turn_order": [p.id for p in dealt_to],
             }
         )
-        # Begin the first player's turn (draw → play → end model): no auto-draw.
+        # Begin the first player's turn — _start_turn auto-draws for them, so
+        # the first player's turn starts fully dealt like every later turn.
         if self.state.players:
             await self._start_turn(self.state.active_player().id)
         await self._broadcast_state()
@@ -555,49 +538,39 @@ class Room:
                     i += 1
             self._notify_change()
 
-    # ── turn lifecycle (draw → play → end turn → advance) ──
+    # ── turn lifecycle (auto-draw → play → end turn → advance) ──
     async def _start_turn(self, player_id: str) -> None:
-        """Begin ``player_id``'s turn. Resets the per-turn draw flag.
+        """Begin ``player_id``'s turn: reset per-turn bookkeeping, auto-draw
+        their ``rules.draw`` card(s), broadcast the fresh snapshot.
 
-        No auto-draw: the active player must send an explicit ``draw`` before
-        they may play or end their turn (while the deck is non-empty). Actual
-        end-of-game timing is handled in ``_advance_turn`` (once the deck is
-        exhausted the drawer finishes, then the game ends), so this method only
-        resets bookkeeping and broadcasts.
+        Every turn — including the very first at the setup→playing transition —
+        starts here, so the auto-draw is uniform. _start_turn is only ever
+        called outside interaction barriers / reaction windows (from
+        ``_start_playing`` and ``_advance_turn``), so the draw can never
+        interleave with a suspended play. End-of-game timing is handled in
+        ``_advance_turn`` (once the deck is exhausted the drawer finishes,
+        then the game ends).
         """
         self._has_drawn = False
         self._plays_this_turn = 0
         await self._emit_hooks(GameEvent.ON_TURN_START, player_id)
+        await self._auto_draw(player_id)
         await self._broadcast_state()
 
-    async def _handle_draw(self, player_id: str) -> None:
-        """Active player draws their ``rules.draw`` card(s) — the first turn step.
+    async def _auto_draw(self, player_id: str) -> None:
+        """Server-side draw of ``rules.draw`` card(s) at turn start.
 
-        Enforces one draw per turn. A draw rule of 0 (e.g. Uno-style house
-        rules) satisfies the draw step without touching the deck. When the
-        end condition is met right after drawing (deck_empty being the
-        classic case) the end latches so the game ends after this player
-        finishes their turn.
+        Drawing is automatic — the protocol has no client ``draw`` message. A
+        draw rule of 0 (e.g. Uno-style house rules) or an empty deck satisfies
+        the draw step without touching the deck. When the end condition is met
+        right after drawing (deck_empty being the classic case) the end latches
+        so the game ends after this player finishes their turn.
         """
-        if self._has_drawn:
-            await self.connections.send(player_id, {"type": "error", "message": "You have already drawn this turn"})
-            return
-        amount = self.state.rules.draw
-        if amount <= 0:
-            self._has_drawn = True
-            await self._log_and_broadcast(f"{self._name(player_id)} skips drawing (draw rule is 0)")
-            await self._broadcast_state()
-            return
-        if not self.state.deck:
-            # Nothing left to draw; mark drawn so the player can still play/pass.
-            self._has_drawn = True
-            await self.connections.send(player_id, {"type": "error", "message": "The deck is empty — nothing to draw"})
-            # Broadcast so the has_drawn flag change reaches clients and Play/Pass unlock.
-            await self._broadcast_state()
-            return
-
-        actual = self._draw_cards(player_id, amount, source="turn")
         self._has_drawn = True
+        amount = self.state.rules.draw
+        if amount <= 0 or not self.state.deck:
+            return
+        actual = self._draw_cards(player_id, amount, source="turn")
         await self._emit_hooks(GameEvent.ON_DRAW_STEP, player_id)
         if evaluate_end_condition(self.state):
             # Met at draw time (classically: the last card was just drawn) —
@@ -605,8 +578,6 @@ class Room:
             self._deck_exhausted = True
         noun = "card" if actual == 1 else "cards"
         await self._log_and_broadcast(f"{self._name(player_id)} drew {actual} {noun}")
-        # Push a fresh snapshot so clients see the new hand + has_drawn without a refresh.
-        await self._broadcast_state()
 
     def _draw_cards(self, player_id: str, count: int, *, source: str) -> int:
         """Move up to ``count`` cards from the top of the deck into a hand (in place
@@ -2527,8 +2498,9 @@ class Room:
 
         Augmented with per-turn transient flags the GameState model doesn't
         carry:
-        - ``has_drawn`` — whether the active player has taken their draw step
-          this turn (client gates Draw vs Play/End-turn).
+        - ``has_drawn`` — whether the active player's turn-start auto-draw has
+          happened (true for the whole turn in practice; kept for client
+          compatibility now that drawing is automatic).
         - ``can_pass`` — whether the active player may end their turn without
           playing (only true when they hold NO playable card). The client hides
           the Pass button unless this is true, so pass is never offered while a

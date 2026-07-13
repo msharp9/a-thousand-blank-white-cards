@@ -25,7 +25,7 @@ from models.effects import (
     StealPointsOp,
     SubtractPointsOp,
 )
-from models.ws_messages import DrawMsg, PlayMsg
+from models.ws_messages import PlayMsg
 
 DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 
@@ -154,9 +154,7 @@ def test_basic_uno_gold_ends_when_a_player_empties_their_hand() -> None:
     assert room.state.rules.draw == 0
     assert room.state.rules.win_condition.kind == "empty_hand"
 
-    asyncio.run(room.handle_action("p2", DrawMsg()))
     asyncio.run(room.handle_action("p2", PlayMsg(card_id="blue")))
-    asyncio.run(room.handle_action("p1", DrawMsg()))
     asyncio.run(room.handle_action("p1", PlayMsg(card_id="p1-other")))
 
     assert room.state.phase == "results"
@@ -182,7 +180,6 @@ def test_wild_uno_gold_registers_and_enforces_color_alignment() -> None:
     assert len(room.state.hooks) == 2
     assert room.state.rules.extra["current_color"] == "red"
 
-    asyncio.run(room.handle_action("p2", DrawMsg()))
     asyncio.run(room.handle_action("p2", PlayMsg(card_id="blue")))
     assert "blue" in room.state.get_player("p2").hand
     assert room.state.turn_index == 1
