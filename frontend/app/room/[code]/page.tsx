@@ -17,6 +17,7 @@ import { DiscardPile } from "@/components/discard-pile";
 import { EffectLog } from "@/components/effect-log";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
 import { EpilogueView } from "@/components/epilogue";
+import { GameNavTabs } from "@/components/game-nav-tabs";
 import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
 import { HistoryModal } from "@/components/history-modal";
@@ -348,9 +349,12 @@ export default function RoomPage() {
           {PHASE_LABELS[phase]}
         </span>
         {phase === "playing" && gameState && (
-          <span className="font-hand text-[17px] text-[#444]">
-            Turn {gameState.turn_number}
-          </span>
+          <>
+            <span className="font-hand text-[17px] text-[#444]">
+              Turn {gameState.turn_number}
+            </span>
+            <GameNavTabs gameState={gameState} roomCode={code} />
+          </>
         )}
         {isSpectator && (
           <span className="rounded-lg border-[1.5px] border-ink bg-panel-paper px-2 py-0.5 font-hand text-sm">
