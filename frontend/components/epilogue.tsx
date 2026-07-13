@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getCardArtUrl } from "@/lib/art";
 import type { CardSnapshot, ClientMsg } from "@/lib/types";
@@ -34,52 +33,72 @@ export function EpilogueView({ cards, send, isHost, roomCode }: EpilogueProps) {
   // Unvoted cards abstain (never block finalizing), so Done is always
   // enabled — its label just adapts to whether anything would be skipped.
   const unvotedCount = cards.filter((c) => votes[c.id] === undefined).length;
+  const keepCount = cards.filter((c) => votes[c.id] === "keep").length;
+  const cutCount = cards.filter((c) => votes[c.id] === "destroy").length;
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-5 pb-10">
       <div>
-        <h2 className="text-xl font-bold">Epilogue — Vote on the Cards</h2>
-        <p className="text-sm text-muted-foreground">
-          Keep the good ones (they join the permanent deck) or destroy the rest.
+        <h2 className="text-center font-marker text-[38px] leading-[0.9]">
+          The Epilogue
+        </h2>
+        <p className="mx-auto mt-1 max-w-[560px] text-center font-hand text-[19px] text-muted-foreground">
+          Game over. Decide which cards deserve to live in the deck forever —
+          and which get retired.
+        </p>
+        <p className="mt-2 text-center font-hand text-base text-[#444]">
+          <span className="text-marker-green">{keepCount} kept</span> ·{" "}
+          <span className="text-primary">{cutCount} cut</span> · {unvotedCount}{" "}
+          to decide
         </p>
       </div>
 
       {!done && (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-wrap justify-center gap-7">
           {cards.map((card) => {
             const choice = votes[card.id];
+            const isCut = choice === "destroy";
             return (
-              <div key={card.id} className="flex items-center gap-5">
-                <SketchCard
-                  card={card}
-                  w={160}
-                  rot={stableRotation(card.id, 3)}
-                  artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
-                />
-                <div className="flex flex-col gap-2">
+              <div key={card.id} className="flex flex-col items-center gap-2.5">
+                <div
+                  className={cn(
+                    "transition-all duration-200",
+                    isCut && "opacity-35 grayscale-[0.9]",
+                  )}
+                >
+                  <SketchCard
+                    card={card}
+                    w={160}
+                    h={224}
+                    rot={stableRotation(card.id, 3)}
+                    artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
+                  />
+                </div>
+                <div className="flex gap-2">
                   <Button
-                    variant={choice === "keep" ? "default" : "outline"}
+                    variant="outline"
                     size="sm"
+                    className={cn(
+                      "font-hand text-base font-normal sticker-shadow-sm",
+                      choice === "keep" &&
+                        "bg-marker-green text-white hover:bg-marker-green",
+                    )}
                     onClick={() => vote(card.id, "keep")}
                   >
                     Keep
                   </Button>
                   <Button
-                    variant={choice === "destroy" ? "destructive" : "outline"}
+                    variant="outline"
                     size="sm"
+                    className={cn(
+                      "font-hand text-base font-normal sticker-shadow-sm",
+                      isCut && "bg-primary text-white hover:bg-primary",
+                    )}
                     onClick={() => vote(card.id, "destroy")}
                   >
-                    Destroy
+                    Cut
                   </Button>
                 </div>
-                {choice && (
-                  <Badge
-                    variant={choice === "keep" ? "default" : "destructive"}
-                    className={cn("ml-auto")}
-                  >
-                    {choice}
-                  </Badge>
-                )}
               </div>
             );
           })}
@@ -88,13 +107,13 @@ export function EpilogueView({ cards, send, isHost, roomCode }: EpilogueProps) {
 
       <div className="flex items-center justify-center gap-3">
         {!done && (
-          <Button onClick={markDone}>
+          <Button size="lg" className="font-marker text-lg" onClick={markDone}>
             {unvotedCount > 0 ? "Skip remaining" : "Done voting"}
           </Button>
         )}
         {isHost && (
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={() => send({ type: "epilogue_finalize" })}
           >
             Finalize now
@@ -103,7 +122,7 @@ export function EpilogueView({ cards, send, isHost, roomCode }: EpilogueProps) {
       </div>
 
       {done && (
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-center font-hand text-lg text-muted-foreground">
           Done voting — waiting for other players…
         </p>
       )}

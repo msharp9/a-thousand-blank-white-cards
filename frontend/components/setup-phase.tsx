@@ -60,8 +60,10 @@ export function SetupPhase({
   if (isSpectator) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
-        <h2 className="text-xl font-bold">Setup in progress</h2>
-        <p className="text-sm italic text-muted-foreground">
+        <h2 className="font-marker text-2xl leading-[0.95]">
+          Setup in progress
+        </h2>
+        <p className="font-hand text-base italic text-muted-foreground">
           You joined after the game started — you are spectating and cannot
           author cards.
         </p>
@@ -72,25 +74,29 @@ export function SetupPhase({
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div>
-        <h2 className="text-xl font-bold">Setup — Author your cards</h2>
-        <p className="text-sm text-muted-foreground">
+        <h2 className="font-marker text-[28px] leading-[0.95]">
+          Setup — Author your cards
+        </h2>
+        <p className="mt-1 font-hand text-lg text-muted-foreground">
           Write {target} cards to seed the deck. {remaining} to go.
         </p>
         {gameState.setup_progress && gameState.players.length > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            {gameState.players
-              .map(
-                (p) =>
-                  `${p.name} ${gameState.setup_progress[p.id] ?? 0}/${target}`,
-              )
-              .join(", ")}
-          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {gameState.players.map((p) => (
+              <span
+                key={p.id}
+                className="rounded-[10px] border-[1.5px] border-ink bg-white px-2.5 py-0.5 font-hand text-sm"
+              >
+                {p.name} {gameState.setup_progress[p.id] ?? 0}/{target}
+              </span>
+            ))}
+          </div>
         )}
       </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">
+          <p className="font-hand text-lg">
             Cards you authored ({myAuthored.length})
           </p>
           <Button
@@ -102,7 +108,7 @@ export function SetupPhase({
           </Button>
         </div>
         {myAuthored.length === 0 ? (
-          <p className="text-xs italic text-muted-foreground">
+          <p className="font-hand text-sm italic text-muted-foreground">
             No cards yet — click “Author a card”.
           </p>
         ) : (
@@ -123,7 +129,7 @@ export function SetupPhase({
 
       {myCards.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium">
+          <p className="font-hand text-lg">
             Your dealt hand ({myCards.length})
           </p>
           <ScrollArea className="max-h-[28rem] w-full">
@@ -143,10 +149,10 @@ export function SetupPhase({
 
       {premadeCards.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium">
+          <p className="font-hand text-lg">
             Pre-made cards in the deck ({premadeCards.length})
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="font-hand text-sm text-muted-foreground">
             These ship with the deck — author cards that play well with them.
           </p>
           <ScrollArea className="max-h-[28rem] w-full">
@@ -164,7 +170,7 @@ export function SetupPhase({
         </div>
       )}
 
-      <p className="text-xs italic text-muted-foreground">
+      <p className="font-hand text-sm italic text-muted-foreground">
         The game starts automatically once everyone has authored their cards.
       </p>
 

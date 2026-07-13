@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { EffectLog } from "@/components/effect-log";
-import { GameTable } from "@/components/game-table";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
 import { getCardArtUrl } from "@/lib/art";
+import { playerColor } from "@/lib/players";
 import type {
   CardSnapshot,
   ClientMsg,
@@ -19,6 +20,8 @@ interface ResultsScreenProps {
   send: (msg: ClientMsg) => void;
   onBack: () => void;
 }
+
+const MEDALS = ["🥇", "🥈", "🥉"];
 
 // Shared end-of-game screen for both stops in the results-first flow:
 // - phase "results": scores + full history, host advances into the epilogue
@@ -63,25 +66,73 @@ export function ResultsScreen({
     headline = "You lose";
   }
 
+  // Standings sorted by score desc; identity colors stay keyed to the original
+  // turn-order index so they match the table view.
+  const standings = gameState.players
+    .map((p, index) => ({ player: p, color: playerColor(index) }))
+    .sort((a, b) => b.player.score - a.player.score);
+  const maxScore = Math.max(1, ...standings.map((s) => s.player.score));
+
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-5 pt-4 pb-10">
       <h2
-        className={
-          iWon
-            ? "text-2xl font-bold text-primary"
-            : "text-2xl font-bold text-muted-foreground"
-        }
+        className={cn(
+          "text-center font-marker text-[40px] leading-[0.9]",
+          iWon ? "text-primary" : "text-ink",
+        )}
       >
         {headline}
       </h2>
       {winnerNames.length > 0 && (
-        <p className="text-sm text-muted-foreground">
+        <p className="font-hand text-[19px] text-muted-foreground">
           {winnerNames.length > 1 ? "Winners" : "Winner"}:{" "}
           {winnerNames.join(", ")}
         </p>
       )}
-      <GameTable gameState={gameState} myPlayerId={myPlayerId} />
-      <EffectLog log={log} brewing={null} className="w-full max-w-2xl" />
+
+      <div className="flex w-full flex-col gap-3.5">
+        {standings.map(({ player, color }, rank) => (
+          <div
+            key={player.id}
+            className={cn(
+              "flex items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-white px-4 py-3.5 panel-shadow",
+              rank % 2 ? "rotate-[0.5deg]" : "-rotate-[0.5deg]",
+            )}
+          >
+            <span
+              className="w-11 shrink-0 text-center font-marker text-3xl"
+              style={{ color: rank === 0 ? "#E8A33D" : "#999" }}
+            >
+              #{rank + 1}
+            </span>
+            <PlayerAvatar name={player.name} color={color} size={50} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-hand text-2xl leading-[0.95]">
+                {player.name}
+                {player.id === myPlayerId && " (you)"} {MEDALS[rank] ?? ""}
+              </p>
+              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full border-[1.5px] border-ink bg-[#eee]">
+                <div
+                  className="h-full"
+                  style={{
+                    width: `${Math.round(
+                      (Math.max(0, player.score) / maxScore) * 100,
+                    )}%`,
+                    background: color,
+                  }}
+                />
+              </div>
+            </div>
+            <span
+              className="shrink-0 font-marker text-[34px] tabular-nums"
+              style={{ color }}
+            >
+              {player.score}
+            </span>
+          </div>
+        ))}
+      </div>
+
       {gameState.epilogue_result && (
         <EpilogueOutcomeLists
           result={gameState.epilogue_result}
@@ -90,12 +141,16 @@ export function ResultsScreen({
         />
       )}
       {!isFinal && isHost && (
-        <Button onClick={() => send({ type: "epilogue_start" })}>
+        <Button
+          size="lg"
+          className="font-marker text-lg"
+          onClick={() => send({ type: "epilogue_start" })}
+        >
           Start epilogue
         </Button>
       )}
       {!isFinal && !isHost && (
-        <p className="text-sm italic text-muted-foreground">
+        <p className="font-hand text-base italic text-muted-foreground">
           Waiting for the host to start the epilogue vote…
         </p>
       )}
@@ -104,6 +159,11 @@ export function ResultsScreen({
           Back to lobby
         </Button>
       )}
+      <EffectLog
+        log={log}
+        brewing={null}
+        className="w-full rounded-xl border-2"
+      />
     </div>
   );
 }
@@ -150,12 +210,17 @@ function OutcomeColumn({
   destroyed?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border p-3">
-      <p className="font-hand text-sm uppercase tracking-wide text-muted-foreground">
+    <div className="flex flex-col gap-2 rounded-2xl border-[2.5px] border-ink bg-white p-3 panel-shadow">
+      <p
+        className={cn(
+          "font-marker text-sm",
+          destroyed ? "text-primary" : "text-marker-green",
+        )}
+      >
         {title} ({outcomes.length})
       </p>
       {outcomes.length === 0 ? (
-        <p className="text-xs italic text-muted-foreground">None.</p>
+        <p className="font-hand text-sm italic text-muted-foreground">None.</p>
       ) : (
         <div className="flex flex-wrap gap-3 px-1 pb-2 pt-1">
           {outcomes.map((outcome) => {

@@ -1,4 +1,3 @@
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { getCardArtUrl } from "@/lib/art";
 import type { CardSnapshot } from "@/lib/types";
 import { SketchCard, stableRotation } from "./sketch-card";
@@ -9,31 +8,28 @@ interface HouseRulesZoneProps {
   roomCode?: string;
 }
 
+/**
+ * The felt table's center zone: cards that affect every player, under the
+ * "◆ AFFECTS EVERYONE ◆" watermark. Styled for a dark felt background.
+ */
 export function HouseRulesZone({
   centerCards,
   brewingCardId,
   roomCode,
 }: HouseRulesZoneProps) {
-  if (centerCards.length === 0) {
-    return (
-      <div className="rounded-lg border-2 border-dashed border-ink/40 bg-white/40 p-6 text-center">
-        <p className="font-hand text-base text-muted-foreground">
-          Nothing in play for everyone…
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <p className="font-marker text-sm">House Rules</p>
-        <span className="rounded-full bg-muted px-2 py-0.5 font-hand text-xs text-muted-foreground">
-          {centerCards.length}
-        </span>
-      </div>
-      <ScrollArea className="w-full">
-        <div className="flex gap-4 px-2 pb-4 pt-3">
+    <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-8">
+      <span className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 whitespace-nowrap font-marker text-sm tracking-[3px] text-white/55">
+        ◆ AFFECTS EVERYONE ◆
+      </span>
+      {centerCards.length === 0 ? (
+        <p className="rounded-2xl border-2 border-dashed border-white/40 px-10 py-7 text-center font-hand text-[19px] text-white/70">
+          Nothing in play for everyone.
+          <br />
+          Cards that affect all players land here.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center justify-center gap-6">
           {centerCards.map((card) => (
             <SketchCard
               key={card.id}
@@ -46,7 +42,7 @@ export function HouseRulesZone({
             />
           ))}
         </div>
-      </ScrollArea>
+      )}
     </div>
   );
 }

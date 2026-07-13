@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,12 +19,30 @@ import { EpilogueView } from "@/components/epilogue";
 import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
 import { HouseRulesZone } from "@/components/house-rules-zone";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { ResultsScreen } from "@/components/results-screen";
 import { SetupPhase } from "@/components/setup-phase";
-import type { CardSnapshot, PromptChoiceMsg } from "@/lib/types";
+import { SketchCard, stableRotation } from "@/components/sketch-card";
+import { getCardArtUrl } from "@/lib/art";
+import { playerColor } from "@/lib/players";
+import type {
+  CardSnapshot,
+  GameStateSnapshot,
+  PromptChoiceMsg,
+} from "@/lib/types";
 import { getPlayerId, storePlayerId, useGameSocket } from "@/lib/ws";
+import { cn } from "@/lib/utils";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+const PHASE_LABELS: Record<GameStateSnapshot["phase"], string> = {
+  lobby: "Lobby",
+  setup: "Setup",
+  playing: "Playing",
+  results: "Results",
+  epilogue: "Epilogue",
+  ended: "Ended",
+};
 
 export default function RoomPage() {
   const params = useParams();
@@ -115,6 +134,8 @@ export default function RoomPage() {
 
   // Resolve helpers.
   const me = gameState?.players.find((p) => p.id === myPlayerId);
+  const myIndex =
+    gameState?.players.findIndex((p) => p.id === myPlayerId) ?? -1;
   // A spectator joined after the game started: they observe but can't act, so
   // all play/pass/author controls are hidden and a banner is shown instead.
   // Spectators live in their own snapshot collection, not `players`.
@@ -132,6 +153,13 @@ export default function RoomPage() {
   const myHandCards: CardSnapshot[] = useMemo(() => {
     if (!gameState || !me) return [];
     return me.hand
+      .map((id) => gameState.cards[id])
+      .filter((c): c is CardSnapshot => Boolean(c));
+  }, [gameState, me]);
+
+  const myInPlayCards: CardSnapshot[] = useMemo(() => {
+    if (!gameState || !me) return [];
+    return (me.in_play ?? [])
       .map((id) => gameState.cards[id])
       .filter((c): c is CardSnapshot => Boolean(c));
   }, [gameState, me]);
@@ -158,25 +186,35 @@ export default function RoomPage() {
       .map((p) => p.name);
   }, [gameState]);
 
+  // The most recent discard, shown as the dock's discard indicator.
+  const topDiscard: CardSnapshot | undefined = gameState
+    ? gameState.cards[gameState.discard[gameState.discard.length - 1] ?? ""]
+    : undefined;
+
   // ── name gate ──
   if (!nameSet) {
     return (
-      <main className="flex h-dvh flex-col items-center justify-center gap-4 p-4">
-        <p className="font-semibold">
-          Enter your name to join room <span className="font-mono">{code}</span>
-        </p>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Your name"
-          maxLength={24}
-          className="max-w-xs"
-          onKeyDown={(e) => e.key === "Enter" && handleJoin()}
-        />
-        <Button disabled={!name.trim() || joining} onClick={handleJoin}>
-          {joining ? "Joining…" : "Enter"}
-        </Button>
-        {joinError && <p className="text-sm text-destructive">{joinError}</p>}
+      <main className="flex h-dvh flex-col items-center justify-center p-4">
+        <div className="flex w-full max-w-sm -rotate-[0.5deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-white p-6 panel-shadow">
+          <p className="text-center font-hand text-xl">
+            Enter your name to join room{" "}
+            <span className="font-mono text-lg">{code}</span>
+          </p>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your name"
+            maxLength={24}
+            className="max-w-xs font-hand text-lg"
+            onKeyDown={(e) => e.key === "Enter" && handleJoin()}
+          />
+          <Button disabled={!name.trim() || joining} onClick={handleJoin}>
+            {joining ? "Joining…" : "Enter"}
+          </Button>
+          {joinError && (
+            <p className="font-hand text-base text-destructive">{joinError}</p>
+          )}
+        </div>
       </main>
     );
   }
@@ -187,19 +225,25 @@ export default function RoomPage() {
   // render as a transient banner over the live game (see below).
   if (fatalError) {
     return (
-      <main className="flex h-dvh flex-col items-center justify-center gap-4 text-destructive">
-        <p>{fatalError}</p>
-        <Button variant="outline" onClick={() => router.push("/")}>
-          Back to lobby
-        </Button>
+      <main className="flex h-dvh flex-col items-center justify-center p-4">
+        <div className="flex w-full max-w-sm rotate-[0.5deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-white p-6 panel-shadow">
+          <p className="text-center font-hand text-xl text-destructive">
+            {fatalError}
+          </p>
+          <Button variant="outline" onClick={() => router.push("/")}>
+            Back to lobby
+          </Button>
+        </div>
       </main>
     );
   }
 
   if (!connected && !gameState) {
     return (
-      <main className="flex h-dvh items-center justify-center text-muted-foreground">
-        Connecting to room {code}…
+      <main className="flex h-dvh items-center justify-center p-4">
+        <p className="-rotate-[0.5deg] rounded-2xl border-[2.5px] border-ink bg-white px-8 py-5 font-hand text-xl panel-shadow">
+          Connecting to room <span className="font-mono text-lg">{code}</span>…
+        </p>
       </main>
     );
   }
@@ -212,13 +256,13 @@ export default function RoomPage() {
       {transientError && (
         <div
           role="alert"
-          className="fixed inset-x-0 top-3 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive shadow-sm backdrop-blur"
+          className="fixed inset-x-0 top-3 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] -rotate-[0.5deg] items-center gap-3 rounded-xl border-2 border-ink bg-white px-3 py-2 font-hand text-base text-destructive sticker-shadow-sm"
         >
           <span>{transientError}</span>
           <Button
             variant="ghost"
             size="icon-xs"
-            className="text-destructive hover:bg-destructive/20"
+            className="text-destructive hover:bg-destructive/10"
             onClick={clearTransientError}
           >
             <XIcon />
@@ -226,38 +270,88 @@ export default function RoomPage() {
           </Button>
         </div>
       )}
-      <header className="flex items-center gap-3 border-b bg-background/80 px-4 py-2 backdrop-blur">
-        <span className="font-mono text-sm text-muted-foreground">
-          Room {code}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {connected ? "Connected" : "Reconnecting…"}
+      <header className="sticky top-0 z-40 flex items-center gap-3.5 border-b-[2.5px] border-ink bg-white px-5 py-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)]">
+        <Link
+          href="/"
+          className="shrink-0 font-marker text-xl leading-[0.95] !text-ink"
+        >
+          1KBWC
+        </Link>
+        <span className="h-6 w-0.5 bg-ink/20" />
+        <span className="font-mono text-sm text-muted-foreground">{code}</span>
+        <span className="font-hand text-[17px] text-[#444]">
+          {PHASE_LABELS[phase]}
         </span>
         {isSpectator && (
-          <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          <span className="rounded-lg border-[1.5px] border-ink bg-panel-paper px-2 py-0.5 font-hand text-sm">
             Spectating
           </span>
         )}
-        <span className="ml-auto text-xs capitalize text-muted-foreground">
-          {phase}
+        <span
+          className="ml-auto flex items-center gap-1.5 font-hand text-sm text-muted-foreground"
+          title={connected ? "Connected" : "Reconnecting…"}
+        >
+          <span
+            className={cn(
+              "size-2.5 rounded-full border border-ink",
+              connected ? "bg-marker-green" : "animate-pulse bg-amber",
+            )}
+          />
+          {connected ? "connected" : "reconnecting…"}
         </span>
       </header>
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className={cn("flex-1 overflow-auto", phase !== "playing" && "p-4")}>
         {!gameState && (
-          <p className="text-muted-foreground">Waiting for game state…</p>
+          <p className="p-4 font-hand text-lg text-muted-foreground">
+            Waiting for game state…
+          </p>
         )}
 
         {gameState && phase === "lobby" && (
-          <div className="flex flex-col items-center gap-4">
-            <p className="text-sm text-muted-foreground">
-              Waiting in the lobby…
-            </p>
-            {isHost && (
-              <Button onClick={() => send({ type: "start" })}>
-                Start game
-              </Button>
-            )}
+          <div className="flex flex-col items-center pt-10">
+            <div className="flex w-full max-w-sm -rotate-[0.6deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-white p-6 panel-shadow">
+              <h2 className="font-marker text-2xl">The Lobby</h2>
+              <p className="text-center font-hand text-lg text-muted-foreground">
+                Waiting for players — share the room code{" "}
+                <span className="font-mono text-base text-ink">{code}</span>.
+              </p>
+              {gameState.players.length > 0 && (
+                <ul className="flex w-full flex-col gap-2">
+                  {gameState.players.map((p, i) => (
+                    <li key={p.id} className="flex items-center gap-2.5">
+                      <PlayerAvatar
+                        name={p.name}
+                        color={playerColor(i)}
+                        size={30}
+                      />
+                      <span className="font-hand text-lg">
+                        {p.name}
+                        {p.id === myPlayerId && " (you)"}
+                        {i === 0 && (
+                          <span className="ml-1 text-sm text-muted-foreground">
+                            · host
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {isHost ? (
+                <Button
+                  size="lg"
+                  className="font-marker text-lg"
+                  onClick={() => send({ type: "start" })}
+                >
+                  Start game
+                </Button>
+              ) : (
+                <p className="font-hand text-base italic text-muted-foreground">
+                  Waiting for the host to start…
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -272,33 +366,131 @@ export default function RoomPage() {
         )}
 
         {gameState && phase === "playing" && (
-          <div className="flex flex-col gap-6">
+          <div className="flex min-h-full flex-col">
             <GameTable gameState={gameState} myPlayerId={myPlayerId ?? ""} />
-            <HouseRulesZone
-              centerCards={houseRuleCards}
-              brewingCardId={brewing}
-              roomCode={code}
-            />
+
+            {/* felt table: center zone + deck/action dock */}
+            <div className="mx-4 my-2.5 flex min-h-[280px] flex-1 items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)]">
+              <HouseRulesZone
+                centerCards={houseRuleCards}
+                brewingCardId={brewing}
+                roomCode={code}
+              />
+              <div className="flex shrink-0 flex-col items-center justify-center gap-3.5 border-l-2 border-dashed border-white/30 bg-black/15 px-5 py-4">
+                <div className="text-center">
+                  {gameState.deck.length > 0 ? (
+                    <div className="relative mx-auto h-32 w-[92px]">
+                      <SketchCard
+                        faceDown
+                        showTape={false}
+                        w={92}
+                        rot={3}
+                        className="absolute top-1 left-1"
+                      />
+                      <SketchCard
+                        faceDown
+                        showTape={false}
+                        w={92}
+                        rot={-2}
+                        className="absolute top-0.5 left-0.5"
+                      />
+                      <SketchCard
+                        faceDown
+                        showTape={false}
+                        w={92}
+                        className="absolute top-0 left-0"
+                      />
+                    </div>
+                  ) : (
+                    <div className="mx-auto flex h-32 w-[92px] items-center justify-center rounded-[7px] border-2 border-dashed border-white/40 font-hand text-sm text-white/70">
+                      empty
+                    </div>
+                  )}
+                  <p className="mt-1.5 font-hand text-[15px] text-white">
+                    Deck · {gameState.deck.length}
+                  </p>
+                  <p className="font-hand text-xs text-white/70">
+                    {gameState.direction === 1
+                      ? "→ clockwise"
+                      : "← counter-clockwise"}
+                  </p>
+                </div>
+                {!isSpectator && (
+                  <div className="flex w-32 flex-col gap-2">
+                    {/* Turn begins with an explicit draw step: show Draw while
+                        the active player hasn't drawn and the deck isn't empty. */}
+                    {isActive &&
+                      !gameState.has_drawn &&
+                      gameState.deck.length > 0 && (
+                        <Button
+                          variant="accent"
+                          onClick={() => send({ type: "draw" })}
+                        >
+                          ↓ Draw a Card
+                        </Button>
+                      )}
+                    <Button
+                      variant="outline"
+                      onClick={() => setDialogOpen(true)}
+                    >
+                      ✏️ Author a card
+                    </Button>
+                  </div>
+                )}
+                {topDiscard && (
+                  <div className="text-center">
+                    <SketchCard
+                      card={topDiscard}
+                      w={80}
+                      rot={-4}
+                      showTape={false}
+                      artUrl={getCardArtUrl(code, topDiscard)}
+                      className="mx-auto"
+                    />
+                    <p className="mt-1 font-hand text-sm text-white">
+                      Discard · {gameState.discard.length}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* your zone */}
             {isSpectator ? (
-              <p className="text-sm italic text-muted-foreground">
-                You joined after the game started — you are spectating and
-                cannot play or author cards.
-              </p>
+              <div className="border-t-[2.5px] border-ink bg-white px-5 py-4">
+                <p className="mx-auto w-fit rounded-xl border-2 border-dashed border-ink/40 px-5 py-3 font-hand text-base text-muted-foreground">
+                  You joined after the game started — you are spectating and
+                  cannot play or author cards.
+                </p>
+              </div>
             ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setDialogOpen(true)}>
-                    Author a card
-                  </Button>
-                  {/* Turn begins with an explicit draw step: show Draw while the
-                      active player hasn't drawn and the deck isn't empty. */}
-                  {isActive &&
-                    !gameState.has_drawn &&
-                    gameState.deck.length > 0 && (
-                      <Button onClick={() => send({ type: "draw" })}>
-                        Draw a card
-                      </Button>
+              <div className="border-t-[2.5px] border-ink bg-white px-5 pt-3 pb-4">
+                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5">
+                    {me && (
+                      <>
+                        <PlayerAvatar
+                          name={me.name}
+                          color={playerColor(myIndex)}
+                          size={38}
+                        />
+                        <span className="font-hand text-[22px] leading-none">
+                          {me.name}
+                          {isActive && (
+                            <span className="ml-1 text-[15px] text-primary">
+                              · your turn
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className="font-marker text-2xl tabular-nums"
+                          style={{ color: playerColor(myIndex) }}
+                        >
+                          {me.score}
+                        </span>
+                      </>
                     )}
+                  </div>
                   {/* End turn only when the player may pass (holds no playable
                       card) and has taken their draw step (or the deck is empty
                       so there's nothing to draw). */}
@@ -306,18 +498,34 @@ export default function RoomPage() {
                     gameState.can_pass &&
                     (gameState.has_drawn || gameState.deck.length === 0) && (
                       <Button
-                        variant="secondary"
-                        className="ml-auto"
+                        variant="outline"
                         onClick={() => send({ type: "pass" })}
                       >
-                        End turn
+                        End Turn ⟳
                       </Button>
                     )}
                 </div>
                 {isActive && !gameState.has_drawn && (
-                  <p className="text-sm font-medium text-primary">
+                  <p className="font-hand text-base text-primary">
                     Your turn — draw a card to begin.
                   </p>
+                )}
+                {myInPlayCards.length > 0 && (
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="font-hand text-sm text-[#888]">
+                      In front of you:
+                    </span>
+                    {myInPlayCards.map((card) => (
+                      <SketchCard
+                        key={card.id}
+                        card={card}
+                        w={56}
+                        showTape={false}
+                        rot={stableRotation(card.id, 4)}
+                        artUrl={getCardArtUrl(code, card)}
+                      />
+                    ))}
+                  </div>
                 )}
                 {/* Playing is gated until the draw step is taken. */}
                 <Hand
@@ -326,8 +534,9 @@ export default function RoomPage() {
                   send={send}
                   roomCode={code}
                 />
-              </>
+              </div>
             )}
+
             <EffectLog log={log} brewing={brewing} />
           </div>
         )}
@@ -346,10 +555,12 @@ export default function RoomPage() {
         {gameState && phase === "epilogue" && (
           <div className="flex flex-col gap-4">
             {epilogueWinnerNames.length > 0 && (
-              <div className="mx-auto rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-center">
-                <p className="text-sm font-semibold text-primary">
+              <div className="mx-auto -rotate-[0.5deg] rounded-xl border-2 border-ink bg-white px-5 py-2 text-center panel-shadow">
+                <p className="font-hand text-lg">
                   {epilogueWinnerNames.length > 1 ? "Winners" : "Winner"}:{" "}
-                  {epilogueWinnerNames.join(", ")}
+                  <span className="font-marker text-base text-primary">
+                    {epilogueWinnerNames.join(", ")}
+                  </span>
                 </p>
               </div>
             )}
@@ -383,6 +594,12 @@ export default function RoomPage() {
 
       <TargetPickerDialog
         prompt={promptChoice}
+        playedTitle={
+          promptChoice
+            ? (gameState?.cards[promptChoice.card_id]?.title ?? "")
+            : ""
+        }
+        players={gameState?.players ?? []}
         onPick={(choice) => {
           if (!promptChoice) return;
           // A prompt option carries either a player_id (player-target axis) or a
@@ -414,10 +631,14 @@ export default function RoomPage() {
 // the choice; cancelling abandons the pending play (the turn never advanced).
 function TargetPickerDialog({
   prompt,
+  playedTitle,
+  players,
   onPick,
   onCancel,
 }: {
   prompt: PromptChoiceMsg | null;
+  playedTitle: string;
+  players: { id: string }[];
   onPick: (choice: PromptChoiceMsg["choices"][number]) => void;
   onCancel: () => void;
 }) {
@@ -428,21 +649,46 @@ function TargetPickerDialog({
         if (!open) onCancel();
       }}
     >
-      <DialogContent>
+      <DialogContent className="animate-popin border-2 border-dashed border-ink bg-panel-paper shadow-none">
         <DialogHeader>
-          <DialogTitle>Choose a target</DialogTitle>
-          {prompt && <DialogDescription>{prompt.prompt}</DialogDescription>}
+          <DialogTitle className="font-hand text-xl font-normal">
+            {playedTitle ? (
+              <>
+                Play <b>“{playedTitle}”</b> to:
+              </>
+            ) : (
+              "Choose a target"
+            )}
+          </DialogTitle>
+          {prompt && (
+            <DialogDescription className="font-hand text-base">
+              {prompt.prompt}
+            </DialogDescription>
+          )}
         </DialogHeader>
-        <div className="flex flex-col gap-2">
-          {prompt?.choices.map((choice) => (
-            <Button
-              key={choice.player_id ?? choice.card_id}
-              variant="outline"
-              onClick={() => onPick(choice)}
-            >
-              {choice.name}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          {prompt?.choices.map((choice) => {
+            const targetIndex = choice.player_id
+              ? players.findIndex((p) => p.id === choice.player_id)
+              : -1;
+            return (
+              <Button
+                key={choice.player_id ?? choice.card_id}
+                variant={targetIndex >= 0 ? "default" : "outline"}
+                style={
+                  targetIndex >= 0
+                    ? { backgroundColor: playerColor(targetIndex) }
+                    : undefined
+                }
+                onClick={() => onPick(choice)}
+              >
+                {choice.name}
+              </Button>
+            );
+          })}
+          <Button variant="ghost" className="text-[#888]" onClick={onCancel}>
+            Cancel
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
