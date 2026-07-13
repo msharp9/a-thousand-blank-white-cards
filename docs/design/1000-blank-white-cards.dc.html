@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Patrick+Hand&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900;1,600&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  a { color: #E24A3B; text-decoration: none; }
+  a:hover { color: #b83527; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(26,26,26,0.25); border-radius: 6px; }
+  @keyframes floaty { 0%,100%{ transform: translateY(0) rotate(-2deg);} 50%{ transform: translateY(-10px) rotate(2deg);} }
+  @keyframes popin { 0%{ transform: scale(0.6) rotate(-8deg); opacity:0;} 100%{ transform: scale(1) rotate(0); opacity:1;} }
+  @keyframes wig { 0%,100%{ transform: rotate(-1.2deg);} 50%{ transform: rotate(1.2deg);} }
+</style>
+</helmet>
+
+<div style="min-height:100vh; width:100%; background-color:#F2EFE6; background-image: radial-gradient(rgba(26,26,26,0.05) 1px, transparent 1px); background-size: 22px 22px; font-family:'Nunito',sans-serif; color:#1a1a1a; position:relative; overflow-x:hidden;">
+
+  <!-- ===================== HOME ===================== -->
+  <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+    <div style="min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; position:relative;">
+      <div style="position:absolute; top:8%; left:12%; font-size:44px; transform:rotate(-14deg); opacity:0.5;">✏️</div>
+      <div style="position:absolute; top:16%; right:10%; font-size:40px; transform:rotate(12deg); opacity:0.5;">🎲</div>
+      <div style="position:absolute; bottom:12%; left:16%; font-size:38px; transform:rotate(8deg); opacity:0.5;">🦆</div>
+      <div style="position:absolute; bottom:16%; right:14%; font-size:42px; transform:rotate(-10deg); opacity:0.5;">🌋</div>
+
+      <div style="display:flex; gap:-10px; margin-bottom:14px;">
+        <div style="animation: floaty 5s ease-in-out infinite;">
+          <dc-import name="Card" title="Blank." rule="Anything can happen." emoji="" points="0" w="120" h="168" rot="-8" show-tape="{{ true }}" hint-size="120px,168px"></dc-import>
+        </div>
+        <div style="margin-left:-26px; animation: floaty 5s ease-in-out infinite; animation-delay:0.6s;">
+          <dc-import name="Card" title="Free Point!" rule="You win. Somehow." emoji="🎉" w="120" h="168" rot="6" show-tape="{{ true }}" hint-size="120px,168px"></dc-import>
+        </div>
+        <div style="margin-left:-26px; animation: floaty 5s ease-in-out infinite; animation-delay:1.2s;">
+          <dc-import name="Card" title="Meow." rule="Everyone must meow now." emoji="🐱" points="0" w="120" h="168" rot="-4" show-tape="{{ true }}" hint-size="120px,168px"></dc-import>
+        </div>
+      </div>
+
+      <h1 style="font-family:'Permanent Marker',cursive; font-size:clamp(38px,7vw,84px); line-height:0.92; text-align:center; margin:18px 0 6px; letter-spacing:-1px;">1000 Blank<br/>White Cards</h1>
+      <p style="font-family:'Patrick Hand',cursive; font-size:clamp(17px,2.4vw,24px); color:#555; margin:0 0 34px; text-align:center; max-width:520px;">The party game with no rules — until you draw them. Make cards, play cards, break cards.</p>
+
+      <div style="display:flex; gap:14px; flex-wrap:wrap; justify-content:center;">
+        <button onClick="{{ goTable }}" style="font-family:'Permanent Marker',cursive; font-size:22px; padding:14px 34px; background:#E24A3B; color:#fff; border:2.5px solid #1a1a1a; border-radius:14px; box-shadow:4px 4px 0 #1a1a1a; cursor:pointer;" style-hover="transform:translate(1px,1px); box-shadow:2px 2px 0 #1a1a1a;">Play Now</button>
+        <button onClick="{{ goCreator }}" style="font-family:'Permanent Marker',cursive; font-size:22px; padding:14px 34px; background:#fff; color:#1a1a1a; border:2.5px solid #1a1a1a; border-radius:14px; box-shadow:4px 4px 0 #1a1a1a; cursor:pointer;" style-hover="transform:translate(1px,1px); box-shadow:2px 2px 0 #1a1a1a;">Make a Card</button>
+      </div>
+
+      <div style="display:flex; gap:26px; margin-top:40px; flex-wrap:wrap; justify-content:center; font-family:'Patrick Hand',cursive; font-size:18px; color:#444;">
+        <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:22px;">1.</span> Draw a blank? Invent a card.</div>
+        <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:22px;">2.</span> Play cards, do what they say.</div>
+        <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:22px;">3.</span> Most points wins. Probably.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===================== APP CHROME ===================== -->
+  <sc-if value="{{ notHome }}" hint-placeholder-val="{{ true }}">
+    <div style="position:sticky; top:0; z-index:40; display:flex; align-items:center; gap:16px; padding:10px 20px; background:#fff; border-bottom:2.5px solid #1a1a1a; box-shadow:0 3px 0 rgba(26,26,26,0.08);">
+      <div onClick="{{ goHome }}" style="font-family:'Permanent Marker',cursive; font-size:20px; cursor:pointer; line-height:0.95; flex:0 0 auto;">1KBWC</div>
+      <div style="height:26px; width:2px; background:#1a1a1a; opacity:0.2;"></div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; flex:1;">
+        <sc-for list="{{ navTabs }}" as="tab" hint-placeholder-count="5">
+          <button onClick="{{ tab.onClick }}" style="font-family:'Nunito',sans-serif; font-weight:800; font-size:14px; padding:8px 16px; border-radius:10px; cursor:pointer; border:2px solid #1a1a1a; background:{{ tab.bg }}; color:{{ tab.fg }};">{{ tab.label }}</button>
+        </sc-for>
+      </div>
+      <div style="font-family:'Patrick Hand',cursive; font-size:17px; color:#444; flex:0 0 auto;">Turn {{ turn }}</div>
+    </div>
+  </sc-if>
+
+  <!-- ===================== TABLE ===================== -->
+  <sc-if value="{{ isTable }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex; flex-direction:column; min-height:calc(100vh - 55px);">
+      <!-- opponents -->
+      <div style="display:flex; justify-content:center; gap:26px; flex-wrap:wrap; padding:20px 20px 6px;">
+        <sc-for list="{{ opponents }}" as="op" hint-placeholder-count="3">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px 12px; border-radius:14px; background:{{ op.panelBg }}; border:2px dashed {{ op.panelBorder }};">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="width:34px; height:34px; border-radius:50%; background:{{ op.color }}; border:2px solid #1a1a1a; display:flex; align-items:center; justify-content:center; font-size:18px;">{{ op.emoji }}</div>
+              <div style="font-family:'Patrick Hand',cursive; font-size:19px; line-height:1;">{{ op.name }}</div>
+              <div style="font-family:'Permanent Marker',cursive; font-size:18px; color:{{ op.color }};">{{ op.score }}</div>
+            </div>
+            <div style="display:flex;">
+              <sc-for list="{{ op.fan }}" as="f" hint-placeholder-count="4">
+                <div style="margin-left:{{ f.ml }}px;">
+                  <dc-import name="Card" face-down="{{ true }}" w="40" h="56" rot="{{ f.rot }}" show-tape="{{ false }}" hint-size="40px,56px"></dc-import>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ op.hasFront }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; align-items:center; gap:6px; margin-top:2px; padding-top:6px; border-top:1.5px dashed rgba(26,26,26,0.2);">
+                <span style="font-family:'Patrick Hand',cursive; font-size:12px; color:#888; white-space:nowrap;">in front:</span>
+                <sc-for list="{{ op.front }}" as="fc" hint-placeholder-count="1">
+                  <dc-import name="Card" title="{{ fc.title }}" rule="{{ fc.rule }}" emoji="{{ fc.emoji }}" img="{{ fc.img }}" w="52" h="73" rot="{{ fc.rot }}" show-tape="{{ false }}" hint-size="52px,73px"></dc-import>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- felt table -->
+      <div style="flex:1; margin:10px 16px; border-radius:22px; background:{{ feltColor }}; border:3px solid #1a1a1a; box-shadow:inset 0 0 60px rgba(0,0,0,0.18); position:relative; min-height:280px; display:flex; align-items:stretch; overflow:hidden;">
+
+        <!-- everyone / center zone -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px 24px; position:relative;">
+          <div style="position:absolute; top:12px; left:50%; transform:translateX(-50%); font-family:'Permanent Marker',cursive; font-size:14px; color:rgba(255,255,255,0.55); letter-spacing:3px; white-space:nowrap;">◆ AFFECTS EVERYONE ◆</div>
+          <div style="display:flex; align-items:center; justify-content:center; gap:26px; flex-wrap:wrap;">
+            <sc-for list="{{ centerCards }}" as="tc" hint-placeholder-count="2">
+              <div style="position:relative; animation: popin 0.35s ease-out;">
+                <dc-import name="Card" title="{{ tc.title }}" rule="{{ tc.rule }}" emoji="{{ tc.emoji }}" img="{{ tc.img }}" w="126" h="176" rot="{{ tc.rot }}" show-tape="{{ true }}" hint-size="126px,176px"></dc-import>
+                <div style="position:absolute; bottom:-10px; left:50%; transform:translateX(-50%) rotate(-2deg); background:#fff; border:1.5px solid #1a1a1a; border-radius:8px; padding:1px 8px; font-family:'Patrick Hand',cursive; font-size:13px; white-space:nowrap;">by {{ tc.by }}</div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ centerEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="font-family:'Patrick Hand',cursive; font-size:19px; color:rgba(255,255,255,0.7); border:2px dashed rgba(255,255,255,0.4); border-radius:16px; padding:28px 40px; text-align:center;">Nothing in play for everyone.<br/>Cards that affect all players land here.</div>
+            </sc-if>
+          </div>
+        </div>
+
+        <!-- deck + discard dock (right) -->
+        <div style="flex:0 0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:16px 20px; background:rgba(0,0,0,0.14); border-left:2px dashed rgba(255,255,255,0.3);">
+          <div style="text-align:center;">
+            <div style="position:relative; width:92px; height:128px; margin:0 auto;">
+              <div style="position:absolute; top:4px; left:4px;"><dc-import name="Card" face-down="{{ true }}" w="92" h="128" rot="3" show-tape="{{ false }}" hint-size="92px,128px"></dc-import></div>
+              <div style="position:absolute; top:2px; left:2px;"><dc-import name="Card" face-down="{{ true }}" w="92" h="128" rot="-2" show-tape="{{ false }}" hint-size="92px,128px"></dc-import></div>
+              <div style="position:absolute; top:0; left:0;"><dc-import name="Card" face-down="{{ true }}" w="92" h="128" rot="0" show-tape="{{ false }}" hint-size="92px,128px"></dc-import></div>
+            </div>
+            <div style="font-family:'Patrick Hand',cursive; font-size:15px; color:#fff; margin-top:6px;">Deck · {{ deckCount }}</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:7px; width:128px;">
+            <button onClick="{{ drawCard }}" style="font-family:'Nunito'; font-weight:800; font-size:13px; padding:9px; border-radius:10px; border:2px solid #1a1a1a; background:#F5D547; cursor:pointer;" style-hover="transform:translateY(-1px);">↓ Draw a Card</button>
+            <button onClick="{{ drawBlank }}" style="font-family:'Nunito'; font-weight:800; font-size:13px; padding:9px; border-radius:10px; border:2px solid #1a1a1a; background:#fff; cursor:pointer;" style-hover="transform:translateY(-1px);">✏️ Draw a Blank</button>
+          </div>
+          <div onClick="{{ openHistory }}" style="text-align:center; cursor:pointer;" style-hover="transform:translateY(-2px);">
+            <sc-if value="{{ hasDiscard }}" hint-placeholder-val="{{ true }}">
+              <dc-import name="Card" title="{{ discard.title }}" rule="{{ discard.rule }}" emoji="{{ discard.emoji }}" img="{{ discard.img }}" w="80" h="112" rot="-4" show-tape="{{ false }}" hint-size="80px,112px"></dc-import>
+            </sc-if>
+            <div style="font-family:'Patrick Hand',cursive; font-size:14px; color:#fff; margin-top:4px;">Discard · tap for log</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- your zone -->
+      <div style="background:#fff; border-top:2.5px solid #1a1a1a; padding:12px 20px 16px; position:relative;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:38px; height:38px; border-radius:50%; background:{{ me.color }}; border:2.5px solid #1a1a1a; display:flex; align-items:center; justify-content:center; font-size:20px;">{{ me.emoji }}</div>
+            <div>
+              <div style="font-family:'Patrick Hand',cursive; font-size:22px; line-height:0.95;">{{ me.name }} <span style="color:#E24A3B; font-size:15px;">· your turn</span></div>
+              <div style="font-family:'Nunito'; font-weight:700; font-size:13px; color:#666;">{{ me.score }} points</div>
+            </div>
+          </div>
+          <button onClick="{{ endTurn }}" style="font-family:'Nunito'; font-weight:800; font-size:14px; padding:9px 18px; border-radius:11px; border:2px solid #1a1a1a; background:#fff; cursor:pointer;" style-hover="background:#f4f2ea;">End Turn ⟳</button>
+        </div>
+
+        <!-- target chooser (when a card is selected) -->
+        <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#FDF6E3; border:2px dashed #1a1a1a; border-radius:12px; padding:8px 12px; margin-bottom:8px; animation: popin 0.2s ease-out;">
+            <span style="font-family:'Patrick Hand',cursive; font-size:17px;">Play <b>“{{ selectedTitle }}”</b> to:</span>
+            <sc-for list="{{ targets }}" as="t" hint-placeholder-count="6">
+              <button onClick="{{ t.onClick }}" style="display:flex; align-items:center; gap:5px; font-family:'Nunito'; font-weight:800; font-size:13px; padding:7px 12px; border-radius:10px; border:2px solid #1a1a1a; background:{{ t.bg }}; color:{{ t.fg }}; cursor:pointer;" style-hover="transform:translateY(-1px);"><span style="font-size:15px;">{{ t.emoji }}</span>{{ t.label }}</button>
+            </sc-for>
+            <button onClick="{{ clearSelection }}" style="font-family:'Nunito'; font-weight:700; font-size:13px; padding:7px 12px; border-radius:10px; border:2px solid #bbb; background:#fff; color:#888; cursor:pointer;">Cancel</button>
+          </div>
+        </sc-if>
+
+        <!-- my in-front cards -->
+        <sc-if value="{{ hasMyFront }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+            <span style="font-family:'Patrick Hand',cursive; font-size:14px; color:#888;">In front of you:</span>
+            <sc-for list="{{ myFront }}" as="fc" hint-placeholder-count="1">
+              <dc-import name="Card" title="{{ fc.title }}" rule="{{ fc.rule }}" emoji="{{ fc.emoji }}" img="{{ fc.img }}" w="56" h="78" rot="{{ fc.rot }}" show-tape="{{ false }}" hint-size="56px,78px"></dc-import>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <div style="display:flex; justify-content:center; align-items:flex-end; padding-top:16px; min-height:200px; flex-wrap:wrap;">
+          <sc-for list="{{ myHand }}" as="c" hint-placeholder-count="5">
+            <div onClick="{{ c.onSelect }}" style="margin-left:{{ c.ml }}px; transform:translateY({{ c.ty }}px) rotate({{ c.rot }}deg); transition:transform 0.16s ease, opacity 0.16s ease; cursor:pointer; z-index:{{ c.z }}; opacity:{{ c.dim }};" style-hover="transform:translateY(-24px) rotate(0deg); z-index:30; opacity:1;">
+              <dc-import name="Card" title="{{ c.title }}" rule="{{ c.rule }}" emoji="{{ c.emoji }}" img="{{ c.img }}" w="130" h="182" rot="0" show-tape="{{ true }}" hint-size="130px,182px"></dc-import>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- play history strip -->
+      <div style="background:#efe9da; border-top:2.5px solid #1a1a1a; padding:8px 18px 10px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="font-family:'Permanent Marker',cursive; font-size:14px; flex:0 0 auto;">Play Log</div>
+          <div style="display:flex; align-items:center; gap:12px; overflow-x:auto; padding:4px 2px;">
+            <sc-if value="{{ historyEmpty }}" hint-placeholder-val="{{ false }}">
+              <span style="font-family:'Patrick Hand',cursive; font-size:15px; color:#999;">No cards played yet.</span>
+            </sc-if>
+            <sc-for list="{{ historyList }}" as="h" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:7px; flex:0 0 auto; background:#fff; border:1.5px solid #1a1a1a; border-radius:10px; padding:4px 9px 4px 4px;">
+                <dc-import name="Card" title="{{ h.title }}" rule="{{ h.rule }}" emoji="{{ h.emoji }}" img="{{ h.img }}" w="30" h="42" rot="0" show-tape="{{ false }}" hint-size="30px,42px"></dc-import>
+                <div style="font-family:'Patrick Hand',cursive; font-size:13px; line-height:1.05; white-space:nowrap;"><b>{{ h.by }}</b> → {{ h.target }}<br/><span style="color:#999; font-size:11px;">{{ h.t }} · {{ h.title }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- history modal -->
+    <sc-if value="{{ showHistory }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeHistory }}" style="position:fixed; inset:0; z-index:60; background:rgba(20,18,14,0.55); display:flex; align-items:center; justify-content:center; padding:24px;">
+        <div style="background:#F2EFE6; border:3px solid #1a1a1a; border-radius:18px; box-shadow:8px 8px 0 rgba(26,26,26,0.25); max-width:640px; width:100%; max-height:82vh; display:flex; flex-direction:column; overflow:hidden;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:2.5px solid #1a1a1a; background:#fff;">
+            <div style="font-family:'Permanent Marker',cursive; font-size:24px;">Everything Played</div>
+            <button onClick="{{ closeHistory }}" style="font-family:'Nunito'; font-weight:800; font-size:18px; width:38px; height:38px; border-radius:10px; border:2px solid #1a1a1a; background:#fff; cursor:pointer;">✕</button>
+          </div>
+          <div style="overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:10px;">
+            <sc-if value="{{ historyEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="font-family:'Patrick Hand',cursive; font-size:18px; color:#999; text-align:center; padding:30px;">Nothing played yet.</div>
+            </sc-if>
+            <sc-for list="{{ historyList }}" as="h" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:14px; background:#fff; border:2px solid #1a1a1a; border-radius:12px; padding:8px 12px;">
+                <dc-import name="Card" title="{{ h.title }}" rule="{{ h.rule }}" emoji="{{ h.emoji }}" img="{{ h.img }}" w="52" h="73" rot="-2" show-tape="{{ false }}" hint-size="52px,73px"></dc-import>
+                <div style="flex:1;">
+                  <div style="font-family:'Patrick Hand',cursive; font-size:20px; line-height:1;">{{ h.title }}</div>
+                  <div style="font-family:'Nunito'; font-size:13px; color:#555; margin-top:2px;">{{ h.rule }}</div>
+                </div>
+                <div style="text-align:right; font-family:'Patrick Hand',cursive; font-size:14px; color:#444; white-space:nowrap;"><b>{{ h.by }}</b><br/>→ {{ h.target }}<br/><span style="color:#999;">{{ h.t }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  </sc-if>
+
+  <!-- ===================== CREATOR STUDIO ===================== -->
+  <sc-if value="{{ isCreator }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex; gap:22px; justify-content:center; align-items:flex-start; padding:28px 20px; flex-wrap:wrap;">
+
+      <!-- left: pens -->
+      <div style="display:flex; flex-direction:column; gap:10px; background:#fff; border:2.5px solid #1a1a1a; border-radius:16px; padding:14px; box-shadow:4px 4px 0 rgba(26,26,26,0.12);">
+        <div style="font-family:'Permanent Marker',cursive; font-size:14px; text-align:center;">Ink</div>
+        <sc-for list="{{ pens }}" as="pen" hint-placeholder-count="5">
+          <button onClick="{{ pen.onClick }}" title="{{ pen.name }}" style="width:40px; height:40px; border-radius:50%; border:{{ pen.border }}; background:{{ pen.color }}; cursor:pointer;"></button>
+        </sc-for>
+        <div style="height:2px; background:#eee; margin:4px 0;"></div>
+        <div style="font-family:'Permanent Marker',cursive; font-size:14px; text-align:center;">Nib</div>
+        <sc-for list="{{ nibs }}" as="nib" hint-placeholder-count="3">
+          <button onClick="{{ nib.onClick }}" style="width:40px; height:36px; border-radius:10px; border:{{ nib.border }}; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+            <span style="display:block; width:22px; border-radius:99px; background:#1a1a1a; height:{{ nib.dot }}px;"></span>
+          </button>
+        </sc-for>
+        <div style="height:2px; background:#eee; margin:4px 0;"></div>
+        <button onClick="{{ undoStroke }}" style="width:40px; height:38px; border-radius:10px; border:2px solid #1a1a1a; background:#fff; cursor:pointer; font-size:18px;" title="Undo">↺</button>
+        <button onClick="{{ clearCanvas }}" style="width:40px; height:38px; border-radius:10px; border:2px solid #1a1a1a; background:#fff; cursor:pointer; font-size:16px;" title="Clear">🗑</button>
+      </div>
+
+      <!-- center: the card -->
+      <div style="display:flex; flex-direction:column; align-items:center; gap:12px;">
+        <div style="position:relative; width:400px; background:#fff; border:2.5px solid #1a1a1a; border-radius:12px; box-shadow:0 12px 30px rgba(20,18,14,0.22); padding:18px; box-sizing:border-box;">
+          <div style="position:absolute; top:-10px; left:20%; width:80px; height:20px; background:rgba(238,214,120,0.6); transform:rotate(-6deg);"></div>
+          <div style="position:absolute; top:-10px; right:20%; width:80px; height:20px; background:rgba(238,214,120,0.6); transform:rotate(5deg);"></div>
+          <div style="position:absolute; inset:8px; border:1px dashed rgba(26,26,26,0.25); border-radius:8px; pointer-events:none;"></div>
+
+          <input value="{{ draft.title }}" onInput="{{ onTitle }}" placeholder="Title your card…" style="width:100%; border:none; border-bottom:2px solid #1a1a1a; background:transparent; font-family:'Patrick Hand',cursive; font-size:26px; text-align:center; padding:2px 6px 6px; outline:none;" />
+
+          <div style="position:relative; margin:12px 0; border:1.5px solid #1a1a1a; border-radius:6px; overflow:hidden; background:#fff;">
+            <canvas ref="{{ canvasRef }}" width="360" height="300" onPointerDown="{{ onDown }}" onPointerMove="{{ onMove }}" onPointerUp="{{ onUp }}" onPointerLeave="{{ onUp }}" style="display:block; width:100%; height:300px; touch-action:none; cursor:crosshair;"></canvas>
+            <sc-if value="{{ canvasEmpty }}" hint-placeholder-val="{{ true }}">
+              <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; font-family:'Patrick Hand',cursive; font-size:20px; color:#bbb;">draw something ✏️</div>
+            </sc-if>
+          </div>
+
+          <textarea value="{{ draft.rule }}" onInput="{{ onRule }}" placeholder="What does this card DO?" rows="2" style="width:100%; border:none; background:transparent; font-family:'Patrick Hand',cursive; font-size:17px; text-align:center; resize:none; outline:none; color:#333;"></textarea>
+        </div>
+        <div style="font-family:'Patrick Hand',cursive; font-size:15px; color:#888;">This card joins your hand + the shared deck.</div>
+      </div>
+
+      <!-- right: stamps + save -->
+      <div style="display:flex; flex-direction:column; gap:14px; width:230px;">
+        <div style="background:#fff; border:2.5px solid #1a1a1a; border-radius:16px; padding:14px; box-shadow:4px 4px 0 rgba(26,26,26,0.12);">
+          <div style="font-family:'Permanent Marker',cursive; font-size:15px; margin-bottom:8px;">Stamps</div>
+          <div style="font-family:'Nunito'; font-weight:700; font-size:11px; color:#888; margin-bottom:8px;">Tap one, then tap the card to stamp it.</div>
+          <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:6px;">
+            <sc-for list="{{ stamps }}" as="s" hint-placeholder-count="15">
+              <button onClick="{{ s.onClick }}" style="aspect-ratio:1; border-radius:9px; border:{{ s.border }}; background:{{ s.bg }}; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;">{{ s.emoji }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <button onClick="{{ saveCard }}" style="font-family:'Permanent Marker',cursive; font-size:20px; padding:14px; background:#1F9E6B; color:#fff; border:2.5px solid #1a1a1a; border-radius:14px; box-shadow:4px 4px 0 #1a1a1a; cursor:pointer;" style-hover="transform:translate(1px,1px); box-shadow:2px 2px 0 #1a1a1a;">✓ Add to Deck</button>
+        <button onClick="{{ resetDraft }}" style="font-family:'Nunito'; font-weight:800; font-size:13px; padding:9px; background:#fff; border:2px solid #1a1a1a; border-radius:11px; cursor:pointer;">Start Over</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===================== GALLERY ===================== -->
+  <sc-if value="{{ isGallery }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width:1100px; margin:0 auto; padding:26px 20px 60px;">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:18px;">
+        <div>
+          <h2 style="font-family:'Permanent Marker',cursive; font-size:38px; margin:0; line-height:0.9;">The Deck</h2>
+          <p style="font-family:'Patrick Hand',cursive; font-size:19px; color:#666; margin:4px 0 0;">{{ galleryCount }} cards invented so far.</p>
+        </div>
+        <button onClick="{{ goCreator }}" style="font-family:'Permanent Marker',cursive; font-size:17px; padding:11px 22px; background:#E24A3B; color:#fff; border:2.5px solid #1a1a1a; border-radius:13px; box-shadow:3px 3px 0 #1a1a1a; cursor:pointer;">+ New Card</button>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:26px; justify-content:center;">
+        <sc-for list="{{ gallery }}" as="g" hint-placeholder-count="12">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px; transform:rotate({{ g.rot }}deg);" style-hover="transform:rotate(0deg) scale(1.04);">
+            <dc-import name="Card" title="{{ g.title }}" rule="{{ g.rule }}" emoji="{{ g.emoji }}" img="{{ g.img }}" w="164" h="230" rot="0" show-tape="{{ true }}" hint-size="164px,230px"></dc-import>
+            <div style="font-family:'Patrick Hand',cursive; font-size:14px; color:#888;">by {{ g.by }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===================== SCOREBOARD ===================== -->
+  <sc-if value="{{ isScoreboard }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width:720px; margin:0 auto; padding:34px 20px 60px;">
+      <h2 style="font-family:'Permanent Marker',cursive; font-size:40px; margin:0 0 6px; text-align:center; line-height:0.9;">Scoreboard</h2>
+      <p style="font-family:'Patrick Hand',cursive; font-size:19px; color:#666; margin:0 0 26px; text-align:center;">Points are made up and rules change constantly. Good luck.</p>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <sc-for list="{{ standings }}" as="s" hint-placeholder-count="4">
+          <div style="display:flex; align-items:center; gap:16px; background:#fff; border:2.5px solid #1a1a1a; border-radius:16px; padding:14px 18px; box-shadow:4px 4px 0 rgba(26,26,26,0.1); transform:rotate({{ s.rot }}deg);">
+            <div style="font-family:'Permanent Marker',cursive; font-size:30px; width:44px; text-align:center; color:{{ s.rankColor }};">{{ s.rank }}</div>
+            <div style="width:50px; height:50px; border-radius:50%; background:{{ s.color }}; border:2.5px solid #1a1a1a; display:flex; align-items:center; justify-content:center; font-size:26px;">{{ s.emoji }}</div>
+            <div style="flex:1;">
+              <div style="font-family:'Patrick Hand',cursive; font-size:24px; line-height:0.95;">{{ s.name }} {{ s.medal }}</div>
+              <div style="height:10px; background:#eee; border:1.5px solid #1a1a1a; border-radius:99px; margin-top:5px; overflow:hidden;"><div style="height:100%; width:{{ s.barPct }}%; background:{{ s.color }};"></div></div>
+            </div>
+            <div style="font-family:'Permanent Marker',cursive; font-size:34px; color:{{ s.color }};">{{ s.score }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===================== EPILOGUE ===================== -->
+  <sc-if value="{{ isEpilogue }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width:1000px; margin:0 auto; padding:30px 20px 60px;">
+      <h2 style="font-family:'Permanent Marker',cursive; font-size:38px; margin:0 0 4px; text-align:center; line-height:0.9;">The Epilogue</h2>
+      <p style="font-family:'Patrick Hand',cursive; font-size:19px; color:#666; margin:0 0 8px; text-align:center; max-width:560px; margin-left:auto; margin-right:auto;">Game over. Decide which cards deserve to live in the deck forever — and which get retired.</p>
+      <div style="text-align:center; font-family:'Nunito'; font-weight:800; font-size:14px; color:#444; margin-bottom:22px;">
+        <span style="color:#1F9E6B;">{{ keepCount }} kept</span> · <span style="color:#E24A3B;">{{ cutCount }} cut</span> · {{ undecidedCount }} to decide
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:30px; justify-content:center;">
+        <sc-for list="{{ epilogue }}" as="e" hint-placeholder-count="8">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+            <div style="opacity:{{ e.opacity }}; filter:{{ e.filter }}; transition:all 0.2s;">
+              <dc-import name="Card" title="{{ e.title }}" rule="{{ e.rule }}" emoji="{{ e.emoji }}" img="{{ e.img }}" w="160" h="224" rot="{{ e.rot }}" show-tape="{{ true }}" hint-size="160px,224px"></dc-import>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button onClick="{{ e.onKeep }}" style="font-family:'Patrick Hand',cursive; font-size:16px; padding:6px 16px; border-radius:10px; border:2px solid #1a1a1a; background:{{ e.keepBg }}; color:{{ e.keepFg }}; cursor:pointer;">Keep</button>
+              <button onClick="{{ e.onCut }}" style="font-family:'Patrick Hand',cursive; font-size:16px; padding:6px 16px; border-radius:10px; border:2px solid #1a1a1a; background:{{ e.cutBg }}; color:{{ e.cutFg }}; cursor:pointer;">Cut</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;feltColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#2f7d5b&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Table&quot;,&quot;options&quot;:[&quot;#2f7d5b&quot;,&quot;#8a4a3b&quot;,&quot;#3a4a7d&quot;,&quot;#4a4a4a&quot;]}}">
+const SEED = [
+  { id:'c1', title:'Free Point!', rule:'Whoever plays this gets a point. Congrats.', emoji:'🎉', points:1, by:'Maya' },
+  { id:'c2', title:'Everybody Meow', rule:'All players must meow. -1 if you refuse.', emoji:'🐱', points:0, by:'Theo' },
+  { id:'c3', title:'The Duck', rule:'Holder must quack every turn. +1 per quack.', emoji:'🦆', points:1, by:'Iris' },
+  { id:'c4', title:'Steal Three', rule:'Take 3 points from any player. No guilt.', emoji:'🫳', points:3, by:'Sol' },
+  { id:'c5', title:'Floor is Lava', rule:'Lift your feet. -2 if a foot touches ground.', emoji:'🌋', points:-2, by:'Maya' },
+  { id:'c6', title:'Snack Break', rule:'+5 points if you share a snack right now.', emoji:'🍪', points:5, by:'Theo' },
+  { id:'c7', title:'Time Warp', rule:'Reverse the turn order immediately.', emoji:'⏳', points:0, by:'Iris' },
+  { id:'c8', title:'Compliment Left', rule:'Compliment the player on your left. +2.', emoji:'🥰', points:2, by:'Sol' },
+  { id:'c9', title:'Mustache Tax', rule:'-1 for every drawn mustache on the table.', emoji:'👨', points:-1, by:'Maya' },
+  { id:'c10', title:'Sudden Applause', rule:'Everyone claps for you. Bask in it.', emoji:'👏', points:1, by:'Theo' },
+  { id:'c11', title:'Double or Nothing', rule:'Flip a coin: double this turn or lose it.', emoji:'🎲', points:0, by:'Iris' },
+  { id:'c12', title:'Banana for Scale', rule:'Place a banana on the table for reference.', emoji:'🍌', points:1, by:'Sol' },
+  { id:'c13', title:'No Sitting', rule:'Nobody may sit until your next turn.', emoji:'🎈', points:0, by:'Maya' },
+  { id:'c14', title:'Group Selfie', rule:'Take a photo together. +3 to everyone.', emoji:'📸', points:3, by:'Theo' },
+];
+const PLAYERS = [
+  { id:'p1', name:'Maya', emoji:'🦊', color:'#E24A3B', score:12 },
+  { id:'p2', name:'Theo', emoji:'🐻', color:'#2E5EAA', score:8 },
+  { id:'p3', name:'Iris', emoji:'🐙', color:'#1F9E6B', score:15 },
+  { id:'p4', name:'Sol',  emoji:'🦉', color:'#E8A33D', score:5 },
+];
+const PEN_COLORS = [
+  { name:'Ink',    color:'#1a1a1a' },
+  { name:'Red',    color:'#E24A3B' },
+  { name:'Blue',   color:'#2E5EAA' },
+  { name:'Green',  color:'#1F9E6B' },
+  { name:'Yellow', color:'#E8A33D' },
+];
+const NIBS = [ { size:2.5, dot:2 }, { size:5, dot:4 }, { size:9, dot:8 } ];
+const STAMP_SET = ['🎉','⭐','❤️','🔥','💥','🐱','🦆','🌋','🍪','🎲','🍌','📸','👏','🥰','👀','🕐','🍕','🦖','⚡','💀'];
+
+class Component extends DCLogic {
+  state = {
+    screen: 'home',
+    turn: 3,
+    currentIdx: 0,
+    players: PLAYERS.map(p => ({ ...p })),
+    library: SEED.slice(),
+    order: SEED.map(c => c.id),
+    hands: {
+      p1: ['c1','c6','c11','c9','c14'],
+      p2: ['c2','c4','c7','c10','c13'],
+      p3: ['c3','c8','c12','c1','c5'],
+      p4: ['c4','c6','c9','c2','c8'],
+    },
+    center: [ { id:'c14', by:'Theo', rot:-3 } ],
+    fronts: { p1:[], p2:[], p3:[ { id:'c3', by:'Iris', rot:-4 } ], p4:[ { id:'c5', by:'Sol', rot:5 } ] },
+    discardId: 'c7',
+    deckCount: 41,
+    history: [
+      { id:'c14', by:'Theo', target:'Everyone', t:'turn 1' },
+      { id:'c3', by:'Iris', target:'Iris', t:'turn 2' },
+      { id:'c5', by:'Sol', target:'Sol', t:'turn 2' },
+      { id:'c7', by:'Iris', target:'Discard', t:'turn 3' },
+    ],
+    showHistory: false,
+    selectedId: null,
+    draft: { title:'', rule:'' },
+    brush: '#1a1a1a',
+    nib: 5,
+    stampEmoji: null,
+    strokeCount: 0,
+    decisions: {},
+  };
+
+  constructor(props) {
+    super(props);
+    this.canvasRef = this.canvasRef.bind(this);
+    this.strokes = [];
+    this.drawing = false;
+  }
+
+  // ---------- lookups ----------
+  card(id) { return this.state.library.find(c => c.id === id); }
+  go(screen) { return () => this.setState({ screen }); }
+
+  // ---------- turn actions ----------
+  selectCard(id) { return () => this.setState(s => ({ selectedId: s.selectedId === id ? null : id })); }
+  clearSelection() { this.setState({ selectedId: null }); }
+  openHistory() { this.setState({ showHistory: true }); }
+  closeHistory() { this.setState({ showHistory: false }); }
+  playTo(target) {
+    return () => this.setState(s => {
+      if (!s.selectedId) return {};
+      const me = s.players[s.currentIdx];
+      const id = s.selectedId;
+      const rot = Math.round(Math.random() * 12 - 6);
+      const upd = { hands: { ...s.hands, [me.id]: s.hands[me.id].filter(x => x !== id) }, selectedId: null };
+      let label;
+      if (target === 'center') { upd.center = [...s.center, { id, by: me.name, rot }]; label = 'Everyone'; }
+      else if (target === 'discard') { upd.discardId = id; label = 'Discard'; }
+      else {
+        const tp = s.players.find(p => p.id === target);
+        upd.fronts = { ...s.fronts, [target]: [...(s.fronts[target] || []), { id, by: me.name, rot }] };
+        label = tp ? tp.name : '';
+      }
+      upd.history = [{ id, by: me.name, target: label, t: 'turn ' + s.turn }, ...s.history];
+      return upd;
+    });
+  }
+  drawCard() {
+    this.setState(s => {
+      if (s.deckCount <= 0) return {};
+      const me = s.players[s.currentIdx];
+      const pick = s.library[Math.floor(Math.random() * s.library.length)];
+      return { deckCount: s.deckCount - 1, hands: { ...s.hands, [me.id]: [...s.hands[me.id], pick.id] } };
+    });
+  }
+  drawBlank() {
+    this.strokes = [];
+    this.setState({ screen: 'creator', draft: { title:'', rule:'' }, stampEmoji:null, strokeCount:0 });
+  }
+  endTurn() {
+    this.setState(s => ({ currentIdx: (s.currentIdx + 1) % s.players.length, turn: s.turn + 1, selectedId: null }));
+  }
+
+  // ---------- creator: canvas ----------
+  canvasRef(el) {
+    if (!el) { this.canvas = null; this.ctx = null; return; }
+    if (this.canvas === el) return;
+    this.canvas = el;
+    this.ctx = el.getContext('2d');
+    this.redraw();
+  }
+  _pos(e) {
+    const r = this.canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (this.canvas.width / r.width), y: (e.clientY - r.top) * (this.canvas.height / r.height) };
+  }
+  onDown = (e) => {
+    if (!this.canvas) return;
+    e.preventDefault();
+    const p = this._pos(e);
+    if (this.state.stampEmoji) {
+      this.strokes.push({ type:'stamp', emoji:this.state.stampEmoji, x:p.x, y:p.y, size:46 });
+      this.redraw();
+      this.setState(s => ({ strokeCount: s.strokeCount + 1 }));
+      return;
+    }
+    this.drawing = true;
+    this.cur = { type:'line', color:this.state.brush, size:this.state.nib, pts:[p] };
+    this.strokes.push(this.cur);
+  };
+  onMove = (e) => {
+    if (!this.drawing || !this.cur) return;
+    e.preventDefault();
+    this.cur.pts.push(this._pos(e));
+    this.redraw();
+  };
+  onUp = () => {
+    if (this.drawing) { this.drawing = false; this.cur = null; this.setState(s => ({ strokeCount: s.strokeCount + 1 })); }
+  };
+  redraw() {
+    const ctx = this.ctx; if (!ctx) return;
+    const w = this.canvas.width, h = this.canvas.height;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const st of this.strokes) {
+      if (st.type === 'stamp') {
+        ctx.font = st.size + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(st.emoji, st.x, st.y);
+      } else {
+        ctx.strokeStyle = st.color; ctx.lineWidth = st.size;
+        ctx.beginPath();
+        st.pts.forEach((pt, i) => { i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y); });
+        if (st.pts.length === 1) { ctx.lineTo(st.pts[0].x + 0.1, st.pts[0].y + 0.1); }
+        ctx.stroke();
+      }
+    }
+  }
+  undoStroke() { this.strokes.pop(); this.redraw(); this.setState(s => ({ strokeCount: Math.max(0, s.strokeCount - 1) })); }
+  clearCanvas() { this.strokes = []; this.redraw(); this.setState({ strokeCount: 0 }); }
+  setBrush(color) { return () => this.setState({ brush: color, stampEmoji: null }); }
+  setNib(size) { return () => this.setState({ nib: size, stampEmoji: null }); }
+  setStamp(emoji) { return () => this.setState(s => ({ stampEmoji: s.stampEmoji === emoji ? null : emoji })); }
+  setDraft(field) { return (e) => { const v = e.target.value; this.setState(s => ({ draft: { ...s.draft, [field]: v } })); }; }
+  resetDraft() { this.strokes = []; this.redraw(); this.setState({ draft:{ title:'', rule:'' }, stampEmoji:null, strokeCount:0 }); }
+  saveCard() {
+    const img = (this.canvas && this.strokes.length) ? this.canvas.toDataURL() : null;
+    this.setState(s => {
+      const me = s.players[s.currentIdx];
+      const id = 'u' + Date.now();
+      const card = { id, title: s.draft.title || 'Untitled', rule: s.draft.rule || '', emoji: img ? '' : '✏️', by: me.name, img };
+      return {
+        library: [...s.library, card],
+        order: [...s.order, id],
+        hands: { ...s.hands, [me.id]: [...s.hands[me.id], id] },
+        screen: 'table',
+      };
+    });
+    this.strokes = [];
+  }
+
+  // ---------- epilogue ----------
+  decide(id, v) { return () => this.setState(s => ({ decisions: { ...s.decisions, [id]: s.decisions[id] === v ? null : v } })); }
+
+  renderVals() {
+    const s = this.state;
+    const me = s.players[s.currentIdx];
+    const navDef = [
+      { key:'table', label:'Table' }, { key:'creator', label:'Create' },
+      { key:'gallery', label:'Gallery' }, { key:'scoreboard', label:'Scores' }, { key:'epilogue', label:'Epilogue' },
+    ];
+    const navTabs = navDef.map(n => ({
+      label: n.label, onClick: this.go(n.key),
+      bg: s.screen === n.key ? '#1a1a1a' : '#fff',
+      fg: s.screen === n.key ? '#fff' : '#1a1a1a',
+    }));
+
+    const cardVM = (id, extra) => { const c = this.card(id) || {}; return { title:c.title || '', rule:c.rule || '', emoji:c.emoji || '', img:c.img || '', ...extra }; };
+
+    // opponents
+    const opponents = s.players.filter((_, i) => i !== s.currentIdx).map(op => {
+      const n = (s.hands[op.id] || []).length;
+      const fan = Array.from({ length: n }).map((_, i) => ({ ml: i === 0 ? 0 : -22, rot: (i - (n - 1) / 2) * 5 }));
+      const front = (s.fronts[op.id] || []).map(f => cardVM(f.id, { rot: f.rot }));
+      return { name: op.name, emoji: op.emoji, color: op.color, score: op.score, fan,
+        front, hasFront: front.length > 0,
+        panelBg: 'rgba(255,255,255,0.6)', panelBorder: op.color };
+    });
+
+    // my hand
+    const handIds = s.hands[me.id] || [];
+    const n = handIds.length;
+    const myHand = handIds.map((id, i) => {
+      const c = this.card(id) || {};
+      const sel = s.selectedId === id;
+      const spread = (i - (n - 1) / 2);
+      return { id, title:c.title, rule:c.rule, emoji:c.emoji, img:c.img || '',
+        ml: i === 0 ? 0 : -34, rot: spread * 3.2, ty: sel ? -34 : Math.abs(spread) * 3, z: sel ? 30 : 10 + i,
+        selected: sel, dim: s.selectedId && !sel ? 0.55 : 1,
+        onSelect: this.selectCard(id) };
+    });
+    const myFront = (s.fronts[me.id] || []).map(f => cardVM(f.id, { rot: f.rot }));
+
+    // table
+    const centerCards = s.center.map(tc => cardVM(tc.id, { by: tc.by, rot: tc.rot }));
+    const disc = this.card(s.discardId) || {};
+    const historyList = s.history.map(h => cardVM(h.id, { by: h.by, target: h.target, t: h.t }));
+    const targets = [
+      { key:'center', label:'Everyone', emoji:'👥', bg:'#F5D547', fg:'#1a1a1a', onClick:this.playTo('center') },
+      ...s.players.map(p => ({ key:p.id, label:p.name, emoji:p.emoji, bg:p.color, fg:'#fff', onClick:this.playTo(p.id) })),
+      { key:'discard', label:'Discard', emoji:'🗑', bg:'#fff', fg:'#1a1a1a', onClick:this.playTo('discard') },
+    ];
+
+    // gallery
+    const gallery = s.order.map((id, i) => { const c = this.card(id) || {}; return { title:c.title, rule:c.rule, emoji:c.emoji, img:c.img || '', by:c.by, rot: ((i % 5) - 2) * 1.6 }; });
+
+    // scoreboard
+    const sorted = s.players.slice().sort((a, b) => b.score - a.score);
+    const max = Math.max(1, ...sorted.map(p => p.score));
+    const medals = ['🥇','🥈','🥉',''];
+    const standings = sorted.map((p, i) => ({ rank:'#' + (i + 1), name:p.name, emoji:p.emoji, color:p.color, score:p.score,
+      medal: medals[i] || '', barPct: Math.round((p.score / max) * 100), rankColor: i === 0 ? '#E8A33D' : '#999', rot: (i % 2 ? 0.5 : -0.5) }));
+
+    // epilogue
+    const epilogue = s.order.map((id, i) => {
+      const c = this.card(id) || {}; const d = s.decisions[id];
+      return { title:c.title, rule:c.rule, emoji:c.emoji, img:c.img || '', rot: ((i % 4) - 1.5) * 2,
+        opacity: d === 'cut' ? 0.35 : 1, filter: d === 'cut' ? 'grayscale(0.9)' : 'none',
+        onKeep: this.decide(id, 'keep'), onCut: this.decide(id, 'cut'),
+        keepBg: d === 'keep' ? '#1F9E6B' : '#fff', keepFg: d === 'keep' ? '#fff' : '#1a1a1a',
+        cutBg: d === 'cut' ? '#E24A3B' : '#fff', cutFg: d === 'cut' ? '#fff' : '#1a1a1a' };
+    });
+    const decVals = Object.values(s.decisions);
+    const keepCount = decVals.filter(v => v === 'keep').length;
+    const cutCount = decVals.filter(v => v === 'cut').length;
+
+    // creator
+    const pens = PEN_COLORS.map(p => ({ name:p.name, color:p.color, onClick:this.setBrush(p.color),
+      border: (s.brush === p.color && !s.stampEmoji) ? '3px solid #E24A3B' : '2px solid #1a1a1a' }));
+    const nibs = NIBS.map(nb => ({ dot:nb.dot, onClick:this.setNib(nb.size),
+      border: s.nib === nb.size ? '3px solid #E24A3B' : '2px solid #1a1a1a' }));
+    const stamps = STAMP_SET.map(e => ({ emoji:e, onClick:this.setStamp(e),
+      bg: s.stampEmoji === e ? '#F5D547' : '#fff', border: s.stampEmoji === e ? '2px solid #E24A3B' : '1.5px solid #1a1a1a' }));
+
+    return {
+      isHome: s.screen === 'home', notHome: s.screen !== 'home',
+      isTable: s.screen === 'table', isCreator: s.screen === 'creator',
+      isGallery: s.screen === 'gallery', isScoreboard: s.screen === 'scoreboard', isEpilogue: s.screen === 'epilogue',
+      goHome: this.go('home'), goTable: this.go('table'), goCreator: this.go('creator'),
+      turn: s.turn, feltColor: this.props.feltColor || '#2f7d5b',
+      navTabs, opponents, myHand,
+      me: { name:me.name, emoji:me.emoji, color:me.color, score:me.score },
+      myFront, hasMyFront: myFront.length > 0,
+      centerCards, centerEmpty: centerCards.length === 0,
+      targets, historyList, historyEmpty: historyList.length === 0,
+      showHistory: s.showHistory, openHistory: () => this.openHistory(), closeHistory: () => this.closeHistory(),
+      deckCount: s.deckCount, discard: { title:disc.title, rule:disc.rule, emoji:disc.emoji, img:disc.img || '' }, hasDiscard: !!disc.title,
+      hasSelection: !!s.selectedId, selectedTitle: (this.card(s.selectedId) || {}).title || '',
+      clearSelection: () => this.clearSelection(), endTurn: () => this.endTurn(),
+      drawCard: () => this.drawCard(), drawBlank: () => this.drawBlank(),
+      gallery, galleryCount: s.order.length, standings,
+      epilogue, keepCount, cutCount, undecidedCount: s.order.length - keepCount - cutCount,
+      pens, nibs, stamps,
+      canvasRef: this.canvasRef, onDown:this.onDown, onMove:this.onMove, onUp:this.onUp,
+      canvasEmpty: s.strokeCount === 0,
+      draft: s.draft, onTitle:this.setDraft('title'), onRule:this.setDraft('rule'),
+      saveCard: () => this.saveCard(), resetDraft: () => this.resetDraft(),
+      undoStroke: () => this.undoStroke(), clearCanvas: () => this.clearCanvas(),
+    };
+  }
+}
+</script>
+</body>
+</html>
