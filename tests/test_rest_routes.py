@@ -55,6 +55,72 @@ def test_join_room_registers_player(client: TestClient) -> None:
     assert any(p.id == pid for p in room.state.players)
 
 
+def test_list_rooms_returns_created_room_with_fields(client: TestClient) -> None:
+    code = client.post("/rooms", json={"mode": "in_person"}).json()["code"]
+    client.post(f"/rooms/{code}/join", json={"name": "Alice"})
+
+    resp = client.get("/rooms")
+    assert resp.status_code == 200
+    rooms = {r["code"]: r for r in resp.json()["rooms"]}
+    assert code in rooms
+    entry = rooms[code]
+    assert entry["phase"] == "lobby"
+    assert entry["mode"] == "in_person"
+    assert entry["player_count"] == 1
+    assert entry["spectator_count"] == 0
+    assert entry["joinable"] is True
+    # ISO-parseable timestamp.
+    from datetime import datetime
+
+    datetime.fromisoformat(entry["created_at"])
+
+
+def test_list_rooms_default_excludes_started_game_but_all_true_includes_it(dev_client: TestClient) -> None:
+    code = dev_client.post("/rooms").json()["code"]
+    dev_client.post(f"/rooms/{code}/join", json={"name": "Alice"})
+    dev_client.post(f"/rooms/{code}/join", json={"name": "Bob"})
+
+    default_codes = {r["code"] for r in dev_client.get("/rooms").json()["rooms"]}
+    assert code in default_codes
+
+    dev_client.post(f"/rooms/{code}/dev/skip-setup")
+
+    default_codes = {r["code"] for r in dev_client.get("/rooms").json()["rooms"]}
+    assert code not in default_codes
+
+    all_rooms = {r["code"]: r for r in dev_client.get("/rooms", params={"all": "true"}).json()["rooms"]}
+    assert code in all_rooms
+    assert all_rooms[code]["phase"] == "playing"
+    assert all_rooms[code]["joinable"] is False
+
+
+def test_list_rooms_excludes_ended_even_with_all(client: TestClient) -> None:
+    code = client.post("/rooms").json()["code"]
+    from board.rooms.manager import room_manager
+
+    room = room_manager.get(code)
+    room.state = room.state.model_copy(update={"phase": "ended"})
+
+    resp = client.get("/rooms", params={"all": "true"})
+    codes = {r["code"] for r in resp.json()["rooms"]}
+    assert code not in codes
+
+
+def test_list_rooms_sorted_newest_first(client: TestClient) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from board.rooms.manager import room_manager
+
+    older = client.post("/rooms").json()["code"]
+    newer = client.post("/rooms").json()["code"]
+    now = datetime.now(UTC)
+    room_manager.get(older).created_at = now - timedelta(hours=1)
+    room_manager.get(newer).created_at = now
+
+    codes = [r["code"] for r in client.get("/rooms").json()["rooms"]]
+    assert codes.index(newer) < codes.index(older)
+
+
 def test_get_room_state(client: TestClient) -> None:
     code = client.post("/rooms").json()["code"]
     client.post(f"/rooms/{code}/join", json={"name": "Alice"})
