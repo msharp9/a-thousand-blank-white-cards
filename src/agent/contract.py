@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from models.effects import EffectProgram
+from models.effects import EffectProgram, OpsStep, RegisterHookOp, ResolutionPlan, SnippetStep
 
 
 class SnippetEffect(BaseModel):
@@ -58,6 +58,10 @@ class InterpretResult(BaseModel):
     a card could not be cleanly interpreted.
     """
 
+    plan: ResolutionPlan | None = Field(
+        default=None,
+        description="An ordered resolution plan. When present it supersedes legacy program/snippet fields.",
+    )
     program: EffectProgram | None = Field(
         default=None,
         description="The compiled effect program of known ops, or None when no program was produced.",
@@ -84,3 +88,27 @@ class InterpretResult(BaseModel):
             "Populated by the real agent later; 'none' for now."
         ),
     )
+
+    def to_plan(self) -> ResolutionPlan:
+        if self.plan is not None:
+            return self.plan
+
+        steps: list[OpsStep | SnippetStep] = []
+        if self.program is not None and self.program.ops:
+            steps.append(OpsStep(ops=self.program.ops))
+        if self.snippet is not None:
+            if self.snippet.trigger is not None:
+                steps.append(
+                    OpsStep(
+                        ops=[
+                            RegisterHookOp(
+                                event=self.snippet.trigger,
+                                scope=self.snippet.scope,
+                                code=self.snippet.code,
+                            )
+                        ]
+                    )
+                )
+            else:
+                steps.append(SnippetStep(code=self.snippet.code, explanation=self.snippet.explanation))
+        return ResolutionPlan(steps=steps)

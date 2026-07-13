@@ -8,14 +8,14 @@ house-ruleset (Uno) as far as today's op vocabulary allows.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import pathlib
+from unittest.mock import AsyncMock, patch
 
+from board.rooms.room import Room
 from engine.compile import compile_card
-from engine.events import GameEvent, HookContext
-from engine.hooks import make_snippet_handler
 from engine.sandbox.validate import validate_snippet
-from models.cards import Card
 from models.effects import (
     AddPointsOp,
     ChangeDrawCountOp,
@@ -29,7 +29,7 @@ from models.effects import (
     StealPointsOp,
     SubtractPointsOp,
 )
-from models.game_state import GameState, Player
+from models.ws_messages import PlayMsg
 
 DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 
@@ -52,15 +52,27 @@ def test_card_counter_compiles_draw_then_scores_hand_via_snippet() -> None:
     snippet = card["canonical"]["snippet"]
     assert validate_snippet(snippet).ok is True
 
-    state = GameState(room_code="TEST", players=[Player(id="p1", name="Alice", score=0, hand=["c1", "c2", "c3"])])
-    state = state.model_copy(
-        update={"cards": {"card-cc": Card(id="card-cc", title="t", description="d", creator_id="p1")}}
+    card = {**card, "id": "card-counter", "creator_id": "seed"}
+    room = Room("TEST")
+    room.add_player("p1", "Alice")
+    room.add_player("p2", "Bob")
+    players = [
+        room.state.players[0].model_copy(update={"hand": ["card-counter", "c1", "c2"]}),
+        room.state.players[1],
+    ]
+    room.state = room.state.model_copy(
+        update={"phase": "playing", "players": players, "cards": {"card-counter": card}, "deck": ["d1", "d2"]}
     )
-    handler = make_snippet_handler("card-cc", snippet)
-    ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
-    new_state = handler(state, ctx)
-    assert new_state.get_player("p1").score == 3
-    assert new_state.log == []
+    room._has_drawn = True
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+
+    with patch("agent.runtime.run_agent") as run_agent:
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="card-counter")))
+
+    run_agent.assert_not_called()
+    assert room.state.get_player("p1").score == 4
+    assert room.state.get_player("p1").hand == ["c1", "c2", "d1", "d2"]
 
 
 def test_sudden_death_combines_set_win_condition_and_end_game() -> None:
