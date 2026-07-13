@@ -15,7 +15,7 @@ not a literal word-for-word reading.
   "trigger_event": "on_play",    // see TRIGGER_EVENT (null for pure immediate)
   "venue": "all",                // see VENUE
   "magnitude_sign": "positive",  // see MAGNITUDE_SIGN
-  "ops": [ ... ]                 // see OPS  (use ops OR snippet, not both)
+  "steps": [ ... ]               // ordered runtime plan; use steps OR ops OR snippet
 }
 ```
 
@@ -74,7 +74,14 @@ Net effect on the target's standing: `positive` (gains points/advantage),
 `negative` (loses points/disadvantage), `neutral` (no point change or a wash,
 e.g. skip a turn, reverse order, a rule with no scoring).
 
-### OPS — structured operations (use `ops` OR `snippet`, never both)
+### STEPS — ordered executable resolution
+Use `steps` when later logic must read an earlier effect's resulting state, or
+when ops and sandbox code must be mixed. Each item is either
+`{"kind":"ops","ops":[...]}` using runtime op fields directly, or
+`{"kind":"snippet","code":"def apply(state, ctx): ..."}`. Never truncate
+or replace executable code with prose.
+
+### OPS — structured operations (use `steps`, `ops`, OR `snippet`, never more than one)
 A list of `{"op": <name>, "args": {...}}`. Op vocabulary:
 - `add_points` — `{"target": <TARGET>, "amount": <int, +/->}` (use a negative amount for losses)
 - `steal_points` — `{"from_target": <TARGET>, "to_target": <TARGET>, "amount": <int>}`
@@ -86,6 +93,9 @@ A list of `{"op": <name>, "args": {...}}`. Op vocabulary:
 - `change_draw_count` — `{"amount": <int>}` (new absolute draw count)
 - `destroy_card` — `{"target": "card" | "all_cards"}`
 - `set_win_condition` — `{"kind": "highest_points"|"lowest_points"|"first_to"|"last_standing"|"none", "threshold": <int|null>}`
+- `set_rule`, `register_hook`, `unregister_hook`, `set_condition`,
+  `set_card_attribute`, `create_card`, and `end_game` use the same fields as
+  the runtime op reference returned by `read_engine_methods`.
 - `custom_note` — `{"note": <str>}` — for flavour / table-adjudicated actions with no engine effect.
 
 When the effect is a real-world action the engine can't execute (a dare, a
@@ -94,6 +104,7 @@ change with `add_points` and add a `custom_note` describing the action. When
 there is no clean structured encoding at all, use `snippet` (a one-sentence
 plain-English rule) instead of `ops`.
 
-### SNIPPET — free-text rule (alternative to `ops`)
-A single sentence describing the rule when `ops` can't capture it. Example:
-`"Ongoing: any player who says 'um' loses 2 points, adjudicated by the table."`
+### SNIPPET — legacy table-adjudicated rule (alternative to `steps` / `ops`)
+The scored photo corpus retains short prose snippets for physical or social
+effects that require human adjudication. Generated executable examples use a
+`SnippetStep` containing real `def apply(state, ctx)` code instead.

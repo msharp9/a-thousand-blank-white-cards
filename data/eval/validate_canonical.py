@@ -13,22 +13,42 @@ from collections import Counter
 from pathlib import Path
 
 TIMING = {"immediate", "modifier"}
-TARGET = {"self", "player", "all", "all_others", "card", "all_cards", "none"}
+TARGET = {"self", "player", "all", "all_others", "center", "card", "all_cards", "none"}
 PLACEMENT = {"discard", "center", "player", "self", "destroy"}
 VENUE = {"all", "in_person", "online"}
 SIGN = {"positive", "negative", "neutral"}
-TRIGGER = {"on_play", "on_draw", "on_turn_start", "on_turn_end", "on_score", None}
+TRIGGER = {
+    "on_play",
+    "on_draw",
+    "on_draw_step",
+    "on_turn_start",
+    "on_turn_end",
+    "on_score",
+    "on_score_change",
+    "on_game_end",
+    "on_validate_play",
+    None,
+}
 OP_NAMES = {
     "add_points",
+    "subtract_points",
     "steal_points",
     "set_points",
     "skip_turn",
     "extra_turn",
     "draw_cards",
     "reverse_order",
+    "scramble_order",
     "change_draw_count",
     "destroy_card",
     "set_win_condition",
+    "set_rule",
+    "register_hook",
+    "unregister_hook",
+    "set_condition",
+    "set_card_attribute",
+    "create_card",
+    "end_game",
     "custom_note",
 }
 
@@ -51,7 +71,7 @@ def validate(path: Path) -> int:
             ("venue", VENUE),
             ("magnitude_sign", SIGN),
         ):
-            val = hc.get(field, "<missing>")
+            val = hc.get(field, "all" if field == "venue" else "<missing>")
             if val not in allowed:
                 errors.append(f"{tag}: {field}={val!r} not in {sorted(allowed)}")
             else:
@@ -60,10 +80,11 @@ def validate(path: Path) -> int:
             errors.append(f"{tag}: trigger_event={hc.get('trigger_event')!r} invalid")
         has_ops = bool(hc.get("ops"))
         has_snip = bool(hc.get("snippet"))
-        if has_ops and has_snip:
-            errors.append(f"{tag}: has BOTH ops and snippet")
-        if not has_ops and not has_snip:
-            errors.append(f"{tag}: has NEITHER ops nor snippet")
+        has_steps = bool(hc.get("steps"))
+        if sum((has_ops, has_snip, has_steps)) > 1:
+            errors.append(f"{tag}: has more than one of ops, snippet, or steps")
+        if not any((has_ops, has_snip, has_steps)):
+            errors.append(f"{tag}: has none of ops, snippet, or steps")
         for op in hc.get("ops") or []:
             if op.get("op") not in OP_NAMES:
                 errors.append(f"{tag}: unknown op {op.get('op')!r}")

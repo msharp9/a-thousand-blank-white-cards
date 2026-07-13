@@ -199,7 +199,9 @@
       "ops": [
         {
           "op": "end_game",
-          "args": {}
+          "args": {
+            "winner": "self"
+          }
         }
       ]
     }
@@ -223,61 +225,131 @@
     }
   },
   {
-    "title": "Double Points on Next Play",
-    "description": "Stay in play. The next card you play scores double points.",
-    "canonical": {
-      "timing": "modifier",
-      "target": "self",
-      "placement": "self",
-      "trigger": "on_play_card",
-      "snippet": "The next card the actor plays scores double points. No runtime point-multiplier op exists yet; a later rules-as-data bead should add one."
-    }
-  },
-  {
-    "title": "Negate the Previous Card",
-    "description": "That didn't count. Negate the effect of the last card played.",
-    "canonical": {
-      "timing": "immediate",
-      "target": "center",
-      "placement": "self",
-      "snippet": "Undo the effect of the last card played. No runtime history/negation op exists yet; a later rules-as-data bead should add one."
-    }
-  },
-  {
-    "title": "Trade Hands with Any Player",
-    "description": "Pick another player. Swap your entire hand of cards with theirs.",
-    "canonical": {
-      "timing": "immediate",
-      "target": "player",
-      "placement": "self",
-      "snippet": "The actor picks another player and swaps their entire hand with that player's hand. No runtime hand-swap op exists yet; a later rules-as-data bead should add one."
-    }
-  },
-  {
-    "title": "Uno",
-    "description": "Announce 'Uno!' if you have exactly one card left, or play this card to make someone else who has one card draw two.",
-    "canonical": {
-      "timing": "immediate",
-      "target": "player",
-      "placement": "self",
-      "snippet": "If target player has exactly 1 card in hand, they draw 2. If you have 1 card and announce Uno before this is played against you, effect is negated."
-    }
-  },
-  {
-    "title": "The Floor Is Lava",
-    "description": "Stay in play. Any player who stands up during the game loses 5 points.",
+    "title": "Draw Bonus Rule",
+    "description": "For the rest of the game, whenever a player takes their draw step, they gain 1 point.",
     "canonical": {
       "timing": "modifier",
       "target": "all",
       "placement": "center",
-      "trigger": "on_physical_action",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_draw_step",
+            "scope": "center",
+            "code": "def apply(state, ctx):\n    state.add_points('self', 1)\n"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Most Cards Drawn Wins",
+    "description": "End the game now. The player or tied players who have drawn the most cards win.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "self",
+      "steps": [
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    totals = state.draw_totals()\n    best = max(totals.values())\n    winners = []\n    for player_id, total in totals.items():\n        if total == best:\n            winners.append('id:' + player_id)\n    state.end_game(winners)\n",
+          "explanation": "Use structured draw history and preserve every tied winner."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Targeted Turnaround",
+    "description": "Choose a player. They lose 2 points and skip their next turn; you gain 2 points.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "player",
+      "placement": "self",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 2,
+            "target": "chosen_player"
+          }
+        },
+        {
+          "op": "skip_turn",
+          "args": {
+            "target": "chosen_player"
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 2,
+            "target": "self"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Basic Uno",
+    "description": "Turn this game into basic Uno: draw 0 automatically, and the first player with no cards in hand wins immediately.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "empty_hand"
+          }
+        },
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "end_condition.type",
+            "value": "empty_hand"
+          }
+        },
+        {
+          "op": "change_draw_count",
+          "args": {
+            "amount": 0
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Red Card Rule",
+    "description": "At the physical table, only red cards may be played while this rule remains in the center.",
+    "canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
       "venue": "in_person",
-      "snippet": "If any player stands from their seat while this card is in play, they lose 5 points. Honor system applies."
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.current_color",
+            "value": "red"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_validate_play",
+            "scope": "center",
+            "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"
+          }
+        }
+      ]
     }
   },
   {
     "title": "This Card is Worth 10 Points If You Keep It",
-    "description": "Hold onto this card. At game end, it's worth 10 points \u2014 but only if you still have it.",
+    "description": "Hold onto this card. At game end, it's worth 10 points — but only if you still have it.",
     "canonical": {
       "timing": "modifier",
       "target": "self",
@@ -313,13 +385,107 @@
     }
   },
   {
-    "title": "Create a New Rule",
-    "description": "Invent a new rule. Write it on a blank card right now and shuffle it into the deck. The rule is now in effect.",
+    "title": "Spicy Uno",
+    "description": "Use basic Uno ending and draw rules, color your remaining hand red, and shuffle Draw 2, Draw 4, and Reverse cards into the deck.",
     "canonical": {
-      "timing": "immediate",
+      "timing": "modifier",
       "target": "all",
       "placement": "center",
-      "snippet": "The active player invents a rule, writes it on a blank card, shuffles it into the draw pile, and announces it. The rule takes effect immediately."
+      "steps": [
+        {
+          "kind": "ops",
+          "ops": [
+            {
+              "op": "set_win_condition",
+              "kind": "empty_hand"
+            },
+            {
+              "op": "set_rule",
+              "path": "end_condition.type",
+              "value": "empty_hand"
+            },
+            {
+              "op": "change_draw_count",
+              "amount": 0
+            },
+            {
+              "op": "set_card_attribute",
+              "card_target": "all_in_hand",
+              "key": "color",
+              "value": "red"
+            },
+            {
+              "op": "create_card",
+              "title": "Draw 2",
+              "description": "The next player draws 2 and skips their turn.",
+              "ops": [
+                {
+                  "op": "draw_cards",
+                  "args": {
+                    "target": "right_neighbor",
+                    "amount": 2
+                  }
+                },
+                {
+                  "op": "skip_turn",
+                  "args": {
+                    "target": "right_neighbor"
+                  }
+                }
+              ],
+              "attributes": {
+                "color": "red",
+                "symbol": "draw_2"
+              },
+              "destination": "deck_shuffle",
+              "count": 1
+            },
+            {
+              "op": "create_card",
+              "title": "Draw 4",
+              "description": "The next player draws 4 and skips their turn.",
+              "ops": [
+                {
+                  "op": "draw_cards",
+                  "args": {
+                    "target": "right_neighbor",
+                    "amount": 4
+                  }
+                },
+                {
+                  "op": "skip_turn",
+                  "args": {
+                    "target": "right_neighbor"
+                  }
+                }
+              ],
+              "attributes": {
+                "color": "wild",
+                "symbol": "draw_4"
+              },
+              "destination": "deck_shuffle",
+              "count": 1
+            },
+            {
+              "op": "create_card",
+              "title": "Reverse",
+              "description": "Reverse turn order.",
+              "ops": [
+                {
+                  "op": "reverse_order",
+                  "args": {}
+                }
+              ],
+              "attributes": {
+                "color": "red",
+                "symbol": "reverse"
+              },
+              "destination": "deck_shuffle",
+              "count": 1
+            }
+          ]
+        }
+      ]
     }
   },
   {
@@ -329,16 +495,23 @@
       "timing": "immediate",
       "target": "self",
       "placement": "self",
-      "ops": [
+      "steps": [
         {
-          "op": "draw_cards",
-          "args": {
-            "amount": 2,
-            "target": "self"
-          }
+          "kind": "ops",
+          "ops": [
+            {
+              "op": "draw_cards",
+              "target": "self",
+              "amount": 2
+            }
+          ]
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    hand_size = state.player(state.actor_id).hand_size\n    state.add_points('self', hand_size)\n",
+          "explanation": "Read the hand only after the draw step has committed."
         }
-      ],
-      "snippet": "def apply(state, ctx):\n    hand_size = state.player(state.actor_id).hand_size\n    state.add_points('self', hand_size)\n"
+      ]
     }
   },
   {
@@ -406,25 +579,47 @@
     }
   },
   {
-    "title": "House Rules: Uno",
-    "description": "For the rest of the game, follow Uno's rules: no automatic per-turn card draw, and the first player to empty their hand goes out. (Win-by-empty-hand isn't expressible in today's op vocabulary yet — a future rules-as-data bead should add a real empty_hand win-condition kind and end trigger; for now this only turns off the draw step.)",
+    "title": "Wild Uno",
+    "description": "Use Uno's empty-hand ending and zero-draw rule. Track the color of each played card and reject plays that do not match the current color.",
     "canonical": {
       "timing": "modifier",
       "target": "all",
       "placement": "center",
-      "trigger": "on_empty_hand",
-      "ops": [
+      "steps": [
         {
-          "op": "set_win_condition",
-          "args": {
-            "kind": "none"
-          }
-        },
-        {
-          "op": "change_draw_count",
-          "args": {
-            "amount": 0
-          }
+          "kind": "ops",
+          "ops": [
+            {
+              "op": "set_win_condition",
+              "kind": "empty_hand"
+            },
+            {
+              "op": "set_rule",
+              "path": "end_condition.type",
+              "value": "empty_hand"
+            },
+            {
+              "op": "change_draw_count",
+              "amount": 0
+            },
+            {
+              "op": "set_rule",
+              "path": "extra.current_color",
+              "value": "red"
+            },
+            {
+              "op": "register_hook",
+              "event": "on_validate_play",
+              "scope": "center",
+              "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"
+            },
+            {
+              "op": "register_hook",
+              "event": "on_play",
+              "scope": "center",
+              "code": "def apply(state, ctx):\n    card = state.card(ctx['card_id'])\n    if card:\n        color = card.get('attributes', {}).get('color')\n        if color:\n            state.set_rule('extra.current_color', color)\n"
+            }
+          ]
         }
       ]
     }
@@ -586,7 +781,7 @@
   },
   {
     "title": "Unreliable Narrator",
-    "description": "Describe the last card that was played \u2014 but get one detail wrong. If no one notices, you gain 2 points. If someone does, they gain 2 points."
+    "description": "Describe the last card that was played — but get one detail wrong. If no one notices, you gain 2 points. If someone does, they gain 2 points."
   },
   {
     "title": "Legacy Card",

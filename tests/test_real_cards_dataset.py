@@ -21,7 +21,7 @@ REAL = DATA_DIR / "real_cards.json"
 
 _VALID_TIMING = {"immediate", "modifier"}
 _VALID_TARGET = {"self", "player", "all", "center"}
-_VALID_PLACEMENT = {"self", "player", "center"}
+_VALID_PLACEMENT = {"discard", "self", "player", "center", "destroy"}
 _VALID_SIGN = {"positive", "negative", "neutral"}
 
 # A genuine Imgur direct image link, e.g. https://i.imgur.com/abc123.jpeg.
@@ -72,7 +72,7 @@ def test_gold_every_card_has_required_fields() -> None:
         assert hc["target"] in _VALID_TARGET
         assert hc["placement"] in _VALID_PLACEMENT
         assert hc["magnitude_sign"] in _VALID_SIGN
-        assert ("ops" in hc) or ("snippet" in hc)
+        assert hc.get("ops") or hc.get("snippet") or hc.get("steps")
 
 
 def test_gold_diversity() -> None:
@@ -88,6 +88,23 @@ def test_gold_diversity() -> None:
 def test_gold_titles_unique() -> None:
     titles = [c["title"] for c in _load(GOLD)]
     assert len(titles) == len(set(titles))
+
+
+def test_gold_includes_ordered_plan_and_game_altering_capability_cases() -> None:
+    cards = _load(GOLD)
+    titles = {card["title"] for card in cards}
+
+    assert {"Chess Master", "Total Chaos", "Most Cards Drawn Wins", "Basic Uno", "Spicy Uno", "Wild Uno"} <= titles
+    assert any(card["human_canonical"].get("steps") for card in cards)
+
+
+def test_wild_uno_eval_mechanics_match_room_tested_seed_plan() -> None:
+    """Keep the scored Wild Uno plan tied to the exemplar exercised in Room tests."""
+    evaluated = {card["title"]: card for card in _load(GOLD)}["Wild Uno"]["human_canonical"]
+    seeds = _load(DATA_DIR.parent / "seed_cards_gold.json")
+    executable = {card["title"]: card for card in seeds}["Wild Uno"]["canonical"]
+
+    assert evaluated["steps"] == executable["steps"]
 
 
 # --------------------------------------------------------------------------- #

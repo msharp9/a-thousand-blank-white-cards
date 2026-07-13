@@ -33,7 +33,7 @@ class TestGoldCards:
         cards = [parse_seed_card(d) for d in _load("seed_cards_gold.json")]
         gold = [c for c in cards if isinstance(c, GoldCard)]
         assert any(c.canonical.ops for c in gold)
-        assert any(c.canonical.snippet for c in gold)
+        assert any(any(step.get("kind") == "snippet" for step in (c.canonical.steps or [])) for c in gold)
 
 
 class TestFillerCards:

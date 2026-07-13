@@ -38,3 +38,26 @@ def test_dsl_validity_missing_output() -> None:
 def test_dsl_validity_malformed() -> None:
     score = dsl_validity.evaluate(_ctx({"effect_program": {"ops": [{"op": "not_a_real_op"}]}}))
     assert score.score == 0.0
+
+
+def test_dsl_validity_accepts_mixed_resolution_plan() -> None:
+    plan = {
+        "steps": [
+            {"kind": "ops", "ops": [{"op": "draw_cards", "target": "self", "amount": 2}]},
+            {
+                "kind": "snippet",
+                "code": "def apply(state, ctx):\n    state.add_points('self', state.hand_size(state.actor_id))\n",
+            },
+        ]
+    }
+
+    assert dsl_validity.evaluate(_ctx({"resolution_plan": plan})).score == 1.0
+
+
+def test_dsl_validity_rejects_invalid_plan_snippet() -> None:
+    plan = {"steps": [{"kind": "snippet", "code": "def apply(state, ctx):\n    state.draw('self', 2)\n"}]}
+
+    score = dsl_validity.evaluate(_ctx({"resolution_plan": plan}))
+
+    assert score.score == 0.0
+    assert "draw_cards" in score.metadata["reason"]
