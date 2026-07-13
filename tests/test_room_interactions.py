@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import pathlib
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
@@ -10,6 +11,14 @@ from models.ws_messages import InteractionResponseMsg, PlayMsg
 from board.rooms.room import Room
 from board.rooms.store import FileRoomStore
 from board.rooms.manager import RoomManager
+
+DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
+
+
+def _gold_plan(title: str) -> ResolutionPlan:
+    cards = json.loads((DATA_DIR / "seed_cards_gold.json").read_text())
+    card = next(card for card in cards if card["title"] == title)
+    return ResolutionPlan.model_validate({"steps": card["canonical"]["steps"]})
 
 
 def _room_with_plan(plan: ResolutionPlan) -> Room:
@@ -40,28 +49,7 @@ def _response(interaction_id: str, kind: str, **payload) -> InteractionResponseM
 
 
 def test_sealed_auction_pauses_atomically_and_resumes_once() -> None:
-    plan = ResolutionPlan.model_validate(
-        {
-            "steps": [
-                {
-                    "kind": "interaction",
-                    "result_key": "bids",
-                    "request": {
-                        "kind": "number",
-                        "prompt": "Bid for this card",
-                        "audience": "all",
-                        "sealed": True,
-                        "minimum": 0,
-                        "maximum": 20,
-                    },
-                },
-                {
-                    "kind": "snippet",
-                    "code": "def apply(state, ctx):\n    bids = ctx['interactions']['bids']\n    best = max(bids.values())\n    winner = [pid for pid in state.turn_order if bids[pid] == best][0]\n    state.subtract_points('id:' + winner, int(bids[winner]))\n    state.transfer_card('this', 'id:' + winner)\n",
-                },
-            ]
-        }
-    )
+    plan = _gold_plan("Going Once, Going Twice")
     room = _room_with_plan(plan)
     room.state = room.state.model_copy(
         update={"players": [player.model_copy(update={"score": 10}) for player in room.state.players]}
@@ -94,21 +82,7 @@ def test_sealed_auction_pauses_atomically_and_resumes_once() -> None:
 
 
 def test_auction_tie_uses_effective_turn_order() -> None:
-    plan = ResolutionPlan.model_validate(
-        {
-            "steps": [
-                {
-                    "kind": "interaction",
-                    "result_key": "bids",
-                    "request": {"kind": "number", "prompt": "Bid", "audience": "all", "sealed": True},
-                },
-                {
-                    "kind": "snippet",
-                    "code": "def apply(state, ctx):\n    bids = ctx['interactions']['bids']\n    best = max(bids.values())\n    winner = [pid for pid in state.turn_order if bids[pid] == best][0]\n    state.subtract_points('id:' + winner, int(best))\n    state.transfer_card('this', 'id:' + winner)\n",
-                },
-            ]
-        }
-    )
+    plan = _gold_plan("Going Once, Going Twice")
     room = _room_with_plan(plan)
     room.state = room.state.model_copy(
         update={
@@ -328,27 +302,7 @@ def test_partial_timeout_uses_submitted_values_and_defaults() -> None:
 
 
 def test_drawing_then_vote_materializes_sealed_submissions_and_tied_winners() -> None:
-    plan = ResolutionPlan.model_validate(
-        {
-            "steps": [
-                {
-                    "kind": "interaction",
-                    "result_key": "cats",
-                    "request": {"kind": "drawing", "prompt": "Draw a cat", "audience": "all", "sealed": True},
-                },
-                {
-                    "kind": "interaction",
-                    "result_key": "votes",
-                    "request": {"kind": "choice", "prompt": "Best cat?", "audience": "all"},
-                    "input_refs": {"options": {"result_key": "cats"}},
-                },
-                {
-                    "kind": "snippet",
-                    "code": "def apply(state, ctx):\n    counts = {}\n    for picks in ctx['interactions']['votes'].values():\n        for pid in picks:\n            counts[pid] = counts.get(pid, 0) + 1\n    best = max(counts.values())\n    for pid, count in counts.items():\n        if count == best:\n            state.add_points('id:' + pid, 1)\n",
-                },
-            ]
-        }
-    )
+    plan = _gold_plan("Cat Show")
     room = _room_with_plan(plan)
     stroke = [{"points": [{"x": 0.1, "y": 0.2}, {"x": 0.8, "y": 0.9}]}]
 
@@ -365,8 +319,42 @@ def test_drawing_then_vote_materializes_sealed_submissions_and_tied_winners() ->
         await room.handle_action("p2", _response(vote.interaction_id, "choice", option_ids=["p2"]))
 
     asyncio.run(scenario())
-    assert [player.score for player in room.state.players] == [1, 1]
+    assert [player.score for player in room.state.players] == [3, 3]
     assert room._pending_resolution is None
+
+
+def test_cat_show_vote_stage_survives_cold_restore_and_completes(tmp_path) -> None:
+    room = _room_with_plan(_gold_plan("Cat Show"))
+    stroke = [{"points": [{"x": 0.1, "y": 0.2}, {"x": 0.8, "y": 0.9}]}]
+
+    async def reach_vote() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        drawing_id = room._pending_resolution.interaction_id
+        await room.handle_action("p1", _response(drawing_id, "drawing", strokes=stroke))
+        await room.handle_action("p2", _response(drawing_id, "drawing", strokes=stroke))
+
+    asyncio.run(reach_vote())
+    assert room._pending_resolution is not None
+    assert room._pending_resolution.request.kind == "choice"
+    assert set(room._pending_resolution.interactions["cats"]) == {"p1", "p2"}
+
+    store = FileRoomStore(tmp_path)
+    store.put(room.code, room)
+    restored = FileRoomStore(tmp_path).get(room.code)
+    assert restored is not None and restored._pending_resolution is not None
+    assert restored._pending_resolution.request.kind == "choice"
+    assert set(restored._pending_resolution.interactions["cats"]) == {"p1", "p2"}
+    restored.connections.connect("p1", AsyncMock())
+    restored.connections.connect("p2", AsyncMock())
+
+    async def finish_vote() -> None:
+        vote_id = restored._pending_resolution.interaction_id
+        await restored.handle_action("p1", _response(vote_id, "choice", option_ids=["p1"]))
+        await restored.handle_action("p2", _response(vote_id, "choice", option_ids=["p2"]))
+
+    asyncio.run(finish_vote())
+    assert restored._pending_resolution is None
+    assert [player.score for player in restored.state.players] == [3, 3]
 
 
 def test_pending_resolution_persists_and_request_replays_without_values(tmp_path) -> None:
