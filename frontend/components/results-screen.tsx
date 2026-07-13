@@ -95,13 +95,16 @@ export function ResultsScreen({
           <div
             key={player.id}
             className={cn(
-              "flex items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-white px-4 py-3.5 panel-shadow",
+              "flex items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-card px-4 py-3.5 panel-shadow",
               rank % 2 ? "rotate-[0.5deg]" : "-rotate-[0.5deg]",
             )}
           >
             <span
               className="w-11 shrink-0 text-center font-marker text-3xl"
-              style={{ color: rank === 0 ? "var(--color-amber)" : "#999" }}
+              style={{
+                color:
+                  rank === 0 ? "var(--color-amber)" : "var(--muted-foreground)",
+              }}
             >
               #{rank + 1}
             </span>
@@ -111,7 +114,7 @@ export function ResultsScreen({
                 {player.name}
                 {player.id === myPlayerId && " (you)"} {MEDALS[rank] ?? ""}
               </p>
-              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full border-[1.5px] border-ink bg-[#eee]">
+              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full border-[1.5px] border-ink bg-muted">
                 <div
                   className="h-full"
                   style={{
@@ -210,7 +213,7 @@ function OutcomeColumn({
   destroyed?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border-[2.5px] border-ink bg-white p-3 panel-shadow">
+    <div className="flex flex-col gap-2 rounded-2xl border-[2.5px] border-ink bg-card p-3 panel-shadow">
       <p
         className={cn(
           "font-marker text-sm",

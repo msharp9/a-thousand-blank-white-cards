@@ -9,17 +9,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "border-ink bg-primary text-primary-foreground sticker-shadow hover:bg-primary active:not-aria-[haspopup]:shadow-[2px_2px_0_#1a1a1a]",
+          "border-ink bg-primary text-primary-foreground sticker-shadow hover:bg-primary active:not-aria-[haspopup]:shadow-[2px_2px_0_var(--sticker-ink)]",
         outline:
-          "border-ink bg-white text-foreground sticker-shadow hover:bg-muted aria-expanded:bg-muted active:not-aria-[haspopup]:shadow-[2px_2px_0_#1a1a1a]",
+          "border-ink bg-card text-foreground sticker-shadow hover:bg-muted aria-expanded:bg-muted active:not-aria-[haspopup]:shadow-[2px_2px_0_var(--sticker-ink)]",
         secondary:
-          "border-ink bg-white text-foreground sticker-shadow hover:bg-muted aria-expanded:bg-muted active:not-aria-[haspopup]:shadow-[2px_2px_0_#1a1a1a]",
+          "border-ink bg-card text-foreground sticker-shadow hover:bg-muted aria-expanded:bg-muted active:not-aria-[haspopup]:shadow-[2px_2px_0_var(--sticker-ink)]",
         accent:
-          "border-ink bg-accent text-accent-foreground sticker-shadow hover:bg-accent/90 active:not-aria-[haspopup]:shadow-[2px_2px_0_#1a1a1a]",
+          "border-ink bg-accent text-accent-foreground sticker-shadow hover:bg-accent/90 active:not-aria-[haspopup]:shadow-[2px_2px_0_var(--sticker-ink)]",
         ghost:
           "border-transparent hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground active:not-aria-[haspopup]:translate-x-0 active:not-aria-[haspopup]:translate-y-0",
         destructive:
-          "border-ink bg-destructive text-white sticker-shadow hover:bg-destructive/90 active:not-aria-[haspopup]:shadow-[2px_2px_0_#1a1a1a]",
+          "border-ink bg-destructive text-white sticker-shadow hover:bg-destructive/90 active:not-aria-[haspopup]:shadow-[2px_2px_0_var(--sticker-ink)]",
         link: "border-transparent text-primary underline-offset-4 hover:underline active:not-aria-[haspopup]:translate-x-0 active:not-aria-[haspopup]:translate-y-0",
       },
       size: {

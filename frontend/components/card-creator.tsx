@@ -241,7 +241,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
 
     return (
       <div className="flex flex-wrap items-start justify-center gap-4">
-        <div className="flex flex-row flex-wrap items-center gap-2 rounded-2xl border-[2.5px] border-ink bg-white p-2.5 panel-shadow sm:flex-col sm:items-stretch">
+        <div className="flex flex-row flex-wrap items-center gap-2 rounded-2xl border-[2.5px] border-ink bg-card p-2.5 panel-shadow sm:flex-col sm:items-stretch">
           <div className="font-marker text-center text-xs">Ink</div>
           {INKS.map((pen) => (
             <button
@@ -275,7 +275,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
                 setArmedStamp(null);
               }}
               className={cn(
-                "flex size-8 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-white",
+                "flex size-8 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-card",
                 nib === n.size && "ring-[3px] ring-ring ring-offset-1",
               )}
             >
@@ -307,7 +307,9 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
         </div>
 
         <div className="flex min-w-0 flex-col items-center gap-2">
-          <div className="relative w-full max-w-[400px] rounded-xl border-[2.5px] border-ink bg-white p-4 shadow-[0_12px_30px_rgba(20,18,14,0.22)]">
+          {/* The card being authored is a physical paper artifact: its face
+              stays white and its ink tokens stay dark in both themes. */}
+          <div className="paper-scope bg-card-face relative w-full max-w-[400px] rounded-xl border-[2.5px] border-ink p-4 shadow-[0_12px_30px_rgba(20,18,14,0.22)]">
             <div className="bg-tape absolute -top-2.5 left-[20%] h-5 w-20 rotate-[-6deg]" />
             <div className="bg-tape absolute -top-2.5 right-[20%] h-5 w-20 rotate-[5deg]" />
             <div className="pointer-events-none absolute inset-2 rounded-lg border border-dashed border-ink/25" />
@@ -320,7 +322,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
               className="font-hand w-full border-b-[1.5px] border-ink bg-transparent px-1.5 pb-1.5 pt-0.5 text-center text-[26px] leading-tight outline-none placeholder:text-ink/30"
             />
 
-            <div className="relative my-3 overflow-hidden rounded-md border-[1.5px] border-ink bg-white">
+            <div className="relative my-3 overflow-hidden rounded-md border-[1.5px] border-ink bg-card-face">
               <canvas
                 ref={canvasRef}
                 onPointerDown={handlePointerDown}
@@ -353,7 +355,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
           )}
         </div>
 
-        <div className="w-full max-w-[400px] rounded-2xl border-[2.5px] border-ink bg-white p-3 panel-shadow sm:w-[190px]">
+        <div className="w-full max-w-[400px] rounded-2xl border-[2.5px] border-ink bg-card p-3 panel-shadow sm:w-[190px]">
           <div className="font-marker mb-1 text-sm">Stamps</div>
           <div className="mb-2 text-[11px] font-bold text-muted-foreground">
             Tap one, then tap the card to stamp it.
@@ -368,7 +370,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
                   setArmedStamp((cur) => (cur === emoji ? null : emoji))
                 }
                 className={cn(
-                  "flex aspect-square cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-white text-lg",
+                  "flex aspect-square cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-card text-lg",
                   armedStamp === emoji && "border-2 border-ring bg-accent",
                 )}
               >

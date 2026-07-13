@@ -86,7 +86,7 @@ export function SetupPhase({
             {gameState.players.map((p) => (
               <span
                 key={p.id}
-                className="rounded-[10px] border-[1.5px] border-ink bg-white px-2.5 py-0.5 font-hand text-sm"
+                className="rounded-[10px] border-[1.5px] border-ink bg-card px-2.5 py-0.5 font-hand text-sm"
               >
                 {p.name} {gameState.setup_progress[p.id] ?? 0}/{target}
               </span>

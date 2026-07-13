@@ -47,12 +47,13 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-  --color-felt: #2f7d5b;
-  --color-panel-paper: #efe9da;
-  --color-marker-green: #1f9e6b;
-  --color-amber: #e8a33d;
-  --color-tape: rgba(238, 214, 120, 0.6);
-  --color-ink: #1a1a1a;
+  --color-felt: var(--felt);
+  --color-panel-paper: var(--panel-paper);
+  --color-marker-green: var(--marker-green);
+  --color-amber: var(--amber);
+  --color-tape: var(--tape);
+  --color-ink: var(--ink);
+  --color-card-face: var(--card-face);
 }
 
 :root {
@@ -74,54 +75,91 @@
   --border: #1a1a1a;
   --input: #1a1a1a;
   --ring: #e24a3b;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --chart-1: #e24a3b;
+  --chart-2: #2e5eaa;
+  --chart-3: #1f9e6b;
+  --chart-4: #e8a33d;
+  --chart-5: #f5d547;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1a1a;
+  --sidebar-primary: #e24a3b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #efe9da;
+  --sidebar-accent-foreground: #1a1a1a;
+  --sidebar-border: #1a1a1a;
+  --sidebar-ring: #e24a3b;
+  --ink: #1a1a1a;
+  --felt: #2f7d5b;
+  --panel-paper: #efe9da;
+  --marker-green: #1f9e6b;
+  --amber: #e8a33d;
+  --tape: rgba(238, 214, 120, 0.6);
+  /* Physical paper artifacts (card faces, drawing canvas) stay white in both
+     themes — real cards on a dark table. */
+  --card-face: #ffffff;
+  --dot-grid: rgba(26, 26, 26, 0.05);
+  --sticker-ink: #1a1a1a;
+  --panel-shadow-color: rgba(26, 26, 26, 0.11);
+  --link: #e24a3b;
+  --link-hover: #b83527;
+  --player-0: #e24a3b;
+  --player-1: #2e5eaa;
+  --player-2: #1f9e6b;
+  --player-3: #e8a33d;
 }
 
+/* "Night table" variant: same sketchbook language on a dark room — deep-green
+   felt, near-black warm paper with a cream dot grid, cream ink. Accents and
+   identity colors are lifted just enough to hold ~3:1+ on the dark panels. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #1e1b16;
+  --foreground: #ece5d3;
+  --card: #27231c;
+  --card-foreground: #ece5d3;
+  --popover: #27231c;
+  --popover-foreground: #ece5d3;
+  --primary: #e6553f;
+  --primary-foreground: #ffffff;
+  --secondary: #4e7ecd;
+  --secondary-foreground: #ffffff;
+  --muted: #332d23;
+  --muted-foreground: #a89e8b;
+  --accent: #f5d547;
+  --accent-foreground: #1a1a1a;
+  --destructive: #e6553f;
+  --border: #ded6c2;
+  --input: #ded6c2;
+  --ring: #e6553f;
+  --chart-1: #e8564a;
+  --chart-2: #4e7ecd;
+  --chart-3: #2ab37c;
+  --chart-4: #ecac49;
+  --chart-5: #f5d547;
+  --sidebar: #27231c;
+  --sidebar-foreground: #ece5d3;
+  --sidebar-primary: #e6553f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #332d23;
+  --sidebar-accent-foreground: #ece5d3;
+  --sidebar-border: #ded6c2;
+  --sidebar-ring: #e6553f;
+  --ink: #ece5d3;
+  --felt: #1d4f3a;
+  --panel-paper: #2b261e;
+  --marker-green: #2ab37c;
+  --amber: #ecac49;
+  --tape: rgba(238, 214, 120, 0.55);
+  --card-face: #ffffff;
+  --dot-grid: rgba(236, 229, 211, 0.06);
+  --sticker-ink: rgba(0, 0, 0, 0.9);
+  --panel-shadow-color: rgba(0, 0, 0, 0.45);
+  --link: #f0705f;
+  --link-hover: #f4988c;
+  --player-0: #e8564a;
+  --player-1: #4e7ecd;
+  --player-2: #2ab37c;
+  --player-3: #ecac49;
 }
 
 @keyframes floaty {
@@ -168,15 +206,24 @@
 }
 
 @utility sticker-shadow {
-  box-shadow: 4px 4px 0 #1a1a1a;
+  box-shadow: 4px 4px 0 var(--sticker-ink);
 }
 
 @utility sticker-shadow-sm {
-  box-shadow: 3px 3px 0 #1a1a1a;
+  box-shadow: 3px 3px 0 var(--sticker-ink);
 }
 
 @utility panel-shadow {
-  box-shadow: 4px 4px 0 rgba(26, 26, 26, 0.11);
+  box-shadow: 4px 4px 0 var(--panel-shadow-color);
+}
+
+/* Scopes ink/text tokens back to light-paper values inside a white card face,
+   so its contents stay legible when the surrounding theme is dark. */
+@utility paper-scope {
+  --ink: #1a1a1a;
+  --foreground: #1a1a1a;
+  --muted-foreground: #666666;
+  color: var(--foreground);
 }
 
 @layer base {
@@ -185,20 +232,17 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
-    background-image: radial-gradient(
-      rgba(26, 26, 26, 0.05) 1px,
-      transparent 1px
-    );
+    background-image: radial-gradient(var(--dot-grid) 1px, transparent 1px);
     background-size: 22px 22px;
   }
   html {
     @apply font-sans;
   }
   a {
-    color: #e24a3b;
+    color: var(--link);
   }
   a:hover {
-    color: #b83527;
+    color: var(--link-hover);
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -208,7 +252,17 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(26, 26, 26, 0.25);
+    background: color-mix(in oklab, var(--ink) 25%, transparent);
     border-radius: 6px;
   }
+}
+
+/* Dark-mode repaint for hardcoded paper classes in files owned by parallel
+   beads (room page, hand, dynamic-state-panel). Unlayered so it outranks the
+   utility layer; delete once those files use bg-card/text tokens. */
+.dark :is(.bg-white, .bg-white\/90) {
+  background-color: var(--card);
+}
+.dark .text-\[\#444\] {
+  color: var(--muted-foreground);
 }

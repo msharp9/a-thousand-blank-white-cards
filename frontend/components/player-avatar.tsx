@@ -26,7 +26,7 @@ export function PlayerAvatar({
           width: size,
           height: size,
           background: color,
-          border: `${size >= 38 ? 2.5 : 2}px solid #1a1a1a`,
+          border: `${size >= 38 ? 2.5 : 2}px solid var(--ink)`,
           fontSize: Math.round(size * 0.5),
         } as CSSProperties
       }
