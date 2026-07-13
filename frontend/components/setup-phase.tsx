@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getCardArtUrl } from "@/lib/art";
 import type { CardSnapshot, ClientMsg, GameStateSnapshot } from "@/lib/types";
-import { CardTile } from "./card";
 import { CreateCardDialog } from "./create-card-dialog";
+import { SketchCard } from "./sketch-card";
 
 interface SetupPhaseProps {
   gameState: GameStateSnapshot;
@@ -106,9 +107,14 @@ export function SetupPhase({
           </p>
         ) : (
           <ScrollArea className="max-h-[28rem] w-full">
-            <div className="grid grid-cols-3 gap-2 pb-2 sm:grid-cols-4 md:grid-cols-5">
+            <div className="flex flex-wrap gap-3 px-1 pb-3 pt-2">
               {myAuthored.map((card) => (
-                <CardTile key={card.id} card={card} className="w-full" />
+                <SketchCard
+                  key={card.id}
+                  card={card}
+                  w={130}
+                  artUrl={getCardArtUrl(gameState.room_code, card)}
+                />
               ))}
             </div>
           </ScrollArea>
@@ -121,9 +127,14 @@ export function SetupPhase({
             Your dealt hand ({myCards.length})
           </p>
           <ScrollArea className="max-h-[28rem] w-full">
-            <div className="grid grid-cols-3 gap-2 pb-2 sm:grid-cols-4 md:grid-cols-5">
+            <div className="flex flex-wrap gap-3 px-1 pb-3 pt-2">
               {myCards.map((card) => (
-                <CardTile key={card.id} card={card} className="w-full" />
+                <SketchCard
+                  key={card.id}
+                  card={card}
+                  w={130}
+                  artUrl={getCardArtUrl(gameState.room_code, card)}
+                />
               ))}
             </div>
           </ScrollArea>
@@ -139,9 +150,14 @@ export function SetupPhase({
             These ship with the deck — author cards that play well with them.
           </p>
           <ScrollArea className="max-h-[28rem] w-full">
-            <div className="grid grid-cols-3 gap-2 pb-2 sm:grid-cols-4 md:grid-cols-5">
+            <div className="flex flex-wrap gap-3 px-1 pb-3 pt-2">
               {premadeCards.map((card) => (
-                <CardTile key={card.id} card={card} className="w-full" />
+                <SketchCard
+                  key={card.id}
+                  card={card}
+                  w={92}
+                  artUrl={getCardArtUrl(gameState.room_code, card)}
+                />
               ))}
             </div>
           </ScrollArea>

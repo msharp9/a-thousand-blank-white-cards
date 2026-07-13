@@ -2,18 +2,21 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CardTile } from "@/components/card";
 import { PlayBlankDialog } from "@/components/play-blank-dialog";
+import { SketchCard } from "@/components/sketch-card";
+import { getCardArtUrl } from "@/lib/art";
 import type { CardSnapshot, ClientMsg } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface HandProps {
   cards: CardSnapshot[];
   /** Is it this player's turn? Play controls only show when true. */
   canPlay: boolean;
   send: (msg: ClientMsg) => void;
+  roomCode?: string;
 }
 
-export function Hand({ cards, canPlay, send }: HandProps) {
+export function Hand({ cards, canPlay, send, roomCode }: HandProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [blankDialogOpen, setBlankDialogOpen] = useState(false);
 
@@ -44,28 +47,36 @@ export function Hand({ cards, canPlay, send }: HandProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="font-hand text-sm uppercase tracking-wide text-muted-foreground">
         Your hand
       </p>
       {cards.length === 0 ? (
-        <p className="text-xs italic text-muted-foreground">
+        <p className="font-hand text-sm italic text-muted-foreground">
           No cards in hand.
         </p>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          {cards.map((card) => (
-            <CardTile
-              key={card.id}
-              card={card}
-              selectable={canPlay}
-              onClick={() => setSelectedId(card.id)}
-              className={
-                selectedId === card.id
-                  ? "border-primary ring-2 ring-primary/30"
-                  : undefined
-              }
-            />
-          ))}
+        <div className="flex items-end px-2 pb-2 pt-10">
+          {cards.map((card, i) => {
+            const isSelected = selectedId === card.id;
+            return (
+              <SketchCard
+                key={card.id}
+                card={card}
+                w={130}
+                rot={(i - (cards.length - 1) / 2) * 3}
+                selectable={canPlay}
+                selected={isSelected}
+                onClick={() => setSelectedId(card.id)}
+                artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
+                className={cn(
+                  i > 0 && "-ml-[34px]",
+                  "hover:z-30",
+                  isSelected && "z-30",
+                  selectedId && !isSelected && "opacity-55",
+                )}
+              />
+            );
+          })}
         </div>
       )}
 

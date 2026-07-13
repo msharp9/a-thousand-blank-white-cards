@@ -92,6 +92,9 @@ export type CardSnapshot = {
   // game seeds blanks into the deck; a blank sits in hand as blank and is
   // authored when played. Cleared once the player fills it in on play.
   blank?: boolean;
+  // True when the backend has rendered artwork for this card, servable from
+  // GET /rooms/{code}/cards/{id}/art (see lib/art.ts).
+  has_art?: boolean;
 };
 
 export type PlayerSnapshot = {

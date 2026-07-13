@@ -277,6 +277,7 @@ export default function RoomPage() {
             <HouseRulesZone
               centerCards={houseRuleCards}
               brewingCardId={brewing}
+              roomCode={code}
             />
             {isSpectator ? (
               <p className="text-sm italic text-muted-foreground">
@@ -323,6 +324,7 @@ export default function RoomPage() {
                   cards={myHandCards}
                   canPlay={isActive && gameState.has_drawn}
                   send={send}
+                  roomCode={code}
                 />
               </>
             )}
@@ -351,7 +353,12 @@ export default function RoomPage() {
                 </p>
               </div>
             )}
-            <EpilogueView cards={epilogueCards} send={send} isHost={isHost} />
+            <EpilogueView
+              cards={epilogueCards}
+              send={send}
+              isHost={isHost}
+              roomCode={code}
+            />
           </div>
         )}
 

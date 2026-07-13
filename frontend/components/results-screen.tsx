@@ -1,12 +1,15 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EffectLog } from "@/components/effect-log";
 import { GameTable } from "@/components/game-table";
+import { SketchCard, stableRotation } from "@/components/sketch-card";
+import { getCardArtUrl } from "@/lib/art";
 import type {
+  CardSnapshot,
   ClientMsg,
   EpilogueCardOutcome,
   GameStateSnapshot,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface ResultsScreenProps {
   gameState: GameStateSnapshot;
@@ -80,7 +83,11 @@ export function ResultsScreen({
       <GameTable gameState={gameState} myPlayerId={myPlayerId} />
       <EffectLog log={log} brewing={null} className="w-full max-w-2xl" />
       {gameState.epilogue_result && (
-        <EpilogueOutcomeLists result={gameState.epilogue_result} />
+        <EpilogueOutcomeLists
+          result={gameState.epilogue_result}
+          cards={gameState.cards}
+          roomCode={gameState.room_code}
+        />
       )}
       {!isFinal && isHost && (
         <Button onClick={() => send({ type: "epilogue_start" })}>
@@ -103,16 +110,27 @@ export function ResultsScreen({
 
 function EpilogueOutcomeLists({
   result,
+  cards,
+  roomCode,
 }: {
   result: { kept: EpilogueCardOutcome[]; destroyed: EpilogueCardOutcome[] };
+  cards: Record<string, CardSnapshot>;
+  roomCode: string;
 }) {
   return (
     <div className="grid w-full max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
-      <OutcomeColumn title="Kept" variant="default" cards={result.kept} />
+      <OutcomeColumn
+        title="Kept"
+        outcomes={result.kept}
+        cards={cards}
+        roomCode={roomCode}
+      />
       <OutcomeColumn
         title="Destroyed"
-        variant="destructive"
-        cards={result.destroyed}
+        outcomes={result.destroyed}
+        cards={cards}
+        roomCode={roomCode}
+        destroyed
       />
     </div>
   );
@@ -120,27 +138,40 @@ function EpilogueOutcomeLists({
 
 function OutcomeColumn({
   title,
-  variant,
+  outcomes,
   cards,
+  roomCode,
+  destroyed,
 }: {
   title: string;
-  variant: "default" | "destructive";
-  cards: EpilogueCardOutcome[];
+  outcomes: EpilogueCardOutcome[];
+  cards: Record<string, CardSnapshot>;
+  roomCode: string;
+  destroyed?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {title} ({cards.length})
+      <p className="font-hand text-sm uppercase tracking-wide text-muted-foreground">
+        {title} ({outcomes.length})
       </p>
-      {cards.length === 0 ? (
+      {outcomes.length === 0 ? (
         <p className="text-xs italic text-muted-foreground">None.</p>
       ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {cards.map((card) => (
-            <Badge key={card.id} variant={variant} className="text-[10px]">
-              {card.title || "Untitled"}
-            </Badge>
-          ))}
+        <div className="flex flex-wrap gap-3 px-1 pb-2 pt-1">
+          {outcomes.map((outcome) => {
+            const card = cards[outcome.id];
+            return (
+              <SketchCard
+                key={outcome.id}
+                card={card}
+                title={card ? undefined : outcome.title}
+                w={92}
+                rot={stableRotation(outcome.id, 3)}
+                artUrl={card ? getCardArtUrl(roomCode, card) : null}
+                className={cn(destroyed && "opacity-70 grayscale")}
+              />
+            );
+          })}
         </div>
       )}
     </div>
