@@ -379,15 +379,20 @@ code:
 
 - **`validate.py`** — a static AST allowlist run *before* code is ever stored or
   executed: no `import`/`from`-import, no `exec`/`eval`/`open`/`compile`/
-  `__import__`/`breakpoint` calls, no dunder attribute access, and exactly one
-  top-level function named `apply`.
+  `__import__`/`breakpoint` calls, no private attribute access, and exactly one
+  top-level function named `apply`. Direct calls on the `state` argument are also
+  checked against the real `SandboxGame` surface, including argument binding and
+  close-name suggestions (`state.draw(...)` is rejected with `draw_cards`).
 - **`api_surface.py`** — the snippet's `apply` receives a restricted
   `SandboxGame` façade, never raw `GameState`. It exposes reads (player views,
   `my_hand`, `hand_size`, `deck_size`, `rules`, `conditions`, `card` metadata,
   `turn_order`) and mutators at FULL op parity (points/turn ops plus
   `draw_cards`, `destroy_card`, `set_win_condition`, `end_game`, `set_rule`,
   `set_condition`, `set_card_attribute`, `create_card`, `register_hook`,
-  `reject_play`) that only **record op dicts** — they cannot touch real state.
+  `unregister_hook`, `custom_note`, `reject_play`) that only **record op dicts** —
+  they cannot touch real state. Canonical mutator names and parameter order match
+  the `Op` models exactly; compatibility aliases remain available for persisted
+  snippets.
 - **`runner.py`** — `execute_snippet` spawns an isolated subprocess
   (`python -I` via `_child_runner.py`) with a wall-clock timeout; the child
   emits the recorded op diff as JSON. **The subprocess is the security boundary**
@@ -405,6 +410,15 @@ So the sandbox isolates: (1) *what code can be written* (AST allowlist), (2)
 *what it can reach* (`SandboxGame` façade, not `GameState`), (3) *where it runs*
 (subprocess + rlimit + timeout), and (4) *what it can ultimately do* (re-validated
 ops through the normal reducers).
+
+`read_engine_methods` derives its signatures from `SandboxGame`, rather than the
+server-only `GameEngine` façade. For any snippet, hook, or mixed plan, the agent
+also receives a context-bound `dry_run_effect` tool. It runs the complete ordered
+plan against a cloned state through the real reducers and sandbox subprocess. A
+server-side final gate repeats static validation and the dry run, attempts one
+bounded repair when validation fails, and returns an effectless invalid verdict
+if the repair is still unsafe. Snippet handlers close over their own source code;
+there is no process-global cache that can collide across rooms or cards.
 
 ---
 

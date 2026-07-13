@@ -17,6 +17,7 @@ from langchain_core.tools import tool
 from agent.contract import InterpretResult
 from agent.persona import PERSONA_ACTIONS, build_system_prompt
 from agent.runtime import _forced_final_result, build_agent, run_agent
+from models.game_state import GameState, Player
 
 
 class ToolAwareFake(GenericFakeChatModel):
@@ -168,6 +169,40 @@ def test_run_agent_happy_path_returns_structured_result():
     # A comment is ALWAYS present and, on the happy path, non-empty.
     assert result.comment
     assert isinstance(result.comment, str)
+
+
+def test_invalid_snippet_gets_one_repair_call() -> None:
+    invalid = (
+        '{"snippet":{"code":"def apply(state, ctx):\\n    state.draw(\\"self\\", 2)\\n",'
+        '"explanation":"draw"},"verdict":"ok","comment":"Try.","persona_action":"none"}'
+    )
+    repaired = (
+        '{"snippet":{"code":"def apply(state, ctx):\\n    state.draw_cards(\\"self\\", 2)\\n",'
+        '"explanation":"draw"},"verdict":"ok","comment":"Fixed.","persona_action":"none"}'
+    )
+    fake = ToolAwareFake(messages=iter([AIMessage(content=invalid), AIMessage(content=repaired)]))
+    state = GameState(room_code="TEST", players=[Player(id="p1", name="Alice")], phase="playing")
+
+    result = run_agent("Draw", "Draw two cards.", state=state, actor_id="p1", model=fake)
+
+    assert result.verdict == "ok"
+    assert result.snippet is not None
+    assert "draw_cards" in result.snippet.code
+
+
+def test_failed_repair_returns_invalid_effectless_result() -> None:
+    invalid = (
+        '{"snippet":{"code":"def apply(state, ctx):\\n    state.draw(\\"self\\", 2)\\n",'
+        '"explanation":"draw"},"verdict":"ok","comment":"Try.","persona_action":"none"}'
+    )
+    fake = ToolAwareFake(messages=iter([AIMessage(content=invalid), AIMessage(content=invalid)]))
+
+    result = run_agent("Draw", "Draw two cards.", model=fake)
+
+    assert result.verdict == "invalid"
+    assert result.plan is None
+    assert result.program is None
+    assert result.snippet is None
 
 
 # ---------------------------------------------------------------------------

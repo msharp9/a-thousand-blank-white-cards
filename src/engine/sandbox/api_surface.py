@@ -144,19 +144,28 @@ class SandboxGame:
             raise ValueError(f"amount must be an int, got {amount!r}")
         self._ops.append({"op": "set_points", "target": target, "amount": amount})
 
-    def skip(self, target: str) -> None:
+    def skip_turn(self, target: str) -> None:
         """Skip player `target`'s next turn."""
         self._ops.append({"op": "skip_turn", "target": target})
 
-    def set_draw_count(self, amount: int) -> None:
+    def skip(self, target: str) -> None:
+        self.skip_turn(target)
+
+    def change_draw_count(self, amount: int) -> None:
         """Set the per-turn draw count."""
         if not isinstance(amount, int) or isinstance(amount, bool) or amount < 0:
             raise ValueError(f"draw count must be a non-negative int, got {amount!r}")
         self._ops.append({"op": "change_draw_count", "amount": amount})
 
-    def note(self, message: str) -> None:
+    def set_draw_count(self, amount: int) -> None:
+        self.change_draw_count(amount)
+
+    def custom_note(self, note: str) -> None:
         """Log a flavour message (no mechanical effect)."""
-        self._ops.append({"op": "custom_note", "note": str(message)[:500]})
+        self._ops.append({"op": "custom_note", "note": str(note)[:500]})
+
+    def note(self, message: str) -> None:
+        self.custom_note(message)
 
     def extra_turn(self, target: str) -> None:
         """Grant player `target` an extra turn."""
@@ -177,8 +186,15 @@ class SandboxGame:
         self._require_nonneg_int(amount)
         self._ops.append({"op": "draw_cards", "target": target, "amount": amount})
 
-    def destroy_card(self, card_target: str | None = None, card_id: str | None = None) -> None:
+    def destroy_card(self, card_id: str | None = None, card_target: str | None = None) -> None:
         """Destroy cards by CardTarget address ('this', 'all_in_play', 'id:…', 'attr:k=v')."""
+        legacy_targets = {"all_in_hand", "all_in_play", "chosen_card", "this"}
+        if (
+            card_target is None
+            and card_id is not None
+            and (card_id in legacy_targets or card_id.startswith(("id:", "attr:")))
+        ):
+            card_target, card_id = card_id, None
         op: dict[str, Any] = {"op": "destroy_card"}
         if card_target is not None:
             op["card_target"] = card_target
@@ -236,9 +252,17 @@ class SandboxGame:
         """Convenience alias: create_card with destination='deck_shuffle'."""
         self.create_card(title, description, ops, destination="deck_shuffle", count=count)
 
-    def register_hook(self, event: str, code: str, scope: str = "center") -> None:
+    def register_hook(self, event: str, scope: str = "center", code: str | None = None) -> None:
         """Install a persistent sandboxed hook (rejected inside hook-produced diffs)."""
+        if code is None:
+            if "def apply" not in scope:
+                raise ValueError("register_hook requires sandbox code; pass code=... with scope='player' or 'center'")
+            code, scope = scope, "center"
         self._ops.append({"op": "register_hook", "event": str(event), "scope": scope, "code": str(code)})
+
+    def unregister_hook(self, source_card_id: str) -> None:
+        """Remove hooks registered by `source_card_id`."""
+        self._ops.append({"op": "unregister_hook", "source_card_id": source_card_id})
 
     def reject_play(self, reason: str) -> None:
         """ON_VALIDATE_PLAY hooks only: veto the play being validated."""

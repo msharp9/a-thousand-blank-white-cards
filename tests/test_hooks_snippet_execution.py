@@ -46,6 +46,17 @@ def test_cache_snippet_rejects_invalid() -> None:
         cache_snippet("card-x", "import os\ndef apply(state, ctx): pass")
 
 
+def test_same_card_id_handlers_keep_room_specific_code() -> None:
+    first = make_snippet_handler("shared-id", "def apply(state, ctx):\n    state.add_points('self', 1)\n")
+    make_snippet_handler("shared-id", "def apply(state, ctx):\n    state.add_points('self', 9)\n")
+    state = _state_with_card("shared-id")
+    ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
+
+    result = first(state, ctx)
+
+    assert result.get_player("p1").score == 1
+
+
 def test_fire_hooks_caps_and_logs_skipped() -> None:
     reg = HookRegistry()
     for i in range(3):

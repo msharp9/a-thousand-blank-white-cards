@@ -39,7 +39,7 @@ from agent.contract import InterpretResult
 from agent.llm import get_chat_model
 from agent.persona import build_system_prompt
 from config import get_settings
-from models.effects import CustomNoteOp, EffectProgram
+from models.effects import CustomNoteOp, EffectProgram, RegisterHookOp, SnippetStep
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,11 @@ FORCED_FINAL_INSTRUCTION = (
     "Budget exhausted — output your final JSON interpretation NOW using what you "
     "already know. Do not call any tools. Respond with ONLY the JSON object "
     "matching the contract."
+)
+
+REPAIR_INSTRUCTION = (
+    "Your proposed effect failed sandbox validation or dry-run. Return one corrected final JSON object now. "
+    "Do not call tools and do not explain the correction outside the JSON."
 )
 
 
@@ -265,11 +270,95 @@ def _forced_final_result(
     return _parse_result({"messages": [response]})
 
 
+def _effect_validation_error(
+    result: InterpretResult,
+    state: Any | None,
+    actor_id: str | None,
+    card_id: str | None,
+) -> str | None:
+    if result.verdict != "ok":
+        return None
+    plan = result.to_plan()
+    if not plan.steps:
+        return None
+
+    from engine.sandbox.validate import validate_snippet
+
+    codes = [step.code for step in plan.steps if isinstance(step, SnippetStep)]
+    codes.extend(op.code for op in plan.operations() if isinstance(op, RegisterHookOp))
+    for code in codes:
+        validation = validate_snippet(code)
+        if not validation.ok:
+            return validation.error
+
+    if state is None or not codes or plan.requires_choice:
+        return None
+
+    from agent.tools.dry_run_effect import dry_run_resolution_plan
+
+    report = dry_run_resolution_plan(state, plan, actor_id, card_id)
+    return None if report["ok"] else str(report["error"])
+
+
+def _repair_effect(
+    chat_model: Any,
+    system_prompt: str,
+    title: str,
+    result: InterpretResult,
+    error: str,
+    timeout: float,
+) -> InterpretResult | None:
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(
+            content=(
+                f"Card: {title}\nInvalid result: {result.model_dump_json()}\n"
+                f"Validation error: {error}\n{REPAIR_INSTRUCTION}"
+            )
+        ),
+    ]
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        future = pool.submit(chat_model.invoke, messages)
+        try:
+            response = future.result(timeout=timeout)
+        except FuturesTimeoutError:
+            future.cancel()
+            return None
+        except Exception:  # noqa: BLE001
+            logger.exception("effect repair call failed")
+            return None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    return _parse_result({"messages": [response]})
+
+
+def _validate_or_repair_effect(
+    result: InterpretResult,
+    chat_model: Any,
+    system_prompt: str,
+    title: str,
+    state: Any | None,
+    actor_id: str | None,
+    card_id: str | None,
+    timeout: float,
+) -> InterpretResult:
+    error = _effect_validation_error(result, state, actor_id, card_id)
+    if error is None:
+        return result
+    logger.warning("agent effect failed validation: %s", error)
+    repaired = _repair_effect(chat_model, system_prompt, title, result, error, timeout)
+    if repaired is not None and _effect_validation_error(repaired, state, actor_id, card_id) is None:
+        return repaired
+    return result.model_copy(update={"plan": None, "program": None, "snippet": None, "verdict": "invalid"})
+
+
 def _assemble_tools(
     state: Any | None,
     actor_id: str | None,
     creator_id: str | None,
     extra: list[Any] | None,
+    card_id: str | None = None,
 ) -> list[Any]:
     """Build the final bound tool list for one interpretation.
 
@@ -296,9 +385,16 @@ def _assemble_tools(
         try:
             from agent.tools.read_game_state import make_read_game_state_tool
 
-            tools.append(make_read_game_state_tool(state, actor_id, creator_id))
+            tools.append(make_read_game_state_tool(state, actor_id, creator_id, card_id))
         except Exception:  # noqa: BLE001 — the state tool is best-effort
             logger.warning("read_game_state tool unavailable; skipping")
+
+        try:
+            from agent.tools.dry_run_effect import make_dry_run_effect_tool
+
+            tools.append(make_dry_run_effect_tool(state, actor_id, card_id))
+        except Exception:  # noqa: BLE001
+            logger.warning("dry_run_effect tool unavailable; skipping")
 
     if extra:
         tools.extend(extra)
@@ -313,6 +409,7 @@ def run_agent(
     actor_id: str | None = None,
     *,
     creator_id: str | None = None,
+    card_id: str | None = None,
     tools: list[Any] | None = None,
     model: Any | None = None,
     timeout: float | None = None,
@@ -327,6 +424,7 @@ def run_agent(
             Never mutated; never sourced from the board layer here.
         actor_id: The id of the player who played the card.
         creator_id: The card's author id (drives do_nothing vs punish_author).
+        card_id: The played card id, used to model its removal during effect dry-runs.
         tools: Tools to bind (default empty — real tools arrive in C2-C9).
         model: Chat model override for tests; defaults to the real provider model.
         timeout: Wall-clock ceiling in seconds (default :data:`AGENT_TIMEOUT_SECONDS`).
@@ -356,7 +454,7 @@ def run_agent(
         creator_id=creator_id,
     )
 
-    bound_tools = _assemble_tools(state, actor_id, creator_id, tools)
+    bound_tools = _assemble_tools(state, actor_id, creator_id, tools, card_id)
 
     try:
         chat_model = model if model is not None else get_chat_model()
@@ -396,7 +494,16 @@ def run_agent(
             future.cancel()
             forced = _forced_final_result(chat_model, system_prompt, title, progress, forced_call_timeout)
             if forced is not None:
-                return forced
+                return _validate_or_repair_effect(
+                    forced,
+                    chat_model,
+                    system_prompt,
+                    title,
+                    state,
+                    actor_id,
+                    card_id,
+                    forced_call_timeout,
+                )
             return _fallback_result(
                 comment="Figuring out your card took so long I lost interest. Nothing happens.",
                 note="Interpretation timed out: no effect applied.",
@@ -405,7 +512,16 @@ def run_agent(
             logger.warning("agent hit recursion cap (%d); forcing a final answer", recursion_limit)
             forced = _forced_final_result(chat_model, system_prompt, title, progress, forced_call_timeout)
             if forced is not None:
-                return forced
+                return _validate_or_repair_effect(
+                    forced,
+                    chat_model,
+                    system_prompt,
+                    title,
+                    state,
+                    actor_id,
+                    card_id,
+                    forced_call_timeout,
+                )
             return _fallback_result(
                 comment="I went in circles trying to make sense of that. I give up.",
                 note="Interpretation exceeded step budget: no effect applied.",
@@ -419,4 +535,13 @@ def run_agent(
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
-    return _parse_result(result)
+    return _validate_or_repair_effect(
+        _parse_result(result),
+        chat_model,
+        system_prompt,
+        title,
+        state,
+        actor_id,
+        card_id,
+        forced_call_timeout,
+    )

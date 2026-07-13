@@ -140,8 +140,8 @@ def test_read_engine_methods_lists_real_ops():
     # A representative sample of ops, introspected from models.effects.Op.
     for op_name in ("add_points", "subtract_points", "steal_points", "custom_note", "set_win_condition"):
         assert op_name in out
-    # Field names come from model_fields, not a hardcoded string.
-    assert "steal_points(from_target, to_target, amount)" in out
+    assert "state.steal_points(from_target:" in out
+    assert "to_target:" in out
 
 
 def test_read_engine_methods_is_introspected_not_hardcoded():
@@ -158,16 +158,17 @@ def test_read_engine_methods_is_introspected_not_hardcoded():
         assert literal in out, f"op {literal!r} missing from introspected reference"
 
 
-def test_read_engine_methods_lists_targets_and_facade():
+def test_read_engine_methods_lists_targets_and_sandbox_boundary():
     out = read_engine_methods.invoke({})
     # Target literals.
     assert "self" in out
     assert "all_others" in out
     assert "player_with_most_points" in out
-    # At least one GameEngine facade method.
-    assert "resolve_card" in out
-    # The snippet escape hatch is mentioned.
-    assert "apply(state, ctx)" in out
+    assert "resolve_card" not in out
+    assert "GameEngine" in out
+    assert "state.draw is invalid" in out
+    assert "state.draw_cards" in out
+    assert "state.reject_play" in out
 
 
 def test_get_read_engine_methods_tool_returns_named_tool():
@@ -184,6 +185,7 @@ def test_assemble_tools_includes_read_game_state_when_state_provided():
     tools = _assemble_tools(_sample_state(), "p1", "p1", None)
     names = {t.name for t in tools}
     assert "read_game_state" in names
+    assert "dry_run_effect" in names
     # read_engine_methods rides in via get_default_tools.
     assert "read_engine_methods" in names
 
@@ -192,6 +194,7 @@ def test_assemble_tools_excludes_read_game_state_when_state_none():
     tools = _assemble_tools(None, None, None, None)
     names = {t.name for t in tools}
     assert "read_game_state" not in names
+    assert "dry_run_effect" not in names
     assert "read_engine_methods" in names
 
 

@@ -14,6 +14,31 @@ import sys
 import traceback
 
 
+_SAFE_BUILTINS = {
+    "abs": abs,
+    "all": all,
+    "any": any,
+    "bool": bool,
+    "dict": dict,
+    "enumerate": enumerate,
+    "float": float,
+    "int": int,
+    "isinstance": isinstance,
+    "len": len,
+    "list": list,
+    "max": max,
+    "min": min,
+    "range": range,
+    "round": round,
+    "set": set,
+    "sorted": sorted,
+    "str": str,
+    "sum": sum,
+    "tuple": tuple,
+    "zip": zip,
+}
+
+
 def _apply_rlimits() -> None:
     """Apply OS resource limits to the child before any user code runs (defense in depth).
 
@@ -71,7 +96,7 @@ def main() -> None:
 
     sandbox = SandboxGame(state_dict, ctx_dict)
 
-    ns: dict = {}
+    ns: dict = {"__builtins__": _SAFE_BUILTINS}
     exec(compile(code, "<snippet>", "exec"), ns)
 
     apply_fn = ns.get("apply")
