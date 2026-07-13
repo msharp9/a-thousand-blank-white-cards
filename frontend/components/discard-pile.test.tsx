@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { DiscardPile } from "./discard-pile";
 import type { CardSnapshot } from "@/lib/types";
 
@@ -37,5 +38,36 @@ describe("DiscardPile", () => {
       />,
     );
     expect(screen.getByRole("button")).toBeTruthy();
+  });
+
+  it("calls onClick when the slot is clicked, including with a top card showing", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <DiscardPile
+        topCard={card}
+        count={3}
+        roomCode="ABCD"
+        onClick={onClick}
+      />,
+    );
+    await user.click(screen.getByRole("button"));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onClick on Enter key for keyboard accessibility", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <DiscardPile
+        topCard={undefined}
+        count={0}
+        roomCode="ABCD"
+        onClick={onClick}
+      />,
+    );
+    screen.getByRole("button").focus();
+    await user.keyboard("{Enter}");
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });

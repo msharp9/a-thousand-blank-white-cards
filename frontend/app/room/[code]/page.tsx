@@ -19,6 +19,7 @@ import { DynamicStatePanel } from "@/components/dynamic-state-panel";
 import { EpilogueView } from "@/components/epilogue";
 import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
+import { HistoryModal } from "@/components/history-modal";
 import { HouseRulesZone } from "@/components/house-rules-zone";
 import { InteractionPanel } from "@/components/interaction-panel";
 import { ReactionWindow } from "@/components/reaction-window";
@@ -78,6 +79,7 @@ export default function RoomPage() {
   const [adoptedStoredName, setAdoptedStoredName] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Once the stored name hydrates in, adopt it and skip the name gate.
   // Adjusting state during render is React's recommended alternative to a
@@ -483,6 +485,7 @@ export default function RoomPage() {
                   topCard={topDiscard}
                   count={gameState.discard.length}
                   roomCode={code}
+                  onClick={() => setHistoryOpen(true)}
                 />
               </div>
             </div>
@@ -649,6 +652,15 @@ export default function RoomPage() {
         }}
         onCancel={clearPromptChoice}
       />
+
+      {gameState && (
+        <HistoryModal
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          gameState={gameState}
+          roomCode={code}
+        />
+      )}
     </main>
   );
 }

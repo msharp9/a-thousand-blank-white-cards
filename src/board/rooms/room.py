@@ -1478,7 +1478,19 @@ class Room:
                 await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id)
                 game_ending = self._end_now() or win_condition_met(self.state)
 
-        await self._after_play_effects(player_id, card_id, game_ending=game_ending, deck_count_before=deck_count_before)
+        # The play's target for history purposes: whoever the player explicitly
+        # chose (prompt_choice) or, for a countered play stolen to a reactor,
+        # that reactor. Cards with no chooser (self-only, or "everyone" via
+        # ops-level target="all") record no target — we don't fabricate one
+        # from ops we haven't inspected (see docstring on history semantics).
+        history_target = [ctx.chosen_player_id] if ctx.chosen_player_id else ([steal_to] if steal_to else [])
+        await self._after_play_effects(
+            player_id,
+            card_id,
+            game_ending=game_ending,
+            deck_count_before=deck_count_before,
+            target_player_ids=history_target,
+        )
 
     async def _after_play_effects(
         self,
@@ -1487,17 +1499,24 @@ class Room:
         *,
         game_ending: bool,
         deck_count_before: int,
+        target_player_ids: list[str] | None = None,
         extra_history_event: dict | None = None,
     ) -> None:
         """The single post-play accounting tail, shared by direct plays
         (_finish_play) and resumed interaction plays (_complete_interaction_play):
         history, deck-exhaustion latch, play allowance, broadcast, end/advance.
-        Runs exactly once per original play regardless of outcome."""
+        Runs exactly once per original play regardless of outcome.
+
+        ``target_player_ids`` records who (beyond the actor) this play was
+        aimed at, when known — e.g. a card played to a chosen player, or
+        an interaction's resolved audience. Defaults to empty (no known
+        target) rather than the actor, since actor_id already covers that.
+        """
         self.state = append_history_event(
             self.state,
             "play",
             actor_id=player_id,
-            target_player_ids=[player_id],
+            target_player_ids=target_player_ids if target_player_ids is not None else [],
             card_id=card_id,
             source="resolved",
         )
@@ -1888,11 +1907,16 @@ class Room:
         )
 
     async def _complete_interaction_play(self, pending: PendingResolution, *, game_ending: bool) -> None:
+        # The interaction's resolved audience (minus the actor) doubles as the
+        # "play" event's target for history purposes — it's who the play's
+        # interaction actually addressed.
+        target_player_ids = [pid for pid in pending.resolved_audience if pid != pending.actor_id]
         await self._after_play_effects(
             pending.actor_id,
             pending.card_id,
             game_ending=game_ending,
             deck_count_before=pending.deck_count_before,
+            target_player_ids=target_player_ids,
             extra_history_event={
                 "kind": "interaction",
                 "actor_id": pending.actor_id,

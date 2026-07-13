@@ -202,6 +202,27 @@ export type SpectatorSnapshot = {
   name: string;
 };
 
+// Mirrors models.game_state.HistoryKind.
+export type HistoryEventKind =
+  "draw" | "play" | "score_change" | "rule_change" | "interaction" | "game_end";
+
+// One privacy-safe, append-only fact about completed game mechanics. Mirrors
+// models.game_state.HistoryEvent. The "Everything Played" history modal reads
+// kind === "play" entries (see components/history-modal.tsx); other kinds ride
+// along for future consumers.
+export type HistoryEventSnapshot = {
+  sequence: number;
+  kind: HistoryEventKind;
+  actor_id?: string | null;
+  target_player_ids: string[];
+  card_id?: string | null;
+  amount?: number | null;
+  source?: string | null;
+  rule_path?: string | null;
+  // Turn number the event occurred on (GameState.turn_number at record time).
+  turn?: number | null;
+};
+
 // One card's epilogue vote outcome (id+title only — enough to render a list).
 // Mirrors models.game_state.EpilogueCardOutcome.
 export type EpilogueCardOutcome = { id: string; title: string };
@@ -250,6 +271,11 @@ export type GameStateSnapshot = {
   // Populated once the epilogue vote finalizes (phase === "ended"); null
   // before then, including during the pre-vote "results" phase.
   epilogue_result: EpilogueResultSummary | null;
+  // Machine-readable, privacy-safe history of completed game mechanics
+  // (draws, plays, score/rule changes, interactions, game end). Drives the
+  // discard pile's "Everything Played" history modal; unlike `log`, entries
+  // never carry private hand contents or generated prose.
+  history_events: HistoryEventSnapshot[];
   log: string[];
   pending_interaction?: PendingInteractionSummary | null;
   // The play currently suspended behind an open reaction window (null when no
