@@ -64,21 +64,28 @@ export function Hand({ cards, canPlay, send, roomCode }: HandProps) {
         <div className="flex items-end px-2 pb-2 pt-10">
           {cards.map((card, i) => {
             const isSelected = selectedId === card.id;
+            // Reaction cards are only playable during another player's play
+            // (the reaction window) — never on your own turn. The server
+            // rejects them anyway; greying them out here explains why.
+            const isReaction = card.canonical?.trigger === "on_reaction";
             return (
               <SketchCard
                 key={card.id}
                 card={card}
                 w={130}
                 rot={(i - (cards.length - 1) / 2) * 3}
-                selectable={canPlay}
+                selectable={canPlay && !isReaction}
                 selected={isSelected}
-                onClick={() => setSelectedId(card.id)}
+                onClick={() => {
+                  if (!isReaction) setSelectedId(card.id);
+                }}
                 artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
                 className={cn(
                   i > 0 && "-ml-[34px]",
                   "hover:z-30",
                   isSelected && "z-30",
                   selectedId && !isSelected && "opacity-55",
+                  isReaction && canPlay && "opacity-70 saturate-50",
                 )}
               />
             );

@@ -79,6 +79,7 @@ def _card_point(
     keep_votes: int = 0,
     destroy_votes: int = 0,
     art: str | None = None,
+    alt_text: str | None = None,
 ) -> PointStruct:
     payload = {
         "card_id": card_id,
@@ -91,6 +92,11 @@ def _card_point(
     }
     if art:
         payload["art"] = art
+    if alt_text:
+        # Art description — payload only, never embedded. Surfaced by
+        # deck._normalise_card so in-game effects can key off what a card's
+        # art depicts.
+        payload["alt_text"] = alt_text
     return PointStruct(
         id=_stable_point_id(card_id),  # Qdrant needs a stable uint64 id
         vector=vector,
@@ -107,6 +113,7 @@ def upsert_card(
     keep_votes: int = 0,
     destroy_votes: int = 0,
     art: str | None = None,
+    alt_text: str | None = None,
 ) -> None:
     """Embed title+description and upsert a point into the cards collection.
 
@@ -125,7 +132,9 @@ def upsert_card(
     _validate_card_lengths(card_id, title, description)
     client = _require_client()
     vector = embed_text_cached(_card_text(title, description))
-    point = _card_point(card_id, title, description, canonical, source, vector, keep_votes, destroy_votes, art)
+    point = _card_point(
+        card_id, title, description, canonical, source, vector, keep_votes, destroy_votes, art, alt_text
+    )
     client.upsert(collection_name=COLLECTION_NAME, points=[point])
 
 
@@ -142,7 +151,16 @@ def upsert_cards(cards: list[dict[str, Any]]) -> None:
     client = _require_client()
     vectors = embed_texts_cached([_card_text(c["title"], c["description"]) for c in cards])
     points = [
-        _card_point(c["card_id"], c["title"], c["description"], c["canonical"], c["source"], vector, art=c.get("art"))
+        _card_point(
+            c["card_id"],
+            c["title"],
+            c["description"],
+            c["canonical"],
+            c["source"],
+            vector,
+            art=c.get("art"),
+            alt_text=c.get("alt_text"),
+        )
         for c, vector in zip(cards, vectors)
     ]
     client.upsert(collection_name=COLLECTION_NAME, points=points)

@@ -20,6 +20,7 @@ import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
 import { HouseRulesZone } from "@/components/house-rules-zone";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { ReactionWindow } from "@/components/reaction-window";
 import { ResultsScreen } from "@/components/results-screen";
 import { SetupPhase } from "@/components/setup-phase";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
@@ -127,6 +128,7 @@ export default function RoomPage() {
     promptChoice,
     clearPromptChoice,
     epilogueCards,
+    reactionResult,
     send,
   } = useGameSocket(nameSet ? code : "", name);
 
@@ -189,6 +191,38 @@ export default function RoomPage() {
   const topDiscard: CardSnapshot | undefined = gameState
     ? gameState.cards[gameState.discard[gameState.discard.length - 1] ?? ""]
     : undefined;
+
+  // Open reaction window (a play suspended while others may counter it). The
+  // snapshot's pending_play is the source of truth; each client derives its
+  // own eligibility from the reaction cards in its hand.
+  const pendingPlay = phase === "playing" ? gameState?.pending_play : null;
+  const pendingCard = pendingPlay
+    ? gameState?.cards[pendingPlay.card_id]
+    : undefined;
+  const pendingActorName =
+    gameState?.players.find((p) => p.id === pendingPlay?.actor_id)?.name ??
+    "Someone";
+  const myReactionCards = useMemo(
+    () =>
+      myHandCards.filter((c) => c.canonical?.trigger === "on_reaction"),
+    [myHandCards],
+  );
+  const reactionResultText = useMemo(() => {
+    if (!reactionResult || reactionResult.outcome === "resolved") return null;
+    const reactor =
+      gameState?.players.find((p) => p.id === reactionResult.reactor_id)
+        ?.name ?? "Someone";
+    switch (reactionResult.outcome) {
+      case "countered":
+        return `💥 Countered by ${reactor}!`;
+      case "stolen":
+        return `🫳 ${reactor} stole the card!`;
+      case "redirected":
+        return `↩️ ${reactor} redirected it!`;
+      default:
+        return null;
+    }
+  }, [reactionResult, gameState]);
 
   // ── name gate ──
   if (!nameSet) {
@@ -537,6 +571,24 @@ export default function RoomPage() {
             )}
 
             <EffectLog log={log} brewing={brewing} />
+
+            {pendingPlay && (
+              <ReactionWindow
+                pending={pendingPlay}
+                pendingCard={pendingCard}
+                actorName={pendingActorName}
+                myReactionCards={myReactionCards}
+                isActor={pendingPlay.actor_id === myPlayerId}
+                isSpectator={isSpectator}
+                send={send}
+                roomCode={code}
+              />
+            )}
+            {reactionResultText && (
+              <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit rotate-[0.4deg] rounded-xl border-2 border-ink bg-white px-4 py-2 font-hand text-lg sticker-shadow-sm">
+                {reactionResultText}
+              </div>
+            )}
           </div>
         )}
 
@@ -604,17 +656,25 @@ export default function RoomPage() {
           // A prompt option carries either a player_id (player-target axis) or a
           // card_id (card-target axis). Re-send the play with the picked target;
           // the backend re-interprets, validates, applies, and advances.
+          // While a reaction window is open, a prompt for any card other than
+          // the suspended one is a REACTION needing a target — its follow-up
+          // must re-carry as_reaction so it routes back into the window.
+          const asReaction = Boolean(
+            pendingPlay && promptChoice.card_id !== pendingPlay.card_id,
+          );
           if (choice.player_id) {
             send({
               type: "play",
               card_id: promptChoice.card_id,
               chosen_player_id: choice.player_id,
+              ...(asReaction ? { as_reaction: true } : {}),
             });
           } else if (choice.card_id) {
             send({
               type: "play",
               card_id: promptChoice.card_id,
               chosen_card_id: choice.card_id,
+              ...(asReaction ? { as_reaction: true } : {}),
             });
           }
           clearPromptChoice();

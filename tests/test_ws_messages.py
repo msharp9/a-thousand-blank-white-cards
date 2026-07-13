@@ -152,3 +152,36 @@ def test_play_authoring_over_limit_rejected() -> None:
     ta = TypeAdapter(ClientMsg)
     with pytest.raises(ValidationError):
         ta.validate_python({"type": "play", "card_id": "blank-0", "description": "y" * (MAX_CARD_DESCRIPTION + 1)})
+
+
+def test_play_msg_as_reaction_defaults_false() -> None:
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python({"type": "play", "card_id": "c1"})
+    assert msg.as_reaction is False
+
+
+def test_play_msg_carries_as_reaction() -> None:
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python({"type": "play", "card_id": "c1", "as_reaction": True})
+    assert isinstance(msg, PlayMsg)
+    assert msg.as_reaction is True
+
+
+def test_client_msg_discriminates_pass_reaction() -> None:
+    from models.ws_messages import PassReactionMsg
+
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python({"type": "pass_reaction", "window_id": "w1"})
+    assert isinstance(msg, PassReactionMsg)
+    assert msg.window_id == "w1"
+    # window_id is an optional stale-window guard.
+    assert ta.validate_python({"type": "pass_reaction"}).window_id is None
+
+
+def test_reaction_server_messages_round_trip() -> None:
+    from models.ws_messages import ReactionResultMsg, ReactionWindowMsg
+
+    window = ReactionWindowMsg(window_id="w1", card_id="c1", actor_id="p1", deadline_epoch_ms=123)
+    assert json.loads(window.model_dump_json())["type"] == "reaction_window"
+    result = ReactionResultMsg(window_id="w1", outcome="countered", reactor_id="p2", reaction_card_id="c9")
+    assert json.loads(result.model_dump_json())["outcome"] == "countered"

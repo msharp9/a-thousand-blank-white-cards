@@ -8,9 +8,9 @@ Two card varieties:
 from __future__ import annotations
 
 import base64
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Card text limits. A card is a card, not a novel — bounding the text keeps every
 # card small enough to embed as a single chunk and enforces the game's terse style.
@@ -71,19 +71,114 @@ class CardOp(BaseModel):
     )
 
 
-class CardCanonical(BaseModel):
-    """Structured annotation describing how a card behaves in the game engine."""
+# Trigger vocabulary = engine.events.GameEvent values + "on_reaction". Hardcoded
+# here (models must not import engine); tests/test_corpus_lint.py asserts the two
+# stay in sync.
+CardTrigger = Literal[
+    "on_play",
+    "on_validate_play",
+    "on_score_change",
+    "on_turn_start",
+    "on_turn_end",
+    "on_draw_step",
+    "on_win_check",
+    "on_game_end",
+    "on_reaction",
+]
 
-    timing: Literal["immediate", "modifier"] = Field(
-        description=(
-            "'immediate' = resolves the moment it is played; 'modifier' = remains in play and modifies future events."
-        )
-    )
-    target: Literal["self", "player", "all", "center"] = Field(
+# v1 → v2 trigger value remaps (spec appendix, data/eval/CANONICAL_SPEC.md).
+_TRIGGER_REMAP = {
+    "on_draw": "on_draw_step",
+    "on_score": "on_score_change",
+    "on_play_card": "on_play",
+    "on_empty_hand": "on_win_check",
+}
+# Table-adjudicated pseudo-events with no engine hook: the rule lives in
+# notes/set_rule ops, not a trigger.
+_DROPPED_TRIGGERS = {"on_physical_action"}
+
+_V2_PLACEMENTS = {"discard", "center", "player"}
+_V2_TARGETS = {"self", "player", "all", "all_others", "card", "all_cards", "none"}
+
+
+def _looks_like_sandbox_code(text: str) -> bool:
+    return text.lstrip().startswith("def apply")
+
+
+def normalise_canonical(raw: dict[str, Any]) -> dict[str, Any]:
+    """Normalise a v1 canonical dict to the v2 schema (idempotent on v2 input).
+
+    The single legacy shim, shared by CardCanonical's before-validator,
+    board.rooms.deck._normalise_card, and scripts/migrate_card_schema.py.
+    Permanent, not migration-only: persisted room canonicals, Qdrant payloads,
+    and agent memory carry v1 dicts forever. Mapping table lives in
+    data/eval/CANONICAL_SPEC.md (appendix).
+    """
+    data = dict(raw)
+    timing = data.pop("timing", None)
+
+    # --- trigger: unify trigger_event → trigger, remap renamed events -------
+    trigger = data.pop("trigger_event", None)
+    if trigger is None:
+        trigger = data.get("trigger")
+    trigger = _TRIGGER_REMAP.get(trigger, trigger)
+    if trigger in _DROPPED_TRIGGERS:
+        trigger = None
+
+    # --- placement: collapse v1 self/destroy, derive when missing -----------
+    placement = data.get("placement")
+    if placement == "self":
+        placement = "player" if timing == "modifier" else "discard"
+    elif placement == "destroy":
+        placement = "discard"
+    elif placement not in _V2_PLACEMENTS:
+        if timing == "modifier":
+            placement = "player" if data.get("target") in ("self", "player") else "center"
+        else:
+            placement = "discard"
+    data["placement"] = placement
+
+    # "on_play" is meaningless on a one-shot card (it fires when played by
+    # definition); only persistent modifiers keep it as a hook event.
+    if trigger == "on_play" and placement == "discard":
+        trigger = None
+    data["trigger"] = trigger
+
+    # --- target: "center" was placement leakage in the v1 model -------------
+    if data.get("target") == "center":
+        data["target"] = "none"
+
+    # --- snippet → sandbox: code renames; prose degrades to a custom_note ---
+    snippet = data.pop("snippet", None)
+    if snippet:
+        if _looks_like_sandbox_code(snippet):
+            data.setdefault("sandbox", snippet)
+        elif not data.get("sandbox") and not data.get("steps"):
+            ops = list(data.get("ops") or [])
+            ops.append({"op": "custom_note", "args": {"note": snippet}})
+            data["ops"] = ops
+
+    data.setdefault("venue", "all")
+    return data
+
+
+class CardCanonical(BaseModel):
+    """Structured annotation describing how a card behaves in the game engine.
+
+    Schema v2 (data/eval/CANONICAL_SPEC.md). Legacy v1 dicts (timing,
+    placement "self"/"destroy", trigger_event, prose snippet) are accepted on
+    input and normalised by ``normalise_canonical``.
+    """
+
+    target: Literal["self", "player", "all", "all_others", "card", "all_cards", "none"] = Field(
         description="Who or what the card's primary effect targets."
     )
-    placement: Literal["self", "player", "center"] = Field(
-        description="Where the card is placed after play (self=in front of player, center=table center)."
+    placement: Literal["discard", "center", "player"] = Field(
+        description=(
+            "Where the card goes after play: 'discard' = one-shot, resolves and is done; "
+            "'center' = stays on the table as a game-wide modifier; 'player' = stays in "
+            "front of one player as a modifier attached to them."
+        )
     )
     venue: Literal["all", "in_person", "online"] = Field(
         default="all",
@@ -95,30 +190,48 @@ class CardCanonical(BaseModel):
             "digitally (rare)."
         ),
     )
-    trigger: str | None = Field(
+    trigger: CardTrigger | None = Field(
         default=None,
-        description="For modifiers: the event string that activates this card, e.g. 'on_draw'.",
+        description=(
+            "None for one-shot cards. For persistent modifiers: the GameEvent that "
+            "re-fires the card's hook. 'on_reaction' marks reaction cards, playable "
+            "only during another player's play (never on your own play step)."
+        ),
     )
     ops: list[CardOp] | None = Field(
         default=None,
-        description="Sequence of CardOp to execute.",
+        description="Sequence of CardOp to execute. None when the effect is sandbox-only.",
     )
     steps: list[dict] | None = Field(
         default=None,
         description=(
             "Ordered runtime resolution steps. New persisted interpretations use this field; "
-            "legacy ops and snippet fields remain readable."
+            "legacy ops and sandbox fields remain readable."
         ),
     )
-    snippet: str | None = Field(
+    sandbox: str | None = Field(
         default=None,
         description=(
-            "Either free-text rule prose (when ops cannot capture the effect at all), or a real "
-            "`def apply(state, ctx): ...` snippet (validated by engine.sandbox.validate) when ops "
-            "capture a deterministic prefix but the rest needs dynamic state — e.g. draw_cards "
-            "followed by a snippet that scores points per card now in hand."
+            "Executable `def apply(state, ctx): ...` code (validated by "
+            "engine.sandbox.validate). Dataset cards always carry it — even when ops "
+            "express the same effect — so the RAG corpus teaches the agent how to "
+            "compose sandbox code for effects ops cannot express."
         ),
     )
+    magnitude_sign: Literal["positive", "negative", "neutral"] | None = Field(
+        default=None,
+        description=(
+            "Eval-only human label: net effect on the target's standing. Not written "
+            "into seed/game data; consumed by eval scorers."
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return normalise_canonical(data)
+        return data
 
 
 # ---------------------------------------------------------------------------
@@ -129,10 +242,24 @@ class CardCanonical(BaseModel):
 class GoldCard(BaseModel):
     """A fully-annotated exemplar card used to train the AI card generator."""
 
+    id: str | None = Field(
+        default=None,
+        description=(
+            "Stable id, unique within its dataset file. Keeps RAG upserts keyed to "
+            "the card rather than its array index across regenerations."
+        ),
+    )
     title: str = Field(max_length=MAX_CARD_TITLE, description="Short card name.")
     description: str = Field(
         max_length=MAX_CARD_DESCRIPTION,
         description="Card text as written on the physical card. May include flavour text.",
+    )
+    alt_text: str | None = Field(
+        default=None,
+        description=(
+            "Description of the card's art (what is drawn), None when artless. "
+            "First-class so cards can query other cards' art content."
+        ),
     )
     canonical: CardCanonical
 
@@ -140,8 +267,10 @@ class GoldCard(BaseModel):
 class FillerCard(BaseModel):
     """A text-only card — title + description only, no structured annotation."""
 
+    id: str | None = None
     title: str = Field(max_length=MAX_CARD_TITLE)
     description: str = Field(max_length=MAX_CARD_DESCRIPTION)
+    alt_text: str | None = None
 
 
 # ---------------------------------------------------------------------------

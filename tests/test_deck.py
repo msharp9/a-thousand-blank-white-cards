@@ -62,7 +62,9 @@ def test_collect_cards_preserves_canonical_ops_and_venue() -> None:
         ]
 
     (card,) = collect_cards(source)
-    assert card["canonical"]["timing"] == "immediate"
+    # The legacy v1 canonical (timing + placement "self") is normalised to v2.
+    assert card["canonical"]["placement"] == "discard"
+    assert "timing" not in card["canonical"]
     assert card["ops"] == [{"op": "add_points", "args": {"amount": 5, "target": "self"}}]
     assert card["venue"] == "in_person"
 

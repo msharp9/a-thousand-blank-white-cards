@@ -103,7 +103,7 @@ class SandboxGame:
         raise KeyError(f"Player {player_id!r} not found")
 
     def card(self, card_id: str) -> dict[str, Any] | None:
-        """Public metadata for a card: title, description, attributes, origin."""
+        """Public metadata for a card: title, description, alt_text, attributes, origin."""
         card = (self._state.get("cards") or {}).get(card_id)
         if not isinstance(card, dict):
             return None
@@ -111,6 +111,9 @@ class SandboxGame:
             "id": card.get("id", card_id),
             "title": card.get("title"),
             "description": card.get("description"),
+            # Art description — queryable, so cards can key off what other
+            # cards depict ("double points for cards with monkeys").
+            "alt_text": card.get("alt_text"),
             "attributes": dict(card.get("attributes") or {}),
             "origin": card.get("origin"),
         }
@@ -306,6 +309,19 @@ class SandboxGame:
     def reject_play(self, reason: str) -> None:
         """ON_VALIDATE_PLAY hooks only: veto the play being validated."""
         self._ops.append({"op": "reject_play", "reason": str(reason)[:300]})
+
+    def counter_play(self, mode: str = "negate") -> None:
+        """Reaction cards only: decide the pending play's fate.
+
+        mode "negate" = the pending card's effect never happens (discard);
+        "steal_hand" = no effect, the pending card goes to your hand;
+        "redirect" = the pending effect resolves as if you had played it.
+        The pending play is described by ctx["pending_card_id"],
+        ctx["pending_actor_id"], ctx["pending_card_title"], ctx["pending_ops"].
+        """
+        if mode not in ("negate", "steal_hand", "redirect"):
+            raise ValueError(f"counter_play mode must be negate/steal_hand/redirect, got {mode!r}")
+        self._ops.append({"op": "counter_play", "mode": mode})
 
     # ------------------------------------------------------------------
     # Internal

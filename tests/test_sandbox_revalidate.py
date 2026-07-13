@@ -103,3 +103,36 @@ def test_extract_veto_finds_reason() -> None:
         == "wrong color"
     )
     assert extract_veto([{"op": "custom_note", "note": "x"}]) is None
+
+
+def test_counter_play_rejected_in_play_diff() -> None:
+    with pytest.raises(DiffValidationError, match="reaction window"):
+        parse_diff([{"op": "counter_play", "mode": "negate"}], origin="play")
+
+
+def test_counter_play_rejected_in_hook_diff() -> None:
+    with pytest.raises(DiffValidationError, match="reaction window"):
+        parse_diff([{"op": "counter_play", "mode": "negate"}], origin="hook")
+
+
+def test_extract_counter_splits_mode_and_side_ops() -> None:
+    from engine.sandbox.revalidate import extract_counter
+
+    raw = [
+        {"op": "add_points", "target": "self", "amount": 2},
+        {"op": "counter_play", "mode": "steal_hand"},
+        {"op": "counter_play", "mode": "redirect"},  # first mode wins
+    ]
+    mode, rest = extract_counter(raw)
+    assert mode == "steal_hand"
+    assert rest == [{"op": "add_points", "target": "self", "amount": 2}]
+    # Post-extraction, the remaining diff parses cleanly for the reaction origin.
+    assert len(parse_diff(rest, origin="reaction").ops) == 1
+
+
+def test_extract_counter_none_when_no_counter() -> None:
+    from engine.sandbox.revalidate import extract_counter
+
+    mode, rest = extract_counter([{"op": "custom_note", "note": "boo"}])
+    assert mode is None
+    assert len(rest) == 1

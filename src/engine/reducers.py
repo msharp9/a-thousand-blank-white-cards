@@ -417,6 +417,13 @@ def _reduce_set_rule(state: GameState, op: SetRuleOp, ctx: HookContext) -> GameS
     return state.model_copy(update={"rules": new_rules})
 
 
+def _reduce_counter_play(state: GameState, op: Op, ctx: HookContext) -> GameState:
+    """Defensive no-op: counter_play is control flow the Room consumes inside a
+    reaction window (like reject_play in ON_VALIDATE_PLAY). If one leaks into a
+    normal play/hook it must never crash — just log and change nothing."""
+    return state.with_log("[counter_play ignored outside a reaction window]")
+
+
 def _reduce_end_game(state: GameState, op: EndGameOp, ctx: HookContext) -> GameState:
     update: dict = {"rules": state.rules.model_copy(update={"end_condition": EndCondition(type="now")})}
     if op.winner is not None:
@@ -443,6 +450,7 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
     "destroy_card": _reduce_destroy_card,
     "set_win_condition": _reduce_set_win_condition,
     "custom_note": _reduce_custom_note,
+    "counter_play": _reduce_counter_play,
     "end_game": _reduce_end_game,
     "set_rule": _reduce_set_rule,
     "register_hook": _reduce_register_hook,

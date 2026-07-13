@@ -259,3 +259,28 @@ def test_canonical_mutators_match_op_names_and_parameters() -> None:
     for name, fields in expected.items():
         signature = inspect.signature(getattr(SandboxGame, name))
         assert tuple(signature.parameters)[1:] == fields
+
+
+class TestCounterPlay:
+    def _game(self):
+        state = {
+            "players": [{"id": "p1", "name": "A", "score": 0, "hand": [], "connected": True}],
+            "rules": {"draw": 1},
+            "cards": {},
+        }
+        return SandboxGame(state, {"actor_id": "p1"})
+
+    def test_counter_play_records_op(self):
+        g = self._game()
+        g.counter_play("steal_hand")
+        assert g.ops() == [{"op": "counter_play", "mode": "steal_hand"}]
+
+    def test_counter_play_defaults_negate(self):
+        g = self._game()
+        g.counter_play()
+        assert g.ops() == [{"op": "counter_play", "mode": "negate"}]
+
+    def test_counter_play_rejects_unknown_mode(self):
+        g = self._game()
+        with pytest.raises(ValueError):
+            g.counter_play("obliterate")

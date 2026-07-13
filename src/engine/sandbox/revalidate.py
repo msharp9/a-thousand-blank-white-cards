@@ -31,11 +31,14 @@ _op_adapter: TypeAdapter[Op] = TypeAdapter(Op)
 def parse_diff(raw_ops: list[dict[str, Any]], *, origin: str = "play") -> EffectProgram:
     """Parse a list of raw op dicts into a validated EffectProgram.
 
-    ``origin`` is where the diff came from and gates two pseudo/dangerous ops:
+    ``origin`` is where the diff came from and gates pseudo/dangerous ops:
       - "play": an immediate card-play snippet. register_hook allowed;
-        reject_play rejected (nothing to veto).
+        reject_play and counter_play rejected (nothing to veto/counter).
       - "hook": a persistent hook fire. register_hook REJECTED (depth cap: no
-        self-replicating hooks); reject_play rejected.
+        self-replicating hooks); reject_play and counter_play rejected.
+      - "reaction": a reaction-card snippet inside a reaction window. The
+        caller extracts counter_play via ``extract_counter`` BEFORE parse_diff,
+        so parse_diff still rejects any counter_play that leaks through.
       - "validate": an ON_VALIDATE_PLAY fire. Handled by the caller via
         ``extract_veto`` BEFORE parse_diff — any remaining ops are dropped by
         the caller, so parse_diff never sees "validate".
@@ -54,6 +57,8 @@ def parse_diff(raw_ops: list[dict[str, Any]], *, origin: str = "play") -> Effect
             raise DiffValidationError(f"Op[{i}] is not a dict: {raw!r}")
         if raw.get("op") == "reject_play":
             raise DiffValidationError(f"Op[{i}] reject_play is only valid in ON_VALIDATE_PLAY hooks")
+        if raw.get("op") == "counter_play":
+            raise DiffValidationError(f"Op[{i}] counter_play is only valid in a reaction window")
         if raw.get("op") == "register_hook" and origin == "hook":
             raise DiffValidationError(f"Op[{i}] register_hook inside a hook-produced diff (no self-replicating hooks)")
         try:
@@ -80,6 +85,27 @@ def extract_veto(raw_ops: list[dict[str, Any]]) -> str | None:
         if isinstance(raw, dict) and raw.get("op") == "reject_play":
             return str(raw.get("reason") or "play rejected")
     return None
+
+
+def extract_counter(raw_ops: list[dict[str, Any]]) -> tuple[str | None, list[dict[str, Any]]]:
+    """Split counter_play ops out of a reaction diff.
+
+    Returns ``(mode, remaining_ops)`` where mode is the first counter_play's
+    mode ("negate"/"steal_hand"/"redirect", defaulting "negate") or None when
+    the reaction chose not to counter. The remaining ops are the reaction's
+    side effects, to be applied via ``apply_snippet_diff`` as usual.
+    """
+    if not isinstance(raw_ops, list):
+        return None, []
+    mode: str | None = None
+    rest: list[dict[str, Any]] = []
+    for raw in raw_ops:
+        if isinstance(raw, dict) and raw.get("op") == "counter_play":
+            if mode is None:
+                mode = str(raw.get("mode") or "negate")
+            continue
+        rest.append(raw)
+    return mode, rest
 
 
 def apply_snippet_diff(

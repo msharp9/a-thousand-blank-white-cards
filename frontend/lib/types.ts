@@ -41,7 +41,14 @@ export type PlayMsg = {
   // Optional card art authored alongside a blank: a PNG data-URL
   // ("data:image/png;base64,…", ≤131072 chars — the server verifies both).
   art?: string;
+  // Play this card into the open reaction window (canonical trigger
+  // "on_reaction"). Sent by non-active players while pending_play is open; a
+  // prompt_choice follow-up for a reaction must re-send this flag.
+  as_reaction?: boolean;
 };
+// Decline to react to the pending play; when every eligible player passes the
+// window closes early. window_id is a stale-window guard.
+export type PassReactionMsg = { type: "pass_reaction"; window_id?: string };
 export type CreateCardMsg = {
   type: "create_card";
   title: string;
@@ -75,6 +82,7 @@ export type ClientMsg =
   | PassMsg
   | EndTurnMsg
   | PlayMsg
+  | PassReactionMsg
   | CreateCardMsg
   | PreviewCardMsg
   | EpilogueStartMsg
@@ -100,6 +108,17 @@ export type CardSnapshot = {
   // True when the backend has rendered artwork for this card, servable from
   // GET /rooms/{code}/cards/{id}/art (see lib/art.ts).
   has_art?: boolean;
+  // Description of the card's art (null/absent when artless). First-class so
+  // effects can key off what a card depicts.
+  alt_text?: string | null;
+  // Structured canonical annotation (schema v2). Typed loosely — the client
+  // only reads trigger to spot reaction cards; the data already rides the
+  // snapshot.
+  canonical?: {
+    trigger?: string | null;
+    placement?: string;
+    venue?: string;
+  } | null;
 };
 
 export type PlayerSnapshot = {
@@ -162,7 +181,19 @@ export type GameStateSnapshot = {
   // Populated once the epilogue vote finalizes (phase === "ended"); null
   // before then, including during the pre-vote "results" phase.
   epilogue_result: EpilogueResultSummary | null;
+  // The play currently suspended behind an open reaction window (null when no
+  // window is open). Reconnect-safe source of truth; the reaction_window push
+  // is just the immediacy signal. Clients compute their own eligibility from
+  // their hand's canonical.trigger === "on_reaction".
+  pending_play: PendingPlaySnapshot | null;
   log: string[];
+};
+
+export type PendingPlaySnapshot = {
+  window_id: string;
+  card_id: string;
+  actor_id: string;
+  deadline_epoch_ms: number;
 };
 
 export type StateMsg = { type: "state"; state: GameStateSnapshot };
@@ -203,6 +234,24 @@ export type PromptChoiceMsg = {
 export type EpilogueMsg = { type: "epilogue"; cards: CardSnapshot[] };
 export type ErrorMsg = { type: "error"; message: string };
 export type BrewingMsg = { type: "brewing"; card_id: string };
+// A play opened a reaction window: the pending card is in the state snapshot
+// (pending_play); this push carries the deadline for the countdown.
+export type ReactionWindowMsg = {
+  type: "reaction_window";
+  window_id: string;
+  card_id: string;
+  actor_id: string;
+  deadline_epoch_ms: number;
+};
+// The window closed. "resolved" = timeout or all passed (the original play
+// resolved normally); the other outcomes name the reactor and their card.
+export type ReactionResultMsg = {
+  type: "reaction_result";
+  window_id: string;
+  outcome: "resolved" | "countered" | "stolen" | "redirected";
+  reactor_id?: string | null;
+  reaction_card_id?: string | null;
+};
 
 export type ServerMsg =
   | StateMsg
@@ -212,4 +261,6 @@ export type ServerMsg =
   | PromptChoiceMsg
   | EpilogueMsg
   | ErrorMsg
-  | BrewingMsg;
+  | BrewingMsg
+  | ReactionWindowMsg
+  | ReactionResultMsg;

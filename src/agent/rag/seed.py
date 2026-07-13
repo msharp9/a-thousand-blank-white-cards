@@ -61,6 +61,9 @@ def load_seed_cards(seed_path: Path | None = None) -> int:
             "card_id": card["id"],
             "title": card["title"],
             "description": card["description"],
+            # Art description rides as payload (not embedded) so retrieved
+            # exemplars expose what their art depicts — cards can key off it.
+            "alt_text": card.get("alt_text"),
             "canonical": _canonical_to_str(card.get("canonical")),
             "source": "seed",
         }

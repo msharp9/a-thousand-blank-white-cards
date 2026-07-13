@@ -30,6 +30,7 @@ import logging
 from models.effects import (
     AddPointsOp,
     ChangeDrawCountOp,
+    CounterPlayOp,
     CreateCardOp,
     CustomNoteOp,
     DestroyCardOp,
@@ -166,6 +167,8 @@ def _compile_op(name: str, args: dict) -> Op | None:
         return SetWinConditionOp(kind=args["kind"], threshold=args.get("threshold"))
     if name == "custom_note":
         return CustomNoteOp(note=str(args.get("note") or args.get("text") or ""))
+    if name == "counter_play":
+        return CounterPlayOp(mode=args.get("mode", "negate"))
     if name == "destroy_card":
         return DestroyCardOp(
             card_target=args.get("card_target"),
@@ -311,8 +314,24 @@ def compile_card_plan(card: dict) -> ResolutionPlan | None:
     if program is not None and program.ops:
         steps.append(OpsStep(ops=program.ops))
 
-    snippet = canonical.get("snippet") if isinstance(canonical, dict) else None
-    if isinstance(snippet, str) and snippet.strip():
-        steps.append(SnippetStep(code=snippet))
+    # Schema v2 carries executable code under "sandbox"; legacy persisted
+    # canonicals may still carry "snippet", which is only usable when it is
+    # real code — prose snippets used to produce doomed SnippetSteps that
+    # failed at execution time.
+    if isinstance(canonical, dict):
+        code = canonical.get("sandbox")
+        if not (isinstance(code, str) and code.strip()):
+            legacy = canonical.get("snippet")
+            code = legacy if isinstance(legacy, str) and _is_valid_snippet_code(legacy) else None
+        if isinstance(code, str) and code.strip():
+            steps.append(SnippetStep(code=code))
 
     return ResolutionPlan(steps=steps) if steps else None
+
+
+def _is_valid_snippet_code(text: str) -> bool:
+    if not text.lstrip().startswith("def apply"):
+        return False
+    from engine.sandbox.validate import validate_snippet  # late import — avoids cycle
+
+    return validate_snippet(text).ok

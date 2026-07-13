@@ -6,6 +6,7 @@ import type {
   ClientMsg,
   GameStateSnapshot,
   PromptChoiceMsg,
+  ReactionResultMsg,
   ServerMsg,
 } from "./types";
 
@@ -76,8 +77,16 @@ export interface GameSocketState {
   // blanks or shipped seed cards), broadcast once when the epilogue opens.
   // Empty until the 'epilogue' message arrives.
   epilogueCards: CardSnapshot[];
+  // The last reaction window outcome ("countered!", "stolen", …), kept briefly
+  // so the UI can flash it. The open window itself is NOT stored here — it is
+  // driven by gameState.pending_play (the reconnect-safe source of truth).
+  // Cleared automatically after a few seconds or when a new window opens.
+  reactionResult: ReactionResultMsg | null;
   send: (msg: ClientMsg) => void;
 }
+
+// How long the reaction outcome flash ("Countered!") stays up.
+const REACTION_RESULT_MS = 4000;
 
 export function useGameSocket(code: string, name: string): GameSocketState {
   const wsRef = useRef<WebSocket | null>(null);
@@ -93,6 +102,11 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     null,
   );
   const [epilogueCards, setEpilogueCards] = useState<CardSnapshot[]>([]);
+  const [reactionResult, setReactionResult] =
+    useState<ReactionResultMsg | null>(null);
+  const reactionResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // Pending auto-dismiss timer for the current transient error, so a newer
   // error resets the countdown instead of being cut short by an older one.
@@ -182,6 +196,25 @@ export function useGameSocket(code: string, name: string): GameSocketState {
           case "epilogue":
             setEpilogueCards(msg.cards);
             break;
+          case "reaction_window":
+            // The window UI is driven by the state snapshot's pending_play
+            // (broadcast right after this push); just clear any stale outcome.
+            if (reactionResultTimeoutRef.current) {
+              clearTimeout(reactionResultTimeoutRef.current);
+              reactionResultTimeoutRef.current = null;
+            }
+            setReactionResult(null);
+            break;
+          case "reaction_result":
+            setReactionResult(msg);
+            if (reactionResultTimeoutRef.current) {
+              clearTimeout(reactionResultTimeoutRef.current);
+            }
+            reactionResultTimeoutRef.current = setTimeout(() => {
+              reactionResultTimeoutRef.current = null;
+              setReactionResult(null);
+            }, REACTION_RESULT_MS);
+            break;
           case "error":
             // Message-level errors are recoverable gameplay/validation notices
             // (e.g. "You have already drawn this turn"). Surface them as a
@@ -248,6 +281,10 @@ export function useGameSocket(code: string, name: string): GameSocketState {
         clearTimeout(transientTimeoutRef.current);
         transientTimeoutRef.current = null;
       }
+      if (reactionResultTimeoutRef.current) {
+        clearTimeout(reactionResultTimeoutRef.current);
+        reactionResultTimeoutRef.current = null;
+      }
       wsRef.current?.close();
     };
   }, [code, name, clearTransientError]);
@@ -264,6 +301,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     promptChoice,
     clearPromptChoice,
     epilogueCards,
+    reactionResult,
     send,
   };
 }

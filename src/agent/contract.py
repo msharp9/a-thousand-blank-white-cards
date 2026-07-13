@@ -39,7 +39,10 @@ class SnippetEffect(BaseModel):
             "None for an immediate one-shot effect (runs once, now). A GameEvent value "
             "('on_play', 'on_turn_start', 'on_turn_end', 'on_draw_step', 'on_score_change', "
             "'on_game_end', 'on_validate_play') declares a PERSISTENT hook: the room "
-            "registers it via RegisterHookOp and it fires on every such event."
+            "registers it via RegisterHookOp and it fires on every such event. "
+            "'on_reaction' is special: it marks the card as a REACTION (counterspell-type) "
+            "— no hook is registered; the code runs when the card is played into a "
+            "reaction window, where it may call state.counter_play(mode)."
         ),
     )
     scope: Literal["player", "center"] = Field(
@@ -97,7 +100,9 @@ class InterpretResult(BaseModel):
         if self.program is not None and self.program.ops:
             steps.append(OpsStep(ops=self.program.ops))
         if self.snippet is not None:
-            if self.snippet.trigger is not None:
+            # "on_reaction" marks the card as a reaction, not a persistent hook:
+            # the code is a run-now step executed inside the reaction window.
+            if self.snippet.trigger is not None and self.snippet.trigger != "on_reaction":
                 steps.append(
                     OpsStep(
                         ops=[

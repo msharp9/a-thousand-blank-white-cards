@@ -453,4 +453,3 @@ shapes), with a secondary lift to `intent_match`.
 - **Consider promoting agent memory to semantic recall.** Today it's sqlite
   keyword/recency recall (deliberately, to avoid an embeddings dependency); a vector
   mirror would make the agent's own past rulings retrievable by similarity.
-```

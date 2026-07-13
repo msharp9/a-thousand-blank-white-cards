@@ -23,17 +23,21 @@ class TestGoldCards:
             card = parse_seed_card(d)
             assert isinstance(card, GoldCard), f"Expected GoldCard: {d['title']}"
 
-    def test_timing_variety(self) -> None:
+    def test_placement_variety(self) -> None:
+        """The exemplar set must show both one-shot (discard) and persistent
+        (center/player) placements — that variety is what teaches the agent."""
         cards = [parse_seed_card(d) for d in _load("seed_cards_gold.json")]
-        timings = {c.canonical.timing for c in cards if isinstance(c, GoldCard)}
-        assert "immediate" in timings
-        assert "modifier" in timings
+        placements = {c.canonical.placement for c in cards if isinstance(c, GoldCard)}
+        assert "discard" in placements
+        assert placements & {"center", "player"}
 
-    def test_has_ops_and_snippet_examples(self) -> None:
+    def test_has_ops_and_effect_examples(self) -> None:
         cards = [parse_seed_card(d) for d in _load("seed_cards_gold.json")]
         gold = [c for c in cards if isinstance(c, GoldCard)]
         assert any(c.canonical.ops for c in gold)
-        assert any(c.canonical.snippet for c in gold)
+        # Effect coverage beyond plain point ops: executable sandbox code, or a
+        # legacy prose snippet degraded to a custom_note by the v1→v2 shim.
+        assert any(c.canonical.sandbox or any(op.op == "custom_note" for op in (c.canonical.ops or [])) for c in gold)
 
 
 class TestFillerCards:

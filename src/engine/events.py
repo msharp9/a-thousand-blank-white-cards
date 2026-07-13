@@ -23,6 +23,10 @@ class GameEvent(StrEnum):
     ON_DRAW_STEP = "on_draw_step"
     ON_WIN_CHECK = "on_win_check"
     ON_GAME_END = "on_game_end"
+    # Fired when a reaction card resolves during another player's play. Also the
+    # canonical trigger marking a card AS a reaction (playable only inside the
+    # reaction window — see board.rooms.room).
+    ON_REACTION = "on_reaction"
 
 
 @dataclass

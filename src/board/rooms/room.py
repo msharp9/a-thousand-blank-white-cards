@@ -37,8 +37,10 @@ import asyncio
 import json
 import logging
 import random
+import time
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 
 from engine.apply import apply_effect
 from engine.compile import compile_card_plan
@@ -77,9 +79,40 @@ CARDS_TO_AUTHOR = BLANKS_PER_PLAYER
 # a module constant so tests and any future styling share one source of truth.
 AGENT_COMMENT_PREFIX = "🤖 "
 
+# How long a reaction window stays open before the pending play auto-resolves.
+# Long enough to read the pending card on a phone; tests monkeypatch it down.
+# A reactor claiming the window (e.g. to answer a prompt_choice) restarts the
+# timer so an abandoned follow-up can never wedge the room.
+REACTION_WINDOW_SECONDS = 15.0
+
 
 class PlanExecutionError(Exception):
     pass
+
+
+@dataclass
+class PendingPlay:
+    """A play suspended while a reaction window is open.
+
+    Deliberately transient (a Room attribute, never GameState): the pending
+    card stays in the actor's hand until commit, so if the process restarts
+    mid-window the suspension evaporates harmlessly and the actor just plays
+    the card again. ``window_id`` defeats timeout races — a stale timer or a
+    late reaction sees a mismatched/cleared id and no-ops.
+    """
+
+    window_id: str
+    actor_id: str
+    card_id: str
+    card: dict
+    plan: ResolutionPlan  # already resolved; NOT re-resolved at commit
+    chosen_player_id: str | None
+    chosen_card_id: str | None
+    eligible_ids: set[str]
+    passed_ids: set[str] = field(default_factory=set)
+    claimed_by: str | None = None  # reactor currently answering a prompt_choice
+    deadline: float = 0.0  # epoch seconds (time.time())
+    timer: asyncio.Task | None = None
 
 
 class Room:
@@ -131,6 +164,9 @@ class Room:
         # → follow-up play re-resolves), so this guards against double-logging the
         # arbiter comment for one played card. See _resolve_plan.
         self._comment_logged: set[str] = set()
+        # The play currently suspended behind an open reaction window, or None.
+        # Transient by design — see PendingPlay.
+        self._pending: PendingPlay | None = None
 
     # ── player management ──
     def add_player(self, player_id: str, name: str) -> None:
@@ -197,6 +233,7 @@ class Room:
             "pass",
             "end_turn",
             "play",
+            "pass_reaction",
             "create_card",
             "preview_card",
         }:
@@ -205,8 +242,22 @@ class Room:
         # Phase gate: once the game leaves "playing" (results/epilogue/ended —
         # e.g. an end_game card fired mid-deck), in-game actions must not run;
         # a stray play would re-trigger _end_game and double-apply end scoring.
-        if mtype in {"draw", "pass", "end_turn", "play"} and self.state.phase != "playing":
+        if mtype in {"draw", "pass", "end_turn", "play", "pass_reaction"} and self.state.phase != "playing":
             await self.connections.send(player_id, {"type": "error", "message": "The game is not in play"})
+            return
+        # Reaction routing comes BEFORE the active-player/has-drawn gates below:
+        # reaction plays are made by non-active players, and normal turn actions
+        # are frozen while a play is suspended behind an open window.
+        if mtype == "play" and getattr(msg, "as_reaction", False):
+            await self._handle_reaction_play(player_id, msg)
+            return
+        if mtype == "pass_reaction":
+            await self._handle_pass_reaction(player_id, msg)
+            return
+        if mtype in {"draw", "pass", "end_turn", "play"} and self._pending is not None:
+            await self.connections.send(
+                player_id, {"type": "error", "message": "Waiting for reactions to the pending play"}
+            )
             return
         if mtype in {"create_card", "preview_card"} and self.state.phase not in {"setup", "playing"}:
             await self.connections.send(player_id, {"type": "error", "message": "Card authoring is closed"})
@@ -768,6 +819,10 @@ class Room:
         """
         if self._is_blank(card):
             return True
+        # Reaction cards are only legal inside a reaction window — a hand of
+        # nothing but reactions must not deadlock the pass gate.
+        if self._is_reaction_card(card):
+            return False
         card_dict = card if isinstance(card, dict) else card.model_dump()
         plan = compile_card_plan(card_dict)
         if plan is not None and plan.steps:
@@ -775,6 +830,28 @@ class Room:
         # A free-text card (description present) can still be interpreted/played.
         description = card_dict.get("description") or ""
         return bool(description.strip())
+
+    def _is_reaction_card(self, card) -> bool:
+        """True when the card's canonical trigger is "on_reaction" — playable
+        ONLY during another player's play, never on your own play step."""
+        if isinstance(card, dict):
+            canonical = card.get("canonical") or {}
+            trigger = card.get("trigger") or (canonical.get("trigger") if isinstance(canonical, dict) else None)
+        else:
+            canonical = getattr(card, "canonical", None)
+            trigger = getattr(card, "trigger", None) or getattr(canonical, "trigger", None)
+        return trigger == str(GameEvent.ON_REACTION)
+
+    def _is_uncounterable(self, card) -> bool:
+        """True when the card carries an ``uncounterable`` flag (properties are
+        authored at creation; attributes are written by set_card_attribute)."""
+        if not isinstance(card, dict):
+            return False
+        for bag_key in ("properties", "attributes"):
+            bag = card.get(bag_key)
+            if isinstance(bag, dict) and bag.get("uncounterable"):
+                return True
+        return False
 
     def _can_pass(self, player_id: str) -> bool:
         """True if the active player may end their turn WITHOUT playing.
@@ -791,13 +868,11 @@ class Room:
     def _play_destination(self, card) -> str:
         """Return the zone a played card lands in: "center" | "in_play" | "discard".
 
-        Derived from the card's canonical placement/timing (preserved by bead 1):
-        - placement == "center"                    → the shared table center.
-        - placement == "self" AND timing=="modifier" (a persistent card that keeps
-          modifying future events)                 → the player's in-play zone,
-          i.e. it stays "in front of" the player.
-        - everything else (immediate point cards, cards with no canonical at all,
-          and authored blanks)                     → the discard pile.
+        Schema v2 (data/eval/CANONICAL_SPEC.md): placement "center" = game-wide
+        modifier on the shared table; "player" = modifier that stays in front of
+        the affected player (in_play); "discard" = one-shot. Legacy v1 canonicals
+        (placement "self" + timing "modifier") persist in old room state and RAG
+        payloads, so the v1 branch stays.
         """
         canonical = card.get("canonical") if isinstance(card, dict) else getattr(card, "canonical", None)
         if canonical is None:
@@ -807,7 +882,9 @@ class Room:
         timing = canonical.get("timing") if isinstance(canonical, dict) else getattr(canonical, "timing", None)
         if placement == "center":
             return "center"
-        if placement == "self" and timing == "modifier":
+        if placement == "player" and timing != "immediate":
+            return "in_play"
+        if placement == "self" and timing == "modifier":  # legacy v1
             return "in_play"
         return "discard"
 
@@ -866,20 +943,37 @@ class Room:
 
         Programs serialize their live ops; a triggered snippet becomes a
         register_hook authoring op (single pipeline); an immediate snippet is
-        carried as canonical["snippet"] for the play path. Cards with neither
+        carried as canonical["sandbox"] for the play path. A snippet the agent
+        marks trigger="on_reaction" makes the card a REACTION: its canonical
+        records the trigger (so the room recognises it) and its code runs when
+        the card is played into a reaction window. Cards with neither
         contribute nothing (fall back to the LLM next time).
         """
         plan = result.to_plan()
+        canonical: dict = {}
+        snippet = getattr(result, "snippet", None)
+        if snippet is not None and getattr(snippet, "trigger", None) == str(GameEvent.ON_REACTION):
+            canonical["trigger"] = str(GameEvent.ON_REACTION)
         if not plan.steps:
-            return {}
-        canonical: dict = {"steps": [step.model_dump() for step in plan.steps]}
+            return {"canonical": canonical} if canonical else {}
+        canonical["steps"] = [step.model_dump() for step in plan.steps]
         ops = [op.model_dump() for step in plan.steps if isinstance(step, OpsStep) for op in step.ops]
         snippets = [step for step in plan.steps if isinstance(step, SnippetStep)]
         if ops:
             canonical["ops"] = ops
         if len(snippets) == 1 and isinstance(plan.steps[-1], SnippetStep):
-            canonical["snippet"] = snippets[0].code
+            canonical["sandbox"] = snippets[0].code
         return {"canonical": canonical}
+
+    def _placement_owner(self, card, ctx: HookContext) -> str:
+        """Which player an in_play (placement "player") card sits in front of:
+        the chosen target when the play had one, else the actor. Legacy
+        placement "self" always attaches to the actor."""
+        canonical = card.get("canonical") if isinstance(card, dict) else getattr(card, "canonical", None)
+        placement = canonical.get("placement") if isinstance(canonical, dict) else getattr(canonical, "placement", None)
+        if placement == "player":
+            return ctx.chosen_player_id or ctx.actor_id
+        return ctx.actor_id
 
     async def _execute_plan(
         self,
@@ -887,6 +981,8 @@ class Room:
         plan: ResolutionPlan,
         ctx: HookContext,
         card,
+        *,
+        zone_owner: str | None = None,
     ) -> GameState:
         from config import get_settings
         from engine.sandbox.revalidate import apply_snippet_diff
@@ -898,8 +994,11 @@ class Room:
             card_id,
             "hand",
             destination,
-            from_player_id=ctx.actor_id,
-            to_player_id=ctx.actor_id,
+            # zone_owner = whose hand the card leaves (differs from ctx.actor_id
+            # only for a redirected reaction, where the effect runs as the
+            # reactor but the card was in the original actor's hand).
+            from_player_id=zone_owner or ctx.actor_id,
+            to_player_id=self._placement_owner(card, ctx) if destination == "in_play" else ctx.actor_id,
         )
         rng = random.Random()
         ctx_dict = {
@@ -948,6 +1047,20 @@ class Room:
         if card is None:
             await self.connections.send(player_id, {"type": "error", "message": f"Card {card_id} not found"})
             return
+        if self._is_reaction_card(card):
+            # Reactions are only legal inside a reaction window. Card stays in
+            # hand, turn not consumed.
+            await self.connections.send(
+                player_id,
+                {
+                    "type": "error",
+                    "message": (
+                        f"{self._card_title(card)} is a reaction — "
+                        "it can only be played when another player plays a card"
+                    ),
+                },
+            )
+            return
 
         # Author-on-play: a blank must be filled in before it can be resolved.
         if self._is_blank(card):
@@ -993,7 +1106,23 @@ class Room:
 
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
         plan = await self._resolve_plan(card_id, card, actor_id=player_id)
-        game_ending = False
+        # Re-check after resolution: a blank authored on play may have been
+        # canonicalized by the LLM as a reaction. Abort the same way — the card
+        # hasn't moved zones, and it is now persisted in hand as a real
+        # reaction card for future windows.
+        persisted = self.state.cards.get(card_id, card)
+        if self._is_reaction_card(persisted):
+            await self.connections.send(
+                player_id,
+                {
+                    "type": "error",
+                    "message": (
+                        f"{self._card_title(persisted)} turned out to be a reaction — "
+                        "it stays in your hand until another player plays a card"
+                    ),
+                },
+            )
+            return
         chosen_player_id = getattr(msg, "chosen_player_id", None)
         chosen_card_id = getattr(msg, "chosen_card_id", None)
         valid_player_ids = {p.id for p in self.state.players}
@@ -1058,28 +1187,69 @@ class Room:
             chosen_player_id=chosen_player_id,
             chosen_card_id=chosen_card_id,
         )
+        # Give reaction-card holders their window BEFORE committing. If one
+        # opens, the play is suspended (PendingPlay) and resolves via
+        # _commit_pending when the window closes.
+        if await self._maybe_open_reaction_window(player_id, card_id, card, plan, ctx):
+            return
+        await self._finish_play(player_id, card_id, card, plan, ctx)
+
+    async def _finish_play(
+        self,
+        player_id: str,
+        card_id: str,
+        card,
+        plan: ResolutionPlan,
+        ctx: HookContext,
+        *,
+        negated: bool = False,
+        steal_to: str | None = None,
+        redirect_to: str | None = None,
+    ) -> None:
+        """Commit a resolved play: zone move + effects + logs + turn accounting.
+
+        The tail of every play, direct or after a reaction window:
+        - ``negated``: the plan never executes; the card goes hand → discard.
+        - ``steal_to``: the plan never executes; the card goes to that player's hand.
+        - ``redirect_to``: the plan executes with that player as the effect actor
+          (the zone move still empties the original actor's hand).
+        A countered/stolen play still consumes the actor's play allowance.
+        """
+        title = self._card_title(card)
+        game_ending = False
         before = {p.id: p.score for p in self.state.players}
         deck_count_before = len(self.state.deck)
-        try:
-            self.state = await self._execute_plan(self.state, plan, ctx, card)
-        except Exception as exc:
-            logger.warning("resolution plan failed for %s: %s", card_id, exc)
-            destination = self._play_destination(card)
-            self.state = self.state.move_card(
-                card_id,
-                "hand",
-                destination,
-                from_player_id=player_id,
-                to_player_id=player_id,
-            )
-            await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
-            fallback = EffectProgram(ops=[CustomNoteOp(note=f"Played {title or 'Card'} (no mechanical effect)")])
-            self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
-            await self._log_and_broadcast(self._describe_play(player_id, card, before))
+        if negated or steal_to is not None:
+            if steal_to is not None:
+                self.state = self.state.move_card(
+                    card_id, "hand", "hand", from_player_id=player_id, to_player_id=steal_to
+                )
+            else:
+                self.state = self.state.move_card(
+                    card_id, "hand", "discard", from_player_id=player_id, to_player_id=player_id
+                )
         else:
-            await self._log_and_broadcast(self._describe_play(player_id, card, before))
-            await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id)
-            game_ending = self._end_now() or win_condition_met(self.state)
+            exec_ctx = ctx if redirect_to is None else replace(ctx, actor_id=redirect_to)
+            try:
+                self.state = await self._execute_plan(self.state, plan, exec_ctx, card, zone_owner=player_id)
+            except Exception as exc:
+                logger.warning("resolution plan failed for %s: %s", card_id, exc)
+                destination = self._play_destination(card)
+                self.state = self.state.move_card(
+                    card_id,
+                    "hand",
+                    destination,
+                    from_player_id=player_id,
+                    to_player_id=player_id,
+                )
+                await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
+                fallback = EffectProgram(ops=[CustomNoteOp(note=f"Played {title or 'Card'} (no mechanical effect)")])
+                self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
+                await self._log_and_broadcast(self._describe_play(player_id, card, before))
+            else:
+                await self._log_and_broadcast(self._describe_play(player_id, card, before))
+                await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id)
+                game_ending = self._end_now() or win_condition_met(self.state)
 
         self.state = append_history_event(
             self.state,
@@ -1104,6 +1274,304 @@ class Room:
             await self._broadcast_state()
         else:
             await self._advance_turn()
+
+    # ── reaction window ──
+    async def _maybe_open_reaction_window(
+        self, player_id: str, card_id: str, card, plan: ResolutionPlan, ctx: HookContext
+    ) -> bool:
+        """Open a reaction window for this play if anyone can react.
+
+        Eligibility (computed once, at open): connected players other than the
+        actor holding at least one reaction card. Skipped entirely when nobody
+        is eligible or the pending card is uncounterable — no 15s stall on
+        ordinary plays. Returns True when the play is now suspended.
+        """
+        if self._is_uncounterable(card):
+            return False
+        connected = set(self.connections.connected_players)
+        eligible = {
+            p.id
+            for p in self.state.players
+            if p.id != player_id
+            and p.id in connected
+            and any(self._is_reaction_card(self.state.cards.get(cid, {})) for cid in p.hand)
+        }
+        if not eligible:
+            return False
+        window_id = uuid.uuid4().hex
+        pending = PendingPlay(
+            window_id=window_id,
+            actor_id=player_id,
+            card_id=card_id,
+            card=card if isinstance(card, dict) else card.model_dump(),
+            plan=plan,
+            chosen_player_id=ctx.chosen_player_id,
+            chosen_card_id=ctx.chosen_card_id,
+            eligible_ids=eligible,
+            deadline=time.time() + REACTION_WINDOW_SECONDS,
+        )
+        pending.timer = asyncio.create_task(self._reaction_timeout(window_id, REACTION_WINDOW_SECONDS))
+        self._pending = pending
+        await self.connections.broadcast(
+            {
+                "type": "reaction_window",
+                "window_id": window_id,
+                "card_id": card_id,
+                "actor_id": player_id,
+                "deadline_epoch_ms": int(pending.deadline * 1000),
+            }
+        )
+        await self._log_and_broadcast(f"{self._name(player_id)} plays {self._card_title(card)}… waiting for reactions")
+        await self._broadcast_state()
+        return True
+
+    async def _reaction_timeout(self, window_id: str, delay: float) -> None:
+        """Auto-resolve the pending play when the window times out.
+
+        Takes the same lock as handle_action, so 'timeout races a reaction'
+        reduces to whoever wins the lock; the loser sees a cleared/mismatched
+        window_id and no-ops.
+        """
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            return
+        async with self._lock:
+            pending = self._pending
+            if pending is None or pending.window_id != window_id:
+                return
+            await self._commit_pending("resolved")
+            self._notify_change()
+
+    async def _commit_pending(
+        self,
+        outcome: str,
+        *,
+        reactor_id: str | None = None,
+        reaction_card_id: str | None = None,
+    ) -> None:
+        """Close the reaction window and commit the suspended play accordingly.
+
+        Callers hold the room lock. Clears ``_pending`` FIRST so re-entrant
+        paths (stale timer, late reactions) see a closed window.
+        """
+        pending = self._pending
+        if pending is None:
+            return
+        self._pending = None
+        if pending.timer is not None and not pending.timer.done():
+            pending.timer.cancel()
+        await self.connections.broadcast(
+            {
+                "type": "reaction_result",
+                "window_id": pending.window_id,
+                "outcome": outcome,
+                "reactor_id": reactor_id,
+                "reaction_card_id": reaction_card_id,
+            }
+        )
+        ctx = HookContext(
+            event=GameEvent.ON_PLAY,
+            actor_id=pending.actor_id,
+            card_id=pending.card_id,
+            chosen_player_id=pending.chosen_player_id,
+            chosen_card_id=pending.chosen_card_id,
+        )
+        title = self._card_title(pending.card)
+        if outcome == "countered":
+            await self._log_and_broadcast(f"{self._name(pending.actor_id)}'s {title} was countered!")
+            await self._finish_play(pending.actor_id, pending.card_id, pending.card, pending.plan, ctx, negated=True)
+        elif outcome == "stolen":
+            await self._log_and_broadcast(
+                f"{self._name(reactor_id)} steals {title} from {self._name(pending.actor_id)}!"
+            )
+            await self._finish_play(
+                pending.actor_id, pending.card_id, pending.card, pending.plan, ctx, steal_to=reactor_id
+            )
+        elif outcome == "redirected":
+            await self._log_and_broadcast(f"{title} is redirected — it resolves for {self._name(reactor_id)}!")
+            await self._finish_play(
+                pending.actor_id, pending.card_id, pending.card, pending.plan, ctx, redirect_to=reactor_id
+            )
+        else:
+            await self._finish_play(pending.actor_id, pending.card_id, pending.card, pending.plan, ctx)
+
+    async def _handle_reaction_play(self, player_id: str, msg) -> None:
+        """A non-active player plays a reaction card into the open window."""
+        pending = self._pending
+
+        async def err(message: str) -> None:
+            await self.connections.send(player_id, {"type": "error", "message": message})
+
+        if pending is None:
+            await err("The reaction window has closed")
+            return
+        if player_id == pending.actor_id:
+            await err("You cannot react to your own play")
+            return
+        if player_id not in pending.eligible_ids:
+            await err("You have no reaction to play")
+            return
+        if player_id in pending.passed_ids:
+            await err("You already passed on this play")
+            return
+        if pending.claimed_by not in (None, player_id):
+            await err("Another player is already reacting")
+            return
+        card_id = msg.card_id
+        if card_id not in self.state.get_player(player_id).hand:
+            await err("That card is not in your hand")
+            return
+        card = self.state.cards.get(card_id)
+        if card is None or self._is_blank(card):
+            await err("Blank cards cannot be played as reactions")
+            return
+        if not self._is_reaction_card(card):
+            await err(f"{self._card_title(card)} is not a reaction card")
+            return
+
+        # Claim the window and restart the timer: the resolve below may need an
+        # LLM round-trip and/or a prompt_choice follow-up, and an abandoned
+        # follow-up must never wedge the room.
+        pending.claimed_by = player_id
+        if pending.timer is not None and not pending.timer.done():
+            pending.timer.cancel()
+        pending.deadline = time.time() + REACTION_WINDOW_SECONDS
+        pending.timer = asyncio.create_task(self._reaction_timeout(pending.window_id, REACTION_WINDOW_SECONDS))
+
+        plan = await self._resolve_plan(card_id, card, actor_id=player_id)
+        chosen_player_id = getattr(msg, "chosen_player_id", None)
+        chosen_card_id = getattr(msg, "chosen_card_id", None)
+        ops = plan.operations()
+        needs_player_choice = any(
+            getattr(op, field_name, None) in ("chooser", "target_player")
+            for op in ops
+            for field_name in ("target", "from_target", "to_target")
+        )
+        if needs_player_choice and chosen_player_id is None:
+            # Same suspend/resume as a normal play: the follow-up play message
+            # re-enters here carrying as_reaction + the choice.
+            await self.connections.send(
+                player_id,
+                {
+                    "type": "prompt_choice",
+                    "card_id": card_id,
+                    "prompt": f"Choose a target player for {self._card_title(card)}",
+                    "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                },
+            )
+            return
+        if chosen_player_id is not None and chosen_player_id not in {p.id for p in self.state.players}:
+            await err(f"Invalid target player: {chosen_player_id}")
+            return
+
+        try:
+            mode = await self._execute_reaction(player_id, card_id, card, plan, chosen_player_id, chosen_card_id)
+        except Exception as exc:
+            logger.warning("reaction %s failed: %s", card_id, exc)
+            pending.claimed_by = None  # unclaim; they may retry or pass
+            await err(f"Reaction failed: {exc}")
+            return
+        outcome = {"negate": "countered", "steal_hand": "stolen", "redirect": "redirected"}.get(mode or "", "resolved")
+        await self._commit_pending(outcome, reactor_id=player_id, reaction_card_id=card_id)
+
+    async def _handle_pass_reaction(self, player_id: str, msg) -> None:
+        """An eligible player declines to react; all-passed closes the window early."""
+        pending = self._pending
+        if pending is None:
+            return  # window already closed — a late pass is harmless
+        window_id = getattr(msg, "window_id", None)
+        if window_id is not None and window_id != pending.window_id:
+            return
+        if player_id not in pending.eligible_ids or player_id in pending.passed_ids:
+            return
+        pending.passed_ids.add(player_id)
+        if pending.passed_ids >= pending.eligible_ids and pending.claimed_by is None:
+            await self._commit_pending("resolved")
+        else:
+            await self._broadcast_state()
+
+    async def _execute_reaction(
+        self,
+        reactor_id: str,
+        reaction_card_id: str,
+        card,
+        plan: ResolutionPlan,
+        chosen_player_id: str | None,
+        chosen_card_id: str | None,
+    ) -> str | None:
+        """Apply a reaction card's own effects and extract its counter mode.
+
+        counter_play ops are control flow, not state changes: they are
+        partitioned out of both OpsStep ops and snippet diffs, and the first
+        one's mode is returned (None = damp squib — the original play still
+        resolves). Everything else applies through the normal reducer path, so
+        "counter and gain 2" works.
+        """
+        from config import get_settings
+        from engine.sandbox.revalidate import apply_snippet_diff, extract_counter
+        from engine.sandbox.runner import execute_snippet
+        from models.effects import CounterPlayOp
+
+        pending = self._pending
+        ctx = HookContext(
+            event=GameEvent.ON_REACTION,
+            actor_id=reactor_id,
+            card_id=reaction_card_id,
+            chosen_player_id=chosen_player_id,
+            chosen_card_id=chosen_card_id,
+            extra={
+                "pending_card_id": pending.card_id,
+                "pending_actor_id": pending.actor_id,
+                "pending_card_title": self._card_title(pending.card),
+                # Op dumps only — a reaction can inspect what the pending play
+                # does, never its snippet source.
+                "pending_ops": [op.model_dump() for op in pending.plan.operations()],
+            },
+        )
+        before = {p.id: p.score for p in self.state.players}
+        destination = self._play_destination(card)
+        working = self.state.move_card(
+            reaction_card_id, "hand", destination, from_player_id=reactor_id, to_player_id=reactor_id
+        )
+        rng = random.Random()
+        ctx_dict = {
+            "actor_id": reactor_id,
+            "event": str(GameEvent.ON_REACTION),
+            "card_id": reaction_card_id,
+            "amount": None,
+            **ctx.extra,
+        }
+        mode: str | None = None
+        for step in plan.steps:
+            bus = EventBus(build_registry(working), max_hooks=MAX_HOOKS_PER_EVENT)
+            if isinstance(step, OpsStep):
+                side_ops = []
+                for op in step.ops:
+                    if isinstance(op, CounterPlayOp):
+                        mode = mode or op.mode
+                    else:
+                        side_ops.append(op)
+                if side_ops:
+                    working = apply_effect(working, EffectProgram(ops=side_ops), ctx, bus=bus, rng=rng)
+                continue
+            if not get_settings().snippet_execution_enabled:
+                raise PlanExecutionError("snippet execution is disabled")
+            state_dict = json.loads(working.model_dump_json())
+            raw_ops = await asyncio.to_thread(execute_snippet, step.code, state_dict, ctx_dict)
+            step_mode, side_raw = extract_counter(raw_ops)
+            mode = mode or step_mode
+            working = apply_snippet_diff(working, side_raw, ctx, origin="reaction", bus=bus, rng=rng)
+        self.state = working
+        deltas = {p.id: p.score - before.get(p.id, p.score) for p in self.state.players}
+        line = f"{self._name(reactor_id)} reacts with {self._card_title(card)}"
+        formatted = self._format_score_deltas(deltas)
+        if formatted:
+            line += f" ({formatted})"
+        await self._log_and_broadcast(line)
+        await self._emit_hooks(GameEvent.ON_REACTION, reactor_id, card_id=reaction_card_id)
+        await self._broadcast_state()
+        return mode
 
     async def _handle_create_card(self, player_id: str, msg) -> None:
         """Author a new card (allowed off-turn / during setup).
@@ -1331,6 +1799,19 @@ class Room:
         snap["can_pass"] = self._can_pass(active_id) if active_id is not None else False
         snap["setup_progress"] = self._setup_progress()
         snap["cards_to_author"] = CARDS_TO_AUTHOR
+        # Open reaction window, public info only (reconnect-safe source of
+        # truth; the reaction_window push is just the immediacy signal). Each
+        # client computes its own eligibility from its hand's canonicals.
+        snap["pending_play"] = (
+            {
+                "window_id": self._pending.window_id,
+                "card_id": self._pending.card_id,
+                "actor_id": self._pending.actor_id,
+                "deadline_epoch_ms": int(self._pending.deadline * 1000),
+            }
+            if self._pending is not None
+            else None
+        )
         return snap
 
     async def _log_and_broadcast(self, log_entry: str) -> None:

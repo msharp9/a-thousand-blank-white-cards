@@ -351,6 +351,24 @@ class CustomNoteOp(BaseModel):
     note: str
 
 
+class CounterPlayOp(BaseModel):
+    """Reaction control-flow op: decides the fate of the play being reacted to.
+
+    Only meaningful inside a reaction window (canonical trigger "on_reaction");
+    the Room consumes it there — like reject_play in ON_VALIDATE_PLAY hooks —
+    and a defensive no-op reducer logs and ignores it anywhere else.
+
+    Modes:
+      negate     — the pending card's effect never happens; the card discards.
+      steal_hand — the effect never happens; the pending card goes to the
+                   reactor's hand instead.
+      redirect   — the pending effect resolves as if the reactor had played it.
+    """
+
+    op: Literal["counter_play"] = "counter_play"
+    mode: Literal["negate", "steal_hand", "redirect"] = "negate"
+
+
 class EndGameOp(BaseModel):
     """Ends the game immediately, independent of deck state or win_condition.
 
@@ -398,6 +416,7 @@ Op = Annotated[
         SetCardAttributeOp,
         CreateCardOp,
         CustomNoteOp,
+        CounterPlayOp,
         EndGameOp,
     ],
     Field(discriminator="op"),

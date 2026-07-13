@@ -108,6 +108,20 @@ class PlayMsg(BaseModel):
     # Optional hand-drawn art for the authored blank, as a validated PNG
     # data-URL. Stored out-of-band in Room.card_art (never in GameState).
     art: CardArt | None = None
+    # Play this card into the open reaction window (canonical trigger
+    # "on_reaction"). Reaction plays come from non-active players and bypass
+    # the active-player/has-drawn gates; they are only legal while a window is
+    # open. prompt_choice follow-ups for a reaction must re-send this flag.
+    as_reaction: bool = False
+
+
+class PassReactionMsg(BaseModel):
+    """Decline to react to the pending play. When every eligible player has
+    passed, the window closes early and the pending card resolves."""
+
+    type: Literal["pass_reaction"] = "pass_reaction"
+    # Stale-window guard: a pass for an already-closed window is ignored.
+    window_id: str | None = None
 
 
 class CreateCardMsg(BaseModel):
@@ -158,6 +172,7 @@ ClientMsg = Annotated[
         PassMsg,
         EndTurnMsg,
         PlayMsg,
+        PassReactionMsg,
         CreateCardMsg,
         PreviewCardMsg,
         EpilogueStartMsg,
@@ -228,6 +243,31 @@ class BrewingMsg(BaseModel):
     card_id: str
 
 
+class ReactionWindowMsg(BaseModel):
+    """Broadcast when a play opens a reaction window. Public info only — each
+    client decides its own eligibility from the hand canonicals it already has
+    in the state snapshot; the server validates authoritatively. The snapshot's
+    ``pending_play`` field is the reconnect-safe source of truth; this message
+    is the immediacy push."""
+
+    type: Literal["reaction_window"] = "reaction_window"
+    window_id: str
+    card_id: str  # the pending card (full body rides the state snapshot)
+    actor_id: str
+    deadline_epoch_ms: int
+
+
+class ReactionResultMsg(BaseModel):
+    """Broadcast when a reaction window closes, however it closed."""
+
+    type: Literal["reaction_result"] = "reaction_result"
+    window_id: str
+    # "resolved" = timeout or all passed (original play resolves normally).
+    outcome: Literal["resolved", "countered", "stolen", "redirected"]
+    reactor_id: str | None = None
+    reaction_card_id: str | None = None
+
+
 ServerMsg = Union[
     StateMsg,
     EffectAppliedMsg,
@@ -237,4 +277,6 @@ ServerMsg = Union[
     EpilogueMsg,
     ErrorMsg,
     BrewingMsg,
+    ReactionWindowMsg,
+    ReactionResultMsg,
 ]

@@ -31,13 +31,15 @@ class TestSimpleSeedDeck:
             assert isinstance(card, GoldCard)
             assert card.canonical.venue == "all", f"Expected venue=all: {d['title']}"
 
-    def test_immediate_cards_compile(self) -> None:
+    def test_one_shot_cards_compile(self) -> None:
+        """Every discard-placement (one-shot) simple card must compile
+        deterministically — simple mode never calls the LLM."""
         for d in _load():
             card = parse_seed_card(d)
             assert isinstance(card, GoldCard)
-            if card.canonical.timing != "immediate":
+            if card.canonical.placement != "discard":
                 continue
-            prog = compile_card({**d, "ops": d["canonical"].get("ops")})
+            prog = compile_card({**d, "ops": [op.model_dump() for op in card.canonical.ops or []]})
             assert isinstance(prog, EffectProgram), f"Did not compile: {d['title']}"
             assert prog.ops, f"Empty program: {d['title']}"
 

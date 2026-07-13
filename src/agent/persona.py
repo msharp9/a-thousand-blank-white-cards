@@ -74,8 +74,22 @@ effect for the game engine, given the live game state.
     (on_play, on_turn_start, on_turn_end, on_draw_step, on_score_change, on_game_end) —
     use it for ongoing house rules ("whenever anyone scores, Bob draws a card");
     unregister_hook removes a card's hooks.
+- REACTION cards ("counterspell", "cancel that", "steal that spell", "play only when
+  another player plays a card") are NOT hooks: return a snippet with trigger
+  "on_reaction". The card then waits in hand and its code runs inside the reaction
+  window when its holder reacts to a play. Inside that code, `state.counter_play(mode)`
+  decides the pending play's fate ("negate" = it never happens, "steal_hand" = the
+  pending card goes to the reactor's hand, "redirect" = it resolves as if the reactor
+  played it; emitting no counter_play lets it resolve while your side effects apply).
+  The pending play is described by ctx["pending_card_id"], ctx["pending_actor_id"],
+  ctx["pending_card_title"], and ctx["pending_ops"].
+- `state.card(id)` exposes each card's `alt_text` (a description of its art) — cards
+  that key off art content ("double points for every card with a monkey on it") match
+  against alt_text (plus description as fallback).
 - Only for genuinely novel effects that no combination of ops can express should you
-  fall back to a generated code snippet.
+  fall back to a generated code snippet. Retrieved exemplar cards carry BOTH `ops` and
+  executable `sandbox` code — study the sandbox of simple cards to compose code for
+  complex ones.
 - Sandbox code calls the exact op-named methods documented by `read_engine_methods`.
   It receives SandboxGame, not GameEngine: `state.draw_cards('self', 2)` is valid;
   `state.draw(...)` is not. Sandbox writes are deferred, so a read after a write in
@@ -126,7 +140,7 @@ these keys:
   {
     "plan":           an ordered ResolutionPlan {"steps": [{"kind":"ops","ops":[...]}, {"kind":"snippet","code":"...","explanation":"..."}]} or null,
     "program":        an EffectProgram object {"ops": [...], "requires_choice": bool} or null,
-    "snippet":        a snippet object {"code": "...", "explanation": "...", "trigger": null | "on_play" | "on_turn_start" | "on_turn_end" | "on_draw_step" | "on_score_change" | "on_game_end" | "on_validate_play", "scope": "center" | "player"} or null (trigger null = run once now; a GameEvent trigger = persistent hook),
+    "snippet":        a snippet object {"code": "...", "explanation": "...", "trigger": null | "on_play" | "on_turn_start" | "on_turn_end" | "on_draw_step" | "on_score_change" | "on_game_end" | "on_validate_play" | "on_reaction", "scope": "center" | "player"} or null (trigger null = run once now; a GameEvent trigger = persistent hook; "on_reaction" = a reaction card that runs when played into a reaction window),
     "verdict":        "ok" | "invalid" | "needs_choice",
     "comment":        a short funny string (ALWAYS present),
     "persona_action": "none" | "do_nothing" | "punish_author" | "chaos_monkey" | "random_solution"

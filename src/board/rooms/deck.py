@@ -24,6 +24,8 @@ import random
 from collections.abc import Callable
 from pathlib import Path
 
+from models.card import normalise_canonical
+
 logger = logging.getLogger(__name__)
 
 # A game needs at least this many cards in the deck to start (acceptance: >= 30).
@@ -111,12 +113,17 @@ def _normalise_card(raw: dict, index: int) -> dict:
     """
     card_id = raw.get("id") or raw.get("card_id") or f"deck-{index:03d}"
     canonical = _coerce_canonical(raw.get("canonical"))
+    if canonical is not None:
+        # Permanent v1→v2 shim: RAG payloads and old seed files carry legacy
+        # canonicals (timing, placement "self", trigger_event, prose snippet).
+        canonical = normalise_canonical(canonical)
     source = raw.get("source", "seed")
     art = raw.get("art") or None
     card: dict = {
         "id": card_id,
         "title": raw.get("title", ""),
         "description": raw.get("description", ""),
+        "alt_text": raw.get("alt_text"),
         "creator_id": source,
         "origin": "authored" if source == "player" else "seed",
         "has_art": bool(art),
@@ -125,9 +132,11 @@ def _normalise_card(raw: dict, index: int) -> dict:
         card["art"] = art
     if canonical is not None:
         card["canonical"] = canonical
-        # Lift ops/venue to the top level so callers need not re-parse canonical.
+        # Lift ops/sandbox/venue to the top level so callers need not re-parse canonical.
         if canonical.get("ops") is not None:
             card["ops"] = canonical["ops"]
+        if canonical.get("sandbox"):
+            card["sandbox"] = canonical["sandbox"]
         card["venue"] = canonical.get("venue", "all")
     return card
 
