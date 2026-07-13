@@ -15,7 +15,12 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
+from agent.tools.dry_run_effect import dry_run_resolution_plan
+from engine.compile import compile_card_plan
 from engine.sandbox.validate import validate_snippet
+from models.game_state import GameState, Player
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "eval"
 GOLD = DATA_DIR / "eval_cards.json"
@@ -192,6 +197,101 @@ def test_real_venue_distribution_is_sane() -> None:
     venues = [c["human_canonical"]["venue"] for c in _load(REAL)]
     assert venues.count("all") > venues.count("in_person")  # most cards work anywhere
     assert venues.count("in_person") >= 10  # but physical cards are genuinely tagged
+
+
+# --------------------------------------------------------------------------- #
+# real_cards.json interaction-mechanics upgrades (bead 7fp): note-only cards
+# whose text implies verifiable mechanics carry an interaction-steps plan
+# (confirm/choice/number/text barriers) or real computed sandbox code instead
+# of a bare custom_note.
+# --------------------------------------------------------------------------- #
+
+
+def _real_steps_cards() -> list[dict]:
+    return [c for c in _load(REAL) if c["human_canonical"].get("steps")]
+
+
+def _representative_state() -> GameState:
+    return GameState(
+        room_code="REAL",
+        players=[
+            Player(id="p1", name="Alice", score=7, hand=["played-card"]),
+            Player(id="p2", name="Bob", score=-4, hand=[]),
+            Player(id="p3", name="Ivy", score=12, hand=[]),
+        ],
+        cards={"played-card": {"id": "played-card", "title": "Played"}},
+        deck=[f"deck-{index}" for index in range(10)],
+        phase="playing",
+    )
+
+
+def test_real_upgraded_interaction_subset_is_nonempty() -> None:
+    assert len(_real_steps_cards()) >= 20
+
+
+def test_real_steps_cards_follow_interaction_contract() -> None:
+    """Interaction-plan cards are steps-only (CANONICAL_SPEC: sandbox null) and never target 'chooser' in code."""
+    for c in _real_steps_cards():
+        hc = c["human_canonical"]
+        assert hc["sandbox"] is None, c["title"]
+        assert hc["ops"] is None, c["title"]
+        steps = hc["steps"]
+        assert any(isinstance(s, dict) and s.get("kind") == "interaction" for s in steps), c["title"]
+        for step in steps:
+            if step.get("kind") == "snippet":
+                assert "'chooser'" not in step["code"] and '"chooser"' not in step["code"], c["title"]
+
+
+def test_real_all_sandbox_and_snippet_code_validates() -> None:
+    """Every executable string in the corpus passes the engine's static sandbox check."""
+    checked = 0
+    for c in _load(REAL):
+        hc = c["human_canonical"]
+        codes = [hc["sandbox"]] if hc.get("sandbox") else []
+        codes += [s["code"] for s in hc.get("steps") or [] if isinstance(s, dict) and s.get("kind") == "snippet"]
+        for code in codes:
+            result = validate_snippet(code)
+            assert result.ok, f"{c['title']}: {result.error}"
+            checked += 1
+    assert checked >= 500
+
+
+@pytest.mark.parametrize("card", _real_steps_cards(), ids=lambda c: c["id"])
+def test_real_steps_cards_compile_and_dry_run(card: dict) -> None:
+    """Each upgraded plan compiles to a ResolutionPlan and survives engine dry-run revalidation."""
+    plan = compile_card_plan({**card, "canonical": card["human_canonical"]})
+    assert plan is not None and plan.steps, card["title"]
+
+    report = dry_run_resolution_plan(
+        _representative_state(),
+        plan,
+        "p1",
+        "played-card",
+        chosen_player_id="p2",
+    )
+    assert report["ok"] is True, f"{card['title']}: {report}"
+    assert report["emitted_ops"], card["title"]
+
+
+@pytest.mark.parametrize(
+    "card",
+    [c for c in _load(REAL) if c["id"] in {"real-122", "real-431", "real-652"}],
+    ids=lambda c: c["id"],
+)
+def test_real_computed_sandbox_upgrades_dry_run(card: dict) -> None:
+    """Score/name-computable cards carry real sandbox code that runs and emits ops."""
+    plan = compile_card_plan({**card, "canonical": card["human_canonical"]})
+    assert plan is not None and plan.steps, card["title"]
+
+    report = dry_run_resolution_plan(
+        _representative_state(),
+        plan,
+        "p1",
+        "played-card",
+        chosen_player_id="p2",
+    )
+    assert report["ok"] is True, f"{card['title']}: {report}"
+    assert any(op.get("op") != "custom_note" for op in report["emitted_ops"]), card["title"]
 
 
 # --------------------------------------------------------------------------- #
