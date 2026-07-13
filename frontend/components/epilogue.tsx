@@ -3,19 +3,21 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getCardArtUrl } from "@/lib/art";
 import type { CardSnapshot, ClientMsg } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { CardTile } from "./card";
+import { SketchCard, stableRotation } from "./sketch-card";
 
 interface EpilogueProps {
   cards: CardSnapshot[];
   send: (msg: ClientMsg) => void;
   isHost: boolean;
+  roomCode?: string;
 }
 
 type VoteChoice = "keep" | "destroy";
 
-export function EpilogueView({ cards, send, isHost }: EpilogueProps) {
+export function EpilogueView({ cards, send, isHost, roomCode }: EpilogueProps) {
   const [votes, setVotes] = useState<Record<string, VoteChoice>>({});
   const [done, setDone] = useState(false);
 
@@ -43,12 +45,17 @@ export function EpilogueView({ cards, send, isHost }: EpilogueProps) {
       </div>
 
       {!done && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6">
           {cards.map((card) => {
             const choice = votes[card.id];
             return (
-              <div key={card.id} className="flex items-center gap-4">
-                <CardTile card={card} />
+              <div key={card.id} className="flex items-center gap-5">
+                <SketchCard
+                  card={card}
+                  w={160}
+                  rot={stableRotation(card.id, 3)}
+                  artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
+                />
                 <div className="flex flex-col gap-2">
                   <Button
                     variant={choice === "keep" ? "default" : "outline"}

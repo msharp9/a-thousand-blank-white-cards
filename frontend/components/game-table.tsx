@@ -1,10 +1,12 @@
 import { Badge } from "@/components/ui/badge";
+import { getCardArtUrl } from "@/lib/art";
 import type {
   CardSnapshot,
   GameStateSnapshot,
   PlayerSnapshot,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SketchCard, stableRotation } from "./sketch-card";
 
 interface GameTableProps {
   gameState: GameStateSnapshot;
@@ -34,6 +36,7 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
             key={player.id}
             player={player}
             cards={cards}
+            roomCode={gameState.room_code}
             isActive={player.id === activePlayer?.id}
             isMe={player.id === myPlayerId}
           />
@@ -57,11 +60,13 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
 function PlayerTile({
   player,
   cards,
+  roomCode,
   isActive,
   isMe,
 }: {
   player: PlayerSnapshot;
   cards: Record<string, CardSnapshot>;
+  roomCode: string;
   isActive: boolean;
   isMe: boolean;
 }) {
@@ -80,35 +85,48 @@ function PlayerTile({
       )}
     >
       <div className="flex items-center gap-1">
-        <span className="text-sm font-semibold">{player.name}</span>
+        <span className="font-hand text-base font-semibold">{player.name}</span>
         {isMe && (
           <Badge variant="secondary" className="text-[10px]">
             you
           </Badge>
         )}
       </div>
-      <span className="text-2xl font-bold tabular-nums">{player.score}</span>
-      <span className="text-[10px] text-muted-foreground">
-        {player.hand.length} cards
-      </span>
+      <span className="font-marker text-2xl tabular-nums">{player.score}</span>
+      {player.hand.length > 0 && (
+        <div
+          className="flex items-end pt-1"
+          title={`${player.hand.length} cards in hand`}
+        >
+          {player.hand.map((id, i) => (
+            <SketchCard
+              key={id}
+              w={40}
+              faceDown
+              rot={(i - (player.hand.length - 1) / 2) * 5}
+              className={cn(i > 0 && "-ml-[22px]")}
+            />
+          ))}
+        </div>
+      )}
       {isActive && <Badge className="text-[10px]">active</Badge>}
       {!player.connected && (
         <span className="text-[10px] text-muted-foreground">offline</span>
       )}
       {inPlayCards.length > 0 && (
         <div className="mt-1 flex w-full flex-col items-center gap-1">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="font-hand text-[11px] uppercase tracking-wide text-muted-foreground">
             In play
           </span>
-          <div className="flex flex-wrap justify-center gap-1">
+          <div className="flex flex-wrap justify-center gap-1.5 pt-1">
             {inPlayCards.map((card) => (
-              <span
+              <SketchCard
                 key={card.id}
-                className="max-w-[100px] truncate rounded border bg-muted/40 px-1.5 py-0.5 text-[10px]"
-                title={card.description || card.title}
-              >
-                {card.title || "Untitled"}
-              </span>
+                card={card}
+                w={52}
+                rot={stableRotation(card.id, 4)}
+                artUrl={getCardArtUrl(roomCode, card)}
+              />
             ))}
           </div>
         </div>
