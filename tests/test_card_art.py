@@ -20,11 +20,12 @@ from fastapi.testclient import TestClient
 from pydantic import TypeAdapter, ValidationError
 
 from agent.contract import InterpretResult
-from models.card import CARD_ART_PREFIX, MAX_CARD_ART_BYTES
+from models.card import CARD_ART_PREFIX, MAX_CARD_ART_BYTES, decode_card_art
 from models.ws_messages import ClientMsg, CreateCardMsg, PlayMsg
 from board.app import create_app
 from board.rooms.deck import _make_blank_card, _normalise_card
 from board.rooms.room import Room
+from board.rooms.store import FileRoomStore
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\nfake-art-bytes"
 ART = CARD_ART_PREFIX + base64.b64encode(PNG_BYTES).decode()
@@ -74,6 +75,19 @@ def test_art_bad_base64_rejected() -> None:
     ta = TypeAdapter(ClientMsg)
     with pytest.raises(ValidationError):
         ta.validate_python({"type": "create_card", "title": "T", "description": "D", "art": ART + "!!!"})
+
+
+def test_art_non_png_payload_rejected() -> None:
+    ta = TypeAdapter(ClientMsg)
+    not_png = CARD_ART_PREFIX + base64.b64encode(b"GIF89a definitely not a png").decode()
+    with pytest.raises(ValidationError):
+        ta.validate_python({"type": "create_card", "title": "T", "description": "D", "art": not_png})
+
+
+def test_decode_card_art_roundtrip_and_magic_check() -> None:
+    assert decode_card_art(ART) == PNG_BYTES
+    with pytest.raises(ValueError):
+        decode_card_art(CARD_ART_PREFIX + base64.b64encode(b"plain text").decode())
 
 
 # ─── room registry: create_card and author-on-play ──────────────────────────
@@ -145,6 +159,62 @@ def test_snapshot_carries_has_art_but_never_the_data_url() -> None:
     assert CARD_ART_PREFIX not in snap
 
 
+# ─── per-room aggregate art budget ───────────────────────────────────────────
+
+
+def _sent_messages(ws) -> list[dict]:
+    return [json.loads(c.args[0]) for c in ws.send_text.call_args_list if c.args]
+
+
+def test_store_card_art_enforces_running_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("board.rooms.room.MAX_ROOM_ART_BYTES", 2 * len(ART))
+    room = Room("ABCDEF")
+    assert room._store_card_art("c1", ART) is True
+    assert room._store_card_art("c2", ART) is True
+    assert room._store_card_art("c3", ART) is False
+    assert set(room.card_art) == {"c1", "c2"}
+    assert room._card_art_bytes == 2 * len(ART)
+
+
+def test_create_card_art_dropped_once_budget_hit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("board.rooms.room.MAX_ROOM_ART_BYTES", len(ART))
+    room = _setup_room()
+    ws = room.connections._connections["p1"]
+    asyncio.run(room.handle_action("p1", CreateCardMsg(title="First", description="fits", art=ART)))
+    asyncio.run(room.handle_action("p1", CreateCardMsg(title="Second", description="dropped", art=ART)))
+    by_title = {c["title"]: c for c in room.state.cards.values() if c.get("creator_id") == "p1"}
+    assert by_title["First"]["has_art"] is True
+    assert by_title["Second"]["has_art"] is False
+    assert list(room.card_art.values()) == [ART]
+    errors = [m for m in _sent_messages(ws) if m["type"] == "error"]
+    assert any("art" in m["message"] for m in errors)
+
+
+def test_author_on_play_art_dropped_once_budget_hit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("board.rooms.room.MAX_ROOM_ART_BYTES", 0)
+    room = _playing_room_with_blank()
+    with patch("agent.runtime.run_agent", return_value=_no_agent_result()):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="blank-0", title="Doodle", description="Art!", art=ART)))
+    card = room.state.cards["blank-0"]
+    assert card["has_art"] is False
+    assert "blank" not in card
+    assert room.card_art == {}
+
+
+def test_absorb_card_art_over_budget_drops_art_and_resets_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("board.rooms.room.MAX_ROOM_ART_BYTES", 0)
+    kept = _normalise_card({"card_id": "c1", "title": "Legacy", "description": "D", "source": "player", "art": ART}, 0)
+    room = Room("ABCDEF")
+    room.add_player("p1", "Alice")
+    room.connections.connect("p1", AsyncMock())
+    with patch("board.rooms.room.build_premade_pool", return_value=({"c1": kept}, ["c1"])):
+        asyncio.run(room._enter_setup())
+    assert room.card_art == {}
+    card = room.state.cards["c1"]
+    assert card["has_art"] is False
+    assert "art" not in card
+
+
 # ─── REST art endpoint ───────────────────────────────────────────────────────
 
 
@@ -163,6 +233,7 @@ def test_get_card_art_returns_png_bytes_with_immutable_cache(client: TestClient)
     assert resp.content == PNG_BYTES
     assert resp.headers["content-type"] == "image/png"
     assert resp.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert resp.headers["x-content-type-options"] == "nosniff"
 
 
 def test_get_card_art_404_when_absent(client: TestClient) -> None:
@@ -260,3 +331,30 @@ def test_enter_setup_repopulates_card_art_and_strips_state() -> None:
 
 def test_blank_cards_default_has_art_false() -> None:
     assert _make_blank_card(0)["has_art"] is False
+
+
+# ─── dev-mode FileRoomStore restore ──────────────────────────────────────────
+
+
+def test_file_store_restore_resets_stale_has_art(tmp_path) -> None:
+    # FileRoomStore never persists Room.card_art, so a restored card that still
+    # advertised has_art would 404 on the art endpoint; restore resets the flag.
+    store = FileRoomStore(tmp_path)
+    room = Room("ABCDEF")
+    room.add_player("p1", "Alice")
+    room.state = room.state.model_copy(
+        update={
+            "cards": {
+                "c1": {"id": "c1", "title": "Arty", "description": "D", "origin": "authored", "has_art": True},
+                "c2": {"id": "c2", "title": "Plain", "description": "D", "origin": "authored", "has_art": False},
+            }
+        }
+    )
+    room.card_art["c1"] = ART
+    store.put("ABCDEF", room)
+
+    restored = FileRoomStore(tmp_path).get("ABCDEF")
+    assert restored is not None
+    assert restored.card_art == {}
+    assert restored.state.cards["c1"]["has_art"] is False
+    assert restored.state.cards["c2"]["has_art"] is False

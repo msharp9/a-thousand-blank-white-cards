@@ -81,8 +81,8 @@ cp .env.example .env
 # OpenAI-compatible gateway / local server (see comments in .env.example).
 # Optional: TAVILY_API_KEY, LANGSMITH_*, QDRANT_* (see comments in .env.example).
 
-# 4. Run the API
-uv run uvicorn board.app:app --reload
+# 4. Run the API (--ws-max-size matches the deployed frame cap, see Dockerfile)
+uv run uvicorn board.app:app --reload --ws-max-size 262144
 
 # 5. Health check
 curl localhost:8000/health

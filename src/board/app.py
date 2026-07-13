@@ -10,7 +10,6 @@ the top of /docs) and in the project README.
 
 from __future__ import annotations
 
-import base64
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -21,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from config import get_settings, warn_if_no_llm_credentials
-from models.card import CARD_ART_PREFIX
+from models.card import decode_card_art
 from logging_config import configure_logging
 from board.rooms.manager import check_single_worker, room_manager
 from board.ws import router as ws_router
@@ -232,11 +231,14 @@ def create_app() -> FastAPI:
         data_url = room.card_art.get(card_id)
         if data_url is None:
             raise HTTPException(status_code=404, detail=f"Card '{card_id}' has no art")
-        png = base64.b64decode(data_url[len(CARD_ART_PREFIX) :])
+        png = decode_card_art(data_url)
         return Response(
             content=png,
             media_type="image/png",
-            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "X-Content-Type-Options": "nosniff",
+            },
         )
 
     @application.post("/rooms/{code}/dev/skip-setup", tags=["rooms"])
