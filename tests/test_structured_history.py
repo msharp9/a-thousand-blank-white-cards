@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
+from agent.contract import InterpretResult
 from agent.tools.read_game_history import make_read_game_history_tool
 from board.rooms.room import Room
 from board.rooms.store import FileRoomStore
@@ -114,6 +115,56 @@ def test_room_play_and_game_end_are_each_recorded_once() -> None:
     game_end = [event for event in room.state.history_events if event.kind == "game_end"]
     assert len(game_end) == 1
     assert game_end[0].target_player_ids == ["p1"]
+
+
+def test_room_play_with_chosen_target_records_target_and_turn() -> None:
+    room = Room("HISTORY")
+    room.add_player("p1", "Alice")
+    room.add_player("p2", "Bob")
+    card = {"id": "bless", "title": "Bless", "description": "give a chosen player points"}
+    players = [room.state.get_player("p1").model_copy(update={"hand": ["bless"]}), room.state.get_player("p2")]
+    room.state = room.state.model_copy(
+        update={
+            "players": players,
+            "cards": {"bless": card},
+            "deck": ["d1"],
+            "phase": "playing",
+            "turn_number": 3,
+        }
+    )
+    room._has_drawn = True
+    program = EffectProgram(ops=[AddPointsOp(target="chooser", amount=5)], requires_choice=True)
+    result = InterpretResult(program=program, snippet=None, verdict="ok")
+
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="bless", chosen_player_id="p2")))
+
+    plays = [event for event in room.state.history_events if event.kind == "play"]
+    assert len(plays) == 1
+    assert plays[0].actor_id == "p1"
+    assert plays[0].target_player_ids == ["p2"]
+    assert plays[0].turn == 3
+
+
+def test_room_play_without_chosen_target_records_no_target() -> None:
+    room = Room("HISTORY")
+    room.add_player("p1", "Alice")
+    room.add_player("p2", "Bob")
+    card = {"id": "gain", "title": "Gain", "description": "gain 3 points"}
+    players = [room.state.get_player("p1").model_copy(update={"hand": ["gain"]}), room.state.get_player("p2")]
+    room.state = room.state.model_copy(
+        update={"players": players, "cards": {"gain": card}, "deck": ["d1"], "phase": "playing"}
+    )
+    room._has_drawn = True
+    program = EffectProgram(ops=[AddPointsOp(target="self", amount=3)])
+    result = InterpretResult(program=program, snippet=None, verdict="ok")
+
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="gain")))
+
+    plays = [event for event in room.state.history_events if event.kind == "play"]
+    assert len(plays) == 1
+    assert plays[0].target_player_ids == []
 
 
 def test_cannot_play_draw_and_snippet_draw_record_exact_amounts() -> None:

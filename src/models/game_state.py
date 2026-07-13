@@ -122,6 +122,11 @@ class HistoryEvent(BaseModel):
     amount: int | None = None
     source: str | None = None
     rule_path: str | None = None
+    # Turn number the event occurred on (GameState.turn_number at record time),
+    # stamped uniformly by with_history_event rather than threaded through
+    # every caller. Lets a client group/label history entries by turn (e.g.
+    # the "Everything Played" history modal) without re-deriving it.
+    turn: int | None = None
 
 
 class Spectator(BaseModel):
@@ -388,13 +393,18 @@ class GameState(BaseModel):
         return self.model_copy(update={"log": [*self.log, msg]})
 
     def with_history_event(self, event: HistoryEvent) -> GameState:
-        """Return a copy with one event appended using the next sequence id."""
+        """Return a copy with one event appended using the next sequence id.
+
+        ``turn`` is stamped here from the current ``turn_number`` (rather than
+        threaded through every ``append_history_event`` call site) so every
+        recorded event carries it uniformly.
+        """
         next_sequence = self.history_events[-1].sequence + 1 if self.history_events else 1
         return self.model_copy(
             update={
                 "history_events": [
                     *self.history_events,
-                    event.model_copy(update={"sequence": next_sequence}),
+                    event.model_copy(update={"sequence": next_sequence, "turn": self.turn_number}),
                 ]
             }
         )
