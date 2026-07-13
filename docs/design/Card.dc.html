@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="position:relative; width:{{w}}px; height:{{h}}px; transform:rotate({{rot}}deg); background:#ffffff; border-radius:7px; box-shadow:0 8px 18px rgba(20,18,14,0.20), 0 2px 4px rgba(20,18,14,0.14); border:1.6px solid #1a1a1a; overflow:hidden; font-family:'Patrick Hand',cursive; box-sizing:border-box; flex:0 0 auto;">
+
+  <div style="position:absolute; inset:4px; border:1px dashed rgba(26,26,26,0.28); border-radius:5px; pointer-events:none; z-index:3;"></div>
+
+  <sc-if value="{{ showTape }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute; top:-8px; left:14%; width:{{tapeW}}px; height:16px; background:rgba(238,214,120,0.6); transform:rotate(-7deg); box-shadow:0 1px 2px rgba(0,0,0,0.12); z-index:4;"></div>
+    <div style="position:absolute; top:-8px; right:14%; width:{{tapeW}}px; height:16px; background:rgba(238,214,120,0.6); transform:rotate(6deg); box-shadow:0 1px 2px rgba(0,0,0,0.12); z-index:4;"></div>
+  </sc-if>
+
+  <sc-if value="{{ faceDown }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:repeating-linear-gradient(45deg, #fbfbf9 0 9px, #f2f0e9 9px 18px);">
+      <div style="width:62%; aspect-ratio:1; border:2px dashed #1a1a1a; border-radius:50%; display:flex; align-items:center; justify-content:center; transform:rotate(-6deg); background:#fff;">
+        <div style="text-align:center; line-height:0.9;">
+          <div style="font-family:'Permanent Marker',cursive; font-size:{{backBig}}px; color:#1a1a1a;">1K</div>
+          <div style="font-family:'Patrick Hand',cursive; font-size:{{backSmall}}px; color:#555; letter-spacing:1px;">BLANK WHITE</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ faceUp }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute; inset:0; display:flex; flex-direction:column; padding:{{pad}}px; box-sizing:border-box;">
+      <div style="font-size:{{titleSize}}px; color:#1a1a1a; line-height:1; border-bottom:1.5px solid #1a1a1a; padding-bottom:{{gap}}px; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ title }}</div>
+      <div style="flex:1; display:flex; align-items:center; justify-content:center; min-height:0; padding:{{gap}}px 0;">
+        <sc-if value="{{ hasImg }}" hint-placeholder-val="{{ true }}">
+          <img src="{{ img }}" style="max-width:100%; max-height:100%; object-fit:contain; image-rendering:auto;" />
+        </sc-if>
+        <sc-if value="{{ noImg }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:{{emojiSize}}px; line-height:1;">{{ emoji }}</div>
+        </sc-if>
+      </div>
+      <div style="font-size:{{ruleSize}}px; color:#333; line-height:1.05; text-align:center; max-height:{{ruleMax}}px; overflow:hidden;">{{ rule }}</div>
+    </div>
+    <sc-if value="{{ hasPoints }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute; top:{{badgeInset}}px; right:{{badgeInset}}px; width:{{badge}}px; height:{{badge}}px; border-radius:50%; background:{{pointsColor}}; border:1.6px solid #1a1a1a; display:flex; align-items:center; justify-content:center; z-index:5; box-shadow:0 2px 3px rgba(0,0,0,0.2); transform:rotate(-8deg);">
+        <span style="font-family:'Permanent Marker',cursive; font-size:{{badgeFont}}px; color:#fff;">{{ pointsLabel }}</span>
+      </div>
+    </sc-if>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:180,&quot;height&quot;:252},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Free Point!&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;rule&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Whoever plays this gets a point. Congrats.&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;emoji&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;🎉&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;points&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;faceDown&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;showTape&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;w&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:180,&quot;tsType&quot;:&quot;number&quot;},&quot;h&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:252,&quot;tsType&quot;:&quot;number&quot;},&quot;rot&quot;:{&quot;editor&quot;:&quot;float&quot;,&quot;default&quot;:0,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const w = Number(p.w) || 150;
+    const h = Number(p.h) || Math.round(w * 1.4);
+    const points = p.points == null || p.points === '' ? 0 : Number(p.points);
+    const faceDown = !!p.faceDown;
+    const pos = points > 0;
+    return {
+      w, h,
+      rot: p.rot == null ? 0 : Number(p.rot),
+      faceDown,
+      faceUp: !faceDown,
+      title: p.title || '',
+      rule: p.rule || '',
+      emoji: p.emoji || '',
+      img: p.img || '',
+      hasImg: !!p.img,
+      noImg: !p.img,
+      showTape: p.showTape == null ? true : !!p.showTape,
+      hasPoints: points !== 0,
+      pointsLabel: pos ? ('+' + points) : ('' + points),
+      pointsColor: pos ? '#E24A3B' : '#2E5EAA',
+      tapeW: Math.round(w * 0.22),
+      titleSize: Math.round(w * 0.115),
+      emojiSize: Math.round(w * 0.4),
+      ruleSize: Math.max(9, Math.round(w * 0.082)),
+      pad: Math.round(w * 0.08),
+      gap: Math.round(w * 0.035),
+      ruleMax: Math.round(h * 0.26),
+      badge: Math.round(w * 0.2),
+      badgeFont: Math.round(w * 0.1),
+      badgeInset: Math.round(w * 0.05),
+      backBig: Math.round(w * 0.28),
+      backSmall: Math.max(7, Math.round(w * 0.07)),
+    };
+  }
+}
+</script>
+</body>
+</html>
