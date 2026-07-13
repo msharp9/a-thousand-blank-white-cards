@@ -25,10 +25,21 @@ class ConnectionManager:
         self._connections[player_id] = websocket
         logger.debug("player %s connected (%d total)", player_id, len(self._connections))
 
-    def disconnect(self, player_id: str) -> None:
-        """Remove a player's socket (they may rejoin later)."""
+    def disconnect(self, player_id: str, websocket: WebSocket | None = None) -> None:
+        """Remove a player's socket (they may rejoin later).
+
+        When `websocket` is given, the mapping is removed only if it still points
+        at that socket — a handler tearing down after being replaced by a newer
+        connection must not evict its replacement.
+        """
+        if websocket is not None and self._connections.get(player_id) is not websocket:
+            return
         self._connections.pop(player_id, None)
         logger.debug("player %s disconnected", player_id)
+
+    def get(self, player_id: str) -> WebSocket | None:
+        """Return the registered socket for a player, or None."""
+        return self._connections.get(player_id)
 
     @property
     def connected_players(self) -> list[str]:
@@ -43,20 +54,20 @@ class ConnectionManager:
             await ws.send_text(json.dumps(message))
         except Exception as exc:
             logger.warning("send to %s failed: %s", player_id, exc)
-            self.disconnect(player_id)
+            self.disconnect(player_id, ws)
 
     async def broadcast(self, message: dict) -> None:
         """Broadcast a JSON message to ALL connected players."""
         payload = json.dumps(message)
-        dead: list[str] = []
+        dead: list[tuple[str, WebSocket]] = []
         for pid, ws in list(self._connections.items()):
             try:
                 await ws.send_text(payload)
             except Exception as exc:
                 logger.warning("broadcast to %s failed: %s", pid, exc)
-                dead.append(pid)
-        for pid in dead:
-            self.disconnect(pid)
+                dead.append((pid, ws))
+        for pid, ws in dead:
+            self.disconnect(pid, ws)
 
     async def broadcast_state(self, state_snapshot: dict) -> None:
         """Wrap a snapshot in the 'state' envelope and broadcast."""

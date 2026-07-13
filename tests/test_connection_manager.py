@@ -66,3 +66,22 @@ def test_disconnect_removes_player() -> None:
     cm.connect("p1", AsyncMock())
     cm.disconnect("p1")
     assert "p1" not in cm.connected_players
+
+
+def test_disconnect_with_stale_socket_keeps_replacement() -> None:
+    cm = ConnectionManager()
+    old, new = AsyncMock(), AsyncMock()
+    cm.connect("p1", old)
+    cm.connect("p1", new)
+    cm.disconnect("p1", old)
+    assert cm.get("p1") is new
+    cm.disconnect("p1", new)
+    assert cm.get("p1") is None
+
+
+def test_get_returns_registered_socket() -> None:
+    cm = ConnectionManager()
+    ws = AsyncMock()
+    cm.connect("p1", ws)
+    assert cm.get("p1") is ws
+    assert cm.get("ghost") is None

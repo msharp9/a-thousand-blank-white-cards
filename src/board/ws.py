@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 from pydantic import TypeAdapter, ValidationError
 
 from models.ws_messages import ClientMsg, JoinMsg
@@ -76,7 +77,7 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
 
     # If this player already has an open socket (duplicate tab / stale connection),
     # close the old one before rebinding (4009 = replaced by new connection).
-    old_ws = room.connections._connections.get(player_id)
+    old_ws = room.connections.get(player_id)
     if old_ws is not None and old_ws is not websocket:
         try:
             await old_ws.close(code=4009)
@@ -100,5 +101,13 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
                 continue
             await room.handle_action(player_id, msg)
     except WebSocketDisconnect:
-        logger.info("player %s disconnected from room %s", player_id, code)
-        room.connections.disconnect(player_id)
+        pass
+    except RuntimeError:
+        # Starlette raises RuntimeError (not WebSocketDisconnect) on receive/send
+        # once the socket has left CONNECTED — e.g. this handler's socket was
+        # replaced by a newer connection and closed with 4009 while the loop was
+        # busy. That is a normal disconnect; anything else is a real bug.
+        if websocket.application_state == WebSocketState.CONNECTED:
+            raise
+    logger.info("player %s disconnected from room %s", player_id, code)
+    room.connections.disconnect(player_id, websocket)

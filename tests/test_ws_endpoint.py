@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from board.app import create_app
 
@@ -27,8 +31,6 @@ def test_unknown_room_closes_with_4004(client: TestClient) -> None:
     landed on a different worker, the WS worker won't find the room. The handler
     must send a clean error envelope and close with 4004 rather than raise.
     """
-    from starlette.websockets import WebSocketDisconnect
-
     with client.websocket_connect("/ws/GHOST1") as ws:
         assert ws.receive_json()["type"] == "error"
         with pytest.raises(WebSocketDisconnect) as exc:
@@ -110,3 +112,96 @@ def test_two_players_stay_connected_with_distinct_ids(client: TestClient) -> Non
             # proving ws1 was NOT evicted by ws2 connecting.
             assert ws2.receive_json()["type"] == "state"
             assert ws1.receive_json()["type"] == "state"
+
+
+def _seat(client: TestClient, name: str = "Alice") -> tuple[str, str]:
+    code = client.post("/rooms").json()["code"]
+    pid = client.post(f"/rooms/{code}/join", json={"name": name}).json()["player_id"]
+    return code, pid
+
+
+def _await_handler_teardown(caplog: pytest.LogCaptureFixture, pid: str, timeout: float = 2.0) -> bool:
+    """Poll caplog for the ws handler's disconnect log — proof its teardown ran."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for record in caplog.records:
+            message = record.getMessage()
+            if "disconnected" in message and pid in message:
+                return True
+        time.sleep(0.01)
+    return False
+
+
+def test_duplicate_join_replaces_old_socket_with_4009(client: TestClient) -> None:
+    """A second socket for the same player_id evicts the first with close 4009,
+    and the room keeps serving the replacement socket."""
+    code, pid = _seat(client)
+    with client.websocket_connect(f"/ws/{code}") as ws1:
+        ws1.send_json({"type": "join", "player_id": pid, "name": "Alice"})
+        assert ws1.receive_json()["type"] == "state"
+        with client.websocket_connect(f"/ws/{code}") as ws2:
+            ws2.send_json({"type": "join", "player_id": pid, "name": "Alice"})
+            assert ws2.receive_json()["type"] == "state"
+            with pytest.raises(WebSocketDisconnect) as exc:
+                ws1.receive_text()
+            assert exc.value.code == 4009
+            ws2.send_text("not json")
+            assert ws2.receive_json()["type"] == "error"
+
+
+def test_replaced_handler_teardown_does_not_evict_new_socket(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """When the replaced socket's client disconnects, the old handler's teardown
+    must NOT unregister the replacement socket (identity-aware disconnect)."""
+    from board.rooms.manager import room_manager
+
+    code, pid = _seat(client)
+    room = room_manager.get(code)
+    with caplog.at_level(logging.INFO, logger="board.ws"):
+        with client.websocket_connect(f"/ws/{code}") as ws1:
+            ws1.send_json({"type": "join", "player_id": pid, "name": "Alice"})
+            assert ws1.receive_json()["type"] == "state"
+            with client.websocket_connect(f"/ws/{code}") as ws2:
+                ws2.send_json({"type": "join", "player_id": pid, "name": "Alice"})
+                assert ws2.receive_json()["type"] == "state"
+
+                ws1.close()
+                assert _await_handler_teardown(caplog, pid)
+                assert room.connections.get(pid) is not None
+
+                pid_bob = client.post(f"/rooms/{code}/join", json={"name": "Bob"}).json()["player_id"]
+                with client.websocket_connect(f"/ws/{code}") as ws_bob:
+                    ws_bob.send_json({"type": "join", "player_id": pid_bob, "name": "Bob"})
+                    assert ws_bob.receive_json()["type"] == "state"
+                    # the broadcast still reaches the replacement socket
+                    assert ws2.receive_json()["type"] == "state"
+
+
+def test_replaced_socket_wakeup_is_clean(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
+    """A replaced handler that wakes up with a queued client message must exit
+    through the normal disconnect path — no unhandled RuntimeError, and no
+    eviction of the replacement socket."""
+    from board.rooms.manager import room_manager
+
+    code, pid = _seat(client)
+    room = room_manager.get(code)
+    with caplog.at_level(logging.INFO, logger="board.ws"):
+        with client.websocket_connect(f"/ws/{code}") as ws1:
+            ws1.send_json({"type": "join", "player_id": pid, "name": "Alice"})
+            assert ws1.receive_json()["type"] == "state"
+            with client.websocket_connect(f"/ws/{code}") as ws2:
+                ws2.send_json({"type": "join", "player_id": pid, "name": "Alice"})
+                assert ws2.receive_json()["type"] == "state"
+
+                # Wake the old handler: it processes this message, then its next
+                # receive on the already-closed socket raises RuntimeError.
+                ws1.send_json({"type": "pass"})
+                assert _await_handler_teardown(caplog, pid)
+                assert room.connections.get(pid) is not None
+
+                # The pass's error reply routed to the live replacement socket.
+                assert ws2.receive_json()["type"] == "error"
+                with pytest.raises(WebSocketDisconnect) as exc:
+                    ws1.receive_text()
+                assert exc.value.code == 4009
