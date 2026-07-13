@@ -104,6 +104,22 @@ class JoinRoomResponse(BaseModel):
     spectator: bool = False
 
 
+class RoomSummary(BaseModel):
+    code: str
+    phase: Literal["lobby", "setup", "playing", "results", "epilogue", "ended"]
+    mode: Literal["online", "in_person", "both"]
+    player_count: int
+    spectator_count: int
+    # True while the room is still in the lobby (accepting new players, not
+    # spectators). Mirrors the join policy in RoomManager.join.
+    joinable: bool
+    created_at: str
+
+
+class ListRoomsResponse(BaseModel):
+    rooms: list[RoomSummary]
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup → yield → shutdown.
@@ -196,6 +212,34 @@ def create_app() -> FastAPI:
         mode = body.mode if body else "both"
         code = room_manager.create_room(mode=mode)
         return CreateRoomResponse(code=code)
+
+    @application.get("/rooms", response_model=ListRoomsResponse, tags=["rooms"])
+    async def list_rooms(all: bool = False) -> ListRoomsResponse:
+        """List active rooms, newest first.
+
+        By default only ``joinable`` rooms (``phase == "lobby"``) are returned,
+        matching what a "join a game" lobby screen wants. Pass ``?all=true`` to
+        also see rooms that have already started (any phase except ``ended``).
+        """
+        rooms = [
+            room
+            for room in room_manager.list_rooms()
+            if room.state.phase != "ended" and (all or room.state.phase == "lobby")
+        ]
+        summaries = [
+            RoomSummary(
+                code=room.code,
+                phase=room.state.phase,
+                mode=room.state.mode,
+                player_count=len(room.state.players),
+                spectator_count=len(room.state.spectators),
+                joinable=room.state.phase == "lobby",
+                created_at=room.created_at.isoformat(),
+            )
+            for room in rooms
+        ]
+        summaries.sort(key=lambda r: r.created_at, reverse=True)
+        return ListRoomsResponse(rooms=summaries)
 
     @application.post("/rooms/{code}/join", response_model=JoinRoomResponse, tags=["rooms"])
     async def join_room(code: str, body: JoinRoomRequest) -> JoinRoomResponse:

@@ -42,6 +42,12 @@ def test_singleton_exists() -> None:
     assert isinstance(room_manager, RoomManager)
 
 
+def test_list_rooms_returns_every_stored_room() -> None:
+    rm = RoomManager()
+    codes = {rm.create_room() for _ in range(3)}
+    assert {room.code for room in rm.list_rooms()} == codes
+
+
 def test_dev_mode_uses_file_store_and_writes(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DEV_MODE", "true")

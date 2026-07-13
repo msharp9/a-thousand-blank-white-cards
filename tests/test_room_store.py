@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+from datetime import UTC, datetime
 from unittest.mock import Mock
 
 
@@ -103,6 +105,36 @@ class TestFileRoomStore:
         assert got.state.rules.draw == 3
         assert got.state.rules.extra == {"color_match": True}
         assert got.state.winner_override == ["p1"]
+
+    def test_roundtrip_preserves_created_at(self, tmp_path) -> None:
+        store = FileRoomStore(tmp_path)
+        room = Room("ABCDEF")
+        store.put("ABCDEF", room)
+
+        reloaded = FileRoomStore(tmp_path).get("ABCDEF")
+        assert reloaded is not None
+        assert reloaded.created_at == room.created_at
+
+    def test_missing_created_at_in_old_file_is_tolerated(self, tmp_path) -> None:
+        """A room file persisted before ``created_at`` existed must still load."""
+        store = FileRoomStore(tmp_path)
+        room = Room("ABCDEF")
+        store.put("ABCDEF", room)
+        path = tmp_path / "ABCDEF.json"
+        data = json.loads(path.read_text())
+        del data["created_at"]
+        path.write_text(json.dumps(data))
+
+        reloaded = FileRoomStore(tmp_path).get("ABCDEF")
+        assert reloaded is not None
+        assert isinstance(reloaded.created_at, datetime)
+        assert reloaded.created_at.tzinfo is not None
+
+    def test_created_at_is_utc_aware(self, tmp_path) -> None:
+        before = datetime.now(UTC)
+        room = Room("ABCDEF")
+        assert room.created_at >= before
+        assert room.created_at.tzinfo is not None
 
     def test_live_object_is_reused_within_process(self, tmp_path) -> None:
         store = FileRoomStore(tmp_path)

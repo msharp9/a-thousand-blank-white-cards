@@ -162,6 +162,9 @@ class Room:
     ) -> None:
         self.code = code
         self.state: GameState = GameState(room_code=code, mode=mode)
+        # When this room was created; set once and never mutated. Restored from
+        # disk by FileRoomStore for a persisted room (see store._room_from_dict).
+        self.created_at: datetime = datetime.now(UTC)
         self.connections: ConnectionManager = ConnectionManager()
         # Card art registry: card_id -> PNG data-URL. Deliberately a plain Room
         # attribute, NOT GameState — every mutation broadcasts the full state

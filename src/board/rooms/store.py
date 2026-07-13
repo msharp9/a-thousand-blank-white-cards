@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -157,6 +158,7 @@ def _room_to_dict(room: Room) -> dict:
     data = {
         "code": room.code,
         "simple": room._simple,
+        "created_at": room.created_at.isoformat(),
         "state": room.state.model_dump(mode="json"),
         "turn_state": {
             "has_drawn": room._has_drawn,
@@ -173,6 +175,9 @@ def _room_to_dict(room: Room) -> dict:
 
 def _room_from_dict(data: dict) -> Room:
     room = Room(data["code"], mode=data["state"]["mode"], simple=data["simple"])
+    created_at = data.get("created_at")
+    if created_at is not None:
+        room.created_at = datetime.fromisoformat(created_at)
     state = GameState.model_validate(data["state"])
     # card_art is not persisted (module docstring): clear has_art on any card
     # whose art did not survive the restart so clients never fetch a 404.

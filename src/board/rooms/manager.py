@@ -69,6 +69,14 @@ class RoomManager:
         """Return the Room for this code, or None if it doesn't exist."""
         return self._store.get(code.upper())
 
+    def list_rooms(self) -> list[Room]:
+        """Return every stored room, in no particular order.
+
+        Filtering (joinable vs all-non-ended) and sorting are presentation
+        concerns owned by the caller (see GET /rooms in board.app).
+        """
+        return self._store.values()
+
     def start_background_tasks(self) -> None:
         """Restore persisted room timers once an application event loop exists."""
         for room in self._store.values():
