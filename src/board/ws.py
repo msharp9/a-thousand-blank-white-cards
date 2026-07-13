@@ -37,12 +37,14 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
       3. Server replays a full `state` snapshot, then loops: it validates each
          client message (join/start/pass/play/create_card/preview_card/
          interaction_response/epilogue_vote — drawing is automatic at turn
-         start, so there is no `draw` message) and dispatches to the room, broadcasting server messages
+         start, so there is no `draw` message, and create_card/preview_card are
+         SETUP-ONLY, rejected in any other phase) and dispatches to the room,
+         broadcasting server messages
          (state, brewing, card_interpreted, effect_applied, preview_result,
          prompt_choice, interaction_request/progress, epilogue, error). Invalid JSON yields an `error` reply.
          A `play` of a BLANK card additionally carries the authored
          `title`+`description`, which the room persists onto the card (author on
-         play) before interpreting it.
+         play) before interpreting it — the only mid-game authoring path.
     """
     code = room_code.upper()
     room = room_manager.get(code)

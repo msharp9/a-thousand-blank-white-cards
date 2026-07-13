@@ -57,19 +57,18 @@ def test_play_unknown_card_errors(monkeypatch) -> None:
     assert any(m["type"] == "error" for m in sent)
 
 
-def test_create_card_interprets(monkeypatch) -> None:
+def test_create_card_mid_game_rejected_and_never_interpreted() -> None:
+    # Authoring is setup-only: create_card during the playing phase gets the
+    # standard error envelope, no card is registered, and the agent never runs.
     room = _room()
-    room.connections.connect("p2", AsyncMock())
-    fake_result = InterpretResult(program=None, snippet=None, verdict="invalid")
-    with patch("agent.runtime.run_agent", return_value=fake_result):
+    ws2 = AsyncMock()
+    room.connections.connect("p2", ws2)
+    with patch("agent.runtime.run_agent") as run:
         asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do stuff")))
-    # a card was added and annotated with a verdict
-    assert len(room.state.cards) == 1
-    card = next(iter(room.state.cards.values()))
-    assert card["verdict"] == "invalid"
-    assert card["mechanical_status"] == "fallback"
-    assert card["mechanical_reason"]
-    assert card["correlation_id"]
+    run.assert_not_called()
+    assert room.state.cards == {}
+    sent = [json.loads(c.args[0]) for c in ws2.send_text.call_args_list]
+    assert any(m["type"] == "error" for m in sent)
 
 
 def test_play_status_is_durable_in_snapshot() -> None:
@@ -91,7 +90,9 @@ def test_play_status_is_durable_in_snapshot() -> None:
 
 
 def test_preview_interprets_and_dry_runs_without_mutating_room() -> None:
+    # preview_card is setup-only (like create_card), so preview from setup.
     room = _room()
+    room.state = room.state.model_copy(update={"phase": "setup"})
     ws = AsyncMock()
     room.connections.connect("p1", ws)
     before = room.state.model_dump()

@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
-from agent.contract import InterpretResult
 from engine.loop import advance_turn
 from engine.scoring import evaluate_win_condition
 from models.game_state import GameState, Player, Spectator, WinCondition
@@ -164,19 +163,21 @@ def test_spectator_play_is_rejected() -> None:
 
 
 def test_spectator_create_card_is_rejected() -> None:
+    # Setup is the only authoring phase, so exercise the spectator gate there
+    # (in any other phase the authoring phase gate would reject first anyway).
     room = _playing_room_with_spectator()
+    room.state = room.state.model_copy(update={"phase": "setup"})
     types = _spectator_error_types(room, CreateCardMsg(title="Wild", description="do something"))
     assert "error" in types
     # No card was authored.
     assert room.state.cards == {}
 
 
-def test_non_spectator_create_card_still_allowed_off_turn() -> None:
+def test_non_spectator_create_card_still_allowed_during_setup() -> None:
     room = _playing_room_with_spectator()
+    room.state = room.state.model_copy(update={"phase": "setup"})
     room.connections.connect("p2", AsyncMock())
-    fake = InterpretResult(program=None, snippet=None, verdict="invalid")
-    with patch("agent.runtime.run_agent", return_value=fake):
-        asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="x")))
+    asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="x")))
     assert len(room.state.cards) == 1
 
 

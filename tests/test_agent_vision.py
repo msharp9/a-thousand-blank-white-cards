@@ -235,12 +235,15 @@ def test_play_without_art_passes_none() -> None:
     assert spy.call_args.kwargs["card_art"] is None
 
 
-def test_midgame_create_card_passes_art_as_side_channel() -> None:
+def test_setup_create_card_stores_art_without_reaching_agent() -> None:
+    # Authoring is setup-only and never calls the LLM; art still lands in the
+    # out-of-band registry for the play-time interpretation to pick up.
     room = Room("ABCDEF")
     room.add_player("p1", "Alice")
-    room.state = room.state.model_copy(update={"phase": "playing"})
+    room.state = room.state.model_copy(update={"phase": "setup"})
     room.connections.connect("p1", AsyncMock())
     with patch("agent.runtime.run_agent", return_value=_no_agent_result()) as spy:
         asyncio.run(room.handle_action("p1", CreateCardMsg(title="Doodle", description="gain 1 point", art=ART)))
-    spy.assert_called_once()
-    assert spy.call_args.kwargs["card_art"] == ART
+    spy.assert_not_called()
+    (card_id,) = [cid for cid, c in room.state.cards.items() if c.get("creator_id") == "p1"]
+    assert room.card_art[card_id] == ART

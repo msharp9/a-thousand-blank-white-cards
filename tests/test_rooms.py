@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, patch
 
 from conftest import drive_to_playing
 
-from agent.contract import InterpretResult
 from models.ws_messages import CreateCardMsg, PassMsg, PlayMsg, Placement
 from board.rooms.connections import ConnectionManager
 from board.rooms.manager import RoomManager
@@ -138,15 +137,11 @@ class TestRoomTurnEnforcement:
         drive_to_playing(room, ["p1", "p2"])
         assert room.state.phase == "playing"
 
-    def test_create_card_off_turn_allowed(self) -> None:
+    def test_create_card_allowed_for_any_player_during_setup(self) -> None:
         room = _room_two_players()
-        room.state = room.state.model_copy(update={"phase": "playing"})
-        room.connections.connect("p2", AsyncMock())  # p2 is off-turn
-        with patch(
-            "agent.runtime.run_agent",
-            return_value=InterpretResult(program=None, snippet=None, verdict="invalid"),
-        ):
-            asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do stuff")))
+        room.state = room.state.model_copy(update={"phase": "setup"})
+        room.connections.connect("p2", AsyncMock())  # setup has no turn gate
+        asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do stuff")))
         assert len(room.state.cards) == 1
         card = next(iter(room.state.cards.values()))
         assert card["title"] == "Wild"

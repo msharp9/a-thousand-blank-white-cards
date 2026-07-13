@@ -59,8 +59,8 @@ finishes their turn, then the game ends).
 | `start` | — | Build/shuffle the deck, deal starting hands, begin play (the first player is auto-drawn to immediately). |
 | `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?`, `art?` | Play a card; the AI arbiter interprets it and applies the effect (active player only). Ends the turn. For a BLANK card, the first play carries the authored `title`+`description` (the card is filled in and persisted before interpretation) and optionally `art` (a PNG data-URL, stored out-of-band and served via `GET /rooms/{code}/cards/{card_id}/art`); a prompt_choice follow-up re-sends only `card_id`+the choice. |
 | `pass` / `end_turn` | — | End your turn without playing a card (active player only). `end_turn` is an accepted alias for `pass`, handled identically. |
-| `create_card` | `title`, `description`, `art?` | Author a new card and interpret it immediately (allowed off-turn). `art` is an optional PNG data-URL; cards carry only a `has_art` flag in state and the image is served via `GET /rooms/{code}/cards/{card_id}/art`. |
-| `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state. |
+| `create_card` | `title`, `description`, `art?` | Author a new card during the SETUP phase (each player writes their quota; the game auto-starts when the last player finishes). Rejected in any other phase — the only mid-game authoring is playing a blank (see `play`). No LLM call: authored cards are interpreted at play time. `art` is an optional PNG data-URL; cards carry only a `has_art` flag in state and the image is served via `GET /rooms/{code}/cards/{card_id}/art`. |
+| `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state (setup phase only, like `create_card`). |
 | `interaction_response` | `schema_version`, `interaction_id`, typed `payload` | Submit one authenticated response to the active generic interaction. |
 | `epilogue_vote` | `card_id`, `keep` | Vote to keep/discard a card during the epilogue phase. |
 
@@ -70,7 +70,7 @@ finishes their turn, then the game ends).
 | --- | --- | --- |
 | `state` | `state` | Full game-state snapshot (sent on connect and after every mutation). |
 | `brewing` | `card_id` | The arbiter is interpreting a card (in-flight indicator). |
-| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict`, `comment`, `mechanical_status`, `mechanical_reason`, `correlation_id` | Result of interpreting a played/created card with durable mechanical diagnostics. |
+| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict`, `comment`, `mechanical_status`, `mechanical_reason`, `correlation_id` | Result of interpreting a played card with durable mechanical diagnostics. |
 | `effect_applied` | `log_entry` | An effect (or the arbiter's `comment`, prefixed `🤖`) was applied; human-readable log line. Also appended to `state.log` so it survives reconnect. |
 | `preview_result` | `program`, `snippet`, `verdict`, `mechanical_status`, `mechanical_reason`, `correlation_id` | Real cloned-state interpretation and dry-run result. |
 | `prompt_choice` | `card_id`, `prompt`, `choices` | Server asks the active player to pick a target. |
