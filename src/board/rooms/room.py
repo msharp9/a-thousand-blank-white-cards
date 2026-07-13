@@ -203,6 +203,11 @@ class Room:
         self._comment_logged: set[str] = set()
         self._pending_resolution: PendingResolution | None = None
         self._interaction_timer: asyncio.Task | None = None
+        # Card id of the play currently being interpreted/resolved (brewing),
+        # or None. Set/cleared (try/finally) around the play branch in
+        # _dispatch and checked BEFORE waiting on the lock in handle_action —
+        # see handle_action for why the check must precede the lock.
+        self._resolving_play: str | None = None
         # The play currently suspended behind an open reaction window, or None.
         # Transient by design — see PendingPlay.
         self._pending: PendingPlay | None = None
@@ -252,8 +257,40 @@ class Room:
             self.on_change(self)
 
     # ── main dispatch ──
+
+    # Game actions frozen while a play is being interpreted/resolved (brewing).
+    # Mirrors the _pending_resolution freeze set in _dispatch. Reaction
+    # messages (pass_reaction, play + as_reaction) are deliberately exempt:
+    # the reaction window only opens AFTER interpretation completes, so a
+    # reaction sent mid-brew already bounces off the window machinery
+    # ("The reaction window has closed" / claimed_by), and the exemption keeps
+    # a reaction from racing the window-open broadcast at the tail of a play.
+    FROZEN_WHILE_RESOLVING = frozenset({"start", "pass", "end_turn", "play", "create_card"})
+
     async def handle_action(self, player_id: str, msg) -> None:
-        """Serialised entry point for all client messages."""
+        """Serialised entry point for all client messages.
+
+        The play-resolution freeze is checked BEFORE waiting on the lock: the
+        lock is held for a play's entire interpretation (including the
+        threaded LLM call), so a game action arriving mid-brew can never
+        observe ``_resolving_play`` from inside ``_dispatch`` — it would queue
+        on the lock and execute against the post-resolution state, succeeding
+        whenever the first play ended on a non-consuming path (prompt_choice,
+        veto, reaction abort). Rejecting up front gives the sender an
+        immediate error instead. The unlocked read is a benign race: a message
+        that slips past just queues as before and lands in the normal
+        turn/allowance gates.
+        """
+        if (
+            self._resolving_play is not None
+            and msg.type in self.FROZEN_WHILE_RESOLVING
+            and not getattr(msg, "as_reaction", False)
+        ):
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "Waiting for the current play to finish resolving"},
+            )
+            return
         async with self._lock:
             await self._dispatch(player_id, msg)
             self._notify_change()
@@ -332,7 +369,15 @@ class Room:
             if not self._is_active_player(player_id):
                 await self.connections.send(player_id, {"type": "error", "message": "Not your turn"})
                 return
-            await self._handle_play(player_id, msg)
+            # Freeze the room's game actions for the whole play (author-on-play
+            # → veto → interpretation → execution → turn accounting); cleared
+            # unconditionally so a crashing LLM call/plan can never leave the
+            # room frozen. handle_action rejects against this flag pre-lock.
+            self._resolving_play = msg.card_id
+            try:
+                await self._handle_play(player_id, msg)
+            finally:
+                self._resolving_play = None
         elif mtype == "create_card":
             await self._handle_create_card(player_id, msg)
         elif mtype == "preview_card":
