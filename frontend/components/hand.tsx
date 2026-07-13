@@ -39,9 +39,15 @@ export function Hand({ cards, canPlay, send, roomCode }: HandProps) {
     setSelectedId(null);
   }
 
-  function playBlank(title: string, description: string) {
+  function playBlank(title: string, description: string, art?: string) {
     if (!selectedId) return;
-    send({ type: "play", card_id: selectedId, title, description });
+    send({
+      type: "play",
+      card_id: selectedId,
+      title,
+      description,
+      ...(art ? { art } : {}),
+    });
     setSelectedId(null);
   }
 

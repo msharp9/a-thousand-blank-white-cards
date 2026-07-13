@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CardCreator, type CardCreatorHandle } from "@/components/card-creator";
 import {
   Dialog,
   DialogContent,
@@ -10,9 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
 import type { ClientMsg } from "@/lib/types";
 
 interface CreateCardDialogProps {
@@ -24,6 +23,7 @@ interface CreateCardDialogProps {
     snippet?: string | null;
     verdict: string;
   } | null;
+  caption?: string;
 }
 
 export function CreateCardDialog({
@@ -31,11 +31,13 @@ export function CreateCardDialog({
   onOpenChange,
   send,
   previewResult,
+  caption = "This card joins the shared deck.",
 }: CreateCardDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [previewing, setPreviewing] = useState(false);
   const [lastResult, setLastResult] = useState(previewResult);
+  const creatorRef = useRef<CardCreatorHandle>(null);
 
   // Stop the spinner when a new preview result arrives. Adjusting state during
   // render (rather than in an effect) is React's recommended pattern for
@@ -61,31 +63,28 @@ export function CreateCardDialog({
       type: "create_card",
       title: title.trim(),
       description: description.trim(),
+      art: creatorRef.current?.getArt() ?? undefined,
     });
     setTitle("");
     setDescription("");
+    creatorRef.current?.reset();
     onOpenChange(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Create a card</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <Input
-            placeholder="Card title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            maxLength={60}
-          />
-          <Textarea
-            placeholder="Describe the rule… e.g. 'Everyone loses 5 points'"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            maxLength={500}
+          <CardCreator
+            ref={creatorRef}
+            title={title}
+            description={description}
+            onTitleChange={setTitle}
+            onDescriptionChange={setDescription}
+            caption={caption}
           />
           {previewing && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
