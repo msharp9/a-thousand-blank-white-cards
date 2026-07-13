@@ -38,11 +38,16 @@ export type PlayMsg = {
   // already real by then).
   title?: string;
   description?: string;
+  // Optional card art authored alongside a blank: a PNG data-URL
+  // ("data:image/png;base64,…", ≤131072 chars — the server verifies both).
+  art?: string;
 };
 export type CreateCardMsg = {
   type: "create_card";
   title: string;
   description: string;
+  // Optional card art: same PNG data-URL contract as PlayMsg.art.
+  art?: string;
 };
 export type PreviewCardMsg = {
   type: "preview_card";

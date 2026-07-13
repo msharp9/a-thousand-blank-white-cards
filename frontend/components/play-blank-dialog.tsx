@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CardCreator, type CardCreatorHandle } from "@/components/card-creator";
 import {
   Dialog,
   DialogContent,
@@ -10,16 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 
 interface PlayBlankDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // Called with the authored title+description when the player commits. The
-  // caller sends the play (carrying these), which fills in the blank and plays
-  // it this turn.
-  onPlay: (title: string, description: string) => void;
+  // Called with the authored title+description (and drawn art, if any) when
+  // the player commits. The caller sends the play (carrying these), which
+  // fills in the blank and plays it this turn.
+  onPlay: (title: string, description: string, art?: string) => void;
 }
 
 // Author-on-play dialog for a BLANK card. The game is *A Thousand Blank White
@@ -33,15 +32,21 @@ export function PlayBlankDialog({
 }: PlayBlankDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const creatorRef = useRef<CardCreatorHandle>(null);
 
   function reset() {
     setTitle("");
     setDescription("");
+    creatorRef.current?.reset();
   }
 
   function handlePlay() {
     if (!title.trim() || !description.trim()) return;
-    onPlay(title.trim(), description.trim());
+    onPlay(
+      title.trim(),
+      description.trim(),
+      creatorRef.current?.getArt() ?? undefined,
+    );
     reset();
     onOpenChange(false);
   }
@@ -54,7 +59,7 @@ export function PlayBlankDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Fill in your blank card</DialogTitle>
           <DialogDescription>
@@ -62,19 +67,14 @@ export function PlayBlankDialog({
             it this turn.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <Input
-            placeholder="Card title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <Textarea
-            placeholder="Describe the rule… e.g. 'Everyone loses 5 points'"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-          />
-        </div>
+        <CardCreator
+          ref={creatorRef}
+          title={title}
+          description={description}
+          onTitleChange={setTitle}
+          onDescriptionChange={setDescription}
+          caption="This card is played this turn."
+        />
         <DialogFooter>
           <Button
             onClick={handlePlay}
