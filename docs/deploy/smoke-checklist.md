@@ -15,24 +15,57 @@ Do not announce a deploy as healthy until both parts pass.
 
 ## 1. Automated probe
 
-From the repo root:
+From the repo root, pass both URLs so the probe can verify the pair deploys
+together (not just each service in isolation):
 
 ```bash
 uv run python scripts/smoke_test.py \
   --backend https://tbwc-backend.onrender.com \
-  --origin https://tbwc.vercel.app
+  --frontend https://tbwc.vercel.app
 ```
 
-This checks:
+This runs the checks that are on by default and prints a pass/fail/skip
+matrix:
 
-- **`/health`** returns `200` with `{"status": "ok"}`
-- **CORS preflight** — an `OPTIONS /health` from the Vercel origin returns an
-  `Access-Control-Allow-Origin` that matches the origin (or `*`)
-- **WebSocket** — creates a room via `POST /rooms`, opens `wss://…/ws/{code}`,
-  sends a `join`, and confirms the server replies (proving the socket is live)
+- **`health`** — `GET /health` returns `200` with `{"status": "ok"}`
+- **`cors`** — an `OPTIONS /health` from the frontend's origin (or
+  `--origin`) returns an `Access-Control-Allow-Origin` that matches it (or
+  `*`). Skipped if neither `--frontend` nor `--origin` is given.
+- **`ws`** — creates a room via `POST /rooms`, joins via
+  `POST /rooms/{code}/join`, opens `wss://…/ws/{code}`, sends a `join`
+  envelope, and asserts a full `state` snapshot comes back.
+- **`frontend`** — `GET` the frontend URL and confirm it returns `200` with
+  the app's page title in the HTML. Only requested when `--frontend` is
+  given.
+- **`wiring`** — `POST /rooms` on the backend with `Origin: <frontend
+  origin>` and asserts CORS allows it and a room code comes back. Combined
+  with `frontend`, this proves the two services are actually deployable as a
+  pair, not just independently healthy. Only requested when `--frontend` is
+  given.
 
-The script exits `0` when all checks pass and `1` otherwise. Investigate any
-`FAIL` line before continuing.
+Skip a normally-on check with `--skip`, e.g. `--skip cors,ws`.
+
+Three more checks are opt-in because they spend third-party quota or hit a
+paid API — pass the flag to run them:
+
+```bash
+uv run python scripts/smoke_test.py --backend https://tbwc-backend.onrender.com \
+  --check-tavily --check-langsmith --check-llm
+```
+
+- **`tavily`** (`--check-tavily`) — `tavily_api_key` is configured and a live
+  search through `agent.tools.web_search` returns a real result (not the
+  "web search unavailable" fallback).
+- **`langsmith`** (`--check-langsmith`) — `langsmith_tracing` +
+  `langsmith_api_key` are configured and a cheap authenticated call to the
+  LangSmith API succeeds.
+- **`llm`** (`--check-llm`) — a one-token chat completion succeeds through
+  `agent.llm.get_chat_model`, proving the configured LLM gateway/provider is
+  reachable and the key is valid.
+
+The script exits `0` iff every REQUESTED check passes — skipped checks (not
+requested, or explicitly `--skip`ped) never affect the exit code. Investigate
+any `FAIL` line before continuing.
 
 > Note: Render free-tier services cold-start. If the first run times out, wait
 > ~30–60s for the service to wake and re-run.
