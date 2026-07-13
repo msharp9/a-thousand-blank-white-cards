@@ -195,6 +195,7 @@ class TestWideFacade:
         g = self._game()
         g.draw_cards("self", 2)
         g.destroy_card(card_target="attr:color=red")
+        g.transfer_card("this", "id:p2")
         g.set_win_condition("empty_hand")
         g.end_game(winner="self")
         g.set_rule("draw", 0)
@@ -213,6 +214,7 @@ class TestWideFacade:
         assert recorded == {
             "draw_cards",
             "destroy_card",
+            "transfer_card",
             "set_win_condition",
             "end_game",
             "set_rule",

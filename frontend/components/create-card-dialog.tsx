@@ -12,17 +12,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import type { ClientMsg } from "@/lib/types";
+import type { ClientMsg, PreviewResult } from "@/lib/types";
 
 interface CreateCardDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   send: (msg: ClientMsg) => void;
-  previewResult: {
-    program?: string | null;
-    snippet?: string | null;
-    verdict: string;
-  } | null;
+  previewResult: PreviewResult | null;
   caption?: string;
 }
 
@@ -38,6 +34,8 @@ export function CreateCardDialog({
   const [previewing, setPreviewing] = useState(false);
   const [lastResult, setLastResult] = useState(previewResult);
   const creatorRef = useRef<CardCreatorHandle>(null);
+  const previewStatus =
+    previewResult?.mechanical_status ?? previewResult?.verdict;
 
   // Stop the spinner when a new preview result arrives. Adjusting state during
   // render (rather than in an effect) is React's recommended pattern for
@@ -97,12 +95,24 @@ export function CreateCardDialog({
                 <span className="font-medium">Preview:</span>
                 <Badge
                   variant={
-                    previewResult.verdict === "ok" ? "default" : "destructive"
+                    previewStatus === "applied" || previewStatus === "ok"
+                      ? "default"
+                      : "destructive"
                   }
                 >
-                  {previewResult.verdict}
+                  {previewStatus}
                 </Badge>
               </div>
+              {previewResult.mechanical_reason && (
+                <p className="text-muted-foreground">
+                  {previewResult.mechanical_reason}
+                </p>
+              )}
+              {previewResult.correlation_id && (
+                <p className="font-mono text-[10px] text-muted-foreground">
+                  Reference: {previewResult.correlation_id}
+                </p>
+              )}
               {previewResult.program && (
                 <pre className="whitespace-pre-wrap">
                   {previewResult.program}

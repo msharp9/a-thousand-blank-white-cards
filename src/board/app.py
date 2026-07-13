@@ -57,6 +57,7 @@ with a full `state` snapshot. All messages are JSON objects with a `type` field.
 | `pass` / `end_turn` | — | End your turn without playing a card (active player only). `end_turn` is an accepted alias for `pass`, handled identically. |
 | `create_card` | `title`, `description`, `art?` | Author a new card and interpret it immediately (allowed off-turn). `art` is an optional PNG data-URL; cards carry only a `has_art` flag in state and the image is served via `GET /rooms/{code}/cards/{card_id}/art`. |
 | `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state. |
+| `interaction_response` | `schema_version`, `interaction_id`, typed `payload` | Submit one authenticated response to the active generic interaction. |
 | `epilogue_vote` | `card_id`, `keep` | Vote to keep/discard a card during the epilogue phase. |
 
 ### Server → client messages
@@ -65,10 +66,12 @@ with a full `state` snapshot. All messages are JSON objects with a `type` field.
 | --- | --- | --- |
 | `state` | `state` | Full game-state snapshot (sent on connect and after every mutation). |
 | `brewing` | `card_id` | The arbiter is interpreting a card (in-flight indicator). |
-| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict`, `comment` | Result of interpreting a played/created card. `comment` is the arbiter's short, in-character remark about the card (may be empty). |
+| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict`, `comment`, `mechanical_status`, `mechanical_reason`, `correlation_id` | Result of interpreting a played/created card with durable mechanical diagnostics. |
 | `effect_applied` | `log_entry` | An effect (or the arbiter's `comment`, prefixed `🤖`) was applied; human-readable log line. Also appended to `state.log` so it survives reconnect. |
-| `preview_result` | `program`, `snippet`, `verdict` | Reply to `preview_card`. |
+| `preview_result` | `program`, `snippet`, `verdict`, `mechanical_status`, `mechanical_reason`, `correlation_id` | Real cloned-state interpretation and dry-run result. |
 | `prompt_choice` | `card_id`, `prompt`, `choices` | Server asks the active player to pick a target. |
+| `interaction_request` | `schema_version`, `interaction_id`, `descriptor`, `deadline_at`, safe `progress` | Versioned request delivered to one resolved audience member; replayed on reconnect. |
+| `interaction_progress` | `schema_version`, `interaction_id`, `deadline_at`, safe `progress` | Counts-only barrier progress; never includes sealed response values. |
 | `epilogue` | `cards` | Epilogue phase opened with the cards created this game. |
 | `error` | `message` | An error (bad message, not your turn, room not found, …). |
 
@@ -122,6 +125,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     # startup: warn loudly if a multi-worker deployment is configured — the
     # room registry uses a process-local in-memory store (single-worker only).
     check_single_worker()
+    room_manager.start_background_tasks()
 
     try:
         from agent.rag.seed import load_seed_cards

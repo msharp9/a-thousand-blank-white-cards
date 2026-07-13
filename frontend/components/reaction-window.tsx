@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,11 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { SketchCard } from "@/components/sketch-card";
 import { getCardArtUrl } from "@/lib/art";
-import type {
-  CardSnapshot,
-  ClientMsg,
-  PendingPlaySnapshot,
-} from "@/lib/types";
+import type { CardSnapshot, ClientMsg, PendingPlaySnapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface ReactionWindowProps {
@@ -50,11 +46,11 @@ function useCountdown(deadlineEpochMs: number): number {
 function CountdownBar({ deadlineEpochMs }: { deadlineEpochMs: number }) {
   const remaining = useCountdown(deadlineEpochMs);
   // First-seen remaining = 100%; the deadline moves when a reactor claims the
-  // window (timer restart), so re-anchor whenever it grows.
-  const totalRef = useRef(remaining);
-  if (remaining > totalRef.current) totalRef.current = remaining;
-  const pct =
-    totalRef.current > 0 ? (remaining / totalRef.current) * 100 : 0;
+  // window (timer restart), so re-anchor whenever it grows. Render-time state
+  // adjustment is React's sanctioned derived-state pattern.
+  const [total, setTotal] = useState(remaining);
+  if (remaining > total) setTotal(remaining);
+  const pct = total > 0 ? (remaining / total) * 100 : 0;
   return (
     <div className="flex items-center gap-2">
       <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-ink bg-white">

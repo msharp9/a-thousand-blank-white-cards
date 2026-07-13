@@ -44,6 +44,8 @@ class HookContext:
     amount: int | None = None  # points delta, draw count, etc.
     target_player_ids: list[str] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
+    interactions: dict[str, Any] = field(default_factory=dict)
+    interaction_refs: dict[str, Any] = field(default_factory=dict)
 
 
 class EventBus:

@@ -184,9 +184,10 @@ discriminated union (`ClientMsg`, keyed on `type`) validated by a single
 `TypeAdapter`; outbound messages are the `ServerMsg` set.
 
 - **Client → server**: `join`, `start`, `draw`, `play`, `pass` / `end_turn`,
-  `create_card`, `preview_card`, `epilogue_vote`.
+  `create_card`, `preview_card`, `interaction_response`, `epilogue_vote`.
 - **Server → client**: `state`, `brewing`, `card_interpreted`, `effect_applied`,
-  `preview_result`, `prompt_choice`, `epilogue`, `error`.
+  `preview_result`, `prompt_choice`, `interaction_request`,
+  `interaction_progress`, `epilogue`, `error`.
 
 **Handshake and close codes** (`board/ws.py`): the socket is accepted, then the
 first message MUST be a `join` carrying a valid `player_id`. The frontend
@@ -203,11 +204,55 @@ On (re)connect the server immediately replays a full `state` snapshot, so a
 refresh restores the whole game (including `state.log`, which is why every
 effect line is persisted there and not only broadcast live).
 
+Snapshots expose the active data-driven game rather than a fixed board model:
+`turn_order`, `rules`, player `conditions`, card `attributes`, and registered
+hook metadata. The frontend mirrors the engine's active seat from `players[turn_index]` and
+renders these values in a generic dynamic-state panel; there is no legacy
+direction flag. Cards also retain a bounded mechanical diagnostic (`pending`,
+`applied`, `fallback`, or `rejected`), a public reason, and a correlation id, so
+failures remain visible after reconnect and can be matched to server logs.
+
 ### Anatomy of an action
 
 Every inbound message is serialized through a per-room `asyncio.Lock`
 (`Room.handle_action` → `Room._dispatch`), so concurrent sockets cannot corrupt
 turn order. Spectators are rejected from all game-mutating message types.
+
+### Generic interaction barriers
+
+`ResolutionPlan` can interleave `ops`, `snippet`, and `interaction` steps.
+Interaction descriptors are versioned, bounded data for `choice`, `number`,
+`text`, `card_pick`, `confirm`, or normalized vector `drawing` input, addressed
+to `active`, `all`, `all_others`, or `player:<id>`. The legacy
+`prompt_choice` target flow remains readable and operational.
+
+At a barrier the Room does not commit the working clone. A private,
+persisted `PendingResolution` stores the plan cursor, cloned state, resolved
+audience, deadline, correlation id, and sealed responses outside `GameState`.
+Normal gameplay is frozen. Shared snapshots expose only safe status and counts;
+each audience member receives their own request, which is replayed on reconnect.
+Responses are schema-checked and authenticated, then the plan resumes exactly
+once with validated values in `ctx.interactions[result_key]`. A later stage may
+use `input_refs` to turn prior submissions into choices, enabling drawing then
+voting without revealing drawings before the submission barrier closes.
+
+Plans are capped at eight total steps, four interaction barriers, and 256 KiB of
+aggregate interaction descriptors/references; individual descriptors and
+responses are bounded as well. The deadline defaults to 60 seconds. Partial
+timeouts continue with submitted values and deterministic type defaults. If nobody responds, all pre-barrier
+mechanics are rolled back, the played card is consumed as a visible no-op, and
+the turn continues. `FileRoomStore` persists pending resolutions and turn
+bookkeeping for dev reloads; application startup recreates timeout tasks without
+requiring a client to reconnect.
+
+The frontend keeps lifecycle phases fixed and renders card-defined interaction
+stages in one global `InteractionPanel` overlay. It has typed renderers for all
+v1 descriptors, counts-only waiting/sealed states, an authoritative deadline
+countdown, reconnect replay, and a visible fallback for unknown future kinds.
+Drawing input is normalized vector geometry (never image data), re-bounded to
+the server's stroke, point, and coordinate limits plus a conservative 48 KiB
+browser wire budget for the server's 65 KiB post-parse cap; completed
+drawing submissions can then render as choice previews in a later vote stage.
 
 ```mermaid
 sequenceDiagram
@@ -223,18 +268,20 @@ sequenceDiagram
   WS->>R: handle_action(player_id, msg)
   Note over R: turn / draw-first / spectator guards
   R->>R: author-on-play (fill blank if needed)
-  R->>CO: compile_card(card)
-  alt compiled ops exist (deterministic)
-    CO-->>R: EffectProgram
+  R->>CO: compile_card_plan(card)
+  alt compiled plan exists (deterministic)
+    CO-->>R: ResolutionPlan
   else free-text card
     R->>CM: broadcast "brewing"
     R->>AG: run_agent(title, desc, state, actor, creator)
-    AG-->>R: InterpretResult (program | fallback)
+    AG-->>R: InterpretResult (plan | legacy fields | fallback)
     R->>CM: broadcast "card_interpreted"
   end
-  Note over R: if program needs a target →<br/>send "prompt_choice", hold play
-  R->>AP: apply_effect(state, program, ctx)
-  AP-->>R: new GameState
+  Note over R: validate and dry-run complete ordered plan
+  loop ops / snippet / interaction steps
+    R->>AP: execute next step against cloned state
+    AP-->>R: cloned state or persisted barrier
+  end
   R->>R: move card hand→(center|in_play|discard)
   R->>CM: broadcast "state" + "effect_applied"
   R->>R: advance_turn (or end game)
@@ -302,7 +349,7 @@ A card resolves as a `ResolutionPlan`: an ordered sequence of `OpsStep` and
 list of `Op`s from the
 discriminated union in `models/effects.py` (`add_points`, `subtract_points`,
 `set_points`, `steal_points`, `skip_turn`, `extra_turn`, `reverse_order`,
-`scramble_order`, `change_draw_count`, `draw_cards`, `destroy_card`,
+`scramble_order`, `change_draw_count`, `draw_cards`, `destroy_card`, `transfer_card`,
 `set_win_condition`, `set_rule`, `custom_note`, `end_game`). Each op addresses players via a `Target`
 (`self`, `left_neighbor`, `all_others`, `chooser`, `player_with_most_points`, …)
 and, for card manipulation, a `CardTarget` (`this`, `chosen_card`,
@@ -410,7 +457,7 @@ code:
   `SandboxGame` façade, never raw `GameState`. It exposes reads (player views,
   `my_hand`, `hand_size`, `deck_size`, `rules`, `conditions`, `card` metadata,
   `turn_order`) and mutators at FULL op parity (points/turn ops plus
-  `draw_cards`, `destroy_card`, `set_win_condition`, `end_game`, `set_rule`,
+  `draw_cards`, `destroy_card`, `transfer_card`, `set_win_condition`, `end_game`, `set_rule`,
   `set_condition`, `set_card_attribute`, `create_card`, `register_hook`,
   `unregister_hook`, `custom_note`, `reject_play`) that only **record op dicts** —
   they cannot touch real state. Canonical mutator names and parameter order match
@@ -442,6 +489,19 @@ server-side final gate repeats static validation and the dry run, attempts one
 bounded repair when validation fails, and returns an effectless invalid verdict
 if the repair is still unsafe. Snippet handlers close over their own source code;
 there is no process-global cache that can collide across rooms or cards.
+
+`preview_card` follows the same boundary without committing: the room gives the
+agent a cloned state containing an ephemeral preview card, then dry-runs the
+returned plan through the real reducers and sandbox. `preview_result` includes
+the plan, mechanical status, sanitized reason, and correlation id. Invalid
+methods such as `state.draw` therefore fail before a card is created or played.
+Preview binds no persistent-write tools (`remember_decision` or `wish`).
+
+If no op, sandbox method, hook, or supported interaction can express a card,
+the `wish` tool appends bounded capability telemetry to configured JSONL.
+`scripts/export_capability_wishes.py` exports it for offline human triage. The
+sink has a hard byte cap and failures are best-effort/non-throwing. The runtime
+never invokes `bd`, writes source, or attempts self-modification.
 
 ---
 
@@ -484,6 +544,10 @@ flowchart LR
   `data/seed_cards.json` in one batched `upsert_cards` call (a single embedding
   round-trip for cache misses). A missing file or offline gateway degrades
   gracefully.
+  `scripts/build_seed_corpus.py` deterministically generates that combined file
+  from `seed_cards_gold.json` plus `seed_cards_fillers.json`; CI checks the files
+  cannot drift. Gold entries are executable full plans, including static chains,
+  post-draw computation, structured-history scoring, and basic/spicy/wild Uno.
 - **Retrievers** (`rag/retrievers.py`): `dense_retriever()` is the baseline
   cosine retriever; `advanced_retriever()` is a `MultiQueryCardRetriever` that
   paraphrases the query via the chat model, retrieves each paraphrase, and
@@ -492,13 +556,22 @@ flowchart LR
   builds a LangChain tool-calling agent (`create_agent`) with the persona system
   prompt and a bound toolbox. `get_default_tools()` returns the context-free
   tools — web search, the card-RAG corpus, game rules, MTG lookup, agent memory,
-  and `read_engine_methods`; the context-dependent `read_game_state` tool
-  (closing over the live snapshot + actor/creator) is bound per invocation. The
+  and `read_engine_methods`; context-dependent `read_game_state`,
+  `read_game_history`, and `dry_run_effect` tools are bound per invocation. The
   agent decides when to retrieve exemplars via the card-RAG tool rather than
   stuffing context unconditionally. It is bounded by a hard tool-call cap
   (`MAX_TOOL_CALLS`) and a wall-clock timeout (`AGENT_TIMEOUT_SECONDS`), and
   **never raises to its caller** — on cap/timeout/error it returns a
   deterministic `InterpretResult` with `verdict="invalid"`.
+  Retrieved top-hit canonicals are emitted as complete JSON; executable code is
+  never character-sliced. Lower-ranked canonicals are omitted whole when the
+  response budget is exhausted.
+
+The eval harness normalizes and judges complete `ResolutionPlan` values before
+legacy program/snippet mirrors. Its structural scorer validates snippet and hook
+code, while corpus lint compiles and behaviorally dry-runs every gold plan on a
+representative state. Capability cases cover Chess Master, static multi-op
+chains, history-derived winners, and the Uno ladder.
 
 The **persona** (`agent/persona.py`) makes the agent a sardonic game master: it
 always emits an in-character `comment`, and when a card can't be cleanly

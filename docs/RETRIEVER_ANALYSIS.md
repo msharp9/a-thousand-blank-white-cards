@@ -7,7 +7,7 @@ card-interpretation agent. It covers two experiments:
 1. Swapping the baseline dense retriever for an **advanced multi-query retriever**.
 2. One additional targeted improvement — **few-shot exemplar injection** in `emit_ops`.
 
-Both experiments are evaluated with the Phase 5 eval harness over the 35-card real
+Both experiments are evaluated with the Phase 5 eval harness over the 41-card real
 testset. The A/B driver scripts already exist (`evals.retriever_ab`,
 `evals.improvement_ab`). `improvement_ab` drives the single tool-calling agent
 (`agent.runtime.run_agent`) and the LLM judge, so it requires a live

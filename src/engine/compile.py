@@ -38,6 +38,7 @@ from models.effects import (
     EffectProgram,
     EndGameOp,
     ExtraTurnOp,
+    InteractionStep,
     RegisterHookOp,
     ResolutionPlan,
     OpsStep,
@@ -53,6 +54,7 @@ from models.effects import (
     StealPointsOp,
     SubtractPointsOp,
     Target,
+    TransferCardOp,
     UnregisterHookOp,
     SnippetStep,
     is_known_target,
@@ -174,6 +176,11 @@ def _compile_op(name: str, args: dict) -> Op | None:
             card_target=args.get("card_target"),
             card_id=args.get("card_id"),
         )
+    if name == "transfer_card":
+        return TransferCardOp(
+            card_target=args.get("card_target", "this"),
+            to_target=_map_target(args.get("to_target", args.get("to", "self")), default="self", op_name=name),
+        )
     if name in _END_GAME_OP_NAMES:
         winner = args.get("winner")
         winners = args.get("winners") or []
@@ -290,7 +297,7 @@ def compile_card(card: dict) -> EffectProgram | None:
 def compile_card_plan(card: dict) -> ResolutionPlan | None:
     canonical = card.get("canonical") or {}
     raw_steps = canonical.get("steps") if isinstance(canonical, dict) else None
-    steps: list[OpsStep | SnippetStep] = []
+    steps: list[OpsStep | SnippetStep | InteractionStep] = []
 
     if raw_steps:
         for raw_step in raw_steps:
@@ -308,6 +315,11 @@ def compile_card_plan(card: dict) -> ResolutionPlan | None:
                         explanation=str(raw_step.get("explanation") or ""),
                     )
                 )
+            elif kind == "interaction":
+                try:
+                    steps.append(InteractionStep.model_validate(raw_step))
+                except Exception as exc:  # noqa: BLE001 - corpus drift is logged and skipped
+                    logger.warning("Skipping invalid interaction step: %s", exc)
         return ResolutionPlan(steps=steps) if steps else None
 
     program = compile_card(card)

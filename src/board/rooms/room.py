@@ -36,11 +36,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import random
+import re
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
 
 from engine.apply import apply_effect
 from engine.compile import compile_card_plan
@@ -50,9 +53,28 @@ from engine.history import append_history_event, record_draw, record_game_end
 from engine.loop import advance_turn
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.card import MAX_ROOM_ART_BYTES
-from models.effects import CustomNoteOp, EffectProgram, OpsStep, ResolutionPlan, SnippetStep
+from models.effects import CustomNoteOp, EffectProgram, InteractionStep, OpsStep, ResolutionPlan, SnippetStep
 from models.game_state import EndCondition, EpilogueCardOutcome, EpilogueResultSummary, GameState, Player, Spectator
+from models.interactions import (
+    CardPickInteraction,
+    CardPickResponse,
+    ChoiceInteraction,
+    ChoiceResponse,
+    ConfirmInteraction,
+    ConfirmResponse,
+    DrawingInteraction,
+    DrawingResponse,
+    InteractionDescriptor,
+    InteractionOption,
+    InteractionProgress,
+    InteractionResponsePayload,
+    NumberInteraction,
+    NumberResponse,
+    TextInteraction,
+    TextResponse,
+)
 from models.ws_messages import CreateCardMsg
+from board.rooms.interactions import PendingResolution
 from board.rooms.connections import ConnectionManager
 from board.rooms.deck import (
     BLANKS_PER_PLAYER,
@@ -90,15 +112,27 @@ class PlanExecutionError(Exception):
     pass
 
 
+class PlanPaused(Exception):
+    def __init__(self, working_state: GameState, cursor: int, step: InteractionStep) -> None:
+        self.working_state = working_state
+        self.cursor = cursor
+        self.step = step
+
+
 @dataclass
 class PendingPlay:
     """A play suspended while a reaction window is open.
 
-    Deliberately transient (a Room attribute, never GameState): the pending
-    card stays in the actor's hand until commit, so if the process restarts
-    mid-window the suspension evaporates harmlessly and the actor just plays
-    the card again. ``window_id`` defeats timeout races — a stale timer or a
-    late reaction sees a mismatched/cleared id and no-ops.
+    The reaction sibling of ``PendingResolution``: that one persists a play
+    paused MID-execution at an interaction barrier (mutated working_state must
+    survive a restart); this one suspends BEFORE any execution, so it is
+    deliberately transient (a Room attribute, never GameState/store) — the
+    pending card stays in the actor's hand until commit, and a restart just
+    evaporates the window so the actor replays. ``window_id`` defeats timeout
+    races — a stale timer or a late reaction sees a mismatched/cleared id and
+    no-ops. The two suspensions are never live simultaneously: a window always
+    closes (committing or negating the play) before its plan can pause on a
+    barrier.
     """
 
     window_id: str
@@ -164,6 +198,8 @@ class Room:
         # → follow-up play re-resolves), so this guards against double-logging the
         # arbiter comment for one played card. See _resolve_plan.
         self._comment_logged: set[str] = set()
+        self._pending_resolution: PendingResolution | None = None
+        self._interaction_timer: asyncio.Task | None = None
         # The play currently suspended behind an open reaction window, or None.
         # Transient by design — see PendingPlay.
         self._pending: PendingPlay | None = None
@@ -236,6 +272,7 @@ class Room:
             "pass_reaction",
             "create_card",
             "preview_card",
+            "interaction_response",
         }:
             await self.connections.send(player_id, {"type": "error", "message": "Spectators cannot take game actions"})
             return
@@ -254,9 +291,22 @@ class Room:
         if mtype == "pass_reaction":
             await self._handle_pass_reaction(player_id, msg)
             return
-        if mtype in {"draw", "pass", "end_turn", "play"} and self._pending is not None:
+        if self._pending is not None and mtype in {"draw", "pass", "end_turn", "play"}:
             await self.connections.send(
                 player_id, {"type": "error", "message": "Waiting for reactions to the pending play"}
+            )
+            return
+        if self._pending_resolution is not None and mtype in {
+            "start",
+            "draw",
+            "pass",
+            "end_turn",
+            "play",
+            "create_card",
+        }:
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "Waiting for the current card interaction to finish"},
             )
             return
         if mtype in {"create_card", "preview_card"} and self.state.phase not in {"setup", "playing"}:
@@ -302,6 +352,8 @@ class Room:
             await self._handle_create_card(player_id, msg)
         elif mtype == "preview_card":
             await self._handle_preview_card(player_id, msg)
+        elif mtype == "interaction_response":
+            await self._handle_interaction_response(player_id, msg)
         elif mtype == "epilogue_start":
             await self._handle_epilogue_start(player_id)
         elif mtype == "epilogue_vote":
@@ -853,6 +905,32 @@ class Room:
                 return True
         return False
 
+    @staticmethod
+    def _public_mechanical_reason(reason: object, *, fallback: str) -> str:
+        """Return a bounded, single-line diagnostic safe for shared snapshots."""
+        text = " ".join(str(reason).split()) if reason else fallback
+        text = re.sub(r"(?:/[A-Za-z0-9_.-]+){2,}", "[path]", text)
+        return text[:240] or fallback
+
+    def _set_card_mechanical_status(
+        self,
+        card_id: str,
+        status: str,
+        correlation_id: str,
+        reason: str | None = None,
+    ) -> None:
+        card = self.state.cards.get(card_id)
+        if not isinstance(card, dict):
+            return
+        updated = {
+            **card,
+            "mechanical_status": status,
+            "mechanical_reason": reason,
+            "correlation_id": correlation_id,
+        }
+        self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: updated}})
+        self._notify_change()
+
     def _can_pass(self, player_id: str) -> bool:
         """True if the active player may end their turn WITHOUT playing.
 
@@ -888,7 +966,24 @@ class Room:
             return "in_play"
         return "discard"
 
-    async def _resolve_plan(self, card_id: str, card, actor_id: str | None = None) -> ResolutionPlan:
+    def _placement_owner(self, card, ctx: HookContext) -> str:
+        """Which player an in_play (placement "player") card sits in front of:
+        the chosen target when the play had one, else the actor. Legacy
+        placement "self" always attaches to the actor."""
+        canonical = card.get("canonical") if isinstance(card, dict) else getattr(card, "canonical", None)
+        placement = canonical.get("placement") if isinstance(canonical, dict) else getattr(canonical, "placement", None)
+        if placement == "player":
+            return ctx.chosen_player_id or ctx.actor_id
+        return ctx.actor_id
+
+    async def _resolve_plan(
+        self,
+        card_id: str,
+        card,
+        actor_id: str | None = None,
+        *,
+        correlation_id: str,
+    ) -> ResolutionPlan:
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
         description = card["description"] if isinstance(card, dict) else getattr(card, "description", "")
         creator_id = card.get("creator_id") if isinstance(card, dict) else getattr(card, "creator_id", None)
@@ -917,6 +1012,11 @@ class Room:
                 "snippet": getattr(result.snippet, "code", None),
                 "verdict": result.verdict,
                 "comment": result.comment,
+                "mechanical_status": "pending" if result.verdict == "ok" else "fallback",
+                "mechanical_reason": (
+                    None if result.verdict == "ok" else "The arbiter could not produce an executable effect."
+                ),
+                "correlation_id": correlation_id,
             }
         )
 
@@ -935,6 +1035,12 @@ class Room:
         if result.verdict == "ok" and plan.steps:
             return plan
 
+        self._set_card_mechanical_status(
+            card_id,
+            "fallback",
+            correlation_id,
+            "The arbiter could not produce an executable effect.",
+        )
         note = title or "Card"
         return ResolutionPlan(steps=[OpsStep(ops=[CustomNoteOp(note=f"Played {note} (no mechanical effect)")])])
 
@@ -965,16 +1071,6 @@ class Room:
             canonical["sandbox"] = snippets[0].code
         return {"canonical": canonical}
 
-    def _placement_owner(self, card, ctx: HookContext) -> str:
-        """Which player an in_play (placement "player") card sits in front of:
-        the chosen target when the play had one, else the actor. Legacy
-        placement "self" always attaches to the actor."""
-        canonical = card.get("canonical") if isinstance(card, dict) else getattr(card, "canonical", None)
-        placement = canonical.get("placement") if isinstance(canonical, dict) else getattr(canonical, "placement", None)
-        if placement == "player":
-            return ctx.chosen_player_id or ctx.actor_id
-        return ctx.actor_id
-
     async def _execute_plan(
         self,
         base_state: GameState,
@@ -982,6 +1078,8 @@ class Room:
         ctx: HookContext,
         card,
         *,
+        start_cursor: int = 0,
+        working_state: GameState | None = None,
         zone_owner: str | None = None,
     ) -> GameState:
         from config import get_settings
@@ -989,25 +1087,32 @@ class Room:
         from engine.sandbox.runner import execute_snippet
 
         card_id = ctx.card_id or ""
-        destination = self._play_destination(card)
-        working = base_state.move_card(
-            card_id,
-            "hand",
-            destination,
-            # zone_owner = whose hand the card leaves (differs from ctx.actor_id
-            # only for a redirected reaction, where the effect runs as the
-            # reactor but the card was in the original actor's hand).
-            from_player_id=zone_owner or ctx.actor_id,
-            to_player_id=self._placement_owner(card, ctx) if destination == "in_play" else ctx.actor_id,
-        )
+        if working_state is None:
+            destination = self._play_destination(card)
+            working = base_state.move_card(
+                card_id,
+                "hand",
+                destination,
+                # zone_owner = whose hand the card leaves (differs from
+                # ctx.actor_id only for a redirected reaction, where the effect
+                # runs as the reactor but the card was in the actor's hand).
+                from_player_id=zone_owner or ctx.actor_id,
+                to_player_id=self._placement_owner(card, ctx) if destination == "in_play" else ctx.actor_id,
+            )
+        else:
+            working = working_state
         rng = random.Random()
         ctx_dict = {
             "actor_id": ctx.actor_id,
             "event": str(ctx.event),
             "card_id": ctx.card_id,
             "amount": ctx.amount,
+            "interactions": ctx.interactions,
+            "interaction_refs": ctx.interaction_refs,
         }
-        for step in plan.steps:
+        for cursor, step in enumerate(plan.steps[start_cursor:], start=start_cursor):
+            if isinstance(step, InteractionStep):
+                raise PlanPaused(working, cursor, step)
             bus = EventBus(build_registry(working), max_hooks=MAX_HOOKS_PER_EVENT)
             if isinstance(step, OpsStep):
                 working = apply_effect(working, EffectProgram(ops=step.ops), ctx, bus=bus, rng=rng)
@@ -1097,6 +1202,12 @@ class Room:
 
         veto = await self._check_play_veto(player_id, card_id, card)
         if veto is not None:
+            correlation_id = str(uuid.uuid4())
+            reason = self._public_mechanical_reason(veto, fallback="A table rule rejected this play.")
+            self._set_card_mechanical_status(card_id, "rejected", correlation_id, reason)
+            logger.info(
+                "card resolution rejected correlation_id=%s card_id=%s reason=%s", correlation_id, card_id, reason
+            )
             await self.connections.send(player_id, {"type": "error", "message": f"Play rejected: {veto}"})
             await self._log_and_broadcast(
                 f"[rule] {self._name(player_id)}'s {self._card_title(card)} was rejected: {veto}"
@@ -1105,7 +1216,15 @@ class Room:
             return
 
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
-        plan = await self._resolve_plan(card_id, card, actor_id=player_id)
+        correlation_id = str(uuid.uuid4())
+        self._set_card_mechanical_status(card_id, "pending", correlation_id)
+        await self._broadcast_state()
+        plan = await self._resolve_plan(
+            card_id,
+            card,
+            actor_id=player_id,
+            correlation_id=correlation_id,
+        )
         # Re-check after resolution: a blank authored on play may have been
         # canonicalized by the LLM as a reaction. Abort the same way — the card
         # hasn't moved zones, and it is now persisted in hand as a real
@@ -1192,7 +1311,7 @@ class Room:
         # _commit_pending when the window closes.
         if await self._maybe_open_reaction_window(player_id, card_id, card, plan, ctx):
             return
-        await self._finish_play(player_id, card_id, card, plan, ctx)
+        await self._finish_play(player_id, card_id, card, plan, ctx, correlation_id=correlation_id)
 
     async def _finish_play(
         self,
@@ -1202,6 +1321,7 @@ class Room:
         plan: ResolutionPlan,
         ctx: HookContext,
         *,
+        correlation_id: str,
         negated: bool = False,
         steal_to: str | None = None,
         redirect_to: str | None = None,
@@ -1213,7 +1333,10 @@ class Room:
         - ``steal_to``: the plan never executes; the card goes to that player's hand.
         - ``redirect_to``: the plan executes with that player as the effect actor
           (the zone move still empties the original actor's hand).
-        A countered/stolen play still consumes the actor's play allowance.
+        A countered/stolen play still consumes the actor's play allowance. A plan
+        pausing on an interaction barrier routes to _pause_resolution, which owns
+        the rest of the play (PlanPaused must never fall into the generic
+        fallback).
         """
         title = self._card_title(card)
         game_ending = False
@@ -1224,16 +1347,63 @@ class Room:
                 self.state = self.state.move_card(
                     card_id, "hand", "hand", from_player_id=player_id, to_player_id=steal_to
                 )
+                self._set_card_mechanical_status(card_id, "countered", correlation_id, "Stolen by a reaction.")
             else:
                 self.state = self.state.move_card(
                     card_id, "hand", "discard", from_player_id=player_id, to_player_id=player_id
                 )
+                self._set_card_mechanical_status(card_id, "countered", correlation_id, "Countered by a reaction.")
         else:
             exec_ctx = ctx if redirect_to is None else replace(ctx, actor_id=redirect_to)
             try:
                 self.state = await self._execute_plan(self.state, plan, exec_ctx, card, zone_owner=player_id)
+            except PlanPaused as paused:
+                try:
+                    await self._pause_resolution(
+                        paused,
+                        plan=plan,
+                        ctx=exec_ctx,
+                        card=card if isinstance(card, dict) else card.model_dump(),
+                        correlation_id=correlation_id,
+                        before_scores=before,
+                        deck_count_before=deck_count_before,
+                        zone_owner=player_id,
+                    )
+                except Exception as exc:
+                    reason = self._public_mechanical_reason(
+                        exc, fallback="The interaction could not be started safely."
+                    )
+                    logger.warning(
+                        "interaction setup failed correlation_id=%s card_id=%s reason=%s",
+                        correlation_id,
+                        card_id,
+                        reason,
+                    )
+                    self._set_card_mechanical_status(card_id, "fallback", correlation_id, reason)
+                    destination = self._play_destination(card)
+                    self.state = self.state.move_card(
+                        card_id, "hand", destination, from_player_id=player_id, to_player_id=player_id
+                    )
+                    await self._log_and_broadcast(f"[interaction error] {title}: {exc}")
+                    fallback = EffectProgram(
+                        ops=[CustomNoteOp(note=f"Played {title or 'Card'} (no mechanical effect)")]
+                    )
+                    self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
+                    await self._log_and_broadcast(self._describe_play(player_id, card, before))
+                else:
+                    return
             except Exception as exc:
-                logger.warning("resolution plan failed for %s: %s", card_id, exc)
+                reason = self._public_mechanical_reason(
+                    exc,
+                    fallback="The interpreted effect could not be applied safely.",
+                )
+                logger.warning(
+                    "resolution plan failed correlation_id=%s card_id=%s reason=%s",
+                    correlation_id,
+                    card_id,
+                    reason,
+                )
+                self._set_card_mechanical_status(card_id, "fallback", correlation_id, reason)
                 destination = self._play_destination(card)
                 self.state = self.state.move_card(
                     card_id,
@@ -1247,10 +1417,28 @@ class Room:
                 self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
                 await self._log_and_broadcast(self._describe_play(player_id, card, before))
             else:
+                current = self.state.cards.get(card_id)
+                if not isinstance(current, dict) or current.get("mechanical_status") != "fallback":
+                    self._set_card_mechanical_status(card_id, "applied", correlation_id)
                 await self._log_and_broadcast(self._describe_play(player_id, card, before))
                 await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id)
                 game_ending = self._end_now() or win_condition_met(self.state)
 
+        await self._after_play_effects(player_id, card_id, game_ending=game_ending, deck_count_before=deck_count_before)
+
+    async def _after_play_effects(
+        self,
+        player_id: str,
+        card_id: str,
+        *,
+        game_ending: bool,
+        deck_count_before: int,
+        extra_history_event: dict | None = None,
+    ) -> None:
+        """The single post-play accounting tail, shared by direct plays
+        (_finish_play) and resumed interaction plays (_complete_interaction_play):
+        history, deck-exhaustion latch, play allowance, broadcast, end/advance.
+        Runs exactly once per original play regardless of outcome."""
         self.state = append_history_event(
             self.state,
             "play",
@@ -1259,6 +1447,8 @@ class Room:
             card_id=card_id,
             source="resolved",
         )
+        if extra_history_event is not None:
+            self.state = append_history_event(self.state, **extra_history_event)
         if self.state.rules.end_condition.type == "deck_empty" and deck_count_before > 0 and not self.state.deck:
             self._deck_exhausted = True
 
@@ -1274,6 +1464,389 @@ class Room:
             await self._broadcast_state()
         else:
             await self._advance_turn()
+
+    # ── generic interaction barriers ──
+    @staticmethod
+    def _resolve_interaction_ref(results: dict, result_key: str, path: list[str | int]):
+        try:
+            value = results[result_key]
+            for part in path:
+                value = value[part]
+            return value
+        except (KeyError, IndexError, TypeError) as exc:
+            raise PlanExecutionError(f"interaction reference {result_key!r} has invalid path {path!r}") from exc
+
+    def _resolve_interaction_audience(self, audience: str, actor_id: str) -> list[str]:
+        player_ids = [player.id for player in self.state.players]
+        if audience == "active":
+            return [actor_id]
+        if audience == "all":
+            return player_ids
+        if audience == "all_others":
+            return [player_id for player_id in player_ids if player_id != actor_id]
+        if audience.startswith("player:"):
+            player_id = audience.removeprefix("player:")
+            return [player_id] if player_id in player_ids else []
+        return []
+
+    def _materialize_interaction(
+        self,
+        step: InteractionStep,
+        results: dict[str, object],
+    ) -> tuple[InteractionDescriptor, dict[str, object]]:
+        refs = {
+            name: self._resolve_interaction_ref(results, ref.result_key, ref.path)
+            for name, ref in step.input_refs.items()
+        }
+        request = step.request
+        if isinstance(request, ChoiceInteraction) and "options" in refs:
+            source = refs["options"]
+            if not isinstance(source, dict):
+                raise PlanExecutionError("choice options reference must resolve to an object")
+            options = [
+                InteractionOption(
+                    id=str(player_id),
+                    label=self._name(str(player_id)),
+                    payload=value,
+                )
+                for player_id, value in source.items()
+            ]
+            request = ChoiceInteraction.model_validate(
+                {
+                    **request.model_dump(mode="python"),
+                    "options": [option.model_dump(mode="python") for option in options],
+                    "max_selections": min(request.max_selections, len(options)),
+                }
+            )
+        if isinstance(request, CardPickInteraction) and "card_ids" in refs:
+            if not isinstance(refs["card_ids"], list) or not refs["card_ids"]:
+                raise PlanExecutionError("card_ids reference must resolve to a non-empty list")
+            request = CardPickInteraction.model_validate(
+                {**request.model_dump(mode="python"), "card_ids": list(refs["card_ids"])}
+            )
+        return request, refs
+
+    async def _pause_resolution(
+        self,
+        paused: PlanPaused,
+        *,
+        plan: ResolutionPlan,
+        ctx: HookContext,
+        card: dict,
+        correlation_id: str,
+        before_scores: dict[str, int],
+        deck_count_before: int,
+        zone_owner: str | None = None,
+    ) -> None:
+        request, refs = self._materialize_interaction(paused.step, ctx.interactions)
+        audience = self._resolve_interaction_audience(request.audience, ctx.actor_id)
+        if not audience:
+            raise PlanExecutionError("interaction has no eligible audience")
+        interaction_id = uuid.uuid4().hex
+        deadline = datetime.now(UTC) + timedelta(seconds=request.timeout_seconds)
+        self._pending_resolution = PendingResolution(
+            interaction_id=interaction_id,
+            card_id=ctx.card_id or "",
+            actor_id=ctx.actor_id,
+            zone_owner=zone_owner or ctx.actor_id,
+            card=card,
+            plan=plan,
+            cursor=paused.cursor + 1,
+            working_state=paused.working_state,
+            request=request,
+            result_key=paused.step.result_key,
+            resolved_audience=audience,
+            deadline_at=deadline,
+            interactions=ctx.interactions,
+            interaction_refs=refs,
+            correlation_id=correlation_id,
+            chosen_player_id=ctx.chosen_player_id,
+            chosen_card_id=ctx.chosen_card_id,
+            before_scores=before_scores,
+            deck_count_before=deck_count_before,
+        )
+        self._set_card_mechanical_status(ctx.card_id or "", "pending", correlation_id)
+        self._schedule_interaction_timeout()
+        for player_id in audience:
+            await self._send_interaction_request(player_id)
+        await self._broadcast_interaction_progress()
+        await self._broadcast_state()
+
+    def _interaction_progress(self, player_id: str | None = None) -> InteractionProgress:
+        pending = self._pending_resolution
+        if pending is None:
+            return InteractionProgress(expected_count=0, received_count=0, complete=True)
+        return InteractionProgress(
+            expected_count=len(pending.resolved_audience),
+            received_count=len(pending.responses),
+            submitted=player_id in pending.responses if player_id else False,
+            complete=len(pending.responses) >= len(pending.resolved_audience),
+        )
+
+    async def _send_interaction_request(self, player_id: str) -> None:
+        pending = self._pending_resolution
+        if pending is None or player_id not in pending.resolved_audience:
+            return
+        await self.connections.send(
+            player_id,
+            {
+                "type": "interaction_request",
+                "schema_version": 1,
+                "interaction_id": pending.interaction_id,
+                "descriptor": pending.request.model_dump(mode="json"),
+                "deadline_at": pending.deadline_at.isoformat(),
+                "progress": self._interaction_progress(player_id).model_dump(),
+            },
+        )
+
+    async def _broadcast_interaction_progress(self) -> None:
+        pending = self._pending_resolution
+        if pending is None:
+            return
+        for player_id in self.connections.connected_players:
+            await self.connections.send(
+                player_id,
+                {
+                    "type": "interaction_progress",
+                    "schema_version": 1,
+                    "interaction_id": pending.interaction_id,
+                    "deadline_at": pending.deadline_at.isoformat(),
+                    "progress": self._interaction_progress(player_id).model_dump(),
+                },
+            )
+
+    async def replay_pending_interaction(self, player_id: str) -> None:
+        if self._pending_resolution is None:
+            return
+        self._schedule_interaction_timeout()
+        await self._send_interaction_request(player_id)
+
+    def ensure_pending_timeout(self) -> None:
+        """Resume persisted interaction deadlines without waiting for reconnect."""
+        if self._pending_resolution is not None:
+            self._schedule_interaction_timeout()
+
+    def _schedule_interaction_timeout(self) -> None:
+        pending = self._pending_resolution
+        if pending is None:
+            return
+        if (
+            self._interaction_timer is not None
+            and self._interaction_timer is not asyncio.current_task()
+            and not self._interaction_timer.done()
+        ):
+            self._interaction_timer.cancel()
+        delay = max(0.0, (pending.deadline_at - datetime.now(UTC)).total_seconds())
+        self._interaction_timer = asyncio.create_task(self._interaction_timeout(pending.interaction_id, delay))
+
+    async def _interaction_timeout(self, interaction_id: str, delay: float) -> None:
+        await asyncio.sleep(delay)
+        async with self._lock:
+            pending = self._pending_resolution
+            if pending is None or pending.interaction_id != interaction_id:
+                return
+            await self._resume_pending_resolution(timed_out=True)
+            self._notify_change()
+
+    def _validate_interaction_response(
+        self,
+        request: InteractionDescriptor,
+        payload: InteractionResponsePayload,
+    ) -> object:
+        if payload.kind != request.kind:
+            raise ValueError("response kind does not match request")
+        if isinstance(request, NumberInteraction) and isinstance(payload, NumberResponse):
+            if not request.minimum <= payload.value <= request.maximum:
+                raise ValueError("number is outside the allowed range")
+            if request.integer and not payload.value.is_integer():
+                raise ValueError("an integer is required")
+            return int(payload.value) if request.integer else payload.value
+        if isinstance(request, TextInteraction) and isinstance(payload, TextResponse):
+            if len(payload.value) > request.max_length:
+                raise ValueError("text is too long")
+            return payload.value
+        if isinstance(request, ChoiceInteraction) and isinstance(payload, ChoiceResponse):
+            option_ids = payload.option_ids
+            if not request.min_selections <= len(option_ids) <= request.max_selections:
+                raise ValueError("wrong number of choices")
+            allowed = {option.id for option in request.options}
+            if not set(option_ids) <= allowed:
+                raise ValueError("unknown choice")
+            return option_ids
+        if isinstance(request, CardPickInteraction) and isinstance(payload, CardPickResponse):
+            if payload.card_id not in request.card_ids:
+                raise ValueError("card is not selectable")
+            return payload.card_id
+        if isinstance(request, ConfirmInteraction) and isinstance(payload, ConfirmResponse):
+            return payload.confirmed
+        if isinstance(request, DrawingInteraction) and isinstance(payload, DrawingResponse):
+            if len(payload.strokes) > request.max_strokes or any(
+                len(stroke.points) > request.max_points_per_stroke for stroke in payload.strokes
+            ):
+                raise ValueError("drawing exceeds request limits")
+            return [stroke.model_dump() for stroke in payload.strokes]
+        raise ValueError("invalid interaction response")
+
+    async def _handle_interaction_response(self, player_id: str, msg) -> None:
+        pending = self._pending_resolution
+        if pending is None or msg.interaction_id != pending.interaction_id:
+            await self.connections.send(player_id, {"type": "error", "message": "Interaction is no longer active"})
+            return
+        if player_id not in pending.resolved_audience:
+            await self.connections.send(player_id, {"type": "error", "message": "You are not part of this interaction"})
+            return
+        if player_id in pending.responses:
+            await self.connections.send(player_id, {"type": "error", "message": "Response already submitted"})
+            return
+        if datetime.now(UTC) >= pending.deadline_at:
+            await self._resume_pending_resolution(timed_out=True)
+            await self.connections.send(player_id, {"type": "error", "message": "Interaction deadline passed"})
+            return
+        try:
+            self._validate_interaction_response(pending.request, msg.payload)
+        except ValueError as exc:
+            await self.connections.send(player_id, {"type": "error", "message": str(exc)})
+            return
+        pending.responses[player_id] = msg.payload
+        await self._send_interaction_request(player_id)
+        await self._broadcast_interaction_progress()
+        if len(pending.responses) >= len(pending.resolved_audience):
+            await self._resume_pending_resolution(timed_out=False)
+
+    @staticmethod
+    def _default_interaction_value(request: InteractionDescriptor) -> object:
+        if isinstance(request, NumberInteraction):
+            bounded = max(request.minimum, min(0, request.maximum))
+            return (
+                int(bounded)
+                if request.integer and bounded.is_integer()
+                else (math.ceil(request.minimum) if request.integer else bounded)
+            )
+        if isinstance(request, TextInteraction):
+            return ""
+        if isinstance(request, ChoiceInteraction):
+            return []
+        if isinstance(request, CardPickInteraction):
+            return None
+        if isinstance(request, ConfirmInteraction):
+            return False
+        return []
+
+    async def _resume_pending_resolution(self, *, timed_out: bool) -> None:
+        pending = self._pending_resolution
+        if pending is None:
+            return
+        if (
+            self._interaction_timer is not None
+            and self._interaction_timer is not asyncio.current_task()
+            and not self._interaction_timer.done()
+        ):
+            self._interaction_timer.cancel()
+        if timed_out and not pending.responses:
+            await self._fail_pending_resolution("No one responded before the interaction timed out.")
+            return
+        values: dict[str, object] = {}
+        for player_id in pending.resolved_audience:
+            payload = pending.responses.get(player_id)
+            values[player_id] = (
+                self._validate_interaction_response(pending.request, payload)
+                if payload is not None
+                else self._default_interaction_value(pending.request)
+            )
+        interactions = {**pending.interactions, pending.result_key: values}
+        self._pending_resolution = None
+        ctx = HookContext(
+            event=GameEvent.ON_PLAY,
+            actor_id=pending.actor_id,
+            card_id=pending.card_id,
+            chosen_player_id=pending.chosen_player_id,
+            chosen_card_id=pending.chosen_card_id,
+            interactions=interactions,
+            interaction_refs=pending.interaction_refs,
+        )
+        try:
+            completed = await self._execute_plan(
+                self.state,
+                pending.plan,
+                ctx,
+                pending.card,
+                start_cursor=pending.cursor,
+                working_state=pending.working_state,
+            )
+        except PlanPaused as paused:
+            try:
+                await self._pause_resolution(
+                    paused,
+                    plan=pending.plan,
+                    ctx=ctx,
+                    card=pending.card,
+                    correlation_id=pending.correlation_id,
+                    before_scores=pending.before_scores,
+                    deck_count_before=pending.deck_count_before,
+                )
+            except Exception as exc:
+                await self._fail_pending_resolution(
+                    self._public_mechanical_reason(exc, fallback="The next interaction could not be started safely."),
+                    pending=pending,
+                )
+            return
+        except Exception as exc:
+            await self._fail_pending_resolution(
+                self._public_mechanical_reason(exc, fallback="The interaction effect could not be applied safely."),
+                pending=pending,
+            )
+            return
+        await self._commit_pending_resolution(pending, completed)
+
+    async def _fail_pending_resolution(self, reason: str, *, pending: PendingResolution | None = None) -> None:
+        pending = pending or self._pending_resolution
+        if pending is None:
+            return
+        self._pending_resolution = None
+        self._set_card_mechanical_status(pending.card_id, "fallback", pending.correlation_id, reason)
+        destination = self._play_destination(pending.card)
+        owner = pending.zone_owner or pending.actor_id
+        self.state = self.state.move_card(
+            pending.card_id,
+            "hand",
+            destination,
+            from_player_id=owner,
+            to_player_id=owner,
+        )
+        ctx = HookContext(event=GameEvent.ON_PLAY, actor_id=pending.actor_id, card_id=pending.card_id)
+        self.state = apply_effect(
+            self.state,
+            EffectProgram(ops=[CustomNoteOp(note=f"Played {self._card_title(pending.card)} (no mechanical effect)")]),
+            ctx,
+            bus=self._hook_bus(),
+        )
+        await self._log_and_broadcast(f"[interaction] {reason}")
+        await self._complete_interaction_play(pending, game_ending=False)
+
+    async def _commit_pending_resolution(self, pending: PendingResolution, completed: GameState) -> None:
+        self.state = completed
+        self._set_card_mechanical_status(pending.card_id, "applied", pending.correlation_id)
+        await self._log_and_broadcast(self._describe_play(pending.actor_id, pending.card, pending.before_scores))
+        await self._emit_hooks(GameEvent.ON_PLAY, pending.actor_id, card_id=pending.card_id)
+        await self._complete_interaction_play(
+            pending,
+            game_ending=self._end_now() or win_condition_met(self.state),
+        )
+
+    async def _complete_interaction_play(self, pending: PendingResolution, *, game_ending: bool) -> None:
+        await self._after_play_effects(
+            pending.actor_id,
+            pending.card_id,
+            game_ending=game_ending,
+            deck_count_before=pending.deck_count_before,
+            extra_history_event={
+                "kind": "interaction",
+                "actor_id": pending.actor_id,
+                "target_player_ids": pending.resolved_audience,
+                "card_id": pending.card_id,
+                "source": pending.result_key,
+            },
+        )
 
     # ── reaction window ──
     async def _maybe_open_reaction_window(
@@ -1377,24 +1950,52 @@ class Room:
             chosen_player_id=pending.chosen_player_id,
             chosen_card_id=pending.chosen_card_id,
         )
+        correlation_id = str(uuid.uuid4())
         title = self._card_title(pending.card)
         if outcome == "countered":
             await self._log_and_broadcast(f"{self._name(pending.actor_id)}'s {title} was countered!")
-            await self._finish_play(pending.actor_id, pending.card_id, pending.card, pending.plan, ctx, negated=True)
+            await self._finish_play(
+                pending.actor_id,
+                pending.card_id,
+                pending.card,
+                pending.plan,
+                ctx,
+                correlation_id=correlation_id,
+                negated=True,
+            )
         elif outcome == "stolen":
             await self._log_and_broadcast(
                 f"{self._name(reactor_id)} steals {title} from {self._name(pending.actor_id)}!"
             )
             await self._finish_play(
-                pending.actor_id, pending.card_id, pending.card, pending.plan, ctx, steal_to=reactor_id
+                pending.actor_id,
+                pending.card_id,
+                pending.card,
+                pending.plan,
+                ctx,
+                correlation_id=correlation_id,
+                steal_to=reactor_id,
             )
         elif outcome == "redirected":
             await self._log_and_broadcast(f"{title} is redirected — it resolves for {self._name(reactor_id)}!")
             await self._finish_play(
-                pending.actor_id, pending.card_id, pending.card, pending.plan, ctx, redirect_to=reactor_id
+                pending.actor_id,
+                pending.card_id,
+                pending.card,
+                pending.plan,
+                ctx,
+                correlation_id=correlation_id,
+                redirect_to=reactor_id,
             )
         else:
-            await self._finish_play(pending.actor_id, pending.card_id, pending.card, pending.plan, ctx)
+            await self._finish_play(
+                pending.actor_id,
+                pending.card_id,
+                pending.card,
+                pending.plan,
+                ctx,
+                correlation_id=correlation_id,
+            )
 
     async def _handle_reaction_play(self, player_id: str, msg) -> None:
         """A non-active player plays a reaction card into the open window."""
@@ -1439,7 +2040,14 @@ class Room:
         pending.deadline = time.time() + REACTION_WINDOW_SECONDS
         pending.timer = asyncio.create_task(self._reaction_timeout(pending.window_id, REACTION_WINDOW_SECONDS))
 
-        plan = await self._resolve_plan(card_id, card, actor_id=player_id)
+        correlation_id = str(uuid.uuid4())
+        plan = await self._resolve_plan(card_id, card, actor_id=player_id, correlation_id=correlation_id)
+        if any(isinstance(step, InteractionStep) for step in plan.steps):
+            # v1 limitation: a reaction resolving inside the window cannot open
+            # an interaction barrier of its own.
+            pending.claimed_by = None
+            await err(f"{self._card_title(card)} needs player input — reactions cannot open interactions")
+            return
         chosen_player_id = getattr(msg, "chosen_player_id", None)
         chosen_card_id = getattr(msg, "chosen_card_id", None)
         ops = plan.operations()
@@ -1472,6 +2080,7 @@ class Room:
             pending.claimed_by = None  # unclaim; they may retry or pass
             await err(f"Reaction failed: {exc}")
             return
+        self._set_card_mechanical_status(card_id, "applied", correlation_id)
         outcome = {"negate": "countered", "steal_hand": "stolen", "redirect": "redirected"}.get(mode or "", "resolved")
         await self._commit_pending(outcome, reactor_id=player_id, reaction_card_id=card_id)
 
@@ -1617,6 +2226,9 @@ class Room:
                 "creator_id": player_id,
                 "origin": "authored",
                 "has_art": bool(art),
+                "mechanical_status": "pending",
+                "mechanical_reason": None,
+                "correlation_id": str(uuid.uuid4()),
             },
         }
         self.state = self.state.model_copy(update={"cards": new_cards})
@@ -1641,6 +2253,8 @@ class Room:
         from agent.contract import InterpretResult
         from agent.runtime import run_agent
 
+        correlation_id = self.state.cards[card_id]["correlation_id"]
+        self._notify_change()
         await self.connections.broadcast({"type": "brewing", "card_id": card_id})
         # A just-created card's actor IS its creator (player_id authored it).
         try:
@@ -1659,6 +2273,13 @@ class Room:
             "program": str(result.program) if result.program is not None else None,
             "snippet": getattr(result.snippet, "code", None),
             "verdict": result.verdict,
+            "mechanical_status": "applied" if result.verdict == "ok" and result.to_plan().steps else "fallback",
+            "mechanical_reason": (
+                None
+                if result.verdict == "ok" and result.to_plan().steps
+                else "The arbiter could not produce an executable effect."
+            ),
+            "correlation_id": correlation_id,
             **self._canonicalize_interpretation(result),
         }
         merged = {**self.state.cards, card_id: card}
@@ -1673,6 +2294,9 @@ class Room:
                 "verdict": card["verdict"],
                 # Carry the in-character comment for the frontend/D1 (not persisted here).
                 "comment": result.comment,
+                "mechanical_status": card["mechanical_status"],
+                "mechanical_reason": card["mechanical_reason"],
+                "correlation_id": correlation_id,
             }
         )
         # D1: persist the arbiter comment so it survives a reconnect (see
@@ -1683,9 +2307,103 @@ class Room:
         await self._broadcast_state()
 
     async def _handle_preview_card(self, player_id: str, msg) -> None:
+        """Interpret and execute against a clone, returning diagnostics only."""
+        from agent.contract import InterpretResult
+        from agent.runtime import run_agent
+        from agent.tools.dry_run_effect import dry_run_resolution_plan
+
+        correlation_id = str(uuid.uuid4())
+        player_ids = {player.id for player in self.state.players}
+        actor_id = player_id if player_id in player_ids else self.state.active_player().id
+        preview_id = f"preview:{correlation_id}"
+        preview_state = self.state.model_copy(deep=True)
+        preview_state = preview_state.model_copy(
+            update={
+                "cards": {
+                    **preview_state.cards,
+                    preview_id: {
+                        "id": preview_id,
+                        "title": msg.title,
+                        "description": msg.description,
+                        "creator_id": actor_id,
+                        "origin": "authored",
+                    },
+                },
+                "players": [
+                    player.model_copy(update={"hand": [*player.hand, preview_id]}) if player.id == actor_id else player
+                    for player in preview_state.players
+                ],
+            }
+        )
+        try:
+            result: InterpretResult = await asyncio.to_thread(
+                run_agent,
+                msg.title,
+                msg.description,
+                preview_state,
+                actor_id,
+                creator_id=actor_id,
+                card_id=preview_id,
+                allow_persistent_tools=False,
+            )
+            plan = result.to_plan()
+            if result.verdict != "ok" or not plan.steps:
+                status = "fallback"
+                reason = "The arbiter could not produce an executable effect."
+                report = None
+            else:
+                choice_player = next((candidate for candidate in sorted(player_ids) if candidate != actor_id), actor_id)
+                choice_card = next(
+                    (candidate for candidate in preview_state.cards_in_play() if candidate != preview_id),
+                    preview_id,
+                )
+                report = await asyncio.to_thread(
+                    dry_run_resolution_plan,
+                    preview_state,
+                    plan,
+                    actor_id,
+                    preview_id,
+                    chosen_player_id=choice_player,
+                    chosen_card_id=choice_card,
+                )
+                status = "applied" if report["ok"] else "rejected"
+                reason = (
+                    None
+                    if report["ok"]
+                    else self._public_mechanical_reason(
+                        report.get("error"),
+                        fallback="The interpreted effect failed its dry-run.",
+                    )
+                )
+        except Exception as exc:
+            logger.exception("preview failed correlation_id=%s", correlation_id)
+            result = InterpretResult(verdict="invalid")
+            plan = result.to_plan()
+            report = None
+            status = "rejected"
+            reason = self._public_mechanical_reason(exc, fallback="The preview could not be completed.")
+
+        logger.info(
+            "card preview correlation_id=%s status=%s actor_id=%s reason=%s",
+            correlation_id,
+            status,
+            actor_id,
+            reason,
+        )
         await self.connections.send(
             player_id,
-            {"type": "preview_result", "program": None, "snippet": msg.description, "verdict": "ok"},
+            {
+                "type": "preview_result",
+                "program": plan.model_dump_json() if plan.steps else None,
+                "snippet": next(
+                    (step.code for step in plan.steps if isinstance(step, SnippetStep)),
+                    None,
+                ),
+                "verdict": result.verdict,
+                "mechanical_status": status,
+                "mechanical_reason": reason,
+                "correlation_id": correlation_id,
+            },
         )
 
     async def start_epilogue(self) -> None:
@@ -1799,6 +2517,17 @@ class Room:
         snap["can_pass"] = self._can_pass(active_id) if active_id is not None else False
         snap["setup_progress"] = self._setup_progress()
         snap["cards_to_author"] = CARDS_TO_AUTHOR
+        pending = self._pending_resolution
+        snap["pending_interaction"] = (
+            {
+                "interaction_id": pending.interaction_id,
+                "kind": pending.request.kind,
+                "deadline_at": pending.deadline_at.isoformat(),
+                "progress": self._interaction_progress().model_dump(),
+            }
+            if pending is not None
+            else None
+        )
         # Open reaction window, public info only (reconnect-safe source of
         # truth; the reaction_window push is just the immediacy signal). Each
         # client computes its own eligibility from its hand's canonicals.

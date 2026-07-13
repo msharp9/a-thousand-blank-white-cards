@@ -19,7 +19,7 @@ from typing import Any
 logger = logging.getLogger("agent.tools")
 
 
-def get_default_tools() -> list[Any]:
+def get_default_tools(*, allow_persistent_tools: bool = True) -> list[Any]:
     """Return the context-free tools safe to bind on every agent build.
 
     These are the tools whose behaviour does not depend on the specific game in
@@ -38,26 +38,31 @@ def get_default_tools() -> list[Any]:
 
     from agent.tools.agent_memory import get_agent_memory_tools
     from agent.tools.card_rag import get_card_rag_tool
+    from agent.tools.capability_wish import get_capability_wish_tool
     from agent.tools.game_rules import get_game_rules_tool
     from agent.tools.mtg_lookup import get_mtg_lookup_tool
     from agent.tools.read_engine_methods import get_read_engine_methods_tool
     from agent.tools.web_search import get_web_search_tool
 
-    for factory in (
+    factories = [
         get_web_search_tool,
         get_card_rag_tool,
         get_game_rules_tool,
         get_mtg_lookup_tool,
         get_read_engine_methods_tool,
-    ):
+    ]
+    if allow_persistent_tools:
+        factories.append(get_capability_wish_tool)
+    for factory in factories:
         try:
             tools.append(factory())
         except Exception:  # noqa: BLE001 — a missing optional dep must not break agent build
             logger.warning("tool %s unavailable; skipping", getattr(factory, "__name__", factory))
 
-    try:
-        tools.extend(get_agent_memory_tools())
-    except Exception:  # noqa: BLE001
-        logger.warning("agent_memory tools unavailable; skipping")
+    if allow_persistent_tools:
+        try:
+            tools.extend(get_agent_memory_tools())
+        except Exception:  # noqa: BLE001
+            logger.warning("agent_memory tools unavailable; skipping")
 
     return tools

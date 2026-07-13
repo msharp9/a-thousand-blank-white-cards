@@ -89,7 +89,7 @@ def test_canonical_ops_are_included() -> None:
         mock_factory.return_value = lambda query, k: fake_hits
         result = _invoke("steal points")
 
-    assert "ops=" in result
+    assert "canonical=" in result
     assert '"steal_points"' in result
 
 
@@ -99,7 +99,7 @@ def test_missing_canonical_omits_ops_segment() -> None:
         mock_factory.return_value = lambda query, k: fake_hits
         result = _invoke("q")
 
-    assert "ops=" not in result
+    assert "canonical=" not in result
 
 
 def test_unparseable_canonical_omits_ops_segment() -> None:
@@ -108,7 +108,7 @@ def test_unparseable_canonical_omits_ops_segment() -> None:
         mock_factory.return_value = lambda query, k: fake_hits
         result = _invoke("q")
 
-    assert "ops=" not in result
+    assert "canonical=" not in result
 
 
 def test_empty_canonical_omits_ops_segment() -> None:
@@ -117,11 +117,11 @@ def test_empty_canonical_omits_ops_segment() -> None:
         mock_factory.return_value = lambda query, k: fake_hits
         result = _invoke("q")
 
-    assert "ops=" not in result
+    assert "canonical=" not in result
 
 
-def test_long_canonical_is_truncated() -> None:
-    canonical = {"ops": [{"type": "note", "text": "x" * 1000}]}
+def test_top_hit_long_canonical_stays_complete_and_parseable() -> None:
+    canonical = {"steps": [{"kind": "snippet", "code": "def apply(state, ctx):\n    " + "x = 1\n    " * 300}]}
     fake_hits = [
         {
             "title": "Verbose Card",
@@ -134,6 +134,20 @@ def test_long_canonical_is_truncated() -> None:
         mock_factory.return_value = lambda query, k: fake_hits
         result = _invoke("q")
 
-    ops_segment = result.split("ops=", 1)[1]
-    assert ops_segment.endswith("…")
-    assert len(ops_segment) <= 500
+    canonical_segment = result.split("canonical=", 1)[1]
+    assert json.loads(canonical_segment) == canonical
+    assert "…" not in canonical_segment
+
+
+def test_lower_ranked_canonical_is_omitted_whole_when_budget_is_spent() -> None:
+    huge = json.dumps({"steps": [{"kind": "snippet", "code": "x" * 7_900}]})
+    fake_hits = [
+        {"title": "Top", "description": "desc", "score": 0.9, "canonical": huge},
+        {"title": "Second", "description": "desc", "score": 0.8, "canonical": huge},
+    ]
+    with patch("agent.tools.card_rag.dense_retriever") as mock_factory:
+        mock_factory.return_value = lambda query, k: fake_hits
+        result = _invoke("q")
+
+    assert result.count("canonical=") == 1
+    assert "canonical omitted to preserve the result budget" in result

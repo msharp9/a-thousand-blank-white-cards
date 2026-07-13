@@ -15,16 +15,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { CreateCardDialog } from "@/components/create-card-dialog";
 import { EffectLog } from "@/components/effect-log";
+import { DynamicStatePanel } from "@/components/dynamic-state-panel";
 import { EpilogueView } from "@/components/epilogue";
 import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
 import { HouseRulesZone } from "@/components/house-rules-zone";
-import { PlayerAvatar } from "@/components/player-avatar";
+import { InteractionPanel } from "@/components/interaction-panel";
 import { ReactionWindow } from "@/components/reaction-window";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { ResultsScreen } from "@/components/results-screen";
 import { SetupPhase } from "@/components/setup-phase";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
 import { getCardArtUrl } from "@/lib/art";
+import { interactionResponseMessage } from "@/lib/interactions";
 import { playerColor } from "@/lib/players";
 import type {
   CardSnapshot,
@@ -128,6 +131,8 @@ export default function RoomPage() {
     promptChoice,
     clearPromptChoice,
     epilogueCards,
+    interactionRequest,
+    interactionProgress,
     reactionResult,
     send,
   } = useGameSocket(nameSet ? code : "", name);
@@ -195,7 +200,8 @@ export default function RoomPage() {
   // Open reaction window (a play suspended while others may counter it). The
   // snapshot's pending_play is the source of truth; each client derives its
   // own eligibility from the reaction cards in its hand.
-  const pendingPlay = phase === "playing" ? gameState?.pending_play : null;
+  const pendingPlay =
+    phase === "playing" ? (gameState?.pending_play ?? null) : null;
   const pendingCard = pendingPlay
     ? gameState?.cards[pendingPlay.card_id]
     : undefined;
@@ -203,8 +209,7 @@ export default function RoomPage() {
     gameState?.players.find((p) => p.id === pendingPlay?.actor_id)?.name ??
     "Someone";
   const myReactionCards = useMemo(
-    () =>
-      myHandCards.filter((c) => c.canonical?.trigger === "on_reaction"),
+    () => myHandCards.filter((c) => c.canonical?.trigger === "on_reaction"),
     [myHandCards],
   );
   const reactionResultText = useMemo(() => {
@@ -301,6 +306,32 @@ export default function RoomPage() {
             <XIcon />
             <span className="sr-only">Dismiss</span>
           </Button>
+        </div>
+      )}
+      <InteractionPanel
+        pending={gameState?.pending_interaction}
+        request={interactionRequest}
+        progressMessage={interactionProgress}
+        cards={gameState?.cards ?? {}}
+        onSubmit={(interactionId, payload) =>
+          send(interactionResponseMessage(interactionId, payload))
+        }
+      />
+      {pendingPlay && (
+        <ReactionWindow
+          pending={pendingPlay}
+          pendingCard={pendingCard}
+          actorName={pendingActorName}
+          myReactionCards={myReactionCards}
+          isActor={pendingPlay.actor_id === myPlayerId}
+          isSpectator={isSpectator}
+          send={send}
+          roomCode={code}
+        />
+      )}
+      {reactionResultText && (
+        <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit rotate-[0.4deg] rounded-xl border-2 border-ink bg-white px-4 py-2 font-hand text-lg sticker-shadow-sm">
+          {reactionResultText}
         </div>
       )}
       <header className="sticky top-0 z-40 flex items-center gap-3.5 border-b-[2.5px] border-ink bg-white px-5 py-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)]">
@@ -401,6 +432,7 @@ export default function RoomPage() {
         {gameState && phase === "playing" && (
           <div className="flex min-h-full flex-col">
             <GameTable gameState={gameState} myPlayerId={myPlayerId ?? ""} />
+            <DynamicStatePanel gameState={gameState} />
 
             {/* felt table: center zone + deck/action dock */}
             <div className="mx-4 my-2.5 flex min-h-[280px] flex-1 items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)]">
@@ -441,11 +473,6 @@ export default function RoomPage() {
                   )}
                   <p className="mt-1.5 font-hand text-[15px] text-white">
                     Deck · {gameState.deck.length}
-                  </p>
-                  <p className="font-hand text-xs text-white/70">
-                    {gameState.direction === 1
-                      ? "→ clockwise"
-                      : "← counter-clockwise"}
                   </p>
                 </div>
                 {!isSpectator && (
@@ -571,24 +598,6 @@ export default function RoomPage() {
             )}
 
             <EffectLog log={log} brewing={brewing} />
-
-            {pendingPlay && (
-              <ReactionWindow
-                pending={pendingPlay}
-                pendingCard={pendingCard}
-                actorName={pendingActorName}
-                myReactionCards={myReactionCards}
-                isActor={pendingPlay.actor_id === myPlayerId}
-                isSpectator={isSpectator}
-                send={send}
-                roomCode={code}
-              />
-            )}
-            {reactionResultText && (
-              <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit rotate-[0.4deg] rounded-xl border-2 border-ink bg-white px-4 py-2 font-hand text-lg sticker-shadow-sm">
-                {reactionResultText}
-              </div>
-            )}
           </div>
         )}
 

@@ -16,7 +16,7 @@ def _load(filename: str) -> list[dict]:
 
 class TestGoldCards:
     def test_count(self) -> None:
-        assert len(_load("seed_cards_gold.json")) == 25
+        assert len(_load("seed_cards_gold.json")) == 27
 
     def test_all_parse_as_gold(self) -> None:
         for d in _load("seed_cards_gold.json"):
@@ -35,9 +35,14 @@ class TestGoldCards:
         cards = [parse_seed_card(d) for d in _load("seed_cards_gold.json")]
         gold = [c for c in cards if isinstance(c, GoldCard)]
         assert any(c.canonical.ops for c in gold)
-        # Effect coverage beyond plain point ops: executable sandbox code, or a
-        # legacy prose snippet degraded to a custom_note by the v1→v2 shim.
-        assert any(c.canonical.sandbox or any(op.op == "custom_note" for op in (c.canonical.ops or [])) for c in gold)
+        # Effect coverage beyond plain point ops: ordered plans with executable
+        # snippet steps, standalone sandbox code, or a legacy prose snippet
+        # degraded to a custom_note by the v1→v2 shim.
+        assert any(any(step.get("kind") == "snippet" for step in (c.canonical.steps or [])) for c in gold)
+        assert any(
+            c.canonical.sandbox or c.canonical.steps or any(op.op == "custom_note" for op in (c.canonical.ops or []))
+            for c in gold
+        )
 
 
 class TestFillerCards:
@@ -56,7 +61,7 @@ class TestFillerCards:
 
 class TestCombinedFile:
     def test_count(self) -> None:
-        assert len(_load("seed_cards.json")) == 65
+        assert len(_load("seed_cards.json")) == 67
 
     def test_all_parse(self) -> None:
         for d in _load("seed_cards.json"):

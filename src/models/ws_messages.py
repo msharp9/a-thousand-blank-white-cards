@@ -12,6 +12,12 @@ from typing import Annotated, Literal, Union
 from pydantic import AfterValidator, BaseModel, Field
 
 from models.card import CARD_ART_PREFIX, MAX_CARD_ART_BYTES, MAX_CARD_DESCRIPTION, MAX_CARD_TITLE, decode_card_art
+from models.interactions import (
+    Identifier,
+    InteractionDescriptor,
+    InteractionProgress,
+    InteractionResponsePayload,
+)
 
 # Length-bounded card text, enforced on every inbound authoring message via the
 # ClientMsg TypeAdapter in board.ws. Limits live in models.card (single source).
@@ -164,6 +170,13 @@ class EpilogueFinalizeMsg(BaseModel):
     type: Literal["epilogue_finalize"] = "epilogue_finalize"
 
 
+class InteractionResponseMsg(BaseModel):
+    type: Literal["interaction_response"] = "interaction_response"
+    schema_version: Literal[1] = 1
+    interaction_id: Identifier
+    payload: InteractionResponsePayload
+
+
 ClientMsg = Annotated[
     Union[
         JoinMsg,
@@ -179,6 +192,7 @@ ClientMsg = Annotated[
         EpilogueVoteMsg,
         EpilogueDoneMsg,
         EpilogueFinalizeMsg,
+        InteractionResponseMsg,
     ],
     Field(discriminator="type"),
 ]
@@ -208,6 +222,9 @@ class CardInterpretedMsg(BaseModel):
     # In-character comment from the agent. Optional so pre-agent callers / older
     # clients stay compatible; D1/D2 consume it (D1 persists it to the game log).
     comment: str = ""
+    mechanical_status: Literal["pending", "applied", "fallback", "rejected"] = "applied"
+    mechanical_reason: str | None = None
+    correlation_id: str
 
 
 class PreviewResultMsg(BaseModel):
@@ -215,6 +232,9 @@ class PreviewResultMsg(BaseModel):
     program: str | None = None
     snippet: str | None = None
     verdict: str
+    mechanical_status: Literal["applied", "fallback", "rejected"]
+    mechanical_reason: str | None = None
+    correlation_id: str
 
 
 class PromptChoiceMsg(BaseModel):
@@ -224,6 +244,23 @@ class PromptChoiceMsg(BaseModel):
     card_id: str
     prompt: str
     choices: list[dict]  # list of {player_id, name}
+
+
+class InteractionRequestMsg(BaseModel):
+    type: Literal["interaction_request"] = "interaction_request"
+    schema_version: Literal[1] = 1
+    interaction_id: Identifier
+    descriptor: InteractionDescriptor
+    deadline_at: str
+    progress: InteractionProgress
+
+
+class InteractionProgressMsg(BaseModel):
+    type: Literal["interaction_progress"] = "interaction_progress"
+    schema_version: Literal[1] = 1
+    interaction_id: Identifier
+    deadline_at: str
+    progress: InteractionProgress
 
 
 class EpilogueMsg(BaseModel):
@@ -274,6 +311,8 @@ ServerMsg = Union[
     CardInterpretedMsg,
     PreviewResultMsg,
     PromptChoiceMsg,
+    InteractionRequestMsg,
+    InteractionProgressMsg,
     EpilogueMsg,
     ErrorMsg,
     BrewingMsg,

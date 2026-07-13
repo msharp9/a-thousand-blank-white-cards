@@ -5,6 +5,9 @@ import type {
   CardSnapshot,
   ClientMsg,
   GameStateSnapshot,
+  InteractionProgressMsg,
+  InteractionRequestMsg,
+  PreviewResult,
   PromptChoiceMsg,
   ReactionResultMsg,
   ServerMsg,
@@ -51,11 +54,7 @@ export interface GameSocketState {
   gameState: GameStateSnapshot | null;
   log: string[];
   brewing: string | null;
-  previewResult: {
-    program?: string | null;
-    snippet?: string | null;
-    verdict: string;
-  } | null;
+  previewResult: PreviewResult | null;
   // A hard connection rejection (close code >= 4000, or a fatal socket error).
   // Retrying can never fix it, so the room page tears down to a "back to lobby"
   // screen. Cleared only when a fresh socket opens successfully.
@@ -77,6 +76,8 @@ export interface GameSocketState {
   // blanks or shipped seed cards), broadcast once when the epilogue opens.
   // Empty until the 'epilogue' message arrives.
   epilogueCards: CardSnapshot[];
+  interactionRequest: InteractionRequestMsg | null;
+  interactionProgress: InteractionProgressMsg | null;
   // The last reaction window outcome ("countered!", "stolen", …), kept briefly
   // so the UI can flash it. The open window itself is NOT stored here — it is
   // driven by gameState.pending_play (the reconnect-safe source of truth).
@@ -102,6 +103,10 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     null,
   );
   const [epilogueCards, setEpilogueCards] = useState<CardSnapshot[]>([]);
+  const [interactionRequest, setInteractionRequest] =
+    useState<InteractionRequestMsg | null>(null);
+  const [interactionProgress, setInteractionProgress] =
+    useState<InteractionProgressMsg | null>(null);
   const [reactionResult, setReactionResult] =
     useState<ReactionResultMsg | null>(null);
   const reactionResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -163,6 +168,33 @@ export function useGameSocket(code: string, name: string): GameSocketState {
         switch (msg.type) {
           case "state":
             setGameState(msg.state);
+            if (msg.state.pending_interaction) {
+              const pending = msg.state.pending_interaction;
+              setInteractionRequest((current) =>
+                current?.interaction_id === pending.interaction_id
+                  ? current
+                  : null,
+              );
+              setInteractionProgress((current) => ({
+                type: "interaction_progress",
+                schema_version: 1,
+                interaction_id: pending.interaction_id,
+                deadline_at: pending.deadline_at,
+                progress: {
+                  ...pending.progress,
+                  // Shared snapshots deliberately cannot personalize this bit.
+                  // Preserve an already-known submission across reconnect until
+                  // the targeted replayed request refreshes it.
+                  submitted:
+                    current?.interaction_id === pending.interaction_id
+                      ? current.progress.submitted
+                      : false,
+                },
+              }));
+            } else {
+              setInteractionRequest(null);
+              setInteractionProgress(null);
+            }
             // Hydrate the effect log from the authoritative state snapshot so a
             // refresh/reconnect restores full history. The backend keeps
             // state.log in sync with every effect_applied it broadcasts, so
@@ -187,14 +219,28 @@ export function useGameSocket(code: string, name: string): GameSocketState {
               program: msg.program,
               snippet: msg.snippet,
               verdict: msg.verdict,
+              mechanical_status: msg.mechanical_status,
+              mechanical_reason: msg.mechanical_reason,
+              correlation_id: msg.correlation_id,
             });
             break;
           case "prompt_choice":
             setBrewing(null);
             setPromptChoice(msg);
             break;
-          case "epilogue":
-            setEpilogueCards(msg.cards);
+          case "interaction_request":
+            setBrewing(null);
+            setInteractionRequest(msg);
+            setInteractionProgress({
+              type: "interaction_progress",
+              schema_version: 1,
+              interaction_id: msg.interaction_id,
+              deadline_at: msg.deadline_at,
+              progress: msg.progress,
+            });
+            break;
+          case "interaction_progress":
+            setInteractionProgress(msg);
             break;
           case "reaction_window":
             // The window UI is driven by the state snapshot's pending_play
@@ -214,6 +260,9 @@ export function useGameSocket(code: string, name: string): GameSocketState {
               reactionResultTimeoutRef.current = null;
               setReactionResult(null);
             }, REACTION_RESULT_MS);
+            break;
+          case "epilogue":
+            setEpilogueCards(msg.cards);
             break;
           case "error":
             // Message-level errors are recoverable gameplay/validation notices
@@ -301,6 +350,8 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     promptChoice,
     clearPromptChoice,
     epilogueCards,
+    interactionRequest,
+    interactionProgress,
     reactionResult,
     send,
   };

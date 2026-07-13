@@ -636,5 +636,110 @@
       ],
       "magnitude_sign": "neutral"
     }
+  },
+  {
+    "title": "Chess Master",
+    "description": "Draw 2 cards, then gain one point for every card now in your hand.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "self",
+      "placement": "discard",
+      "trigger_event": "on_play",
+      "magnitude_sign": "positive",
+      "steps": [
+        {"kind": "ops", "ops": [{"op": "draw_cards", "target": "self", "amount": 2}]},
+        {"kind": "snippet", "code": "def apply(state, ctx):\n    state.add_points('self', state.hand_size(state.actor_id))\n"}
+      ]
+    }
+  },
+  {
+    "title": "Total Chaos",
+    "description": "Gain 5, everyone else loses 3 and skips, take an extra turn, and destroy all cards in play.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "discard",
+      "trigger_event": "on_play",
+      "magnitude_sign": "positive",
+      "ops": [
+        {"op": "add_points", "args": {"target": "self", "amount": 5}},
+        {"op": "subtract_points", "args": {"target": "all_others", "amount": 3}},
+        {"op": "skip_turn", "args": {"target": "all_others"}},
+        {"op": "extra_turn", "args": {"target": "self"}},
+        {"op": "destroy_card", "args": {"card_target": "all_in_play"}}
+      ]
+    }
+  },
+  {
+    "title": "Most Cards Drawn Wins",
+    "description": "End the game. Whoever has drawn the most cards wins; ties share the win.",
+    "human_canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "discard",
+      "trigger_event": "on_play",
+      "magnitude_sign": "neutral",
+      "steps": [
+        {"kind": "snippet", "code": "def apply(state, ctx):\n    totals = state.draw_totals()\n    best = max(totals.values())\n    state.end_game(['id:' + pid for pid, total in totals.items() if total == best])\n"}
+      ]
+    }
+  },
+  {
+    "title": "Basic Uno",
+    "description": "Use Uno rules: no automatic draw and the first empty hand wins immediately.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "magnitude_sign": "neutral",
+      "ops": [
+        {"op": "set_win_condition", "args": {"kind": "empty_hand"}},
+        {"op": "set_rule", "args": {"path": "end_condition.type", "value": "empty_hand"}},
+        {"op": "change_draw_count", "args": {"amount": 0}}
+      ]
+    }
+  },
+  {
+    "title": "Spicy Uno",
+    "description": "Use basic Uno rules and add colored Draw 2, Draw 4, and Reverse cards to the deck.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "magnitude_sign": "neutral",
+      "steps": [
+        {"kind": "ops", "ops": [
+          {"op": "set_win_condition", "kind": "empty_hand"},
+          {"op": "set_rule", "path": "end_condition.type", "value": "empty_hand"},
+          {"op": "change_draw_count", "amount": 0},
+          {"op": "create_card", "title": "Draw 2", "ops": [{"op": "draw_cards", "args": {"target": "right_neighbor", "amount": 2}}], "attributes": {"color": "red"}},
+          {"op": "create_card", "title": "Draw 4", "ops": [{"op": "draw_cards", "args": {"target": "right_neighbor", "amount": 4}}], "attributes": {"color": "wild"}},
+          {"op": "create_card", "title": "Reverse", "ops": [{"op": "reverse_order", "args": {}}], "attributes": {"color": "red"}}
+        ]}
+      ]
+    }
+  },
+  {
+    "title": "Wild Uno",
+    "description": "Use Uno ending rules and enforce color alignment on every play.",
+    "human_canonical": {
+      "timing": "modifier",
+      "target": "all",
+      "placement": "center",
+      "trigger_event": "on_play",
+      "magnitude_sign": "neutral",
+      "steps": [
+        {"kind": "ops", "ops": [
+          {"op": "set_win_condition", "kind": "empty_hand"},
+          {"op": "set_rule", "path": "end_condition.type", "value": "empty_hand"},
+          {"op": "change_draw_count", "amount": 0},
+          {"op": "set_rule", "path": "extra.current_color", "value": "red"},
+          {"op": "register_hook", "event": "on_validate_play", "scope": "center", "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"},
+          {"op": "register_hook", "event": "on_play", "scope": "center", "code": "def apply(state, ctx):\n    card = state.card(ctx['card_id'])\n    if card:\n        color = card.get('attributes', {}).get('color')\n        if color:\n            state.set_rule('extra.current_color', color)\n"}
+        ]}
+      ]
+    }
   }
 ]

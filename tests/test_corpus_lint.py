@@ -17,6 +17,10 @@ import pathlib
 import pytest
 
 from engine.compile import compile_card
+from engine.compile import compile_card_plan
+from engine.history import append_history_event
+from agent.tools.dry_run_effect import dry_run_resolution_plan
+from models.game_state import GameState, Player
 
 DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 
@@ -61,3 +65,50 @@ def test_card_ops_compile_without_drift(
         compile_card({"id": "lint", "title": title, "ops": ops})
     drift = [record.getMessage() for record in caplog.records]
     assert not drift, f"{filename}::{title} triggered compiler drift warnings: {drift}"
+
+
+def _representative_state(card: dict) -> GameState:
+    state = GameState(
+        room_code="CORPUS",
+        players=[
+            Player(id="p1", name="Alice", score=7, hand=["gold", "hand-card"]),
+            Player(id="p2", name="Bob", score=4, hand=["target-card"]),
+        ],
+        cards={
+            "gold": {**card, "id": "gold"},
+            "hand-card": {"id": "hand-card", "title": "Hand"},
+            "target-card": {"id": "target-card", "title": "Target"},
+            "in-play": {"id": "in-play", "title": "In play"},
+        },
+        deck=[f"deck-{index}" for index in range(20)],
+        house_rules=["in-play"],
+        phase="playing",
+    )
+    state = append_history_event(state, "draw", actor_id="p1", target_player_ids=["p1"], amount=4)
+    return append_history_event(state, "draw", actor_id="p2", target_player_ids=["p2"], amount=2)
+
+
+@pytest.mark.parametrize("card", json.loads((DATA_DIR / "seed_cards_gold.json").read_text()), ids=lambda c: c["title"])
+def test_every_gold_canonical_compiles_and_dry_runs_end_to_end(card: dict) -> None:
+    plan = compile_card_plan({**card, "id": "gold"})
+
+    assert plan is not None and plan.steps, card["title"]
+    report = dry_run_resolution_plan(
+        _representative_state(card),
+        plan,
+        "p1",
+        "gold",
+        chosen_player_id="p2",
+        chosen_card_id="target-card",
+    )
+
+    assert report["ok"] is True, f"{card['title']}: {report}"
+    assert report["emitted_ops"], card["title"]
+
+
+def test_combined_seed_is_generated_from_gold_and_fillers() -> None:
+    gold = json.loads((DATA_DIR / "seed_cards_gold.json").read_text())
+    fillers = json.loads((DATA_DIR / "seed_cards_fillers.json").read_text())
+    combined = json.loads((DATA_DIR / "seed_cards.json").read_text())
+
+    assert combined == gold + fillers

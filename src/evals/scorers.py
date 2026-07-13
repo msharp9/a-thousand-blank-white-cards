@@ -25,12 +25,16 @@ def _judge() -> JudgeLLM:
 def _effect_summary(output: dict[str, Any]) -> str:
     """Extract a text summary of the agent's generated effect for the judge.
 
-    Prefers the structured effect_program, then a generated snippet body. When the
+    Prefers the complete ordered resolution_plan, then the legacy structured
+    effect_program, then a generated snippet body. When the
     agent produced neither (e.g. an "invalid" verdict), fall back to the verdict +
     in-character comment so the judge still has something to score. The old graph's
     "classification" dict no longer exists (the single agent has no classify step),
     so it is not consulted here.
     """
+    plan = output.get("resolution_plan")
+    if plan:
+        return json.dumps(plan, default=str)
     ep = output.get("effect_program")
     if ep:
         return json.dumps(ep, default=str)
@@ -66,8 +70,27 @@ intent_match_judge = create_scorer(
 
 
 def _dsl_validity_scorer(context: ScorerContext) -> Score:
-    """1.0 if output contains a non-empty EffectProgram parseable by Pydantic, else 0.0."""
+    """Validate a non-empty ordered plan, falling back to legacy EffectProgram."""
     output = context.output or {}
+    raw_plan = output.get("resolution_plan")
+    if raw_plan:
+        try:
+            from engine.sandbox.validate import validate_snippet
+            from models.effects import RegisterHookOp, ResolutionPlan, SnippetStep
+
+            plan = ResolutionPlan.model_validate(raw_plan) if isinstance(raw_plan, dict) else raw_plan
+            if not plan.steps:
+                return Score(score=0.0, metadata={"reason": "empty ResolutionPlan"})
+            codes = [step.code for step in plan.steps if isinstance(step, SnippetStep)]
+            codes.extend(op.code for op in plan.operations() if isinstance(op, RegisterHookOp))
+            for code in codes:
+                validation = validate_snippet(code)
+                if not validation.ok:
+                    return Score(score=0.0, metadata={"reason": validation.error or "invalid snippet"})
+            return Score(score=1.0)
+        except Exception as exc:
+            return Score(score=0.0, metadata={"reason": str(exc)})
+
     ep = output.get("effect_program")
     if not ep:
         return Score(score=0.0, metadata={"reason": "no effect_program in output"})
@@ -86,7 +109,7 @@ def _dsl_validity_scorer(context: ScorerContext) -> Score:
 
 dsl_validity = create_scorer(
     name="dsl_validity",
-    description="Structural check: is the effect_program a valid non-empty EffectProgram?",
+    description="Structural check: is the ordered plan (or legacy program) valid and non-empty?",
     scorer=_dsl_validity_scorer,
 )
 

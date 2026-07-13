@@ -118,6 +118,14 @@ def _build_reference() -> str:
         "Before returning any snippet or hook, call dry_run_effect with the code or complete plan. "
         "No imports, I/O, private attributes, exec, eval, or open are allowed."
     )
+    parts.append(
+        "ResolutionPlan may also pause at an interaction step: "
+        "{'kind':'interaction','result_key':'bids','request':{'kind':'number','prompt':'Bid',"
+        "'audience':'all','sealed':true}}. Kinds: choice, number, text, card_pick, confirm, drawing. "
+        "Audiences: active, all, all_others, player:<id>. Later snippets read "
+        "ctx['interactions'][result_key]. Use input_refs {'options':{'result_key':'drawings','path':[]}} "
+        "to turn prior submissions into options for a chained vote."
+    )
     return "\n".join(parts)
 
 

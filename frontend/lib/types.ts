@@ -75,6 +75,28 @@ export type EpilogueFinalizeMsg = { type: "epilogue_finalize" };
 // vote. Only valid while phase === "results".
 export type EpilogueStartMsg = { type: "epilogue_start" };
 
+export type DrawingPoint = { x: number; y: number };
+export type DrawingStroke = {
+  color: string;
+  width: number;
+  points: DrawingPoint[];
+};
+
+export type InteractionResponsePayload =
+  | { kind: "choice"; option_ids: string[] }
+  | { kind: "number"; value: number }
+  | { kind: "text"; value: string }
+  | { kind: "card_pick"; card_id: string }
+  | { kind: "confirm"; confirmed: boolean }
+  | { kind: "drawing"; strokes: DrawingStroke[] };
+
+export type InteractionResponseMsg = {
+  type: "interaction_response";
+  schema_version: 1;
+  interaction_id: string;
+  payload: InteractionResponsePayload;
+};
+
 export type ClientMsg =
   | JoinMsg
   | StartMsg
@@ -88,7 +110,8 @@ export type ClientMsg =
   | EpilogueStartMsg
   | EpilogueVoteMsg
   | EpilogueDoneMsg
-  | EpilogueFinalizeMsg;
+  | EpilogueFinalizeMsg
+  | InteractionResponseMsg;
 
 // ─── server → client ──────────────────────────────────────────────────────
 
@@ -101,6 +124,10 @@ export type CardSnapshot = {
   program?: string | null;
   snippet?: string | null;
   verdict?: string;
+  attributes?: Record<string, unknown>;
+  mechanical_status?: MechanicalStatus;
+  mechanical_reason?: string | null;
+  correlation_id?: string | null;
   // True while this is an un-authored blank card (empty title/description). The
   // game seeds blanks into the deck; a blank sits in hand as blank and is
   // authored when played. Cleared once the player fills it in on play.
@@ -130,6 +157,43 @@ export type PlayerSnapshot = {
   // table). Resolve ids against GameStateSnapshot.cards to render them.
   in_play: string[];
   connected: boolean;
+  conditions: Record<string, unknown>;
+};
+
+export type MechanicalStatus =
+  | "pending"
+  | "applied"
+  | "fallback"
+  | "rejected"
+  // A reaction negated or stole the play before it could resolve.
+  | "countered";
+
+export type WinConditionSnapshot = {
+  kind: string;
+  threshold?: number | null;
+};
+
+export type EndConditionSnapshot = {
+  type: string;
+  threshold?: number | null;
+};
+
+export type RulesSnapshot = {
+  draw: number;
+  play: number;
+  cannot_play: Record<string, unknown>;
+  end_condition: EndConditionSnapshot;
+  win_condition: WinConditionSnapshot;
+  skip_predicate?: string | null;
+  extra: Record<string, unknown>;
+};
+
+export type HookSnapshot = {
+  id: string;
+  source_card_id: string;
+  event: string;
+  scope: "player" | "center";
+  owner_id?: string | null;
 };
 
 // A late joiner who watches but never plays (joined after the game left the
@@ -157,12 +221,14 @@ export type GameStateSnapshot = {
   players: PlayerSnapshot[];
   spectators: SpectatorSnapshot[];
   turn_index: number;
-  direction: 1 | -1;
+  turn_order: string[];
+  rules: RulesSnapshot;
   draw_count: number;
   deck: string[];
   discard: string[];
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
+  hooks: HookSnapshot[];
   // Whether the active player has taken their draw step this turn. The Draw
   // button shows while false; the Play action is gated until true.
   has_drawn: boolean;
@@ -181,12 +247,13 @@ export type GameStateSnapshot = {
   // Populated once the epilogue vote finalizes (phase === "ended"); null
   // before then, including during the pre-vote "results" phase.
   epilogue_result: EpilogueResultSummary | null;
+  log: string[];
+  pending_interaction?: PendingInteractionSummary | null;
   // The play currently suspended behind an open reaction window (null when no
   // window is open). Reconnect-safe source of truth; the reaction_window push
   // is just the immediacy signal. Clients compute their own eligibility from
   // their hand's canonical.trigger === "on_reaction".
-  pending_play: PendingPlaySnapshot | null;
-  log: string[];
+  pending_play?: PendingPlaySnapshot | null;
 };
 
 export type PendingPlaySnapshot = {
@@ -194,6 +261,20 @@ export type PendingPlaySnapshot = {
   card_id: string;
   actor_id: string;
   deadline_epoch_ms: number;
+};
+
+export type InteractionProgress = {
+  expected_count: number;
+  received_count: number;
+  submitted: boolean;
+  complete: boolean;
+};
+
+export type PendingInteractionSummary = {
+  interaction_id: string;
+  kind: string;
+  deadline_at: string;
+  progress: InteractionProgress;
 };
 
 export type StateMsg = { type: "state"; state: GameStateSnapshot };
@@ -204,6 +285,9 @@ export type CardInterpretedMsg = {
   program?: string | null;
   snippet?: string | null;
   verdict: string;
+  mechanical_status?: MechanicalStatus;
+  mechanical_reason?: string | null;
+  correlation_id?: string | null;
   // A short in-character quip from the AI arbiter about the interpreted card.
   // Persisted separately: the backend also appends it to state.log with a "🤖 "
   // prefix and broadcasts it via effect_applied, so the frontend renders it from
@@ -216,7 +300,12 @@ export type PreviewResultMsg = {
   program?: string | null;
   snippet?: string | null;
   verdict: string;
+  mechanical_status?: MechanicalStatus;
+  mechanical_reason?: string | null;
+  correlation_id?: string | null;
 };
+
+export type PreviewResult = Omit<PreviewResultMsg, "type">;
 // A single selectable option in a prompt_choice. Player-target prompts carry a
 // `player_id`; card-target prompts carry a `card_id`. Exactly one is present,
 // which tells the UI which field to send back on the follow-up play.
@@ -234,6 +323,51 @@ export type PromptChoiceMsg = {
 export type EpilogueMsg = { type: "epilogue"; cards: CardSnapshot[] };
 export type ErrorMsg = { type: "error"; message: string };
 export type BrewingMsg = { type: "brewing"; card_id: string };
+
+export type InteractionOption = {
+  id: string;
+  label: string;
+  payload?: unknown;
+};
+
+export type InteractionDescriptor = {
+  schema_version: 1;
+  kind: string;
+  prompt: string;
+  audience: string;
+  sealed: boolean;
+  timeout_seconds: number;
+  options?: InteractionOption[];
+  min_selections?: number;
+  max_selections?: number;
+  minimum?: number;
+  maximum?: number;
+  integer?: boolean;
+  max_length?: number;
+  card_ids?: string[];
+  confirm_label?: string;
+  decline_label?: string;
+  max_strokes?: number;
+  max_points_per_stroke?: number;
+};
+
+export type InteractionRequestMsg = {
+  type: "interaction_request";
+  schema_version: 1;
+  interaction_id: string;
+  descriptor: InteractionDescriptor;
+  deadline_at: string;
+  progress: InteractionProgress;
+};
+
+export type InteractionProgressMsg = {
+  type: "interaction_progress";
+  schema_version: 1;
+  interaction_id: string;
+  deadline_at: string;
+  progress: InteractionProgress;
+};
+
 // A play opened a reaction window: the pending card is in the state snapshot
 // (pending_play); this push carries the deadline for the countdown.
 export type ReactionWindowMsg = {
@@ -262,5 +396,7 @@ export type ServerMsg =
   | EpilogueMsg
   | ErrorMsg
   | BrewingMsg
+  | InteractionRequestMsg
+  | InteractionProgressMsg
   | ReactionWindowMsg
   | ReactionResultMsg;

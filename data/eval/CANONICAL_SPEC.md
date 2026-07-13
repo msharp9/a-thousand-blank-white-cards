@@ -34,17 +34,24 @@ purely decorative with no describable content.
   "venue":     "all",          // see VENUE — required, no implicit default
   "trigger":   null,           // see TRIGGER
   "ops":       [ ... ] | null, // see OPS
+  "steps":     [ ... ] | null, // see STEPS — ordered plans / interaction barriers
   "sandbox":   "def apply(state, ctx): ...",  // see SANDBOX
   "magnitude_sign": "positive" // eval datasets only, optional
 }
 ```
 
-**Every card carries BOTH `ops` and `sandbox`.** `sandbox` is always executable
-code (never prose). `ops` is `null` only when the effect cannot be expressed as
-structured ops. Rationale: cards are RAG exemplars — when the agent meets a card
-too complex for ops, it composes sandbox code by studying how simple cards do
-each piece (a card that draws, a card that counts a hand, a card that adds
-points → "Chess Master: draw 2, then gain points equal to your hand size").
+**Every card carries BOTH an executable form (`ops` and/or `steps`) and
+`sandbox`.** `sandbox` is always executable code (never prose). `ops` is `null`
+only when the effect cannot be expressed as structured ops. Rationale: cards
+are RAG exemplars — when the agent meets a card too complex for ops, it
+composes sandbox code by studying how simple cards do each piece (a card that
+draws, a card that counts a hand, a card that adds points → "Chess Master:
+draw 2, then gain points equal to your hand size").
+
+The one exception: **interaction-step cards** (auctions, votes, drawing
+contests — any card whose `steps` include `kind: "interaction"`) carry
+`sandbox: null`. A single sandbox function runs to completion and cannot pause
+for player input; those cards teach through their `steps` instead.
 
 ### PLACEMENT — where the card physically goes after being played
 
@@ -126,6 +133,28 @@ Net effect on the target's standing: `positive` (gains points/advantage),
 `negative` (loses), `neutral` (no point change or a wash). Optional human label
 consumed by eval scorers; not written into seed/game data.
 
+### STEPS — ordered executable resolution plans
+
+Use `steps` when later logic must read an earlier effect's resulting state,
+when ops and sandbox code must be mixed, or when the card needs **player
+input mid-resolution**. Each item is one of:
+
+- `{"kind": "ops", "ops": [ ... ]}` — runtime op dicts, applied in order.
+- `{"kind": "snippet", "code": "def apply(state, ctx): ..."}` — executable
+  sandbox code (never prose; never truncate or replace code with a summary).
+- `{"kind": "interaction", "result_key": "bids", "request": {...},
+   "input_refs": {...}}` — a **barrier**: resolution pauses, the `request`
+  descriptor (`kind`: `choice` | `number` | `text` | `card_pick` | `confirm` |
+  `drawing`; `audience`: `active` | `all` | `all_others` | `player:<id>`;
+  `sealed` for hidden bids; `timeout_seconds` 10–300) is sent to the audience,
+  and collected responses land in `ctx["interactions"][result_key]`
+  (player_id → validated value) for later steps. `input_refs` lets a step's
+  options come from a prior result (e.g. vote on submitted drawings).
+
+Bounds: ≤ 8 steps per plan, ≤ 4 interaction barriers, byte caps enforced by
+`models.effects.ResolutionPlan`. Exemplars: gold "Going Once, Going Twice"
+(sealed auction), "Cat Show" (drawing contest + vote).
+
 ### OPS — structured operations
 
 A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
@@ -139,6 +168,7 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
 - `reverse_order` / `scramble_order` — `{}`
 - `change_draw_count` — `{"amount": <int>}` (new absolute draw count)
 - `destroy_card` — `{"card_target": "this" | "chosen_card" | "all_in_play" | ...}`
+- `transfer_card` — `{"card_target": ..., "to_target": <TARGET>}` (moves cards into one player's hand)
 - `set_win_condition` — `{"kind": "highest_points"|"lowest_points"|"first_to"|"empty_hand"|"last_standing"|"none", "threshold": <int|null>}`
 - `set_rule` — `{"path": <str>, "value": ...}`
 - `set_condition` — `{"target": <TARGET>, "key": <str>, "value": ...}`
@@ -174,10 +204,12 @@ reads — `current_player_id`, `actor_id`, `draw_count`, `deck_size`,
 (returns `title`, `description`, `alt_text`, `attributes`, `origin`);
 mutators — `add_points`, `subtract_points`, `set_points`, `skip_turn`,
 `extra_turn`, `set_draw_count`, `note`, `reverse_order`, `scramble_order`,
-`steal_points`, `draw_cards`, `destroy_card`, `set_win_condition`, `end_game`,
-`set_rule`, `set_condition`, `set_card_attribute`, `create_card`,
-`shuffle_into_deck`, `register_hook`, `unregister_hook`, plus context-gated
-`reject_play` (on_validate_play hooks) and `counter_play` (reactions).
+`steal_points`, `draw_cards`, `destroy_card`, `transfer_card`,
+`set_win_condition`, `end_game`, `set_rule`, `set_condition`,
+`set_card_attribute`, `create_card`, `shuffle_into_deck`, `register_hook`,
+`unregister_hook`, plus context-gated `reject_play` (on_validate_play hooks)
+and `counter_play` (reactions). After an interaction barrier, a snippet step
+reads `ctx["interactions"][result_key]`.
 
 Style guide:
 - Player targets are runtime Target strings: `"self"`, `"chooser"` (the chosen

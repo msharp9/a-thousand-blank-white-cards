@@ -35,6 +35,7 @@ from models.effects import (
     StealPointsOp,
     SubtractPointsOp,
     Target,
+    TransferCardOp,
     UnregisterHookOp,
 )
 from pydantic import ValidationError as PydanticValidationError
@@ -273,6 +274,45 @@ def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) 
     return state.model_copy(update={"players": new_players, "house_rules": house_rules, "discard": discard})
 
 
+def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext) -> GameState:
+    """Move resolved cards from any current zone into exactly one player's hand.
+
+    Finding the source zone here is intentional: during a resolution plan the
+    played card is already staged in discard, while persistent cards or chosen
+    cards may live in a hand, in-play, center, deck, or discard.
+    """
+    recipients = _resolve_targets(op.to_target, ctx, state)
+    if len(recipients) != 1:
+        raise ValueError("transfer_card requires exactly one destination player")
+    card_ids = _resolve_card_targets(op.card_target, ctx, state)
+    located = {
+        *state.deck,
+        *state.discard,
+        *state.house_rules,
+        *(card for player in state.players for card in (*player.hand, *player.in_play)),
+    }
+    known = [card_id for card_id in card_ids if card_id in state.cards and card_id in located]
+    if not known:
+        raise ValueError("transfer_card resolved no cards")
+    targets = set(known)
+    recipient = recipients[0]
+    players = []
+    for player in state.players:
+        hand = [card for card in player.hand if card not in targets]
+        in_play = [card for card in player.in_play if card not in targets]
+        if player.id == recipient:
+            hand.extend(card for card in known if card not in hand)
+        players.append(player.model_copy(update={"hand": hand, "in_play": in_play}))
+    return state.model_copy(
+        update={
+            "players": players,
+            "house_rules": [card for card in state.house_rules if card not in targets],
+            "discard": [card for card in state.discard if card not in targets],
+            "deck": [card for card in state.deck if card not in targets],
+        }
+    )
+
+
 def _reduce_set_win_condition(state: GameState, op: SetWinConditionOp, ctx: HookContext) -> GameState:
     wc = WinCondition(kind=op.kind, threshold=op.threshold)
     return state.model_copy(update={"rules": state.rules.model_copy(update={"win_condition": wc})})
@@ -448,6 +488,7 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
     "steal_points": _reduce_steal_points,
     "draw_cards": _reduce_draw_cards,
     "destroy_card": _reduce_destroy_card,
+    "transfer_card": _reduce_transfer_card,
     "set_win_condition": _reduce_set_win_condition,
     "custom_note": _reduce_custom_note,
     "counter_play": _reduce_counter_play,

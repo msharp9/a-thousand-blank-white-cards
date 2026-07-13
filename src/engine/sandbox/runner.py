@@ -46,7 +46,8 @@ def execute_snippet(
 
     payload = json.dumps({"state": state_dict, "ctx": ctx_dict, "code": code})
     src_dir = str(Path(__file__).parent.parent.parent)  # .../src (engine/sandbox/runner.py -> src)
-    cmd = [sys.executable, "-I", str(_CHILD_RUNNER)]
+    bootstrap = "import runpy,sys; sys.path.insert(0, sys.argv[1]); runpy.run_path(sys.argv[2], run_name='__main__')"
+    cmd = [sys.executable, "-I", "-c", bootstrap, src_dir, str(_CHILD_RUNNER)]
 
     proc = subprocess.Popen(
         cmd,
@@ -54,7 +55,7 @@ def execute_snippet(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={"PYTHONPATH": src_dir},
+        env={},
     )
     try:
         stdout, stderr = proc.communicate(input=payload, timeout=timeout)

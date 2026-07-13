@@ -69,6 +69,11 @@ class RoomManager:
         """Return the Room for this code, or None if it doesn't exist."""
         return self._store.get(code.upper())
 
+    def start_background_tasks(self) -> None:
+        """Restore persisted room timers once an application event loop exists."""
+        for room in self._store.values():
+            room.ensure_pending_timeout()
+
     def join(self, code: str, name: str) -> tuple[str, str, bool] | None:
         """Add a player to the room. Returns (room_code, player_id, spectator) or None.
 
