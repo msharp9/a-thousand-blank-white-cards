@@ -10,16 +10,18 @@ the top of /docs) and in the project README.
 
 from __future__ import annotations
 
+import base64
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from config import get_settings, warn_if_no_llm_credentials
+from models.card import CARD_ART_PREFIX
 from logging_config import configure_logging
 from board.rooms.manager import check_single_worker, room_manager
 from board.ws import router as ws_router
@@ -52,9 +54,9 @@ with a full `state` snapshot. All messages are JSON objects with a `type` field.
 | `join` | `player_id` (null on first join), `name` | Authenticate the socket into the room; must be the first message. |
 | `start` | — | Build/shuffle the deck, deal starting hands, begin play. |
 | `draw` | — | Draw your card(s) for the turn (active player only). The turn model is **draw → play → end turn**: drawing is EXPLICIT and is the first step; playing or passing before drawing is rejected while the deck has cards. Drawing the last card arms end-of-game. |
-| `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?` | Play a card; the AI arbiter interprets it and applies the effect (active player only). Ends the turn. For a BLANK card, the first play carries the authored `title`+`description` (the card is filled in and persisted before interpretation); a prompt_choice follow-up re-sends only `card_id`+the choice. |
+| `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?`, `art?` | Play a card; the AI arbiter interprets it and applies the effect (active player only). Ends the turn. For a BLANK card, the first play carries the authored `title`+`description` (the card is filled in and persisted before interpretation) and optionally `art` (a PNG data-URL, stored out-of-band and served via `GET /rooms/{code}/cards/{card_id}/art`); a prompt_choice follow-up re-sends only `card_id`+the choice. |
 | `pass` / `end_turn` | — | End your turn without playing a card (active player only). `end_turn` is an accepted alias for `pass`, handled identically. |
-| `create_card` | `title`, `description` | Author a new card and interpret it immediately (allowed off-turn). |
+| `create_card` | `title`, `description`, `art?` | Author a new card and interpret it immediately (allowed off-turn). `art` is an optional PNG data-URL; cards carry only a `has_art` flag in state and the image is served via `GET /rooms/{code}/cards/{card_id}/art`. |
 | `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state. |
 | `epilogue_vote` | `card_id`, `keep` | Vote to keep/discard a card during the epilogue phase. |
 
@@ -213,6 +215,29 @@ def create_app() -> FastAPI:
         if room is None:
             raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
         return room.snapshot()
+
+    @application.get("/rooms/{code}/cards/{card_id}/art", tags=["rooms"])
+    async def get_card_art(code: str, card_id: str) -> Response:
+        """Serve a card's hand-drawn art as PNG bytes, out-of-band from state.
+
+        Art never rides the GameState snapshot (cards carry only ``has_art``);
+        clients fetch the image here instead. Card ids are immutable and art is
+        written once at authoring time, so the response is served with
+        long-lived immutable cache headers. 404 when the room does not exist or
+        the card has no art.
+        """
+        room = room_manager.get(code)
+        if room is None:
+            raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
+        data_url = room.card_art.get(card_id)
+        if data_url is None:
+            raise HTTPException(status_code=404, detail=f"Card '{card_id}' has no art")
+        png = base64.b64decode(data_url[len(CARD_ART_PREFIX) :])
+        return Response(
+            content=png,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
 
     @application.post("/rooms/{code}/dev/skip-setup", tags=["rooms"])
     async def dev_skip_setup(code: str) -> dict:

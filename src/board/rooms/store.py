@@ -13,10 +13,12 @@ Codes are expected to already be normalised to upper-case by the caller
 ``FileRoomStore`` is a DEV-ONLY convenience (wired in only when
 ``get_settings().dev_mode`` is true) that persists each room to JSON on disk so
 in-progress games survive an API reload. It is deliberately lossy: the Room
-``_deck_exhausted`` latch is NOT persisted and resets on reload. Regular
-serialized state — per-player ``conditions``, ``rules``, ``turn_order``,
-registered ``hooks`` (their per-room registry is rebuilt lazily from state) —
-survives the round-trip. Acceptable for a dev loop; not a durable
+``_deck_exhausted`` latch is NOT persisted and resets on reload, and the
+out-of-band ``Room.card_art`` registry (card art deliberately lives outside
+GameState) is NOT persisted either — dev-mode art does not survive a process
+restart. Regular serialized state — per-player ``conditions``, ``rules``,
+``turn_order``, registered ``hooks`` (their per-room registry is rebuilt lazily
+from state) — survives the round-trip. Acceptable for a dev loop; not a durable
 multi-worker backend.
 """
 

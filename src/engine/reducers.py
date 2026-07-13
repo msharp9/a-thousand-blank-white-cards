@@ -335,6 +335,7 @@ def _reduce_create_card(
             "origin": "authored",
             "canonical": {"ops": [dict(o) for o in op.ops]},
             "attributes": dict(op.attributes),
+            "has_art": False,
         }
         new_ids.append(cid)
 

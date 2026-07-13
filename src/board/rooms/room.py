@@ -100,6 +100,12 @@ class Room:
         self.code = code
         self.state: GameState = GameState(room_code=code, mode=mode)
         self.connections: ConnectionManager = ConnectionManager()
+        # Card art registry: card_id -> PNG data-URL. Deliberately a plain Room
+        # attribute, NOT GameState — every mutation broadcasts the full state
+        # snapshot to every client, so inline art would multiply every broadcast.
+        # Cards carry only a has_art flag; clients fetch the bytes from
+        # GET /rooms/{code}/cards/{card_id}/art (see board.app).
+        self.card_art: dict[str, str] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
         self._epilogue: EpilogueManager | None = None
         # Persistence callback fired after every serialized mutation; None keeps
@@ -270,6 +276,22 @@ class Room:
         """Map non-spectator player id -> authored-card count, for the client."""
         return {p.id: self._authored_count(p.id) for p in self.state.turn_players()}
 
+    def _absorb_card_art(self, cards: dict[str, dict]) -> dict[str, dict]:
+        """Pop each card's transient ``art`` data-URL into ``self.card_art``.
+
+        Cards re-entering from the RAG corpus surface their art under a
+        transient ``art`` key (see deck._normalise_card). Art must never ride
+        GameState (snapshots broadcast to every client), so this strips the key
+        — returning cleaned copies — and stores the data-URL out-of-band.
+        """
+        cleaned: dict[str, dict] = {}
+        for cid, card in cards.items():
+            if isinstance(card, dict) and card.get("art"):
+                card = dict(card)
+                self.card_art[cid] = card.pop("art")
+            cleaned[cid] = card
+        return cleaned
+
     # ── per-action handlers ──
     async def _handle_start(self, player_id: str) -> None:
         """Phase-aware game start (deck building happens in two steps).
@@ -310,8 +332,10 @@ class Room:
         )
         # Pre-made cards live in the registry AND (as ids) in the deck so the
         # setup UI can render "the deck so far". They're re-shuffled with the
-        # authored + blank cards at finalisation.
-        merged_cards = {**cards, **self.state.cards}
+        # authored + blank cards at finalisation. Cards kept from a prior game
+        # may carry a transient "art" key (see deck._normalise_card) — absorb it
+        # into the out-of-band registry before the dicts land in GameState.
+        merged_cards = {**self._absorb_card_art(cards), **self.state.cards}
         self.state = self.state.model_copy(update={"phase": "setup", "cards": merged_cards, "deck": list(pool)})
         await self._broadcast_state()
 
@@ -989,14 +1013,18 @@ class Room:
                     {"type": "error", "message": "A blank card must be given a title and description to play"},
                 )
                 return
+            art = getattr(msg, "art", None)
             authored = {
                 **card,
                 "title": title,
                 "description": description,
                 "creator_id": player_id,
                 "origin": "authored",
+                "has_art": bool(art),
             }
             authored.pop("blank", None)
+            if art:
+                self.card_art[card_id] = art
             merged = {**self.state.cards, card_id: authored}
             self.state = self.state.model_copy(update={"cards": merged})
             card = authored
@@ -1155,6 +1183,7 @@ class Room:
             return
 
         card_id = str(uuid.uuid4())
+        art = getattr(msg, "art", None)
         new_cards = {
             **self.state.cards,
             card_id: {
@@ -1163,9 +1192,12 @@ class Room:
                 "description": msg.description,
                 "creator_id": player_id,
                 "origin": "authored",
+                "has_art": bool(art),
             },
         }
         self.state = self.state.model_copy(update={"cards": new_cards})
+        if art:
+            self.card_art[card_id] = art
 
         if self.state.phase == "setup":
             # Auto-start: once every non-spectator has authored the required
@@ -1245,8 +1277,12 @@ class Room:
         whether it ever left the deck.
         """
         cards = [c for c in self.state.cards.values() if self._is_authored_card(c)]
-        # normalise to dicts with an 'id' key
-        card_dicts = [c if isinstance(c, dict) else c.model_dump() for c in cards]
+        # normalise to dicts with an 'id' key; art stays out-of-band (defensive
+        # strip — state.cards never carries it), so the epilogue broadcast and
+        # the persisted vote state stay small.
+        card_dicts = [
+            {k: v for k, v in c.items() if k != "art"} if isinstance(c, dict) else c.model_dump() for c in cards
+        ]
         # Only real players vote in the epilogue; spectators authored no cards
         # and must not be counted as expected voters (which would stall the tally).
         self._epilogue = EpilogueManager(player_ids=[p.id for p in self.state.turn_players()])
@@ -1309,7 +1345,7 @@ class Room:
         so the final results screen — and a client reconnecting after the
         vote — can render kept/destroyed lists straight from the snapshot.
         """
-        result = await self._epilogue.tally_and_persist()
+        result = await self._epilogue.tally_and_persist(card_art=self.card_art)
         epilogue_result = EpilogueResultSummary(
             kept=[
                 EpilogueCardOutcome(id=cid, title=self._card_title(self.state.cards.get(cid, {})))

@@ -17,6 +17,13 @@ from pydantic import BaseModel, Field
 MAX_CARD_TITLE = 60
 MAX_CARD_DESCRIPTION = 500
 
+# Card art travels as a PNG data-URL, out-of-band from GameState (see
+# Room.card_art): the required prefix and the cap on the WHOLE data-URL length.
+# 128 KiB keeps a sketch small enough to store/serve without letting a play
+# message smuggle in a megapixel image.
+CARD_ART_PREFIX = "data:image/png;base64,"
+MAX_CARD_ART_BYTES = 131072
+
 
 # ---------------------------------------------------------------------------
 # Canonical annotation — describes HOW a card is executed by the engine

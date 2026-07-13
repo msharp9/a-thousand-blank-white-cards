@@ -7,16 +7,37 @@ message. Server messages mirror the frontend lib/types.ts.
 
 from __future__ import annotations
 
+import base64
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 
-from models.card import MAX_CARD_DESCRIPTION, MAX_CARD_TITLE
+from models.card import CARD_ART_PREFIX, MAX_CARD_ART_BYTES, MAX_CARD_DESCRIPTION, MAX_CARD_TITLE
 
 # Length-bounded card text, enforced on every inbound authoring message via the
 # ClientMsg TypeAdapter in board.ws. Limits live in models.card (single source).
 CardTitle = Annotated[str, Field(max_length=MAX_CARD_TITLE)]
 CardDescription = Annotated[str, Field(max_length=MAX_CARD_DESCRIPTION)]
+
+
+def _validate_card_art(value: str) -> str:
+    """Validate an inbound card-art data-URL: PNG prefix, size cap, clean base64.
+
+    Enforced at the message boundary so Room and the REST art endpoint can trust
+    every stored data-URL to decode (limits live in models.card, single source).
+    """
+    if not value.startswith(CARD_ART_PREFIX):
+        raise ValueError(f"card art must be a {CARD_ART_PREFIX!r} data-URL")
+    if len(value) > MAX_CARD_ART_BYTES:
+        raise ValueError(f"card art exceeds {MAX_CARD_ART_BYTES} bytes ({len(value)})")
+    try:
+        base64.b64decode(value[len(CARD_ART_PREFIX) :], validate=True)
+    except ValueError as exc:  # binascii.Error subclasses ValueError
+        raise ValueError(f"card art base64 payload does not decode: {exc}") from exc
+    return value
+
+
+CardArt = Annotated[str, AfterValidator(_validate_card_art)]
 
 # ─── client → server ────────────────────────────────────────────────────────
 
@@ -84,12 +105,17 @@ class PlayMsg(BaseModel):
     # now-real card. Ignored for non-blank cards.
     title: CardTitle | None = None
     description: CardDescription | None = None
+    # Optional hand-drawn art for the authored blank, as a validated PNG
+    # data-URL. Stored out-of-band in Room.card_art (never in GameState).
+    art: CardArt | None = None
 
 
 class CreateCardMsg(BaseModel):
     type: Literal["create_card"] = "create_card"
     title: CardTitle
     description: CardDescription
+    # Optional hand-drawn art, as a validated PNG data-URL (see PlayMsg.art).
+    art: CardArt | None = None
 
 
 class PreviewCardMsg(BaseModel):
