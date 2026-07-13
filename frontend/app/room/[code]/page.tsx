@@ -439,7 +439,7 @@ export default function RoomPage() {
             <DynamicStatePanel gameState={gameState} />
 
             {/* felt table: center zone + deck/action dock */}
-            <div className="mx-4 my-2.5 flex min-h-[280px] flex-1 items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)]">
+            <div className="mx-4 my-2.5 flex min-h-[380px] flex-1 items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)]">
               <HouseRulesZone
                 centerCards={houseRuleCards}
                 brewingCardId={brewing}
