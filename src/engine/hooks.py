@@ -90,7 +90,11 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
             "event": str(getattr(ctx, "event", "")),
             "card_id": getattr(ctx, "card_id", None),
             "amount": getattr(ctx, "amount", None),
+            "target_player_ids": list(getattr(ctx, "target_player_ids", None) or []),
         }
+        deltas = (getattr(ctx, "extra", None) or {}).get("deltas")
+        if isinstance(deltas, dict):
+            ctx_dict["deltas"] = dict(deltas)
         try:
             raw_ops = execute_snippet(code, state_dict, ctx_dict)
             return apply_snippet_diff(state, raw_ops, ctx, origin="hook")

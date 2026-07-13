@@ -40,14 +40,23 @@ def apply_effect(
         state = apply_op(state, op, ctx, rng=rng)
 
         if is_score_op:
-            changed_pids = [pid for pid in before_scores if before_scores[pid] != state.get_player(pid).score]
-            if changed_pids:
+            deltas = {
+                pid: state.get_player(pid).score - before
+                for pid, before in before_scores.items()
+                if state.get_player(pid).score != before
+            }
+            if deltas:
+                # amount is the per-player delta when every affected player
+                # moved by the same amount (add/subtract/set); mixed deltas
+                # (steal_points) leave it None — read extra["deltas"] instead.
+                unique_deltas = set(deltas.values())
                 score_ctx = HookContext(
                     event=GameEvent.ON_SCORE_CHANGE,
                     actor_id=ctx.actor_id,
                     card_id=ctx.card_id,
-                    target_player_ids=changed_pids,
-                    extra={"op": op.op},
+                    amount=unique_deltas.pop() if len(unique_deltas) == 1 else None,
+                    target_player_ids=list(deltas),
+                    extra={"op": op.op, "deltas": deltas},
                 )
                 state = active_bus.emit(GameEvent.ON_SCORE_CHANGE, state, score_ctx)
 
