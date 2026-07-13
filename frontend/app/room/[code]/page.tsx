@@ -436,7 +436,6 @@ export default function RoomPage() {
         {gameState && phase === "playing" && (
           <div className="flex min-h-full flex-col">
             <GameTable gameState={gameState} myPlayerId={myPlayerId ?? ""} />
-            <DynamicStatePanel gameState={gameState} />
 
             {/* felt table: center zone + deck/action dock */}
             <div className="mx-4 my-2.5 flex min-h-[280px] flex-1 items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)]">
@@ -564,6 +563,7 @@ export default function RoomPage() {
             )}
 
             <EffectLog log={log} brewing={brewing} />
+            <DynamicStatePanel gameState={gameState} />
           </div>
         )}
 

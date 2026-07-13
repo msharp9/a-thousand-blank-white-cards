@@ -1,3 +1,5 @@
+import { isDevMode } from "@/lib/dev";
+import { playerColor } from "@/lib/players";
 import type {
   CardSnapshot,
   GameStateSnapshot,
@@ -28,6 +30,8 @@ export function DynamicStatePanel({
 }: {
   gameState: GameStateSnapshot;
 }) {
+  if (!isDevMode()) return null;
+
   const { players, cards, rules } = gameState;
   const order = gameState.turn_order.length
     ? gameState.turn_order
@@ -35,6 +39,7 @@ export function DynamicStatePanel({
   const activeId = players.length
     ? players[gameState.turn_index % players.length]?.id
     : undefined;
+  const playerIndex = new Map(players.map((player, i) => [player.id, i]));
   const conditionedPlayers = players.filter(
     (player) => entries(player.conditions).length,
   );
@@ -46,7 +51,7 @@ export function DynamicStatePanel({
   );
 
   return (
-    <details className="mx-5 mt-2 rounded-xl border-2 border-dashed border-ink/40 bg-white/90 px-3 py-2 font-hand open:shadow-sm">
+    <details className="mx-5 my-2 rounded-xl border-2 border-dashed border-border bg-card px-3 py-2 font-hand text-foreground open:shadow-sm">
       <summary className="cursor-pointer select-none text-base font-semibold">
         Dynamic game state
         <span className="ml-2 text-sm font-normal text-muted-foreground">
@@ -57,20 +62,25 @@ export function DynamicStatePanel({
         <section>
           <p className="font-semibold">Turn order</p>
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            {order.map((id, index) => (
-              <span key={id} className="contents">
-                {index > 0 && <span aria-hidden>→</span>}
-                <span
-                  className={
-                    id === activeId
-                      ? "rounded-md bg-primary px-1.5 text-primary-foreground"
-                      : "rounded-md border border-ink/30 bg-white px-1.5"
-                  }
-                >
-                  {playerName(players, id)}
+            {order.map((id, index) => {
+              const color = playerColor(playerIndex.get(id) ?? index);
+              const isActive = id === activeId;
+              return (
+                <span key={id} className="contents">
+                  {index > 0 && <span aria-hidden>→</span>}
+                  <span
+                    className={
+                      isActive
+                        ? "rounded-md border-2 px-1.5 font-semibold"
+                        : "rounded-md border px-1.5"
+                    }
+                    style={{ borderColor: color, color }}
+                  >
+                    {playerName(players, id)}
+                  </span>
                 </span>
-              </span>
-            ))}
+              );
+            })}
           </div>
         </section>
 
