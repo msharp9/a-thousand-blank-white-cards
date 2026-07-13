@@ -47,7 +47,9 @@ def load_eval_items(data_path: Path, limit: int | None = None) -> list[EvalItem]
 def normalise_agent_output(result: Any) -> dict[str, Any]:
     """Map an :class:`~agent.contract.InterpretResult` to the dict the scorers read.
 
-    The scorers (see evals.scorers) consume three keys:
+    The scorers (see evals.scorers) consume the ordered plan plus legacy mirrors:
+      - ``resolution_plan``: the full ordered ResolutionPlan, including mixed
+        ops/snippet effects.
       - ``effect_program``: the EffectProgram as a plain dict (dsl_validity re-validates
         it, the judge summarises it). Produced from ``result.program``.
       - ``snippet_effect``: the generated Python hook body, if any. Produced from
@@ -67,6 +69,11 @@ def normalise_agent_output(result: Any) -> dict[str, Any]:
         "comment": getattr(result, "comment", ""),
         "persona_action": getattr(result, "persona_action", "none"),
     }
+    to_plan = getattr(result, "to_plan", None)
+    if callable(to_plan):
+        plan = to_plan()
+        if plan.steps:
+            out["resolution_plan"] = plan.model_dump()
     if program is not None:
         # EffectProgram -> plain dict for dsl_validity's EffectProgram.model_validate.
         out["effect_program"] = program.model_dump() if hasattr(program, "model_dump") else program

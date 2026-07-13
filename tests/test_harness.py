@@ -9,7 +9,7 @@ from unittest.mock import patch
 from agent.contract import InterpretResult
 from evals.eval_core import EvalRunReport
 from evals.harness import load_eval_items, normalise_agent_output, run_harness
-from models.effects import AddPointsOp, EffectProgram
+from models.effects import AddPointsOp, EffectProgram, OpsStep, ResolutionPlan, SnippetStep
 
 
 def test_load_eval_items(tmp_path: Path) -> None:
@@ -28,7 +28,23 @@ def test_normalise_maps_program_to_effect_program() -> None:
     out = normalise_agent_output(result)
     assert "effect_program" in out
     assert out["effect_program"]["ops"][0]["op"] == "add_points"
+    assert out["resolution_plan"]["steps"][0]["kind"] == "ops"
     assert out["verdict"] == "ok"
+
+
+def test_normalise_preserves_complete_mixed_resolution_plan() -> None:
+    plan = ResolutionPlan(
+        steps=[
+            OpsStep(ops=[AddPointsOp(target="self", amount=1)]),
+            SnippetStep(code="def apply(state, ctx):\n    state.add_points('self', 2)\n"),
+        ]
+    )
+    result = InterpretResult(plan=plan, verdict="ok")
+
+    out = normalise_agent_output(result)
+
+    assert [step["kind"] for step in out["resolution_plan"]["steps"]] == ["ops", "snippet"]
+    assert "state.add_points" in out["resolution_plan"]["steps"][1]["code"]
 
 
 def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:

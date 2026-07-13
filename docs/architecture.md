@@ -484,6 +484,10 @@ flowchart LR
   `data/seed_cards.json` in one batched `upsert_cards` call (a single embedding
   round-trip for cache misses). A missing file or offline gateway degrades
   gracefully.
+  `scripts/build_seed_corpus.py` deterministically generates that combined file
+  from `seed_cards_gold.json` plus `seed_cards_fillers.json`; CI checks the files
+  cannot drift. Gold entries are executable full plans, including static chains,
+  post-draw computation, structured-history scoring, and basic/spicy/wild Uno.
 - **Retrievers** (`rag/retrievers.py`): `dense_retriever()` is the baseline
   cosine retriever; `advanced_retriever()` is a `MultiQueryCardRetriever` that
   paraphrases the query via the chat model, retrieves each paraphrase, and
@@ -492,13 +496,22 @@ flowchart LR
   builds a LangChain tool-calling agent (`create_agent`) with the persona system
   prompt and a bound toolbox. `get_default_tools()` returns the context-free
   tools — web search, the card-RAG corpus, game rules, MTG lookup, agent memory,
-  and `read_engine_methods`; the context-dependent `read_game_state` tool
-  (closing over the live snapshot + actor/creator) is bound per invocation. The
+  and `read_engine_methods`; context-dependent `read_game_state`,
+  `read_game_history`, and `dry_run_effect` tools are bound per invocation. The
   agent decides when to retrieve exemplars via the card-RAG tool rather than
   stuffing context unconditionally. It is bounded by a hard tool-call cap
   (`MAX_TOOL_CALLS`) and a wall-clock timeout (`AGENT_TIMEOUT_SECONDS`), and
   **never raises to its caller** — on cap/timeout/error it returns a
   deterministic `InterpretResult` with `verdict="invalid"`.
+  Retrieved top-hit canonicals are emitted as complete JSON; executable code is
+  never character-sliced. Lower-ranked canonicals are omitted whole when the
+  response budget is exhausted.
+
+The eval harness normalizes and judges complete `ResolutionPlan` values before
+legacy program/snippet mirrors. Its structural scorer validates snippet and hook
+code, while corpus lint compiles and behaviorally dry-runs every gold plan on a
+representative state. Capability cases cover Chess Master, static multi-op
+chains, history-derived winners, and the Uno ladder.
 
 The **persona** (`agent/persona.py`) makes the agent a sardonic game master: it
 always emits an in-character `comment`, and when a card can't be cleanly

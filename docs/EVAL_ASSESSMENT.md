@@ -28,7 +28,7 @@ magnitude-sign / overall on a 0–1 scale against the human-canonical label.
 
 ## 2. Is the test set sound?
 
-Yes, with a caveat. `data/eval/eval_cards.json` is **35 hand-annotated gold cards**,
+Yes, with a caveat. `data/eval/eval_cards.json` is **41 hand-annotated gold cards**,
 each with a structured `human_canonical` label (timing, target, placement,
 trigger_event, ops, magnitude_sign). Spot-checks look correct and consistent with the
 engine's op vocabulary (e.g. "Gain 5 Points" → `add_points{target:self, amount:5}`,

@@ -23,11 +23,12 @@ logger = logging.getLogger(__name__)
 
 _NO_RESULTS = "no similar cards found"
 _UNAVAILABLE = "card retrieval unavailable"
-_CANONICAL_MAX_CHARS = 500
+_RESULT_MAX_CHARS = 8_000
+_OMITTED = "canonical omitted to preserve the result budget"
 
 
 def _format_canonical(raw: object) -> str:
-    """Compact a stored canonical JSON string to a bounded, single-line snippet.
+    """Compact stored canonical JSON without slicing executable code.
 
     Returns "" if raw is missing/empty/unparseable so callers can omit it.
     """
@@ -37,17 +38,14 @@ def _format_canonical(raw: object) -> str:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         return ""
-    compact = json.dumps(parsed, separators=(",", ":"))
-    if len(compact) > _CANONICAL_MAX_CHARS:
-        compact = compact[: _CANONICAL_MAX_CHARS - 1] + "…"
-    return compact
+    return json.dumps(parsed, separators=(",", ":"))
 
 
 def _format_hits(hits: list[dict[str, Any]]) -> str:
     """Format retriever payload dicts into a concise text block, one line per hit.
 
-    Each line is ``title — description — score — ops={...}``, with the ops
-    segment omitted when the hit has no usable canonical payload. Missing
+    Each line is ``title — description — score — canonical={...}``, with the
+    canonical segment omitted when the hit has no usable payload. Missing
     fields degrade to sensible placeholders rather than raising.
     """
     lines: list[str] = []
@@ -64,7 +62,12 @@ def _format_hits(hits: list[dict[str, Any]]) -> str:
         line = f"{title} — {description} — score={score_str}"
         canonical = _format_canonical(hit.get("canonical"))
         if canonical:
-            line += f" — ops={canonical}"
+            with_canonical = f"{line} — canonical={canonical}"
+            current_size = sum(len(existing) + 1 for existing in lines)
+            if not lines or current_size + len(with_canonical) <= _RESULT_MAX_CHARS:
+                line = with_canonical
+            else:
+                line += f" — {_OMITTED}"
         lines.append(line)
     return "\n".join(lines)
 
