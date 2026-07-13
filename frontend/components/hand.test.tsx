@@ -64,4 +64,48 @@ describe("Hand", () => {
     handUi({ canPlay: false });
     expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
+
+  // Drag-to-play gates on exactly the same conditions as click-to-select:
+  // active turn, nothing brewing, not a reaction card. Blanks ARE draggable
+  // (dropping one opens the author-on-play dialog in PlayDndContext).
+  describe("draggability", () => {
+    function draggableIds(container: HTMLElement): string[] {
+      return Array.from(
+        container.querySelectorAll('[data-draggable="true"]'),
+      ).map((el) => el.textContent ?? "");
+    }
+
+    it("marks playable cards (including blanks) draggable on your turn", () => {
+      const { container } = handUi();
+      expect(
+        container.querySelectorAll('[data-draggable="true"]'),
+      ).toHaveLength(2);
+    });
+
+    it("marks nothing draggable off-turn", () => {
+      const { container } = handUi({ canPlay: false });
+      expect(
+        container.querySelectorAll('[data-draggable="true"]'),
+      ).toHaveLength(0);
+    });
+
+    it("marks nothing draggable while a play is brewing", () => {
+      const { container } = handUi({ brewing: "b1" });
+      expect(
+        container.querySelectorAll('[data-draggable="true"]'),
+      ).toHaveLength(0);
+    });
+
+    it("never marks reaction cards draggable", () => {
+      const reaction: CardSnapshot = {
+        id: "r1",
+        title: "Nope",
+        description: "Counter the last play.",
+        canonical: { trigger: "on_reaction" },
+      };
+      const { container } = handUi({ cards: [zap, reaction] });
+      expect(draggableIds(container).join(" ")).toContain("Zap");
+      expect(draggableIds(container).join(" ")).not.toContain("Nope");
+    });
+  });
 });

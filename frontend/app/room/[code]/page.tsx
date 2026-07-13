@@ -23,6 +23,7 @@ import { Hand } from "@/components/hand";
 import { HistoryModal } from "@/components/history-modal";
 import { HouseRulesZone } from "@/components/house-rules-zone";
 import { InteractionPanel } from "@/components/interaction-panel";
+import { FeltDropZone, PlayDndContext } from "@/components/play-dnd";
 import { ReactionWindow } from "@/components/reaction-window";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { ResultsScreen } from "@/components/results-screen";
@@ -440,138 +441,143 @@ export default function RoomPage() {
         )}
 
         {gameState && phase === "playing" && (
-          <div className="flex min-h-full flex-col">
-            <GameTable gameState={gameState} myPlayerId={myPlayerId ?? ""} />
+          /* Drag-and-drop card play: hand cards drag onto the felt (general
+             play) or an opponent seat (targeted play). Click-to-select + Play
+             keeps working unchanged inside <Hand>. */
+          <PlayDndContext cards={gameState.cards} roomCode={code} send={send}>
+            <div className="flex min-h-full flex-col">
+              <GameTable gameState={gameState} myPlayerId={myPlayerId ?? ""} />
 
-            {/* felt table: center zone + deck/action dock */}
-            <div className="mx-4 my-2.5 flex min-h-[380px] flex-1 items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)]">
-              <HouseRulesZone
-                centerCards={houseRuleCards}
-                brewingCardId={brewing}
-                roomCode={code}
-              />
-              <div className="flex shrink-0 flex-col items-center justify-center gap-3.5 border-l-2 border-dashed border-white/30 bg-black/15 px-5 py-4">
-                <div className="text-center">
-                  {gameState.deck.length > 0 ? (
-                    <div className="relative mx-auto h-32 w-[92px]">
-                      <SketchCard
-                        faceDown
-                        showTape={false}
-                        w={92}
-                        rot={3}
-                        className="absolute top-1 left-1"
-                      />
-                      <SketchCard
-                        faceDown
-                        showTape={false}
-                        w={92}
-                        rot={-2}
-                        className="absolute top-0.5 left-0.5"
-                      />
-                      <SketchCard
-                        faceDown
-                        showTape={false}
-                        w={92}
-                        className="absolute top-0 left-0"
-                      />
-                    </div>
-                  ) : (
-                    <div className="mx-auto flex h-32 w-[92px] items-center justify-center rounded-[7px] border-2 border-dashed border-white/40 font-hand text-sm text-white/70">
-                      empty
-                    </div>
-                  )}
-                  <p className="mt-1.5 font-hand text-[15px] text-white">
-                    Deck · {gameState.deck.length}
+              {/* felt table: center zone + deck/action dock */}
+              <FeltDropZone className="mx-4 my-2.5 flex min-h-[380px] flex-1 items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)]">
+                <HouseRulesZone
+                  centerCards={houseRuleCards}
+                  brewingCardId={brewing}
+                  roomCode={code}
+                />
+                <div className="flex shrink-0 flex-col items-center justify-center gap-3.5 border-l-2 border-dashed border-white/30 bg-black/15 px-5 py-4">
+                  <div className="text-center">
+                    {gameState.deck.length > 0 ? (
+                      <div className="relative mx-auto h-32 w-[92px]">
+                        <SketchCard
+                          faceDown
+                          showTape={false}
+                          w={92}
+                          rot={3}
+                          className="absolute top-1 left-1"
+                        />
+                        <SketchCard
+                          faceDown
+                          showTape={false}
+                          w={92}
+                          rot={-2}
+                          className="absolute top-0.5 left-0.5"
+                        />
+                        <SketchCard
+                          faceDown
+                          showTape={false}
+                          w={92}
+                          className="absolute top-0 left-0"
+                        />
+                      </div>
+                    ) : (
+                      <div className="mx-auto flex h-32 w-[92px] items-center justify-center rounded-[7px] border-2 border-dashed border-white/40 font-hand text-sm text-white/70">
+                        empty
+                      </div>
+                    )}
+                    <p className="mt-1.5 font-hand text-[15px] text-white">
+                      Deck · {gameState.deck.length}
+                    </p>
+                  </div>
+                  <DiscardPile
+                    topCard={topDiscard}
+                    count={gameState.discard.length}
+                    roomCode={code}
+                    onClick={() => setHistoryOpen(true)}
+                  />
+                </div>
+              </FeltDropZone>
+
+              {/* your zone */}
+              {isSpectator ? (
+                <div className="border-t-[2.5px] border-ink bg-white px-5 py-4">
+                  <p className="mx-auto w-fit rounded-xl border-2 border-dashed border-ink/40 px-5 py-3 font-hand text-base text-muted-foreground">
+                    You joined after the game started — you are spectating and
+                    cannot play cards.
                   </p>
                 </div>
-                <DiscardPile
-                  topCard={topDiscard}
-                  count={gameState.discard.length}
-                  roomCode={code}
-                  onClick={() => setHistoryOpen(true)}
-                />
-              </div>
-            </div>
-
-            {/* your zone */}
-            {isSpectator ? (
-              <div className="border-t-[2.5px] border-ink bg-white px-5 py-4">
-                <p className="mx-auto w-fit rounded-xl border-2 border-dashed border-ink/40 px-5 py-3 font-hand text-base text-muted-foreground">
-                  You joined after the game started — you are spectating and
-                  cannot play cards.
-                </p>
-              </div>
-            ) : (
-              <div className="border-t-[2.5px] border-ink bg-white px-5 pt-3 pb-4">
-                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2.5">
-                  <div className="flex items-center gap-2.5">
-                    {me && (
-                      <>
-                        <PlayerAvatar
-                          name={me.name}
-                          color={playerColor(myIndex)}
-                          size={38}
-                        />
-                        <span className="font-hand text-[22px] leading-none">
-                          {me.name}
-                          {isActive && (
-                            <span className="ml-1 text-[15px] text-primary">
-                              · your turn
-                            </span>
-                          )}
-                        </span>
-                        <span
-                          className="font-marker text-2xl tabular-nums"
-                          style={{ color: playerColor(myIndex) }}
-                        >
-                          {me.score}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  {/* End turn only when the player may pass (holds no playable
+              ) : (
+                <div className="border-t-[2.5px] border-ink bg-white px-5 pt-3 pb-4">
+                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5">
+                      {me && (
+                        <>
+                          <PlayerAvatar
+                            name={me.name}
+                            color={playerColor(myIndex)}
+                            size={38}
+                          />
+                          <span className="font-hand text-[22px] leading-none">
+                            {me.name}
+                            {isActive && (
+                              <span className="ml-1 text-[15px] text-primary">
+                                · your turn
+                              </span>
+                            )}
+                          </span>
+                          <span
+                            className="font-marker text-2xl tabular-nums"
+                            style={{ color: playerColor(myIndex) }}
+                          >
+                            {me.score}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    {/* End turn only when the player may pass (holds no playable
                       card); the server drew for them at turn start. Hidden
                       while a play is brewing — the server freezes game
                       actions during interpretation. */}
-                  {isActive && !brewing && gameState.can_pass && (
-                    <Button
-                      variant="outline"
-                      onClick={() => send({ type: "pass" })}
-                    >
-                      End Turn ⟳
-                    </Button>
-                  )}
-                </div>
-                {myInPlayCards.length > 0 && (
-                  <div className="mb-1 flex items-center gap-2">
-                    <span className="font-hand text-sm text-[#888]">
-                      In front of you:
-                    </span>
-                    {myInPlayCards.map((card) => (
-                      <SketchCard
-                        key={card.id}
-                        card={card}
-                        w={56}
-                        showTape={false}
-                        rot={stableRotation(card.id, 4)}
-                        artUrl={getCardArtUrl(code, card)}
-                      />
-                    ))}
+                    {isActive && !brewing && gameState.can_pass && (
+                      <Button
+                        variant="outline"
+                        onClick={() => send({ type: "pass" })}
+                      >
+                        End Turn ⟳
+                      </Button>
+                    )}
                   </div>
-                )}
-                <Hand
-                  cards={myHandCards}
-                  canPlay={isActive}
-                  brewing={brewing}
-                  send={send}
-                  roomCode={code}
-                />
-              </div>
-            )}
+                  {myInPlayCards.length > 0 && (
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="font-hand text-sm text-[#888]">
+                        In front of you:
+                      </span>
+                      {myInPlayCards.map((card) => (
+                        <SketchCard
+                          key={card.id}
+                          card={card}
+                          w={56}
+                          showTape={false}
+                          rot={stableRotation(card.id, 4)}
+                          artUrl={getCardArtUrl(code, card)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <Hand
+                    cards={myHandCards}
+                    canPlay={isActive}
+                    brewing={brewing}
+                    send={send}
+                    roomCode={code}
+                  />
+                </div>
+              )}
 
-            <EffectLog log={log} brewing={brewing} />
-            <DynamicStatePanel gameState={gameState} />
-          </div>
+              <EffectLog log={log} brewing={brewing} />
+              <DynamicStatePanel gameState={gameState} />
+            </div>
+          </PlayDndContext>
         )}
 
         {gameState && phase === "results" && (

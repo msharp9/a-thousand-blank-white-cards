@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { PlayBlankDialog } from "@/components/play-blank-dialog";
 import { SketchCard } from "@/components/sketch-card";
@@ -44,12 +45,12 @@ export function Hand({
   // the authoring dialog; on submit we send a play carrying the authored
   // title+description (the backend fills in the blank, then plays it).
   function playSelected() {
-    if (!selectedId) return;
-    if (selectedCard?.blank) {
+    if (!selectedCard) return;
+    if (selectedCard.blank) {
       setBlankDialogOpen(true);
       return;
     }
-    send({ type: "play", card_id: selectedId });
+    send({ type: "play", card_id: selectedCard.id });
     setSelectedId(null);
   }
 
@@ -83,35 +84,46 @@ export function Hand({
             // rejects them anyway; greying them out here explains why.
             const isReaction = card.canonical?.trigger === "on_reaction";
             return (
-              <SketchCard
+              <DraggableHandCard
                 key={card.id}
-                card={card}
-                w={130}
-                rot={(i - (cards.length - 1) / 2) * 3}
-                selectable={playable && !isReaction}
-                selected={isSelected}
-                onClick={() => {
-                  if (!isReaction) setSelectedId(card.id);
-                }}
-                brewing={brewing === card.id}
-                artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
+                cardId={card.id}
+                // Draggability gates exactly on selectability: dragging is
+                // just another way to play. Blanks ARE draggable — dropping
+                // one opens the author-on-play dialog (see PlayDndContext).
+                canDrag={playable && !isReaction}
                 className={cn(
+                  "relative",
                   i > 0 && "-ml-[34px]",
                   "hover:z-30",
                   isSelected && "z-30",
                   selectedId && !isSelected && "opacity-55",
-                  isReaction && playable && "opacity-70 saturate-50",
                 )}
-              />
+              >
+                <SketchCard
+                  card={card}
+                  w={130}
+                  rot={(i - (cards.length - 1) / 2) * 3}
+                  selectable={playable && !isReaction}
+                  selected={isSelected}
+                  onClick={() => {
+                    if (!isReaction) setSelectedId(card.id);
+                  }}
+                  brewing={brewing === card.id}
+                  artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
+                  className={cn(
+                    isReaction && playable && "opacity-70 saturate-50",
+                  )}
+                />
+              </DraggableHandCard>
             );
           })}
         </div>
       )}
 
-      {playable && selectedId && (
+      {playable && selectedCard && (
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={playSelected}>
-            {selectedCard?.blank ? "Fill in & play" : "Play"}
+            {selectedCard.blank ? "Fill in & play" : "Play"}
           </Button>
         </div>
       )}
@@ -121,6 +133,44 @@ export function Hand({
         onOpenChange={setBlankDialogOpen}
         onPlay={playBlank}
       />
+    </div>
+  );
+}
+
+/**
+ * Drag source wrapper for one hand card. Dragging complements clicking (it is
+ * never the only way to play): the card lifts into the PlayDndContext overlay
+ * while the source dims. Keyboard/click play stays on the SketchCard itself,
+ * so no dnd-kit aria attributes are spread here — `data-draggable` marks the
+ * gate instead.
+ */
+function DraggableHandCard({
+  cardId,
+  canDrag,
+  className,
+  children,
+}: {
+  cardId: string;
+  canDrag: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  const { setNodeRef, listeners, isDragging } = useDraggable({
+    id: cardId,
+    disabled: !canDrag,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...(canDrag ? listeners : {})}
+      data-draggable={canDrag || undefined}
+      className={cn(
+        "touch-manipulation",
+        isDragging && "opacity-30",
+        className,
+      )}
+    >
+      {children}
     </div>
   );
 }
