@@ -48,6 +48,7 @@ function makeGameState(
     deck: [],
     discard: [],
     cards: {},
+    history_events: [],
     house_rules: [],
     hooks: [],
     has_drawn: true,
