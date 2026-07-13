@@ -66,5 +66,5 @@ def test_real_seed_file_shape() -> None:
     from agent.rag.seed import DEFAULT_SEED_PATH
 
     data = json.loads(DEFAULT_SEED_PATH.read_text())
-    assert len(data) == 67
+    assert len(data) == 69
     assert all("title" in c and "description" in c for c in data)

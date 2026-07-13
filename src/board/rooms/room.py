@@ -1107,6 +1107,11 @@ class Room:
             "event": str(ctx.event),
             "card_id": ctx.card_id,
             "amount": ctx.amount,
+            # Snippet diffs reject "chooser" targets (no prompt_choice flow), so
+            # sandbox code targeting a chosen player reads this and addresses
+            # them as "id:" + ctx["chosen_player_id"].
+            "chosen_player_id": ctx.chosen_player_id,
+            "chosen_card_id": ctx.chosen_card_id,
             "interactions": ctx.interactions,
             "interaction_refs": ctx.interaction_refs,
         }
@@ -2149,6 +2154,8 @@ class Room:
             "event": str(GameEvent.ON_REACTION),
             "card_id": reaction_card_id,
             "amount": None,
+            "chosen_player_id": chosen_player_id,
+            "chosen_card_id": chosen_card_id,
             **ctx.extra,
         }
         mode: str | None = None

@@ -14,8 +14,9 @@ fully deterministic (no LLM judge), and it does not depend on the retired graph.
 
 Scored dimensions (all structural, no LLM):
   - recall_nonempty:  did the retriever return at least one exemplar?
-  - timing_match:     does any retrieved exemplar's canonical timing match the
-                      gold card's expected timing?
+  - placement_match:  does any retrieved exemplar's canonical placement match
+                      the gold card's expected placement? (v2 has no timing;
+                      placement encodes persistence.)
   - target_match:     does any retrieved exemplar's canonical target match expected?
 
 Prints per-dimension mean scores + latency for each retriever, and a comparison
@@ -75,10 +76,10 @@ recall_nonempty = create_scorer(
     description="Did the retriever return at least one exemplar?",
     scorer=_recall_nonempty_scorer,
 )
-timing_match = create_scorer(
-    name="timing_match",
-    description="Does any retrieved exemplar's canonical timing match the gold card?",
-    scorer=_field_match_scorer("timing"),
+placement_match = create_scorer(
+    name="placement_match",
+    description="Does any retrieved exemplar's canonical placement match the gold card?",
+    scorer=_field_match_scorer("placement"),
 )
 target_match = create_scorer(
     name="target_match",
@@ -86,7 +87,7 @@ target_match = create_scorer(
     scorer=_field_match_scorer("target"),
 )
 
-RETRIEVAL_SCORERS = [recall_nonempty, timing_match, target_match]
+RETRIEVAL_SCORERS = [recall_nonempty, placement_match, target_match]
 
 
 def _make_task(mode: str):

@@ -12,7 +12,7 @@ from evals.judge import JudgeLLM, Verdict
 def _verdict() -> Verdict:
     return Verdict(
         intent_match=0.9,
-        timing_correct=1.0,
+        persistence_correct=1.0,
         target_placement_correct=1.0,
         trigger_event_correct=1.0,
         magnitude_sign_correct=1.0,
@@ -29,7 +29,7 @@ def test_verdict_score_range_rejected() -> None:
     with pytest.raises(Exception):
         Verdict(
             intent_match=1.5,
-            timing_correct=1.0,
+            persistence_correct=1.0,
             target_placement_correct=1.0,
             trigger_event_correct=1.0,
             magnitude_sign_correct=1.0,
@@ -42,7 +42,7 @@ def test_verdict_has_all_seven_fields() -> None:
     fields = set(Verdict.model_fields.keys())
     assert fields == {
         "intent_match",
-        "timing_correct",
+        "persistence_correct",
         "target_placement_correct",
         "trigger_event_correct",
         "magnitude_sign_correct",
@@ -85,7 +85,7 @@ def test_judge_evaluate_calls_structured_output(monkeypatch: pytest.MonkeyPatch)
         out = judge.evaluate(
             card_description="Gain 5 points.",
             generated_summary="add_points(5, self)",
-            human_canonical={"timing": "immediate", "target": "self"},
+            human_canonical={"placement": "discard", "target": "self"},
         )
         assert out is expected
         MockLLM.return_value.with_structured_output.assert_called_once_with(Verdict)

@@ -124,8 +124,11 @@ Values are the engine's `GameEvent` strings (`src/engine/events.py`) plus
   ONLY during the reaction window that opens when another player plays a card.
   Reactions are one-shot: placement `discard`.
 
-Invariant: `trigger` is `null` ⇔ placement is `discard`, with the single
-exception of reactions (`discard` + `on_reaction`).
+Invariants: a `discard` (one-shot) card's trigger is `null` — or
+`on_reaction` for reaction cards. Persistent modifiers usually name the event
+that re-fires them; **table-adjudicated ongoing rules** (honor-system cards —
+"the next person to make a penis joke loses 1000" — where the engine only
+displays the reminder) leave `trigger` null.
 
 ### MAGNITUDE_SIGN — `"positive" | "negative" | "neutral"` (eval datasets only)
 

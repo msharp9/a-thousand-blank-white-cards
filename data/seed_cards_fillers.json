@@ -1,162 +1,1075 @@
 [
   {
+    "id": "seed-filler-000",
     "title": "Compliment Someone",
-    "description": "Say something genuinely nice about another player right now. They gain 1 point if they believe you."
+    "description": "Say something genuinely nice about another player right now. They gain 1 point if they believe you.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Say something genuinely nice about the chosen player. The point stands only if they believe you."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 1,
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('Say something genuinely nice about the chosen player. The point stands only if they believe you.')\n    state.add_points(chosen, 1)"
+    }
   },
   {
+    "id": "seed-filler-001",
     "title": "Mandatory Dance Break",
-    "description": "All players must stand up and dance for 10 seconds. No exceptions. The most enthusiastic dancer gains 2 points (voted by majority)."
+    "description": "All players must stand up and dance for 10 seconds. No exceptions. The most enthusiastic dancer gains 2 points (voted by majority).",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "All players stand up and dance for 10 seconds. A majority vote picks the most enthusiastic dancer; choose them as the target."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 2,
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('All players stand up and dance for 10 seconds. A majority vote picks the most enthusiastic dancer.')\n    state.add_points(chosen, 2)"
+    }
   },
   {
+    "id": "seed-filler-002",
     "title": "Speak Only in Questions",
-    "description": "Stay in play until the start of your next turn. You may only communicate in the form of questions. Violations cost 2 points."
+    "description": "Stay in play until the start of your next turn. You may only communicate in the form of questions. Violations cost 2 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_turn_start",
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "speak_only_in_questions",
+            "value": true
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_start",
+            "scope": "player",
+            "code": "def apply(state, ctx):\n    state.set_condition('self', 'speak_only_in_questions', False)\n    state.note('The questions-only restriction has ended.')\n"
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Until the start of your next turn you may only communicate in questions. Each violation costs 2 points (table-adjudicated)."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'speak_only_in_questions', True)\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.set_condition('self', 'speak_only_in_questions', False)\\n    state.note('The questions-only restriction has ended.')\\n\")\n    state.note('Until the start of your next turn you may only communicate in questions. Each violation costs 2 points.')"
+    }
   },
   {
+    "id": "seed-filler-003",
     "title": "Left Hand Only",
-    "description": "For the rest of this round you may only use your left hand for everything. Lefties use their right hand."
+    "description": "For the rest of this round you may only use your left hand for everything. Lefties use their right hand.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "left_hand_only",
+            "value": true
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "For the rest of this round you may only use your left hand for everything (lefties: right hand). Table-adjudicated."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'left_hand_only', True)\n    state.note('For the rest of this round you may only use your left hand for everything. Lefties use their right hand.')"
+    }
   },
   {
+    "id": "seed-filler-004",
     "title": "This Card Is Actually Cursed",
-    "description": "Announce 'I am cursed.' You are cursed. What that means is up for debate."
+    "description": "Announce 'I am cursed.' You are cursed. What that means is up for debate.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "cursed",
+            "value": true
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Announce 'I am cursed.' You are cursed. What that means is up for debate."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'cursed', True)\n    state.note(\"Announce: I am cursed. You are cursed. What that means is up for debate.\")"
+    }
   },
   {
+    "id": "seed-filler-005",
     "title": "Invisible Card",
-    "description": "Pretend to play an invisible card. Mime its effects. Other players must react as if it was real."
+    "description": "Pretend to play an invisible card. Mime its effects. Other players must react as if it was real.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Mime playing an invisible card and act out its effects. All other players must react as if it were real."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('Mime playing an invisible card and act out its effects. All other players must react as if it were real.')"
+    }
   },
   {
+    "id": "seed-filler-006",
     "title": "Point at the Ceiling",
-    "description": "Whoever looks up loses 1 point. If no one looks up, the player who played this card loses 1 point."
+    "description": "Whoever looks up loses 1 point. If no one looks up, the player who played this card loses 1 point.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Point at the ceiling. Choose the first player who looked up as the target; if nobody looked, choose yourself."
+          }
+        },
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 1,
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('Point at the ceiling. The chosen player is whoever looked up, or the player of this card if nobody did.')\n    state.subtract_points(chosen, 1)"
+    }
   },
   {
+    "id": "seed-filler-007",
     "title": "The Meta Card",
-    "description": "This card is about itself. By reading it, you have already played it. Nothing else happens."
+    "description": "This card is about itself. By reading it, you have already played it. Nothing else happens.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "This card is about itself. By reading it, you have already played it. Nothing else happens."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('This card is about itself. By reading it, you have already played it. Nothing else happens.')"
+    }
   },
   {
+    "id": "seed-filler-008",
     "title": "High Five Tax",
-    "description": "Anyone who gives a high five for the rest of the game must pay 1 point to the other person."
+    "description": "Anyone who gives a high five for the rest of the game must pay 1 point to the other person.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.high_five_tax",
+            "value": 1
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "For the rest of the game, anyone who gives a high five pays 1 point to the other person (table-adjudicated)."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.high_five_tax', 1)\n    state.note('For the rest of the game, anyone who gives a high five pays 1 point to the other person.')"
+    }
   },
   {
+    "id": "seed-filler-009",
     "title": "Rename a Player",
-    "description": "Give any player a nickname. They must be addressed by that name for the rest of the game. Refusing costs 3 points."
+    "description": "Give any player a nickname. They must be addressed by that name for the rest of the game. Refusing costs 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "chosen_player",
+            "key": "nicknamed",
+            "value": true
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Give the chosen player a nickname. They must be addressed by it for the rest of the game; refusing costs 3 points (table-adjudicated)."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'nicknamed', True)\n    state.note('Give the chosen player a nickname. They must be addressed by it for the rest of the game; refusing costs 3 points.')"
+    }
   },
   {
+    "id": "seed-filler-010",
     "title": "The Prophecy",
-    "description": "Announce who you think will win the game right now. If you're correct, gain 5 points at game end."
+    "description": "Announce who you think will win the game right now. If you're correct, gain 5 points at game end.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "chosen_player",
+            "key": "prophesied_winner",
+            "value": true
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_game_end",
+            "scope": "player",
+            "code": "def apply(state, ctx):\n    best = None\n    for p in state.players():\n        if best is None or p.score > best.score:\n            best = p\n    if best and state.conditions(best.id).get('prophesied_winner'):\n        state.add_points('self', 5)\n"
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Announce who you think will win the game right now. If you are correct, you gain 5 points at game end."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'prophesied_winner', True)\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    best = None\\n    for p in state.players():\\n        if best is None or p.score > best.score:\\n            best = p\\n    if best and state.conditions(best.id).get('prophesied_winner'):\\n        state.add_points('self', 5)\\n\")\n    state.note('Announce who you think will win the game right now. If you are correct, you gain 5 points at game end.')"
+    }
   },
   {
+    "id": "seed-filler-011",
     "title": "Time Warp",
-    "description": "Undo the last card played as if it never happened. The card goes back into the hand it came from."
+    "description": "Undo the last card played as if it never happened. The card goes back into the hand it came from.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "The last card played never happened; the table unwinds its effects. Choose that card and the player whose hand it came from."
+          }
+        },
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "chosen_card",
+            "to_target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('The last card played never happened; the table unwinds its effects.')\n    state.transfer_card('chosen_card', chosen)"
+    }
   },
   {
+    "id": "seed-filler-012",
     "title": "Pay to Win",
-    "description": "You may spend any number of points to gain an equal number of points. This does nothing but you feel good about it."
+    "description": "You may spend any number of points to gain an equal number of points. This does nothing but you feel good about it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Spend any number of points to gain an equal number of points. Net change: zero. You feel good about it anyway."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('Spend any number of points to gain an equal number of points. Net change: zero. You feel good about it anyway.')"
+    }
   },
   {
+    "id": "seed-filler-013",
     "title": "Dramatic Reading",
-    "description": "Read the last card played aloud in your most dramatic voice. Other players rate you out of 10. You gain points equal to the average."
+    "description": "Read the last card played aloud in your most dramatic voice. Other players rate you out of 10. You gain points equal to the average.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Read the last card played aloud in your most dramatic voice. Players rate it 0-10; the table adjusts this award to the actual average (5 is the recorded default)."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('Read the last card played aloud in your most dramatic voice. Players rate it 0-10; the table adjusts this award to the actual average.')\n    state.add_points('self', 5)"
+    }
   },
   {
+    "id": "seed-filler-014",
     "title": "Conspiracy Theory",
-    "description": "Accuse another player of cheating. Whether or not it's true, they must defend themselves. The group votes. If guilty, they lose 3 points."
+    "description": "Accuse another player of cheating. Whether or not it's true, they must defend themselves. The group votes. If guilty, they lose 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Accuse the chosen player of cheating. They must defend themselves and the group votes. If acquitted, the table restores these 3 points."
+          }
+        },
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 3,
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('Accuse the chosen player of cheating. They defend themselves and the group votes; if acquitted, the table restores the 3 points.')\n    state.subtract_points(chosen, 3)"
+    }
   },
   {
+    "id": "seed-filler-015",
     "title": "Borrow a Card",
-    "description": "Look at another player's hand. Take one card. You must play it immediately, for better or worse."
+    "description": "Look at another player's hand. Take one card. You must play it immediately, for better or worse.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Look at another player's hand and take one card. You must play it immediately, for better or worse."
+          }
+        },
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "chosen_card",
+            "to_target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note(\"Look at another player's hand and take one card. You must play it immediately, for better or worse.\")\n    state.transfer_card('chosen_card', 'self')"
+    }
   },
   {
+    "id": "seed-filler-016",
     "title": "The Wild Card",
-    "description": "You decide what this card does. Announce its effect out loud before playing it. It does exactly what you say."
+    "description": "You decide what this card does. Announce its effect out loud before playing it. It does exactly what you say.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Announce this card's effect out loud before playing it. It does exactly what you said. The table holds you to it."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note(\"Announce this card's effect out loud before playing it. It does exactly what you said. The table holds you to it.\")"
+    }
   },
   {
+    "id": "seed-filler-017",
     "title": "Rock Paper Scissors Duel",
-    "description": "Challenge any player to best-of-three rock paper scissors. Winner gains 4 points."
+    "description": "Challenge any player to best-of-three rock paper scissors. Winner gains 4 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Challenge any player to best-of-three rock paper scissors. Choose the winner of the duel as the target."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 4,
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('Challenge any player to best-of-three rock paper scissors. The chosen player is the winner of the duel.')\n    state.add_points(chosen, 4)"
+    }
   },
   {
+    "id": "seed-filler-018",
     "title": "The Referendum",
-    "description": "Propose any rule change. All players vote. If it passes (majority), it becomes a house rule for the rest of the game."
+    "description": "Propose any rule change. All players vote. If it passes (majority), it becomes a house rule for the rest of the game.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Propose any rule change. All players vote; on a majority it becomes a house rule for the rest of the game. This card stays in the center as the reminder."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('Propose any rule change. All players vote; on a majority it becomes a house rule for the rest of the game.')"
+    }
   },
   {
+    "id": "seed-filler-019",
     "title": "Tourist Mode",
-    "description": "For your next two turns, you must ask what everything means and how the game works, as if you've never played before."
+    "description": "For your next two turns, you must ask what everything means and how the game works, as if you've never played before.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "tourist_mode",
+            "value": true
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "For your next two turns, ask what everything means and how the game works, as if you have never played before. Then remove this card."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'tourist_mode', True)\n    state.note('For your next two turns, ask what everything means and how the game works, as if you have never played before.')"
+    }
   },
   {
+    "id": "seed-filler-020",
     "title": "Free Real Estate",
-    "description": "Claim any card currently on the table in front of another player. It is yours now. No take-backs."
+    "description": "Claim any card currently on the table in front of another player. It is yours now. No take-backs.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Claim any card currently on the table in front of another player. It is yours now. No take-backs."
+          }
+        },
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "chosen_card",
+            "to_target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('Claim any card currently on the table in front of another player. It is yours now. No take-backs.')\n    state.transfer_card('chosen_card', 'self')"
+    }
   },
   {
+    "id": "seed-filler-021",
     "title": "The Pacifist",
-    "description": "No one may lose points this round. Protective aura. Very good vibes only."
+    "description": "No one may lose points this round. Protective aura. Very good vibes only.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.no_point_losses",
+            "value": true
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "No one may lose points this round. Protective aura. Very good vibes only (table-adjudicated)."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.no_point_losses', True)\n    state.note('No one may lose points this round. Protective aura. Very good vibes only.')"
+    }
   },
   {
+    "id": "seed-filler-022",
     "title": "Choose Your Destiny",
-    "description": "Draw 3 cards. Keep 1. Discard the others. You live with your choices."
+    "description": "Draw 3 cards. Keep 1. Discard the others. You live with your choices.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "draw_cards",
+          "args": {
+            "amount": 3,
+            "target": "self"
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Keep 1 of the 3 drawn cards and discard the other 2. You live with your choices."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 3)\n    state.note('Keep 1 of the 3 drawn cards and discard the other 2. You live with your choices.')"
+    }
   },
   {
+    "id": "seed-filler-023",
     "title": "Groundhog Day",
-    "description": "The last player's turn repeats exactly. Same cards, same effects. Don't think too hard about it."
+    "description": "The last player's turn repeats exactly. Same cards, same effects. Don't think too hard about it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "extra_turn",
+          "args": {
+            "target": "left_neighbor"
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.extra_turn('left_neighbor')\n    state.note(\"The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage.\")"
+    }
   },
   {
+    "id": "seed-filler-024",
     "title": "Emotional Support Card",
-    "description": "Give this card to whoever looks like they're having the least fun. They gain 3 points."
+    "description": "Give this card to whoever looks like they're having the least fun. They gain 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 3,
+            "target": "chosen_player"
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Give this card to whoever looks like they are having the least fun. It stays in front of them as emotional support."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.add_points(chosen, 3)\n    state.note('Give this card to whoever looks like they are having the least fun. It stays in front of them as emotional support.')"
+    }
   },
   {
+    "id": "seed-filler-025",
     "title": "Forbidden Word",
-    "description": "Pick a common word. No one may say it for the rest of the game. Anyone who does loses 2 points. You decide the word."
+    "description": "Pick a common word. No one may say it for the rest of the game. Anyone who does loses 2 points. You decide the word.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.forbidden_word_active",
+            "value": true
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Pick a common word and announce it. For the rest of the game anyone who says it loses 2 points (table-adjudicated)."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.forbidden_word_active', True)\n    state.note('Pick a common word and announce it. For the rest of the game anyone who says it loses 2 points.')"
+    }
   },
   {
+    "id": "seed-filler-026",
     "title": "The Floor Vote",
-    "description": "All players simultaneously point at whoever they think deserves 3 points. The player with the most votes gets 3 points."
+    "description": "All players simultaneously point at whoever they think deserves 3 points. The player with the most votes gets 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "All players simultaneously point at whoever they think deserves 3 points. Choose the player with the most votes as the target."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 3,
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('All players simultaneously point at whoever they think deserves 3 points. The chosen player is whoever got the most votes.')\n    state.add_points(chosen, 3)"
+    }
   },
   {
+    "id": "seed-filler-027",
     "title": "Chaos Shuffle",
-    "description": "All players pass their hands to the player on their left simultaneously."
+    "description": "All players pass their hands to the player on their left simultaneously.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "All players pass their entire hands to the player on their left simultaneously."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('All players pass their entire hands to the player on their left simultaneously.')"
+    }
   },
   {
+    "id": "seed-filler-028",
     "title": "Two Truths and a Lie (Card Edition)",
-    "description": "State two true things about a card in your hand and one lie. Other players guess the lie. Each correct guesser gets 1 point."
+    "description": "State two true things about a card in your hand and one lie. Other players guess the lie. Each correct guesser gets 1 point.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all_others",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "State two true things and one lie about a card in your hand; the others guess the lie. Wrong guessers give their point back (table-adjudicated)."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 1,
+            "target": "all_others"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('State two true things and one lie about a card in your hand; the others guess the lie. Wrong guessers give their point back.')\n    state.add_points('all_others', 1)"
+    }
   },
   {
+    "id": "seed-filler-029",
     "title": "The Clone",
-    "description": "Copy the effect of any card that has already been played this game. If you can remember it."
+    "description": "Copy the effect of any card that has already been played this game. If you can remember it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Copy the effect of any card that has already been played this game — if you can remember it. The table re-applies that effect."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('Copy the effect of any card that has already been played this game, if you can remember it. The table re-applies that effect.')"
+    }
   },
   {
+    "id": "seed-filler-030",
     "title": "Timeout",
-    "description": "The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence."
+    "description": "The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence.')"
+    }
   },
   {
+    "id": "seed-filler-031",
     "title": "The Bystander",
-    "description": "Skip your turn but gain 2 points for not participating. Sometimes doing nothing is the move."
+    "description": "Skip your turn but gain 2 points for not participating. Sometimes doing nothing is the move.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "skip_turn",
+          "args": {
+            "target": "self"
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 2,
+            "target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.skip_turn('self')\n    state.add_points('self', 2)"
+    }
   },
   {
+    "id": "seed-filler-032",
     "title": "Hot Potato",
-    "description": "Pass this card to another player at any time, even out of turn, to give them a problem you don't want. They must play it on their next turn."
+    "description": "Pass this card to another player at any time, even out of turn, to give them a problem you don't want. They must play it on their next turn.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "this",
+            "to_target": "chosen_player"
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "The chosen player must play this card on their next turn. It may be passed again at any time, even out of turn."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.transfer_card('this', chosen)\n    state.note('The chosen player must play this card on their next turn. It may be passed again at any time, even out of turn.')"
+    }
   },
   {
+    "id": "seed-filler-033",
     "title": "Unreliable Narrator",
-    "description": "Describe the last card that was played — but get one detail wrong. If no one notices, you gain 2 points. If someone does, they gain 2 points."
+    "description": "Describe the last card that was played — but get one detail wrong. If no one notices, you gain 2 points. If someone does, they gain 2 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Describe the last card played but get one detail wrong. If nobody notices, choose yourself as the target; if someone catches it, choose them."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 2,
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('Describe the last card played but get one detail wrong. The 2 points go to you if nobody notices, or to whoever catches the error.')\n    state.add_points(chosen, 2)"
+    }
   },
   {
+    "id": "seed-filler-034",
     "title": "Legacy Card",
-    "description": "Write your name on this card. It is now named after you. If it is ever played again, you gain 1 point."
+    "description": "Write your name on this card. It is now named after you. If it is ever played again, you gain 1 point.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "legacy_card",
+            "value": true
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Write your name on this card. It is now named after you; whenever it is played again, you gain 1 point."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'legacy_owner', state.actor_id)\n    state.note('This card is now named after its first player; whenever it is played again, they gain 1 point.')"
+    }
   },
   {
+    "id": "seed-filler-035",
     "title": "The Hype Card",
-    "description": "Announce the next card you play as if it's the most amazing thing anyone has ever done. If the table agrees, gain 3 points."
+    "description": "Announce the next card you play as if it's the most amazing thing anyone has ever done. If the table agrees, gain 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Announce your next play as the most amazing thing anyone has ever done. The 3-point award stands only if the table agrees."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 3,
+            "target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('Announce your next play as the most amazing thing anyone has ever done. The 3-point award stands only if the table agrees.')\n    state.add_points('self', 3)"
+    }
   },
   {
+    "id": "seed-filler-036",
     "title": "Nap Time",
-    "description": "Close your eyes for 30 seconds. You are resting. Nothing can target you during this time. Probably."
+    "description": "Close your eyes for 30 seconds. You are resting. Nothing can target you during this time. Probably.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "napping",
+            "value": true
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Close your eyes for 30 seconds. Nothing can target you while napping. Probably. Afterwards, remove this card and the condition."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'napping', True)\n    state.note('Close your eyes for 30 seconds. Nothing can target you while napping. Probably. Afterwards, remove this card and the condition.')"
+    }
   },
   {
+    "id": "seed-filler-037",
     "title": "The Historian",
-    "description": "Recite from memory every card that has been played this game. Gain 1 point per card you correctly name."
+    "description": "Recite from memory every card that has been played this game. Gain 1 point per card you correctly name.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Recite from memory every card that has been played this game. The table adjusts this award to 1 point per correctly named card (3 is the recorded default)."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 3,
+            "target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('Recite from memory every card that has been played this game. The table adjusts this award to 1 point per correctly named card.')\n    state.add_points('self', 3)"
+    }
   },
   {
+    "id": "seed-filler-038",
     "title": "Mystery Box",
-    "description": "Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first."
+    "description": "Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first.')"
+    }
   },
   {
+    "id": "seed-filler-039",
     "title": "The Epilogue",
-    "description": "If this is the last card played in the game, whoever played it wins regardless of points. If it isn't, nothing happens."
+    "description": "If this is the last card played in the game, whoever played it wins regardless of points. If it isn't, nothing happens.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "If this is the last card played in the game, whoever played it wins regardless of points. If it is not, nothing happens."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('If this is the last card played in the game, whoever played it wins regardless of points. If it is not, nothing happens.')"
+    }
   }
 ]

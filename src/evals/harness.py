@@ -20,13 +20,22 @@ from evals.eval_core import EvalItem, EvalRunReport, run_eval
 from evals.paths import find_repo_root
 from evals.scorers import ALL_SCORERS
 
-# The scored testset is the hand-annotated gold corpus (has human_canonical
-# labels). It lives in eval_cards.json; real_cards.json is the larger raw
-# transcription of the full photo album (human_canonical is null there).
+# The scored testsets, all hand-annotated with human_canonical labels:
+#   gold — eval_cards.json, the broad coverage set.
+#   hard — eval_cards_hard.json, compositional sandbox/steps-only cards that
+#          stretch the agent (ops: null by design).
+# real_cards.json is the larger raw photo transcription, not a scored suite.
 DEFAULT_DATA = find_repo_root(Path(__file__)) / "data" / "eval" / "eval_cards.json"
+DEFAULT_HARD_DATA = find_repo_root(Path(__file__)) / "data" / "eval" / "eval_cards_hard.json"
+
+SUITES: dict[str, list[tuple[Path, str]]] = {
+    "gold": [(DEFAULT_DATA, "real_card")],
+    "hard": [(DEFAULT_HARD_DATA, "hard_card")],
+    "all": [(DEFAULT_DATA, "real_card"), (DEFAULT_HARD_DATA, "hard_card")],
+}
 
 
-def load_eval_items(data_path: Path, limit: int | None = None) -> list[EvalItem]:
+def load_eval_items(data_path: Path, limit: int | None = None, tag: str = "real_card") -> list[EvalItem]:
     cards: list[dict[str, Any]] = json.loads(data_path.read_text(encoding="utf-8"))
     if limit:
         cards = cards[:limit]
@@ -38,9 +47,16 @@ def load_eval_items(data_path: Path, limit: int | None = None) -> list[EvalItem]
                 id=f"card_{i:03d}_{title}",
                 input=card,
                 expected=card.get("human_canonical") or {},
-                tags=("real_card",),
+                tags=(tag,),
             )
         )
+    return items
+
+
+def load_suite_items(suite: str, limit: int | None = None) -> list[EvalItem]:
+    items: list[EvalItem] = []
+    for path, tag in SUITES[suite]:
+        items.extend(load_eval_items(path, limit=limit, tag=tag))
     return items
 
 
@@ -94,9 +110,16 @@ def make_task():
     return task
 
 
-def run_harness(data_path: Path | None = None, limit: int | None = None) -> EvalRunReport:
-    """Run the full eval and return the report (also usable programmatically)."""
-    items = load_eval_items(data_path or DEFAULT_DATA, limit=limit)
+def run_harness(data_path: Path | None = None, limit: int | None = None, suite: str | None = None) -> EvalRunReport:
+    """Run the full eval and return the report (also usable programmatically).
+
+    ``suite`` ("gold"/"hard"/"all") selects the standard testsets; an explicit
+    ``data_path`` overrides it for ad-hoc files.
+    """
+    if data_path is not None:
+        items = load_eval_items(data_path, limit=limit)
+    else:
+        items = load_suite_items(suite or "gold", limit=limit)
     report = run_eval("tbwc-interpretation", data=items, task=make_task(), scorers=ALL_SCORERS)
     return report
 
@@ -114,10 +137,11 @@ def print_report(report: EvalRunReport) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the TBWC interpretation eval harness.")
-    parser.add_argument("--data", type=Path, default=DEFAULT_DATA)
+    parser.add_argument("--data", type=Path, default=None, help="explicit dataset path (overrides --suite)")
+    parser.add_argument("--suite", choices=sorted(SUITES), default="gold")
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
-    report = run_harness(args.data, args.limit)
+    report = run_harness(args.data, args.limit, suite=args.suite)
     print_report(report)
 
 

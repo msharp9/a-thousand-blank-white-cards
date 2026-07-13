@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import pathlib
 
-from models.card import FillerCard, GoldCard, parse_seed_card
+from models.card import GoldCard, parse_seed_card
 
 DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 
@@ -16,7 +16,7 @@ def _load(filename: str) -> list[dict]:
 
 class TestGoldCards:
     def test_count(self) -> None:
-        assert len(_load("seed_cards_gold.json")) == 27
+        assert len(_load("seed_cards_gold.json")) == 29
 
     def test_all_parse_as_gold(self) -> None:
         for d in _load("seed_cards_gold.json"):
@@ -46,22 +46,21 @@ class TestGoldCards:
 
 
 class TestFillerCards:
+    """Fillers carry full canonical annotations since the schema-v2 pass —
+    they parse as GoldCard and only differ from the gold set in provenance."""
+
     def test_count(self) -> None:
         assert len(_load("seed_cards_fillers.json")) == 40
 
-    def test_all_parse_as_filler(self) -> None:
+    def test_all_parse_as_gold(self) -> None:
         for d in _load("seed_cards_fillers.json"):
             card = parse_seed_card(d)
-            assert isinstance(card, FillerCard), f"Expected FillerCard: {d['title']}"
-
-    def test_no_canonical_key(self) -> None:
-        for d in _load("seed_cards_fillers.json"):
-            assert "canonical" not in d
+            assert isinstance(card, GoldCard), f"Expected GoldCard: {d['title']}"
 
 
 class TestCombinedFile:
     def test_count(self) -> None:
-        assert len(_load("seed_cards.json")) == 67
+        assert len(_load("seed_cards.json")) == 69
 
     def test_all_parse(self) -> None:
         for d in _load("seed_cards.json"):

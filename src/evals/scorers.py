@@ -126,16 +126,87 @@ target_accuracy = create_scorer(
 )
 
 
-def _timing_accuracy_scorer(context: ScorerContext) -> Score:
+def _persistence_accuracy_scorer(context: ScorerContext) -> Score:
     verdict = _run_judge(context)
-    return Score(score=verdict.timing_correct, metadata={"reason": verdict.reason})
+    return Score(score=verdict.persistence_correct, metadata={"reason": verdict.reason})
 
 
-timing_accuracy = create_scorer(
-    name="timing_accuracy",
-    description="LLM judge: is the timing (immediate/persistent/triggered) correct?",
-    scorer=_timing_accuracy_scorer,
+persistence_accuracy = create_scorer(
+    name="persistence_accuracy",
+    description="LLM judge: is the persistence (one-shot vs ongoing modifier + trigger) correct?",
+    scorer=_persistence_accuracy_scorer,
 )
 
 
-ALL_SCORERS = [intent_match_judge, dsl_validity, target_accuracy, timing_accuracy]
+def _generated_effect_forms(output: dict[str, Any]) -> tuple[list[str], list[dict[str, Any]]]:
+    """Split the agent's generated effect into (snippet codes, plain op dicts)."""
+    codes: list[str] = []
+    ops: list[dict[str, Any]] = []
+    plan = output.get("resolution_plan")
+    if isinstance(plan, dict):
+        for step in plan.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            if step.get("kind") == "snippet" and isinstance(step.get("code"), str):
+                codes.append(step["code"])
+            elif step.get("kind") == "ops":
+                ops.extend(op for op in step.get("ops") or [] if isinstance(op, dict))
+    else:
+        ep = output.get("effect_program")
+        if isinstance(ep, dict):
+            ops.extend(op for op in ep.get("ops") or [] if isinstance(op, dict))
+        snippet = output.get("snippet_effect")
+        if isinstance(snippet, str) and snippet.strip():
+            codes.append(snippet)
+    return codes, ops
+
+
+def _sandbox_behavior_scorer(context: ScorerContext) -> Score:
+    """Deterministic behavioral comparison: execute the EXPECTED sandbox and the
+    GENERATED effect against canned fixtures and compare the op diffs.
+
+    Sandbox code cannot be text-matched; behavior can. Scores the average
+    multiset-Jaccard similarity across fixtures. N/A cases (no expected
+    sandbox — e.g. interaction-step cards) score 1.0 with a skipped marker,
+    matching the trigger_event_correct N/A convention. Execution failures and
+    timeouts score 0 with the reason — never crash the harness.
+    """
+    expected_code = (context.expected or {}).get("sandbox")
+    if not expected_code:
+        return Score(score=1.0, metadata={"skipped": "no expected sandbox (steps-based or unannotated)"})
+    from config import get_settings
+
+    if not get_settings().snippet_execution_enabled:
+        return Score(score=1.0, metadata={"skipped": "snippet execution disabled"})
+
+    from engine.sandbox.runner import SnippetExecutionError, execute_snippet
+    from evals.fixtures import fixture_states, multiset_jaccard, normalise_ops
+
+    codes, plain_ops = _generated_effect_forms(context.output or {})
+    if not codes and not plain_ops:
+        return Score(score=0.0, metadata={"reason": "no generated effect to execute"})
+
+    similarities: list[float] = []
+    for state_dict, ctx_dict in fixture_states():
+        try:
+            expected_diff = normalise_ops(execute_snippet(expected_code, state_dict, ctx_dict), ctx_dict)
+            generated_raw: list[dict[str, Any]] = list(plain_ops)
+            for code in codes:
+                generated_raw.extend(execute_snippet(code, state_dict, ctx_dict))
+            generated_diff = normalise_ops(generated_raw, ctx_dict)
+        except SnippetExecutionError as exc:
+            return Score(score=0.0, metadata={"reason": f"execution failed: {exc}"})
+        except Exception as exc:
+            return Score(score=0.0, metadata={"reason": str(exc)})
+        similarities.append(multiset_jaccard(expected_diff, generated_diff))
+    return Score(score=sum(similarities) / len(similarities), metadata={"per_fixture": similarities})
+
+
+sandbox_behavior = create_scorer(
+    name="sandbox_behavior",
+    description="Deterministic: generated effect's op diff matches the expected sandbox's diff on fixtures.",
+    scorer=_sandbox_behavior_scorer,
+)
+
+
+ALL_SCORERS = [intent_match_judge, dsl_validity, target_accuracy, persistence_accuracy, sandbox_behavior]

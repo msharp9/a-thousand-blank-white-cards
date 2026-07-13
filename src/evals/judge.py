@@ -22,8 +22,13 @@ class Verdict(BaseModel):
     intent_match: Annotated[
         float, Field(ge=0.0, le=1.0, description="Does the generated effect capture the card's intent?")
     ]
-    timing_correct: Annotated[
-        float, Field(ge=0.0, le=1.0, description="Is the timing (immediate/persistent/triggered) correct?")
+    persistence_correct: Annotated[
+        float,
+        Field(
+            ge=0.0,
+            le=1.0,
+            description="Is the persistence correct? (one-shot discard vs ongoing center/player modifier, and its trigger.)",
+        ),
     ]
     target_placement_correct: Annotated[
         float, Field(ge=0.0, le=1.0, description="Is the target (self/player/all) and placement correct?")
@@ -53,14 +58,16 @@ Given:
 
 Score each dimension independently from 0.0 to 1.0:
 - intent_match: Does the generated effect do what the card says? Focus on semantics, not phrasing.
-- timing_correct: Is the timing tag correct? (immediate=one-shot on play; persistent=stays in play; triggered=fires on an event).
+- persistence_correct: Is the persistence correct? The expected canonical encodes it as
+  placement ("discard"=one-shot; "center"/"player"=ongoing modifier) plus trigger (the
+  event that re-fires an ongoing card; null for one-shots; "on_reaction" for reactions).
 - target_placement_correct: Is the target correct? (self=card player, player=chosen player, all=everyone).
 - trigger_event_correct: Is the trigger event correct? If the card has NO trigger, this should be 1.0 (N/A).
 - magnitude_sign_correct: Is the sign of the effect correct? (positive=gaining, negative=losing, neutral=no change).
 - overall: Holistic judgment of interpretation faithfulness.
 
 Be strict. "all players" interpreted as "self" scores 0 for target_placement_correct.
-A persistent card interpreted as immediate scores 0 for timing_correct.
+A persistent card interpreted as one-shot scores 0 for persistence_correct.
 """
 
 

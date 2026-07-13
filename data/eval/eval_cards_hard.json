@@ -1,0 +1,430 @@
+[
+  {
+    "id": "hard-000",
+    "title": "Grandmaster's Gambit",
+    "description": "Draw 2 cards, then gain 1 point for every card now in your hand. Openings win games.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    drawn = min(2, state.deck_size)\n    state.draw_cards('self', 2)\n    total = state.hand_size(state.actor_id) + drawn\n    if total > 0:\n        state.add_points('self', total)"
+    }
+  },
+  {
+    "id": "hard-001",
+    "title": "Hoarder's Dividend",
+    "description": "Gain 2 points for every card in your hand beyond the fifth. Hoarding finally pays off.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    extra = state.hand_size(state.actor_id) - 5\n    if extra > 0:\n        state.add_points('self', 2 * extra)"
+    }
+  },
+  {
+    "id": "hard-002",
+    "title": "Deck Necromancer",
+    "description": "If the deck has fewer than 10 cards left, gain 15 points. Feast on scarcity.",
+    "alt_text": "a skeleton wizard raising discarded cards from a cardboard graveyard",
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    if state.deck_size < 10:\n        state.add_points('self', 15)"
+    }
+  },
+  {
+    "id": "hard-003",
+    "title": "Minimalist Award",
+    "description": "The player holding the fewest cards gains 4 points. Ties: all tied players cash in.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    low = min(p.hand_size for p in state.players())\n    for p in state.players():\n        if p.hand_size == low:\n            state.add_points('id:' + p.id, 4)"
+    }
+  },
+  {
+    "id": "hard-004",
+    "title": "Empty Threat",
+    "description": "If this was the last card in your hand, gain 10 points. Otherwise lose 1 point per card you kept.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    held = state.hand_size(state.actor_id)\n    if held == 0:\n        state.add_points('self', 10)\n    else:\n        state.subtract_points('self', held)"
+    }
+  },
+  {
+    "id": "hard-005",
+    "title": "Monkey Census",
+    "description": "Gain 2 points for every card in your hand whose art contains a monkey. This card's monkey is counting.",
+    "alt_text": "a monkey in a tiny vest holding a clipboard, counting other monkeys",
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    count = 0\n    for cid in state.my_hand():\n        card = state.card(cid)\n        if card and 'monkey' in (card.get('alt_text') or '').lower():\n            count += 1\n    if count > 0:\n        state.add_points('self', 2 * count)"
+    }
+  },
+  {
+    "id": "hard-006",
+    "title": "Art Critic",
+    "description": "Gain 1 point per 10 characters of art description across the cards in your hand, up to 10. Fine art appreciates.",
+    "alt_text": "a monocled critic sneering at a stick-figure drawing",
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    total = 0\n    for cid in state.my_hand():\n        card = state.card(cid)\n        if card:\n            total += len(card.get('alt_text') or '')\n    bonus = min(10, total // 10)\n    if bonus > 0:\n        state.add_points('self', bonus)"
+    }
+  },
+  {
+    "id": "hard-007",
+    "title": "Banana Magnet",
+    "description": "If any card in your hand depicts a monkey or a banana, steal 2 points from a player of your choice.",
+    "alt_text": "a monkey riding a giant horseshoe magnet through a hail of bananas",
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    found = False\n    for cid in state.my_hand():\n        card = state.card(cid)\n        alt = (card.get('alt_text') or '').lower() if card else ''\n        if 'monkey' in alt or 'banana' in alt:\n            found = True\n    if found:\n        chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n        state.steal_points(chosen, 'self', 2)"
+    }
+  },
+  {
+    "id": "hard-008",
+    "title": "Wordless Wonder",
+    "description": "Gain 3 points for every card in your hand with no art at all. Blank is beautiful.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    blanks = 0\n    for cid in state.my_hand():\n        card = state.card(cid)\n        if card and not card.get('alt_text'):\n            blanks += 1\n    if blanks > 0:\n        state.add_points('self', 3 * blanks)"
+    }
+  },
+  {
+    "id": "hard-009",
+    "title": "Wealth Tax",
+    "description": "Ongoing: at the start of every turn, the richest player pays 2 points and everyone else pays 1. The auditor never sleeps.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": "on_turn_start",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    code = \"def apply(state, ctx):\\n    top = max(p.score for p in state.players())\\n    for p in state.players():\\n        if p.score == top:\\n            state.subtract_points('id:' + p.id, 2)\\n        else:\\n            state.subtract_points('id:' + p.id, 1)\\n\"\n    state.register_hook('on_turn_start', scope='center', code=code)"
+    }
+  },
+  {
+    "id": "hard-010",
+    "title": "Echo Chamber",
+    "description": "Ongoing: whenever a player gains points, they gain 1 bonus point. Hype begets hype.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": "on_score_change",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    code = \"def apply(state, ctx):\\n    amount = ctx.get('amount') or 0\\n    actor = ctx.get('actor_id')\\n    if amount > 0 and actor:\\n        state.add_points('id:' + actor, 1)\\n\"\n    state.register_hook('on_score_change', scope='center', code=code)"
+    }
+  },
+  {
+    "id": "hard-011",
+    "title": "Karma Police",
+    "description": "Ongoing: whenever the sole point leader plays a card, they lose 1 point. Heavy is the crown.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    code = \"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if not actor:\\n        return\\n    scores = [p.score for p in state.players()]\\n    top = max(scores)\\n    if state.player(actor).score == top and scores.count(top) == 1:\\n        state.subtract_points('id:' + actor, 1)\\n\"\n    state.register_hook('on_play', scope='center', code=code)"
+    }
+  },
+  {
+    "id": "hard-012",
+    "title": "Overdraft Fees",
+    "description": "Ongoing: any player who draws while already holding 7 or more cards loses 2 points. Storage isn't free.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": "on_draw_step",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    code = \"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor and state.hand_size(actor) >= 7:\\n        state.subtract_points('id:' + actor, 2)\\n\"\n    state.register_hook('on_draw_step', scope='center', code=code)"
+    }
+  },
+  {
+    "id": "hard-013",
+    "title": "Nuh-Uh",
+    "description": "Play only when another player plays a card. That card is negated. Nuh-uh.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": "on_reaction",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.counter_play('negate')\n    title = ctx.get('pending_card_title') or 'That card'\n    state.note(title + ' does nothing. Nuh-uh.')"
+    }
+  },
+  {
+    "id": "hard-014",
+    "title": "Grabby Hands",
+    "description": "Play when another player plays a card. Negate it and take 3 points from them for trying.",
+    "alt_text": "two enormous cartoon hands snatching at everything on the table",
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": "on_reaction",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.counter_play('negate')\n    pid = ctx.get('pending_actor_id')\n    if pid:\n        state.steal_points('id:' + pid, 'self', 3)"
+    }
+  },
+  {
+    "id": "hard-015",
+    "title": "Mirror Match",
+    "description": "Play when another player plays a card. Their card resolves as if YOU had played it. Mine now.",
+    "alt_text": "a full-length mirror wearing a smug grin",
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": "on_reaction",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.counter_play('redirect')\n    title = ctx.get('pending_card_title') or 'that card'\n    state.note('Mirror Match: ' + title + ' is mine now.')"
+    }
+  },
+  {
+    "id": "hard-016",
+    "title": "Robin Hood",
+    "description": "Steal 5 points from the richest player and give them to the poorest. Same person? Nothing happens. Ties break toward earlier turn order.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    order = state.turn_order\n    rich = order[0]\n    poor = order[0]\n    for pid in order:\n        if state.player(pid).score > state.player(rich).score:\n            rich = pid\n        if state.player(pid).score < state.player(poor).score:\n            poor = pid\n    if rich != poor:\n        state.steal_points('id:' + rich, 'id:' + poor, 5)"
+    }
+  },
+  {
+    "id": "hard-017",
+    "title": "Underdog Uprising",
+    "description": "Every player whose score is below the table average gains 3 points. Rise up.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    players = state.players()\n    total = sum(p.score for p in players)\n    n = len(players)\n    for p in players:\n        if p.score * n < total:\n            state.add_points('id:' + p.id, 3)"
+    }
+  },
+  {
+    "id": "hard-018",
+    "title": "Coin Flip of Destiny",
+    "description": "Flip the cosmic coin: if your score is odd you gain 7 points, if it's even you lose 3. The coin was rigged all along.",
+    "alt_text": "a two-headed coin spinning in midair",
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    if state.player(state.actor_id).score % 2 != 0:\n        state.add_points('self', 7)\n    else:\n        state.subtract_points('self', 3)"
+    }
+  },
+  {
+    "id": "hard-019",
+    "title": "Photo Finish",
+    "description": "If the top two players are within 3 points of each other, they both gain 5. Ties break toward earlier turn order.",
+    "alt_text": "two snails crossing a finish line antenna-to-antenna",
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    ranked = sorted(state.turn_order, key=lambda pid: -state.player(pid).score)\n    if len(ranked) >= 2:\n        gap = state.player(ranked[0]).score - state.player(ranked[1]).score\n        if gap <= 3:\n            state.add_points('id:' + ranked[0], 5)\n            state.add_points('id:' + ranked[1], 5)"
+    }
+  },
+  {
+    "id": "hard-020",
+    "title": "Musical Chairs",
+    "description": "The music stops! Every player's score becomes the current score of the next player in turn order.",
+    "alt_text": "empty chairs in a circle with one confused ghost still standing",
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    order = state.turn_order\n    scores = {}\n    for pid in order:\n        scores[pid] = state.player(pid).score\n    n = len(order)\n    for i in range(n):\n        state.set_points('id:' + order[i], scores[order[(i + 1) % n]])"
+    }
+  },
+  {
+    "id": "hard-021",
+    "title": "The Great Flattening",
+    "description": "Every player's score becomes the table average, rounded down. Utopia achieved; everyone is equally annoyed.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    players = state.players()\n    avg = sum(p.score for p in players) // len(players)\n    state.set_points('all', avg)"
+    }
+  },
+  {
+    "id": "hard-022",
+    "title": "Silver Medal Syndrome",
+    "description": "The player in second place gains 6 points. First place gets nothing but the fear. Ties break toward earlier turn order.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    ranked = sorted(state.turn_order, key=lambda pid: -state.player(pid).score)\n    if len(ranked) >= 2:\n        state.add_points('id:' + ranked[1], 6)"
+    }
+  },
+  {
+    "id": "hard-023",
+    "title": "Lowball Auction",
+    "description": "Everyone secretly bids 0-20 points. The LOWEST bidder pays their bid and gains 10 points. Ties go to the earliest player in turn order.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "bids",
+          "request": {
+            "kind": "number",
+            "schema_version": 1,
+            "prompt": "Secretly bid between 0 and 20 points. LOWEST bid wins.",
+            "audience": "all",
+            "sealed": true,
+            "timeout_seconds": 60,
+            "minimum": 0,
+            "maximum": 20,
+            "integer": true
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    bids = ctx['interactions']['bids']\n    if not bids:\n        return\n    best = min(bids.values())\n    winner = [pid for pid in state.turn_order if bids.get(pid) == best][0]\n    state.add_points('id:' + winner, 10)\n    state.subtract_points('id:' + winner, int(best))\n",
+          "explanation": "Resolve the sealed lowest-bid auction deterministically: earliest tied bidder in turn order pays their bid and takes the prize."
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null
+    }
+  },
+  {
+    "id": "hard-024",
+    "title": "Point Referendum",
+    "description": "Everyone votes in secret: TAX the current point leader 5 points, or GIFT them 5 more. Majority rules, ties tax. Leader ties break toward earlier turn order.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "votes",
+          "request": {
+            "kind": "choice",
+            "schema_version": 1,
+            "prompt": "The current point leader hangs in the balance. Tax them 5 points, or gift them 5 more?",
+            "audience": "all",
+            "sealed": true,
+            "timeout_seconds": 60,
+            "options": [
+              {
+                "id": "tax",
+                "label": "Tax the leader 5 points"
+              },
+              {
+                "id": "gift",
+                "label": "Gift the leader 5 points"
+              }
+            ],
+            "min_selections": 1,
+            "max_selections": 1
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    votes = ctx['interactions']['votes']\n    tax = 0\n    gift = 0\n    for picks in votes.values():\n        for oid in picks:\n            if oid == 'tax':\n                tax += 1\n            elif oid == 'gift':\n                gift += 1\n    order = state.turn_order\n    leader = order[0]\n    for pid in order:\n        if state.player(pid).score > state.player(leader).score:\n            leader = pid\n    if tax >= gift:\n        state.subtract_points('id:' + leader, 5)\n    else:\n        state.add_points('id:' + leader, 5)\n",
+          "explanation": "Tally the sealed vote, find the leader with an earliest-turn-order tie-break, and apply the majority's verdict (ties tax)."
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null
+    }
+  }
+]

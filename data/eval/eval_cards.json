@@ -1,12 +1,12 @@
 [
   {
+    "id": "eval-000",
     "title": "Gain 5 Points",
     "description": "When you play this card, gain 5 points. Nice.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -16,17 +16,20 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"
     }
   },
   {
+    "id": "eval-001",
     "title": "Mega Jackpot",
     "description": "CONGRATULATIONS!!! You found the jackpot card. Gain 100 points immediately. Do a little dance.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -36,17 +39,20 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 100)"
     }
   },
   {
+    "id": "eval-002",
     "title": "Stubbed Your Toe",
     "description": "Ouch! You stubbed your toe on the coffee table. Lose 3 points.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -56,17 +62,20 @@
           }
         }
       ],
-      "magnitude_sign": "negative"
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 3)"
     }
   },
   {
+    "id": "eval-003",
     "title": "Tax Season",
     "description": "The taxman cometh. Every player loses 10 points. No exceptions, not even you.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_play",
       "ops": [
         {
           "op": "add_points",
@@ -76,17 +85,20 @@
           }
         }
       ],
-      "magnitude_sign": "negative"
+      "magnitude_sign": "negative",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('all', 10)"
     }
   },
   {
+    "id": "eval-004",
     "title": "Universal Basic Points",
     "description": "Everyone gains 7 points. We're all winners here (sort of).",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_play",
       "ops": [
         {
           "op": "add_points",
@@ -96,17 +108,20 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('all', 7)"
     }
   },
   {
+    "id": "eval-005",
     "title": "Skip It",
     "description": "The player to your left loses their next turn. Sorry, not sorry.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "player",
       "placement": "player",
-      "trigger_event": "on_play",
       "ops": [
         {
           "op": "skip_turn",
@@ -115,17 +130,20 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.skip_turn(chosen)"
     }
   },
   {
+    "id": "eval-006",
     "title": "Go Again!",
     "description": "That was fun. Take another turn right now.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "extra_turn",
@@ -134,34 +152,40 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.extra_turn('self')"
     }
   },
   {
+    "id": "eval-007",
     "title": "Backwards Day",
     "description": "Reverse the direction of play. Whee!",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_play",
       "ops": [
         {
           "op": "reverse_order",
           "args": {}
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.reverse_order()"
     }
   },
   {
+    "id": "eval-008",
     "title": "Draw Three",
     "description": "Your hand is looking thin. Draw 3 cards.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "draw_cards",
@@ -171,17 +195,20 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 1)"
     }
   },
   {
+    "id": "eval-009",
     "title": "Robin Hood",
     "description": "Steal 8 points from the player with the most points and keep them for yourself.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "player",
       "placement": "player",
-      "trigger_event": "on_play",
       "ops": [
         {
           "op": "steal_points",
@@ -191,17 +218,20 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 8)"
     }
   },
   {
+    "id": "eval-010",
     "title": "Generous Gift",
     "description": "You're feeling kind today. Give 10 of your points to another player of your choice.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "player",
       "placement": "player",
-      "trigger_event": "on_play",
       "ops": [
         {
           "op": "add_points",
@@ -218,55 +248,65 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.subtract_points('self', 10)\n    state.add_points(chosen, 10)"
     }
   },
   {
+    "id": "eval-011",
     "title": "New Win Condition",
     "description": "Forget 1000. The first player to reach 250 points wins the whole game.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_play",
       "ops": [
         {
           "op": "set_win_condition",
           "args": {
+            "kind": "first_to",
             "threshold": 250
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('first_to', 250)"
     }
   },
   {
+    "id": "eval-012",
     "title": "Burn It Down",
     "description": "Destroy any one card currently in play. Poof. It's gone forever.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
-      "target": "center",
+      "target": "card",
       "placement": "center",
-      "trigger_event": "on_play",
       "ops": [
         {
           "op": "destroy_card",
           "args": {
-            "target": "center"
+            "card_target": "chosen_card"
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.destroy_card(card_id=ctx.get(\"chosen_card_id\"))"
     }
   },
   {
+    "id": "eval-013",
     "title": "Windfall",
     "description": "You won the lottery! Gain 50 points and brag about it loudly.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -276,17 +316,20 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 50)"
     }
   },
   {
+    "id": "eval-014",
     "title": "Double Draw",
     "description": "From now on, everyone draws 2 cards at the start of their turn instead of 1.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_turn_start",
       "ops": [
         {
           "op": "change_draw_count",
@@ -295,17 +338,20 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": "on_turn_start",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(1)"
     }
   },
   {
+    "id": "eval-015",
     "title": "Passive Income",
     "description": "Keep this card in front of you. At the start of each of your turns, gain 3 points.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_turn_start",
+      "placement": "player",
       "ops": [
         {
           "op": "add_points",
@@ -315,17 +361,20 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": "on_turn_start",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 3)"
     }
   },
   {
+    "id": "eval-016",
     "title": "Cursed Amulet",
     "description": "This card sticks to you. At the end of each of your turns, lose 2 points until someone destroys it.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_turn_end",
+      "placement": "player",
       "ops": [
         {
           "op": "add_points",
@@ -335,17 +384,20 @@
           }
         }
       ],
-      "magnitude_sign": "negative"
+      "magnitude_sign": "negative",
+      "trigger": "on_turn_end",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 2)"
     }
   },
   {
+    "id": "eval-017",
     "title": "Draw Tax",
     "description": "Ongoing: whenever any player draws a card, that player loses 1 point.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_draw",
       "ops": [
         {
           "op": "add_points",
@@ -355,17 +407,20 @@
           }
         }
       ],
-      "magnitude_sign": "negative"
+      "magnitude_sign": "negative",
+      "trigger": "on_draw_step",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.subtract_points(chosen, 1)"
     }
   },
   {
+    "id": "eval-018",
     "title": "Lucky Charm",
     "description": "Place in front of you. Every time you play a card, gain 1 bonus point.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "player",
       "ops": [
         {
           "op": "add_points",
@@ -375,17 +430,20 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 1)"
     }
   },
   {
+    "id": "eval-019",
     "title": "Victory Bonus",
     "description": "Persistent. When the game ends, whoever holds this card gains 40 points before the final tally.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_game_end",
+      "placement": "player",
       "ops": [
         {
           "op": "add_points",
@@ -395,108 +453,224 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": "on_game_end",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 40)"
     }
   },
   {
+    "id": "eval-020",
     "title": "Score Doubler",
     "description": "Keep this out. Whenever you score points from another card, this doubles them.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_score",
-      "snippet": "When the holder gains points this turn, add the same amount again as a bonus.",
-      "magnitude_sign": "positive"
+      "placement": "player",
+      "magnitude_sign": "positive",
+      "trigger": "on_score_change",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_score_change",
+            "scope": "player",
+            "code": "def apply(state, ctx):\n    amount = ctx.get(\"amount\")\n    if amount and amount > 0:\n        state.add_points(\"self\", amount)\n"
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Only the holder's own point gains are doubled; the table adjudicates gains the engine cannot attribute."
+          }
+        }
+      ],
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.register_hook(\"on_score_change\", scope=\"player\", code=\"def apply(state, ctx):\\n    amount = ctx.get('amount')\\n    if amount and amount > 0:\\n        state.add_points('self', amount)\\n\")\n    state.note(\"Only the holder's own point gains are doubled; the table adjudicates gains the engine cannot attribute.\")"
     }
   },
   {
+    "id": "eval-021",
     "title": "Everybody Stand Up",
     "description": "Everyone must physically stand up. The last person still seated loses 5 points.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "all",
-      "placement": "center",
-      "trigger_event": "on_play",
-      "snippet": "All players stand up; the last to stand loses 5 points. Enforced by the table, not the engine.",
-      "magnitude_sign": "negative"
-    }
-  },
-  {
-    "title": "Compliment Circle",
-    "description": "Give the player on your right a genuine compliment. If it makes them smile, you both gain 5 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "player",
-      "placement": "player",
-      "trigger_event": "on_play",
-      "snippet": "Actor compliments the player to their right; if that player smiles, both gain 5 points. Judged by the table.",
-      "magnitude_sign": "positive"
-    }
-  },
-  {
-    "title": "Do Your Best Impression",
-    "description": "Do your best impression of a farm animal. If nobody guesses which animal within 10 seconds, lose 4 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "snippet": "Actor mimics a farm animal; if no one guesses it in 10 seconds, actor loses 4 points.",
-      "magnitude_sign": "negative"
-    }
-  },
-  {
-    "title": "The Floor Is Lava",
-    "description": "For the rest of the game, anyone caught touching the floor with bare feet loses 2 points on the spot.",
-    "human_canonical": {
-      "timing": "modifier",
-      "target": "all",
-      "placement": "center",
-      "trigger_event": null,
-      "snippet": "Ongoing house rule: any player who touches the floor with bare feet loses 2 points, adjudicated by the table.",
-      "magnitude_sign": "negative"
-    }
-  },
-  {
-    "title": "One Does Not Simply",
-    "description": "One does not simply walk into Mordor. If you can quote the next line, gain 9 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
-      "snippet": "Actor recites the next line of the movie quote; if correct, gain 9 points. Table adjudicates.",
-      "magnitude_sign": "positive"
-    }
-  },
-  {
-    "title": "Rickrolled",
-    "description": "Never gonna give you up! Sing one line of the chorus or lose 6 points.",
-    "human_canonical": {
-      "timing": "immediate",
-      "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
+      "magnitude_sign": "negative",
+      "trigger": null,
       "ops": [
         {
           "op": "custom_note",
           "args": {
-            "note": "Actor must sing a line of the chorus; if they refuse, apply -6 points."
+            "note": "All players stand up; the table identifies the last player to stand as the chosen target."
+          }
+        },
+        {
+          "op": "subtract_points",
+          "args": {
+            "target": "player",
+            "amount": 5
           }
         }
       ],
-      "magnitude_sign": "negative"
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.note(\"All players stand up; the table identifies the last player to stand as the chosen target.\")\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.subtract_points(chosen, 5)"
     }
   },
   {
+    "id": "eval-022",
+    "title": "Compliment Circle",
+    "description": "Give the player on your right a genuine compliment. If it makes them smile, you both gain 5 points.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Actor compliments the player to their right; the points apply only if that player smiles. Judged by the table."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 5
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "right_neighbor",
+            "amount": 5
+          }
+        }
+      ],
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.note(\"Actor compliments the player to their right; the points apply only if that player smiles. Judged by the table.\")\n    state.add_points(\"self\", 5)\n    state.add_points(\"right_neighbor\", 5)"
+    }
+  },
+  {
+    "id": "eval-023",
+    "title": "Do Your Best Impression",
+    "description": "Do your best impression of a farm animal. If nobody guesses which animal within 10 seconds, lose 4 points.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Actor mimics a farm animal; the loss applies only if no one guesses it in 10 seconds. Table adjudicates."
+          }
+        },
+        {
+          "op": "subtract_points",
+          "args": {
+            "target": "self",
+            "amount": 4
+          }
+        }
+      ],
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.note(\"Actor mimics a farm animal; the loss applies only if no one guesses it in 10 seconds. Table adjudicates.\")\n    state.subtract_points(\"self\", 4)"
+    }
+  },
+  {
+    "id": "eval-024",
+    "title": "The Floor Is Lava",
+    "description": "For the rest of the game, anyone caught touching the floor with bare feet loses 2 points on the spot.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Ongoing house rule: any player who touches the floor with bare feet loses 2 points, adjudicated by the table."
+          }
+        }
+      ],
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.note('Ongoing house rule: any player who touches the floor with bare feet loses 2 points, adjudicated by the table.')"
+    }
+  },
+  {
+    "id": "eval-025",
+    "title": "One Does Not Simply",
+    "description": "One does not simply walk into Mordor. If you can quote the next line, gain 9 points.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Actor recites the next line of the movie quote; the gain applies only if correct. Table adjudicates."
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 9
+          }
+        }
+      ],
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.note(\"Actor recites the next line of the movie quote; the gain applies only if correct. Table adjudicates.\")\n    state.add_points(\"self\", 9)"
+    }
+  },
+  {
+    "id": "eval-026",
+    "title": "Rickrolled",
+    "description": "Never gonna give you up! Sing one line of the chorus or lose 6 points.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Actor must sing a line of the chorus; the loss applies only if they refuse. Table adjudicates."
+          }
+        },
+        {
+          "op": "subtract_points",
+          "args": {
+            "target": "self",
+            "amount": 6
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.note(\"Actor must sing a line of the chorus; the loss applies only if they refuse. Table adjudicates.\")\n    state.subtract_points(\"self\", 6)"
+    }
+  },
+  {
+    "id": "eval-027",
     "title": "Blank White Card",
     "description": "This card is intentionally left blank. It does absolutely nothing. Contemplate the void.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "custom_note",
@@ -505,17 +679,20 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.note('No mechanical effect; pure flavor card.')"
     }
   },
   {
+    "id": "eval-028",
     "title": "Motivational Poster",
     "description": "Hang in there! This card just says something nice. No points change hands.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "custom_note",
@@ -524,29 +701,42 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.note('Flavor only; no game effect.')"
     }
   },
   {
+    "id": "eval-029",
     "title": "Great Depression",
     "description": "The market crashed. Every player's score is cut in half, rounded down.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_play",
-      "snippet": "Set each player's score to floor(score / 2).",
-      "magnitude_sign": "negative"
+      "magnitude_sign": "negative",
+      "trigger": "on_play",
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "Set each player's score to floor(score / 2)."
+          }
+        }
+      ],
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.note(\"Set each player's score to floor(score / 2).\")"
     }
   },
   {
+    "id": "eval-030",
     "title": "Point Vampire",
     "description": "Steal 15 points from the player to your left. Muahaha.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "player",
       "placement": "player",
-      "trigger_event": "on_play",
       "ops": [
         {
           "op": "steal_points",
@@ -556,17 +746,20 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 15)"
     }
   },
   {
+    "id": "eval-031",
     "title": "Slow Draw",
     "description": "From now on everyone draws one fewer card each turn. Scarcity!",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_turn_start",
       "ops": [
         {
           "op": "change_draw_count",
@@ -575,17 +768,20 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": "on_turn_start",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(-1)"
     }
   },
   {
+    "id": "eval-032",
     "title": "Big Bonus Draw",
     "description": "Feeling greedy? Draw 5 cards right now.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "draw_cards",
@@ -595,17 +791,20 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 1)"
     }
   },
   {
+    "id": "eval-033",
     "title": "Grand Finale",
     "description": "MASSIVE PAYOUT. Gain 500 points. You basically win. Probably.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -615,17 +814,20 @@
           }
         }
       ],
-      "magnitude_sign": "positive"
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 500)"
     }
   },
   {
+    "id": "eval-034",
     "title": "Time Out",
     "description": "You've been naughty. Skip your own next turn as punishment.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
-      "placement": "self",
-      "trigger_event": "on_play",
+      "placement": "discard",
       "ops": [
         {
           "op": "skip_turn",
@@ -634,112 +836,295 @@
           }
         }
       ],
-      "magnitude_sign": "neutral"
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.skip_turn('self')"
     }
   },
   {
+    "id": "eval-035",
     "title": "Chess Master",
     "description": "Draw 2 cards, then gain one point for every card now in your hand.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "self",
       "placement": "discard",
-      "trigger_event": "on_play",
       "magnitude_sign": "positive",
       "steps": [
-        {"kind": "ops", "ops": [{"op": "draw_cards", "target": "self", "amount": 2}]},
-        {"kind": "snippet", "code": "def apply(state, ctx):\n    state.add_points('self', state.hand_size(state.actor_id))\n"}
-      ]
+        {
+          "kind": "ops",
+          "ops": [
+            {
+              "op": "draw_cards",
+              "target": "self",
+              "amount": 2
+            }
+          ]
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    state.add_points('self', state.hand_size(state.actor_id))\n"
+        }
+      ],
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null
     }
   },
   {
+    "id": "eval-036",
     "title": "Total Chaos",
     "description": "Gain 5, everyone else loses 3 and skips, take an extra turn, and destroy all cards in play.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "all",
       "placement": "discard",
-      "trigger_event": "on_play",
       "magnitude_sign": "positive",
       "ops": [
-        {"op": "add_points", "args": {"target": "self", "amount": 5}},
-        {"op": "subtract_points", "args": {"target": "all_others", "amount": 3}},
-        {"op": "skip_turn", "args": {"target": "all_others"}},
-        {"op": "extra_turn", "args": {"target": "self"}},
-        {"op": "destroy_card", "args": {"card_target": "all_in_play"}}
-      ]
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 5
+          }
+        },
+        {
+          "op": "subtract_points",
+          "args": {
+            "target": "all_others",
+            "amount": 3
+          }
+        },
+        {
+          "op": "skip_turn",
+          "args": {
+            "target": "all_others"
+          }
+        },
+        {
+          "op": "extra_turn",
+          "args": {
+            "target": "self"
+          }
+        },
+        {
+          "op": "destroy_card",
+          "args": {
+            "card_target": "all_in_play"
+          }
+        }
+      ],
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)\n    state.subtract_points('all_others', 3)\n    state.skip_turn('all_others')\n    state.extra_turn('self')\n    state.destroy_card(card_target='all_in_play')"
     }
   },
   {
+    "id": "eval-037",
     "title": "Most Cards Drawn Wins",
     "description": "End the game. Whoever has drawn the most cards wins; ties share the win.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "immediate",
       "target": "all",
       "placement": "discard",
-      "trigger_event": "on_play",
       "magnitude_sign": "neutral",
       "steps": [
-        {"kind": "snippet", "code": "def apply(state, ctx):\n    totals = state.draw_totals()\n    best = max(totals.values())\n    state.end_game(['id:' + pid for pid, total in totals.items() if total == best])\n"}
-      ]
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    totals = state.draw_totals()\n    best = max(totals.values())\n    state.end_game(['id:' + pid for pid, total in totals.items() if total == best])\n"
+        }
+      ],
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null
     }
   },
   {
+    "id": "eval-038",
     "title": "Basic Uno",
     "description": "Use Uno rules: no automatic draw and the first empty hand wins immediately.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_play",
       "magnitude_sign": "neutral",
       "ops": [
-        {"op": "set_win_condition", "args": {"kind": "empty_hand"}},
-        {"op": "set_rule", "args": {"path": "end_condition.type", "value": "empty_hand"}},
-        {"op": "change_draw_count", "args": {"amount": 0}}
-      ]
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "empty_hand"
+          }
+        },
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "end_condition.type",
+            "value": "empty_hand"
+          }
+        },
+        {
+          "op": "change_draw_count",
+          "args": {
+            "amount": 0
+          }
+        }
+      ],
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('empty_hand')\n    state.set_rule('end_condition.type', 'empty_hand')\n    state.change_draw_count(0)"
     }
   },
   {
+    "id": "eval-039",
     "title": "Spicy Uno",
     "description": "Use basic Uno rules and add colored Draw 2, Draw 4, and Reverse cards to the deck.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_play",
       "magnitude_sign": "neutral",
       "steps": [
-        {"kind": "ops", "ops": [
-          {"op": "set_win_condition", "kind": "empty_hand"},
-          {"op": "set_rule", "path": "end_condition.type", "value": "empty_hand"},
-          {"op": "change_draw_count", "amount": 0},
-          {"op": "create_card", "title": "Draw 2", "ops": [{"op": "draw_cards", "args": {"target": "right_neighbor", "amount": 2}}], "attributes": {"color": "red"}},
-          {"op": "create_card", "title": "Draw 4", "ops": [{"op": "draw_cards", "args": {"target": "right_neighbor", "amount": 4}}], "attributes": {"color": "wild"}},
-          {"op": "create_card", "title": "Reverse", "ops": [{"op": "reverse_order", "args": {}}], "attributes": {"color": "red"}}
-        ]}
-      ]
+        {
+          "kind": "ops",
+          "ops": [
+            {
+              "op": "set_win_condition",
+              "kind": "empty_hand"
+            },
+            {
+              "op": "set_rule",
+              "path": "end_condition.type",
+              "value": "empty_hand"
+            },
+            {
+              "op": "change_draw_count",
+              "amount": 0
+            },
+            {
+              "op": "create_card",
+              "title": "Draw 2",
+              "ops": [
+                {
+                  "op": "draw_cards",
+                  "args": {
+                    "target": "right_neighbor",
+                    "amount": 2
+                  }
+                }
+              ],
+              "attributes": {
+                "color": "red"
+              }
+            },
+            {
+              "op": "create_card",
+              "title": "Draw 4",
+              "ops": [
+                {
+                  "op": "draw_cards",
+                  "args": {
+                    "target": "right_neighbor",
+                    "amount": 4
+                  }
+                }
+              ],
+              "attributes": {
+                "color": "wild"
+              }
+            },
+            {
+              "op": "create_card",
+              "title": "Reverse",
+              "ops": [
+                {
+                  "op": "reverse_order",
+                  "args": {}
+                }
+              ],
+              "attributes": {
+                "color": "red"
+              }
+            }
+          ]
+        }
+      ],
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": null
     }
   },
   {
+    "id": "eval-040",
     "title": "Wild Uno",
     "description": "Use Uno ending rules and enforce color alignment on every play.",
+    "alt_text": null,
     "human_canonical": {
-      "timing": "modifier",
       "target": "all",
       "placement": "center",
-      "trigger_event": "on_play",
       "magnitude_sign": "neutral",
       "steps": [
-        {"kind": "ops", "ops": [
-          {"op": "set_win_condition", "kind": "empty_hand"},
-          {"op": "set_rule", "path": "end_condition.type", "value": "empty_hand"},
-          {"op": "change_draw_count", "amount": 0},
-          {"op": "set_rule", "path": "extra.current_color", "value": "red"},
-          {"op": "register_hook", "event": "on_validate_play", "scope": "center", "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"},
-          {"op": "register_hook", "event": "on_play", "scope": "center", "code": "def apply(state, ctx):\n    card = state.card(ctx['card_id'])\n    if card:\n        color = card.get('attributes', {}).get('color')\n        if color:\n            state.set_rule('extra.current_color', color)\n"}
-        ]}
-      ]
+        {
+          "kind": "ops",
+          "ops": [
+            {
+              "op": "set_win_condition",
+              "kind": "empty_hand"
+            },
+            {
+              "op": "set_rule",
+              "path": "end_condition.type",
+              "value": "empty_hand"
+            },
+            {
+              "op": "change_draw_count",
+              "amount": 0
+            },
+            {
+              "op": "set_rule",
+              "path": "extra.current_color",
+              "value": "red"
+            },
+            {
+              "op": "register_hook",
+              "event": "on_validate_play",
+              "scope": "center",
+              "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"
+            },
+            {
+              "op": "register_hook",
+              "event": "on_play",
+              "scope": "center",
+              "code": "def apply(state, ctx):\n    card = state.card(ctx['card_id'])\n    if card:\n        color = card.get('attributes', {}).get('color')\n        if color:\n            state.set_rule('extra.current_color', color)\n"
+            }
+          ]
+        }
+      ],
+      "trigger": "on_play",
+      "venue": "all",
+      "sandbox": null
+    }
+  },
+  {
+    "id": "eval-041",
+    "title": "Sticky Fingers",
+    "description": "Play only when another player plays a card: their card never resolves and lands in your hand instead. Finders keepers.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "magnitude_sign": "neutral",
+      "trigger": "on_reaction",
+      "ops": [
+        {
+          "op": "counter_play",
+          "args": {
+            "mode": "steal_hand"
+          }
+        }
+      ],
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    if ctx.get(\"pending_card_id\"):\n        state.counter_play(\"steal_hand\")"
     }
   }
 ]

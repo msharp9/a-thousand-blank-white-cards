@@ -15,13 +15,17 @@ import json
 import re
 from pathlib import Path
 
+from engine.sandbox.validate import validate_snippet
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "eval"
 GOLD = DATA_DIR / "eval_cards.json"
 REAL = DATA_DIR / "real_cards.json"
+HARD = DATA_DIR / "eval_cards_hard.json"
 
-_VALID_TIMING = {"immediate", "modifier"}
-_VALID_TARGET = {"self", "player", "all", "center"}
-_VALID_PLACEMENT = {"discard", "self", "player", "center", "destroy"}
+# Schema v2 (data/eval/CANONICAL_SPEC.md): no timing, placement collapsed to
+# three zones, target "center" re-annotated as "none", unified trigger.
+_VALID_TARGET = {"self", "player", "all", "all_others", "card", "all_cards", "none"}
+_VALID_PLACEMENT = {"discard", "player", "center"}
 _VALID_SIGN = {"positive", "negative", "neutral"}
 
 # A genuine Imgur direct image link, e.g. https://i.imgur.com/abc123.jpeg.
@@ -66,20 +70,25 @@ def test_gold_every_card_has_required_fields() -> None:
     for c in _load(GOLD):
         assert c["title"]
         assert c["description"]
+        assert "alt_text" in c
         hc = c["human_canonical"]
         assert hc is not None
-        assert hc["timing"] in _VALID_TIMING
+        assert "timing" not in hc  # v2: derived from placement
         assert hc["target"] in _VALID_TARGET
         assert hc["placement"] in _VALID_PLACEMENT
         assert hc["magnitude_sign"] in _VALID_SIGN
-        assert hc.get("ops") or hc.get("snippet") or hc.get("steps")
+        assert hc.get("ops") or hc.get("steps")
+        # sandbox is the executable teaching form; steps-based cards carry
+        # their code inside the plan instead.
+        assert hc.get("sandbox") or hc.get("steps")
 
 
 def test_gold_diversity() -> None:
     cards = _load(GOLD)
     hcs = [c["human_canonical"] for c in cards]
-    assert sum(1 for h in hcs if "snippet" in h and h.get("snippet")) >= 5
-    assert sum(1 for h in hcs if h["timing"] == "modifier") >= 6
+    assert sum(1 for h in hcs if h.get("sandbox")) >= 5
+    # v2 has no timing: persistence == non-discard placement.
+    assert sum(1 for h in hcs if h["placement"] != "discard") >= 6
     assert sum(1 for h in hcs if h["target"] == "all") >= 3
     assert any(h["magnitude_sign"] == "negative" for h in hcs)
     assert any(h["magnitude_sign"] == "neutral" for h in hcs)
@@ -135,7 +144,8 @@ def test_real_image_urls_unique() -> None:
 def test_real_cards_have_transcription_shape() -> None:
     """Each raw card has the expected top-level fields."""
     for c in _load(REAL):
-        assert set(c.keys()) == {"image_url", "title", "description", "human_canonical"}
+        assert set(c.keys()) == {"id", "image_url", "title", "description", "alt_text", "human_canonical"}
+        assert not c["description"].lstrip().startswith("["), f"unsplit alt text: {c['title']!r}"
         assert isinstance(c["title"], str)
         assert isinstance(c["description"], str)
 
@@ -144,12 +154,22 @@ def test_real_cards_have_transcription_shape() -> None:
 # real_cards.json human_canonical annotations (see data/eval/CANONICAL_SPEC.md).
 # --------------------------------------------------------------------------- #
 
-_REAL_TIMING = {"immediate", "modifier"}
 _REAL_TARGET = {"self", "player", "all", "all_others", "card", "all_cards", "none"}
-_REAL_PLACEMENT = {"discard", "center", "player", "self", "destroy"}
+_REAL_PLACEMENT = {"discard", "center", "player"}
 _REAL_VENUE = {"all", "in_person", "online"}
 _REAL_SIGN = {"positive", "negative", "neutral"}
-_REAL_TRIGGER = {"on_play", "on_draw", "on_turn_start", "on_turn_end", "on_score", None}
+_REAL_TRIGGER = {
+    "on_play",
+    "on_validate_play",
+    "on_score_change",
+    "on_turn_start",
+    "on_turn_end",
+    "on_draw_step",
+    "on_win_check",
+    "on_game_end",
+    "on_reaction",
+    None,
+}
 
 
 def test_real_every_card_is_annotated() -> None:
@@ -157,14 +177,14 @@ def test_real_every_card_is_annotated() -> None:
     for c in _load(REAL):
         hc = c["human_canonical"]
         assert hc is not None, f"unannotated card: {c['title']!r}"
-        assert hc["timing"] in _REAL_TIMING
         assert hc["target"] in _REAL_TARGET
         assert hc["placement"] in _REAL_PLACEMENT
         assert hc["venue"] in _REAL_VENUE
         assert hc["magnitude_sign"] in _REAL_SIGN
-        assert hc.get("trigger_event", None) in _REAL_TRIGGER
-        # exactly one of ops / snippet
-        assert bool(hc.get("ops")) != bool(hc.get("snippet")), f"ops XOR snippet violated: {c['title']!r}"
+        assert hc.get("trigger", None) in _REAL_TRIGGER
+        assert "trigger_event" not in hc  # v2 unifies on "trigger"
+        assert "snippet" not in hc  # v2: prose degraded to ops, code lives in sandbox
+        assert hc.get("ops") or hc.get("steps"), f"no executable form: {c['title']!r}"
 
 
 def test_real_venue_distribution_is_sane() -> None:
@@ -172,3 +192,60 @@ def test_real_venue_distribution_is_sane() -> None:
     venues = [c["human_canonical"]["venue"] for c in _load(REAL)]
     assert venues.count("all") > venues.count("in_person")  # most cards work anywhere
     assert venues.count("in_person") >= 10  # but physical cards are genuinely tagged
+
+
+# --------------------------------------------------------------------------- #
+# Hard corpus: eval_cards_hard.json (effects too complex for flat ops — the
+# benchmark for whether the card-interpretation agent can compose sandbox
+# code or ordered steps).
+# --------------------------------------------------------------------------- #
+
+
+def _has_interaction_steps(hc: dict) -> bool:
+    return any(isinstance(s, dict) and s.get("kind") == "interaction" for s in hc.get("steps") or [])
+
+
+class TestHardEvalCards:
+    """The hard set is sandbox/steps-only by design: every ops slot is null."""
+
+    def test_exactly_25_cards(self) -> None:
+        assert len(_load(HARD)) == 25
+
+    def test_ids_and_titles_unique(self) -> None:
+        cards = _load(HARD)
+        ids = [c["id"] for c in cards]
+        titles = [c["title"] for c in cards]
+        assert len(ids) == len(set(ids))
+        assert len(titles) == len(set(titles))
+
+    def test_ops_always_null(self) -> None:
+        for c in _load(HARD):
+            assert c["human_canonical"]["ops"] is None, c["title"]
+
+    def test_sandbox_xor_interaction_steps(self) -> None:
+        """One executable teaching form each: sandbox code, or an interaction plan."""
+        for c in _load(HARD):
+            hc = c["human_canonical"]
+            assert bool(hc.get("sandbox")) != _has_interaction_steps(hc), c["title"]
+
+    def test_reaction_coverage(self) -> None:
+        cards = _load(HARD)
+        assert sum(1 for c in cards if c["human_canonical"]["trigger"] == "on_reaction") >= 3
+
+    def test_register_hook_coverage(self) -> None:
+        cards = _load(HARD)
+        assert sum(1 for c in cards if "register_hook" in (c["human_canonical"].get("sandbox") or "")) >= 3
+
+    def test_interaction_step_coverage(self) -> None:
+        cards = _load(HARD)
+        assert sum(1 for c in cards if _has_interaction_steps(c["human_canonical"])) >= 2
+
+    def test_all_sandbox_code_passes_static_validation(self) -> None:
+        for c in _load(HARD):
+            hc = c["human_canonical"]
+            codes = [hc["sandbox"]] if hc.get("sandbox") else []
+            codes += [s["code"] for s in hc.get("steps") or [] if isinstance(s, dict) and s.get("kind") == "snippet"]
+            assert codes, c["title"]
+            for code in codes:
+                result = validate_snippet(code)
+                assert result.ok, f"{c['title']}: {result.error}"

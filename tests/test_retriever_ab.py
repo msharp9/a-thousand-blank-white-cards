@@ -11,7 +11,9 @@ from evals.retriever_ab import render_ab_table, run_ab
 
 
 def test_run_ab_and_render(tmp_path: Path) -> None:
-    data = [{"title": "Gain 3", "description": "Gain 3.", "human_canonical": {"timing": "immediate", "target": "self"}}]
+    data = [
+        {"title": "Gain 3", "description": "Gain 3.", "human_canonical": {"placement": "discard", "target": "self"}}
+    ]
     p = tmp_path / "cards.json"
     p.write_text(json.dumps(data))
 
@@ -22,7 +24,7 @@ def test_run_ab_and_render(tmp_path: Path) -> None:
             "card_id": "c1",
             "title": "Gain",
             "description": "d",
-            "canonical": json.dumps({"timing": "immediate", "target": "self"}),
+            "canonical": json.dumps({"placement": "discard", "target": "self"}),
         }
     ]
     advanced_hits = [
@@ -30,7 +32,7 @@ def test_run_ab_and_render(tmp_path: Path) -> None:
             "card_id": "c2",
             "title": "Lose",
             "description": "d",
-            "canonical": json.dumps({"timing": "persistent", "target": "all"}),
+            "canonical": json.dumps({"placement": "center", "target": "all"}),
         }
     ]
 
@@ -50,12 +52,12 @@ def test_run_ab_and_render(tmp_path: Path) -> None:
     assert isinstance(advanced, EvalRunReport)
 
     ds, ad = dense.summary(), advanced.summary()
-    # dense exemplar matches the gold timing/target; advanced does not.
+    # dense exemplar matches the gold placement/target; advanced does not.
     assert ds["recall_nonempty"] == 1.0
-    assert ds["timing_match"] == 1.0
+    assert ds["placement_match"] == 1.0
     assert ds["target_match"] == 1.0
     assert ad["recall_nonempty"] == 1.0
-    assert ad["timing_match"] == 0.0
+    assert ad["placement_match"] == 0.0
     assert ad["target_match"] == 0.0
 
     table = render_ab_table(dense, advanced)

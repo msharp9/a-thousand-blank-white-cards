@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import pathlib
 
-from engine.compile import compile_card
+from engine.compile import compile_card, compile_card_plan
 from models.card import GoldCard, parse_seed_card
 from models.effects import EffectProgram
 
@@ -18,7 +18,7 @@ def _load() -> list[dict]:
 
 class TestSimpleSeedDeck:
     def test_count(self) -> None:
-        assert len(_load()) >= 28
+        assert len(_load()) >= 32
 
     def test_all_parse_as_gold(self) -> None:
         for d in _load():
@@ -42,6 +42,14 @@ class TestSimpleSeedDeck:
             prog = compile_card({**d, "ops": [op.model_dump() for op in card.canonical.ops or []]})
             assert isinstance(prog, EffectProgram), f"Did not compile: {d['title']}"
             assert prog.ops, f"Empty program: {d['title']}"
+
+    def test_modifier_cards_compile_deterministically(self) -> None:
+        """The center modifiers (game-wide rules) must also compile without
+        the LLM — simple mode plays every card through compile_card_plan."""
+        by_title = {d["title"]: d for d in _load()}
+        for title in ("Generous Dealer", "Echo Chamber"):
+            plan = compile_card_plan(by_title[title])
+            assert plan is not None and plan.steps, f"Empty plan: {title}"
 
     def test_exactly_two_on_game_end_cards(self) -> None:
         cards = [parse_seed_card(d) for d in _load()]

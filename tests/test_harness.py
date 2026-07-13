@@ -13,13 +13,13 @@ from models.effects import AddPointsOp, EffectProgram, OpsStep, ResolutionPlan, 
 
 
 def test_load_eval_items(tmp_path: Path) -> None:
-    data = [{"title": "T1", "description": "d1", "human_canonical": {"timing": "immediate"}}]
+    data = [{"title": "T1", "description": "d1", "human_canonical": {"placement": "discard"}}]
     p = tmp_path / "cards.json"
     p.write_text(json.dumps(data))
     items = load_eval_items(p)
     assert len(items) == 1
     assert items[0].input["title"] == "T1"
-    assert items[0].expected == {"timing": "immediate"}
+    assert items[0].expected == {"placement": "discard"}
 
 
 def test_normalise_maps_program_to_effect_program() -> None:
@@ -52,7 +52,7 @@ def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
         {
             "title": "Gain 3",
             "description": "Gain 3 points.",
-            "human_canonical": {"timing": "immediate", "target": "self"},
+            "human_canonical": {"placement": "discard", "target": "self"},
         },
     ]
     p = tmp_path / "cards.json"
@@ -70,7 +70,7 @@ def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
 
         mock_judge.return_value = Verdict(
             intent_match=1.0,
-            timing_correct=1.0,
+            persistence_correct=1.0,
             target_placement_correct=1.0,
             trigger_event_correct=1.0,
             magnitude_sign_correct=1.0,

@@ -13,7 +13,9 @@ from models.effects import AddPointsOp, EffectProgram
 
 
 def test_run_improvement_ab_and_render(tmp_path: Path) -> None:
-    data = [{"title": "Gain 3", "description": "Gain 3.", "human_canonical": {"timing": "immediate", "target": "self"}}]
+    data = [
+        {"title": "Gain 3", "description": "Gain 3.", "human_canonical": {"placement": "discard", "target": "self"}}
+    ]
     p = tmp_path / "cards.json"
     p.write_text(json.dumps(data))
     prog = EffectProgram(ops=[AddPointsOp(target="self", amount=3)])
@@ -22,7 +24,7 @@ def test_run_improvement_ab_and_render(tmp_path: Path) -> None:
 
     verdict = Verdict(
         intent_match=1.0,
-        timing_correct=1.0,
+        persistence_correct=1.0,
         target_placement_correct=1.0,
         trigger_event_correct=1.0,
         magnitude_sign_correct=1.0,

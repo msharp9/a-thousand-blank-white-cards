@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from evals.eval_core import EvalItem, ScorerContext
-from evals.scorers import ALL_SCORERS, dsl_validity, intent_match_judge, target_accuracy, timing_accuracy
+from evals.scorers import (
+    ALL_SCORERS,
+    dsl_validity,
+    intent_match_judge,
+    persistence_accuracy,
+    sandbox_behavior,
+    target_accuracy,
+)
 
 
 def _ctx(output, expected=None) -> ScorerContext:
@@ -12,10 +19,11 @@ def _ctx(output, expected=None) -> ScorerContext:
 
 
 def test_all_scorers_count() -> None:
-    assert len(ALL_SCORERS) == 4
+    assert len(ALL_SCORERS) == 5
+    assert sandbox_behavior in ALL_SCORERS
     assert intent_match_judge in ALL_SCORERS
     assert target_accuracy in ALL_SCORERS
-    assert timing_accuracy in ALL_SCORERS
+    assert persistence_accuracy in ALL_SCORERS
 
 
 def test_dsl_validity_valid_effect_program() -> None:
@@ -61,3 +69,59 @@ def test_dsl_validity_rejects_invalid_plan_snippet() -> None:
 
     assert score.score == 0.0
     assert "draw_cards" in score.metadata["reason"]
+
+
+class TestSandboxBehavior:
+    def _ctx(self, output: dict, expected: dict):
+        from evals.eval_core import EvalItem, ScorerContext
+
+        item = EvalItem(id="sb", input={"title": "x", "description": "y"}, expected=expected)
+        return ScorerContext(item=item, output=output)
+
+    def test_skips_when_no_expected_sandbox(self) -> None:
+        score = sandbox_behavior.evaluate(self._ctx({"effect_program": {"ops": []}}, {}))
+        assert score.score == 1.0
+        assert "skipped" in score.metadata
+
+    def test_zero_when_no_generated_effect(self) -> None:
+        expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
+        score = sandbox_behavior.evaluate(self._ctx({}, expected))
+        assert score.score == 0.0
+
+    def test_matching_ops_program_scores_one(self) -> None:
+        expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
+        output = {"effect_program": {"ops": [{"op": "add_points", "target": "self", "amount": 5}]}}
+        score = sandbox_behavior.evaluate(self._ctx(output, expected))
+        assert score.score == 1.0
+
+    def test_wrong_amount_scores_below_one(self) -> None:
+        expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
+        output = {"effect_program": {"ops": [{"op": "add_points", "target": "self", "amount": 500}]}}
+        score = sandbox_behavior.evaluate(self._ctx(output, expected))
+        assert score.score < 1.0
+
+    def test_equivalent_snippet_scores_one(self) -> None:
+        expected = {"sandbox": "def apply(state, ctx):\n    state.subtract_points('all_others', 2)"}
+        output = {
+            "resolution_plan": {
+                "steps": [
+                    {"kind": "snippet", "code": "def apply(state, ctx):\n    state.subtract_points('all_others', 2)"}
+                ]
+            }
+        }
+        score = sandbox_behavior.evaluate(self._ctx(output, expected))
+        assert score.score == 1.0
+
+    def test_chooser_alias_normalises_to_chosen_player(self) -> None:
+        # Expected sandbox addresses the chosen player via ctx; a generated ops
+        # program may say "chooser" — normalisation must treat them as equal.
+        expected = {
+            "sandbox": (
+                "def apply(state, ctx):\n"
+                '    chosen = "id:" + (ctx.get("chosen_player_id") or "")\n'
+                "    state.add_points(chosen, 3)"
+            )
+        }
+        output = {"effect_program": {"ops": [{"op": "add_points", "target": "chooser", "amount": 3}]}}
+        score = sandbox_behavior.evaluate(self._ctx(output, expected))
+        assert score.score == 1.0
