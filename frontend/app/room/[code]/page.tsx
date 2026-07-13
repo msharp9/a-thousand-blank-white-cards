@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { CreateCardDialog } from "@/components/create-card-dialog";
 import { EffectLog } from "@/components/effect-log";
+import { DynamicStatePanel } from "@/components/dynamic-state-panel";
 import { EpilogueView } from "@/components/epilogue";
 import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
@@ -367,6 +368,7 @@ export default function RoomPage() {
         {gameState && phase === "playing" && (
           <div className="flex min-h-full flex-col">
             <GameTable gameState={gameState} myPlayerId={myPlayerId ?? ""} />
+            <DynamicStatePanel gameState={gameState} />
 
             {/* felt table: center zone + deck/action dock */}
             <div className="mx-4 my-2.5 flex min-h-[280px] flex-1 items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)]">
@@ -407,11 +409,6 @@ export default function RoomPage() {
                   )}
                   <p className="mt-1.5 font-hand text-[15px] text-white">
                     Deck · {gameState.deck.length}
-                  </p>
-                  <p className="font-hand text-xs text-white/70">
-                    {gameState.direction === 1
-                      ? "→ clockwise"
-                      : "← counter-clockwise"}
                   </p>
                 </div>
                 {!isSpectator && (

@@ -4,7 +4,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getCardArtUrl } from "@/lib/art";
-import type { CardSnapshot, ClientMsg, GameStateSnapshot } from "@/lib/types";
+import type {
+  CardSnapshot,
+  ClientMsg,
+  GameStateSnapshot,
+  PreviewResult,
+} from "@/lib/types";
 import { CreateCardDialog } from "./create-card-dialog";
 import { SketchCard } from "./sketch-card";
 
@@ -12,11 +17,7 @@ interface SetupPhaseProps {
   gameState: GameStateSnapshot;
   myPlayerId: string;
   send: (msg: ClientMsg) => void;
-  previewResult: {
-    program?: string | null;
-    snippet?: string | null;
-    verdict: string;
-  } | null;
+  previewResult: PreviewResult | null;
   isSpectator?: boolean;
 }
 

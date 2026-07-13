@@ -141,14 +141,15 @@ schema *is* the plugin API, data-shaped, with no code loading.**
 
 Give the interpretation agent a `wish` tool (sibling to `read_engine_methods`
 in `agent/tools/`): when it cannot express a card even with the full registry
-facade, it records `{card_title, card_description, what_i_wanted, missing
-_capability}` — appended to a JSONL and/or filed as a `bd` issue tagged
-`agent-wish` — then falls back exactly as today (persona action /
+facade, it records `{card_title, card_description, what_i_wanted,
+missing_capability}` in append-only JSONL telemetry — then falls back exactly
+as today (persona action /
 `CustomNoteOp`; the play still never silently no-ops).
 
 - Turns §1's speculation into telemetry: every real ceiling hit becomes a
   triaged, human-reviewed feature request. It is the input queue for 2c.
-- Zero risk: it's a logging tool. In-character, the arbiter can even say "the
+- The runtime never invokes `bd` and never edits source. A human exports and
+  triages the records offline. In-character, the arbiter can even say "the
   table can't do that yet — I've filed a complaint with management," which is
   extremely on-brand for this game.
 
@@ -230,9 +231,9 @@ remaining niche large enough to justify collapsing the security boundary.
 
 ### Phases
 
-1. **Now (with registry phase E, ~free):** wish-note tool + `bd` filing +
-   in-character fallback line. Start measuring the real ceiling.
-   *Follow-up bead: agent `wish` tool + triage tag.*
+1. **Implemented:** wish-note JSONL telemetry + in-character fallback line.
+   `scripts/export_capability_wishes.py` supports offline human triage; no
+   runtime issue-tracker or source-writing authority exists.
 2. **After registry phases A–E prove out:** interaction descriptors —
    `interaction_request`/`interaction_response` envelopes, Room
    pending-interaction table with barrier + timeout, `InteractionPanel`

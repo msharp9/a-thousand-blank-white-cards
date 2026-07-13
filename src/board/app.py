@@ -65,9 +65,9 @@ with a full `state` snapshot. All messages are JSON objects with a `type` field.
 | --- | --- | --- |
 | `state` | `state` | Full game-state snapshot (sent on connect and after every mutation). |
 | `brewing` | `card_id` | The arbiter is interpreting a card (in-flight indicator). |
-| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict`, `comment` | Result of interpreting a played/created card. `comment` is the arbiter's short, in-character remark about the card (may be empty). |
+| `card_interpreted` | `card_id`, `program`, `snippet`, `verdict`, `comment`, `mechanical_status`, `mechanical_reason`, `correlation_id` | Result of interpreting a played/created card with durable mechanical diagnostics. |
 | `effect_applied` | `log_entry` | An effect (or the arbiter's `comment`, prefixed `🤖`) was applied; human-readable log line. Also appended to `state.log` so it survives reconnect. |
-| `preview_result` | `program`, `snippet`, `verdict` | Reply to `preview_card`. |
+| `preview_result` | `program`, `snippet`, `verdict`, `mechanical_status`, `mechanical_reason`, `correlation_id` | Real cloned-state interpretation and dry-run result. |
 | `prompt_choice` | `card_id`, `prompt`, `choices` | Server asks the active player to pick a target. |
 | `epilogue` | `cards` | Epilogue phase opened with the cards created this game. |
 | `error` | `message` | An error (bad message, not your turn, room not found, …). |

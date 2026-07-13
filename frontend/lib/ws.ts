@@ -5,6 +5,7 @@ import type {
   CardSnapshot,
   ClientMsg,
   GameStateSnapshot,
+  PreviewResult,
   PromptChoiceMsg,
   ServerMsg,
 } from "./types";
@@ -50,11 +51,7 @@ export interface GameSocketState {
   gameState: GameStateSnapshot | null;
   log: string[];
   brewing: string | null;
-  previewResult: {
-    program?: string | null;
-    snippet?: string | null;
-    verdict: string;
-  } | null;
+  previewResult: PreviewResult | null;
   // A hard connection rejection (close code >= 4000, or a fatal socket error).
   // Retrying can never fix it, so the room page tears down to a "back to lobby"
   // screen. Cleared only when a fresh socket opens successfully.
@@ -173,6 +170,9 @@ export function useGameSocket(code: string, name: string): GameSocketState {
               program: msg.program,
               snippet: msg.snippet,
               verdict: msg.verdict,
+              mechanical_status: msg.mechanical_status,
+              mechanical_reason: msg.mechanical_reason,
+              correlation_id: msg.correlation_id,
             });
             break;
           case "prompt_choice":

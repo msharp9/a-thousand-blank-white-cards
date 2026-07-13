@@ -21,8 +21,8 @@ interface GameTableProps {
  */
 export function GameTable({ gameState, myPlayerId }: GameTableProps) {
   const { players, spectators, turn_index, cards } = gameState;
-  const activePlayer = players.length
-    ? players[turn_index % players.length]
+  const activePlayerId = players.length
+    ? players[turn_index % players.length]?.id
     : undefined;
 
   return (
@@ -36,7 +36,7 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
               color={playerColor(index)}
               cards={cards}
               roomCode={gameState.room_code}
-              isActive={player.id === activePlayer?.id}
+              isActive={player.id === activePlayerId}
             />
           ),
         )}

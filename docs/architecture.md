@@ -203,6 +203,14 @@ On (re)connect the server immediately replays a full `state` snapshot, so a
 refresh restores the whole game (including `state.log`, which is why every
 effect line is persisted there and not only broadcast live).
 
+Snapshots expose the active data-driven game rather than a fixed board model:
+`turn_order`, `rules`, player `conditions`, card `attributes`, and registered
+hook metadata. The frontend derives the active player from `turn_order` and
+renders these values in a generic dynamic-state panel; there is no legacy
+direction flag. Cards also retain a bounded mechanical diagnostic (`pending`,
+`applied`, `fallback`, or `rejected`), a public reason, and a correlation id, so
+failures remain visible after reconnect and can be matched to server logs.
+
 ### Anatomy of an action
 
 Every inbound message is serialized through a per-room `asyncio.Lock`
@@ -442,6 +450,19 @@ server-side final gate repeats static validation and the dry run, attempts one
 bounded repair when validation fails, and returns an effectless invalid verdict
 if the repair is still unsafe. Snippet handlers close over their own source code;
 there is no process-global cache that can collide across rooms or cards.
+
+`preview_card` follows the same boundary without committing: the room gives the
+agent a cloned state containing an ephemeral preview card, then dry-runs the
+returned plan through the real reducers and sandbox. `preview_result` includes
+the plan, mechanical status, sanitized reason, and correlation id. Invalid
+methods such as `state.draw` therefore fail before a card is created or played.
+Preview binds no persistent-write tools (`remember_decision` or `wish`).
+
+If no op, sandbox method, hook, or supported interaction can express a card,
+the `wish` tool appends bounded capability telemetry to configured JSONL.
+`scripts/export_capability_wishes.py` exports it for offline human triage. The
+sink has a hard byte cap and failures are best-effort/non-throwing. The runtime
+never invokes `bd`, writes source, or attempts self-modification.
 
 ---
 

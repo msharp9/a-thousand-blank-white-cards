@@ -193,6 +193,9 @@ class CardInterpretedMsg(BaseModel):
     # In-character comment from the agent. Optional so pre-agent callers / older
     # clients stay compatible; D1/D2 consume it (D1 persists it to the game log).
     comment: str = ""
+    mechanical_status: Literal["pending", "applied", "fallback", "rejected"] = "applied"
+    mechanical_reason: str | None = None
+    correlation_id: str
 
 
 class PreviewResultMsg(BaseModel):
@@ -200,6 +203,9 @@ class PreviewResultMsg(BaseModel):
     program: str | None = None
     snippet: str | None = None
     verdict: str
+    mechanical_status: Literal["applied", "fallback", "rejected"]
+    mechanical_reason: str | None = None
+    correlation_id: str
 
 
 class PromptChoiceMsg(BaseModel):

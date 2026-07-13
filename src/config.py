@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     # ":memory:" for an ephemeral in-process store.
     agent_memory_db: str = "agent_memory.db"
 
+    # Append-only capability telemetry emitted by the agent's ``wish`` tool.
+    # Keep it outside tracked source data; production can point this at a
+    # persistent volume and export the JSONL for human triage.
+    capability_wish_path: str = ".devstate/capability_wishes.jsonl"
+    capability_wish_max_bytes: int = Field(default=1_048_576, ge=1024)
+
     # --- Sandbox ---
     snippet_execution_enabled: bool = True
 

@@ -37,6 +37,7 @@ import asyncio
 import json
 import logging
 import random
+import re
 import uuid
 from collections.abc import Callable
 
@@ -776,6 +777,32 @@ class Room:
         description = card_dict.get("description") or ""
         return bool(description.strip())
 
+    @staticmethod
+    def _public_mechanical_reason(reason: object, *, fallback: str) -> str:
+        """Return a bounded, single-line diagnostic safe for shared snapshots."""
+        text = " ".join(str(reason).split()) if reason else fallback
+        text = re.sub(r"(?:/[A-Za-z0-9_.-]+){2,}", "[path]", text)
+        return text[:240] or fallback
+
+    def _set_card_mechanical_status(
+        self,
+        card_id: str,
+        status: str,
+        correlation_id: str,
+        reason: str | None = None,
+    ) -> None:
+        card = self.state.cards.get(card_id)
+        if not isinstance(card, dict):
+            return
+        updated = {
+            **card,
+            "mechanical_status": status,
+            "mechanical_reason": reason,
+            "correlation_id": correlation_id,
+        }
+        self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: updated}})
+        self._notify_change()
+
     def _can_pass(self, player_id: str) -> bool:
         """True if the active player may end their turn WITHOUT playing.
 
@@ -811,7 +838,14 @@ class Room:
             return "in_play"
         return "discard"
 
-    async def _resolve_plan(self, card_id: str, card, actor_id: str | None = None) -> ResolutionPlan:
+    async def _resolve_plan(
+        self,
+        card_id: str,
+        card,
+        actor_id: str | None = None,
+        *,
+        correlation_id: str,
+    ) -> ResolutionPlan:
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
         description = card["description"] if isinstance(card, dict) else getattr(card, "description", "")
         creator_id = card.get("creator_id") if isinstance(card, dict) else getattr(card, "creator_id", None)
@@ -840,6 +874,11 @@ class Room:
                 "snippet": getattr(result.snippet, "code", None),
                 "verdict": result.verdict,
                 "comment": result.comment,
+                "mechanical_status": "pending" if result.verdict == "ok" else "fallback",
+                "mechanical_reason": (
+                    None if result.verdict == "ok" else "The arbiter could not produce an executable effect."
+                ),
+                "correlation_id": correlation_id,
             }
         )
 
@@ -858,6 +897,12 @@ class Room:
         if result.verdict == "ok" and plan.steps:
             return plan
 
+        self._set_card_mechanical_status(
+            card_id,
+            "fallback",
+            correlation_id,
+            "The arbiter could not produce an executable effect.",
+        )
         note = title or "Card"
         return ResolutionPlan(steps=[OpsStep(ops=[CustomNoteOp(note=f"Played {note} (no mechanical effect)")])])
 
@@ -984,6 +1029,12 @@ class Room:
 
         veto = await self._check_play_veto(player_id, card_id, card)
         if veto is not None:
+            correlation_id = str(uuid.uuid4())
+            reason = self._public_mechanical_reason(veto, fallback="A table rule rejected this play.")
+            self._set_card_mechanical_status(card_id, "rejected", correlation_id, reason)
+            logger.info(
+                "card resolution rejected correlation_id=%s card_id=%s reason=%s", correlation_id, card_id, reason
+            )
             await self.connections.send(player_id, {"type": "error", "message": f"Play rejected: {veto}"})
             await self._log_and_broadcast(
                 f"[rule] {self._name(player_id)}'s {self._card_title(card)} was rejected: {veto}"
@@ -992,7 +1043,15 @@ class Room:
             return
 
         title = card["title"] if isinstance(card, dict) else getattr(card, "title", "")
-        plan = await self._resolve_plan(card_id, card, actor_id=player_id)
+        correlation_id = str(uuid.uuid4())
+        self._set_card_mechanical_status(card_id, "pending", correlation_id)
+        await self._broadcast_state()
+        plan = await self._resolve_plan(
+            card_id,
+            card,
+            actor_id=player_id,
+            correlation_id=correlation_id,
+        )
         game_ending = False
         chosen_player_id = getattr(msg, "chosen_player_id", None)
         chosen_card_id = getattr(msg, "chosen_card_id", None)
@@ -1063,7 +1122,17 @@ class Room:
         try:
             self.state = await self._execute_plan(self.state, plan, ctx, card)
         except Exception as exc:
-            logger.warning("resolution plan failed for %s: %s", card_id, exc)
+            reason = self._public_mechanical_reason(
+                exc,
+                fallback="The interpreted effect could not be applied safely.",
+            )
+            logger.warning(
+                "resolution plan failed correlation_id=%s card_id=%s reason=%s",
+                correlation_id,
+                card_id,
+                reason,
+            )
+            self._set_card_mechanical_status(card_id, "fallback", correlation_id, reason)
             destination = self._play_destination(card)
             self.state = self.state.move_card(
                 card_id,
@@ -1077,6 +1146,9 @@ class Room:
             self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
             await self._log_and_broadcast(self._describe_play(player_id, card, before))
         else:
+            current = self.state.cards.get(card_id)
+            if not isinstance(current, dict) or current.get("mechanical_status") != "fallback":
+                self._set_card_mechanical_status(card_id, "applied", correlation_id)
             await self._log_and_broadcast(self._describe_play(player_id, card, before))
             await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id)
             game_ending = self._end_now() or win_condition_met(self.state)
@@ -1149,6 +1221,9 @@ class Room:
                 "creator_id": player_id,
                 "origin": "authored",
                 "has_art": bool(art),
+                "mechanical_status": "pending",
+                "mechanical_reason": None,
+                "correlation_id": str(uuid.uuid4()),
             },
         }
         self.state = self.state.model_copy(update={"cards": new_cards})
@@ -1173,6 +1248,8 @@ class Room:
         from agent.contract import InterpretResult
         from agent.runtime import run_agent
 
+        correlation_id = self.state.cards[card_id]["correlation_id"]
+        self._notify_change()
         await self.connections.broadcast({"type": "brewing", "card_id": card_id})
         # A just-created card's actor IS its creator (player_id authored it).
         try:
@@ -1191,6 +1268,13 @@ class Room:
             "program": str(result.program) if result.program is not None else None,
             "snippet": getattr(result.snippet, "code", None),
             "verdict": result.verdict,
+            "mechanical_status": "applied" if result.verdict == "ok" and result.to_plan().steps else "fallback",
+            "mechanical_reason": (
+                None
+                if result.verdict == "ok" and result.to_plan().steps
+                else "The arbiter could not produce an executable effect."
+            ),
+            "correlation_id": correlation_id,
             **self._canonicalize_interpretation(result),
         }
         merged = {**self.state.cards, card_id: card}
@@ -1205,6 +1289,9 @@ class Room:
                 "verdict": card["verdict"],
                 # Carry the in-character comment for the frontend/D1 (not persisted here).
                 "comment": result.comment,
+                "mechanical_status": card["mechanical_status"],
+                "mechanical_reason": card["mechanical_reason"],
+                "correlation_id": correlation_id,
             }
         )
         # D1: persist the arbiter comment so it survives a reconnect (see
@@ -1215,9 +1302,103 @@ class Room:
         await self._broadcast_state()
 
     async def _handle_preview_card(self, player_id: str, msg) -> None:
+        """Interpret and execute against a clone, returning diagnostics only."""
+        from agent.contract import InterpretResult
+        from agent.runtime import run_agent
+        from agent.tools.dry_run_effect import dry_run_resolution_plan
+
+        correlation_id = str(uuid.uuid4())
+        player_ids = {player.id for player in self.state.players}
+        actor_id = player_id if player_id in player_ids else self.state.active_player().id
+        preview_id = f"preview:{correlation_id}"
+        preview_state = self.state.model_copy(deep=True)
+        preview_state = preview_state.model_copy(
+            update={
+                "cards": {
+                    **preview_state.cards,
+                    preview_id: {
+                        "id": preview_id,
+                        "title": msg.title,
+                        "description": msg.description,
+                        "creator_id": actor_id,
+                        "origin": "authored",
+                    },
+                },
+                "players": [
+                    player.model_copy(update={"hand": [*player.hand, preview_id]}) if player.id == actor_id else player
+                    for player in preview_state.players
+                ],
+            }
+        )
+        try:
+            result: InterpretResult = await asyncio.to_thread(
+                run_agent,
+                msg.title,
+                msg.description,
+                preview_state,
+                actor_id,
+                creator_id=actor_id,
+                card_id=preview_id,
+                allow_persistent_tools=False,
+            )
+            plan = result.to_plan()
+            if result.verdict != "ok" or not plan.steps:
+                status = "fallback"
+                reason = "The arbiter could not produce an executable effect."
+                report = None
+            else:
+                choice_player = next((candidate for candidate in sorted(player_ids) if candidate != actor_id), actor_id)
+                choice_card = next(
+                    (candidate for candidate in preview_state.cards_in_play() if candidate != preview_id),
+                    preview_id,
+                )
+                report = await asyncio.to_thread(
+                    dry_run_resolution_plan,
+                    preview_state,
+                    plan,
+                    actor_id,
+                    preview_id,
+                    chosen_player_id=choice_player,
+                    chosen_card_id=choice_card,
+                )
+                status = "applied" if report["ok"] else "rejected"
+                reason = (
+                    None
+                    if report["ok"]
+                    else self._public_mechanical_reason(
+                        report.get("error"),
+                        fallback="The interpreted effect failed its dry-run.",
+                    )
+                )
+        except Exception as exc:
+            logger.exception("preview failed correlation_id=%s", correlation_id)
+            result = InterpretResult(verdict="invalid")
+            plan = result.to_plan()
+            report = None
+            status = "rejected"
+            reason = self._public_mechanical_reason(exc, fallback="The preview could not be completed.")
+
+        logger.info(
+            "card preview correlation_id=%s status=%s actor_id=%s reason=%s",
+            correlation_id,
+            status,
+            actor_id,
+            reason,
+        )
         await self.connections.send(
             player_id,
-            {"type": "preview_result", "program": None, "snippet": msg.description, "verdict": "ok"},
+            {
+                "type": "preview_result",
+                "program": plan.model_dump_json() if plan.steps else None,
+                "snippet": next(
+                    (step.code for step in plan.steps if isinstance(step, SnippetStep)),
+                    None,
+                ),
+                "verdict": result.verdict,
+                "mechanical_status": status,
+                "mechanical_reason": reason,
+                "correlation_id": correlation_id,
+            },
         )
 
     async def start_epilogue(self) -> None:

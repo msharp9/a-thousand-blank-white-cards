@@ -93,6 +93,10 @@ export type CardSnapshot = {
   program?: string | null;
   snippet?: string | null;
   verdict?: string;
+  attributes?: Record<string, unknown>;
+  mechanical_status?: MechanicalStatus;
+  mechanical_reason?: string | null;
+  correlation_id?: string | null;
   // True while this is an un-authored blank card (empty title/description). The
   // game seeds blanks into the deck; a blank sits in hand as blank and is
   // authored when played. Cleared once the player fills it in on play.
@@ -111,6 +115,37 @@ export type PlayerSnapshot = {
   // table). Resolve ids against GameStateSnapshot.cards to render them.
   in_play: string[];
   connected: boolean;
+  conditions: Record<string, unknown>;
+};
+
+export type MechanicalStatus = "pending" | "applied" | "fallback" | "rejected";
+
+export type WinConditionSnapshot = {
+  kind: string;
+  threshold?: number | null;
+};
+
+export type EndConditionSnapshot = {
+  type: string;
+  threshold?: number | null;
+};
+
+export type RulesSnapshot = {
+  draw: number;
+  play: number;
+  cannot_play: Record<string, unknown>;
+  end_condition: EndConditionSnapshot;
+  win_condition: WinConditionSnapshot;
+  skip_predicate?: string | null;
+  extra: Record<string, unknown>;
+};
+
+export type HookSnapshot = {
+  id: string;
+  source_card_id: string;
+  event: string;
+  scope: "player" | "center";
+  owner_id?: string | null;
 };
 
 // A late joiner who watches but never plays (joined after the game left the
@@ -138,12 +173,14 @@ export type GameStateSnapshot = {
   players: PlayerSnapshot[];
   spectators: SpectatorSnapshot[];
   turn_index: number;
-  direction: 1 | -1;
+  turn_order: string[];
+  rules: RulesSnapshot;
   draw_count: number;
   deck: string[];
   discard: string[];
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
+  hooks: HookSnapshot[];
   // Whether the active player has taken their draw step this turn. The Draw
   // button shows while false; the Play action is gated until true.
   has_drawn: boolean;
@@ -173,6 +210,9 @@ export type CardInterpretedMsg = {
   program?: string | null;
   snippet?: string | null;
   verdict: string;
+  mechanical_status?: MechanicalStatus;
+  mechanical_reason?: string | null;
+  correlation_id?: string | null;
   // A short in-character quip from the AI arbiter about the interpreted card.
   // Persisted separately: the backend also appends it to state.log with a "🤖 "
   // prefix and broadcasts it via effect_applied, so the frontend renders it from
@@ -185,7 +225,12 @@ export type PreviewResultMsg = {
   program?: string | null;
   snippet?: string | null;
   verdict: string;
+  mechanical_status?: MechanicalStatus;
+  mechanical_reason?: string | null;
+  correlation_id?: string | null;
 };
+
+export type PreviewResult = Omit<PreviewResultMsg, "type">;
 // A single selectable option in a prompt_choice. Player-target prompts carry a
 // `player_id`; card-target prompts carry a `card_id`. Exactly one is present,
 // which tells the UI which field to send back on the follow-up play.
