@@ -103,23 +103,23 @@ def test_authoring_over_the_limit_during_setup_is_rejected() -> None:
     assert not any(c.get("title") == "extra" for c in room.state.cards.values())
 
 
-def test_create_card_cap_does_not_apply_during_playing_phase() -> None:
-    from unittest.mock import patch
-
-    from agent.contract import InterpretResult
+def test_create_card_rejected_during_playing_phase() -> None:
+    import json
 
     room = _room_two_players()
-    # Jump straight to playing; the setup-only cap must not gate mid-game creates.
+    ws1 = AsyncMock()
+    room.connections.connect("p1", ws1)
+    # Authoring is setup-only: a mid-game create_card gets the standard error
+    # envelope, never reaches the agent, and registers no card.
     room.state = room.state.model_copy(update={"phase": "playing"})
 
-    fake_result = InterpretResult(program=None, snippet=None, verdict="invalid")
-    with patch("agent.runtime.run_agent", return_value=fake_result):
-        # Author far more than CARDS_TO_AUTHOR — none should be rejected by the cap.
-        for i in range(CARDS_TO_AUTHOR + 3):
-            asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"mid{i}", description="do something")))
+    with patch("agent.runtime.run_agent") as mock_agent:
+        asyncio.run(room.handle_action("p1", CreateCardMsg(title="mid", description="do something")))
 
-    authored = [c for c in room.state.cards.values() if c.get("creator_id") == "p1"]
-    assert len(authored) == CARDS_TO_AUTHOR + 3
+    mock_agent.assert_not_called()
+    sent = [json.loads(c.args[0]) for c in ws1.send_text.call_args_list]
+    assert any(m["type"] == "error" for m in sent)
+    assert room.state.cards == {}
 
 
 def test_start_during_setup_with_players_behind_errors_and_stays_in_setup() -> None:

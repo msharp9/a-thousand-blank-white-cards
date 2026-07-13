@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { CreateCardDialog } from "@/components/create-card-dialog";
 import { DiscardPile } from "@/components/discard-pile";
 import { EffectLog } from "@/components/effect-log";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
@@ -76,7 +75,6 @@ export default function RoomPage() {
 
   const [name, setName] = useState("");
   const [nameSet, setNameSet] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [adoptedStoredName, setAdoptedStoredName] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -476,16 +474,6 @@ export default function RoomPage() {
                     Deck · {gameState.deck.length}
                   </p>
                 </div>
-                {!isSpectator && (
-                  <div className="flex w-32 flex-col gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setDialogOpen(true)}
-                    >
-                      ✏️ Author a card
-                    </Button>
-                  </div>
-                )}
                 <DiscardPile
                   topCard={topDiscard}
                   count={gameState.discard.length}
@@ -499,7 +487,7 @@ export default function RoomPage() {
               <div className="border-t-[2.5px] border-ink bg-white px-5 py-4">
                 <p className="mx-auto w-fit rounded-xl border-2 border-dashed border-ink/40 px-5 py-3 font-hand text-base text-muted-foreground">
                   You joined after the game started — you are spectating and
-                  cannot play or author cards.
+                  cannot play cards.
                 </p>
               </div>
             ) : (
@@ -617,13 +605,6 @@ export default function RoomPage() {
           />
         )}
       </div>
-
-      <CreateCardDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        send={send}
-        previewResult={previewResult}
-      />
 
       <TargetPickerDialog
         prompt={promptChoice}

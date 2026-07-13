@@ -2,10 +2,11 @@
 
 Room owns an immutable GameState (replaced on each mutation) and serialises all
 handle_action calls with an asyncio.Lock so concurrent WebSocket messages cannot
-corrupt turn order. Play/pass require the active player's turn; card creation and
-preview are allowed off-turn. Play and create_card run the agent interpretation
-graph via asyncio.to_thread (with a "brewing" broadcast), applying resulting
-effects through the engine.
+corrupt turn order. Play/pass require the active player's turn. Card authoring
+(create_card/preview_card) is SETUP-ONLY; the only mid-game authoring is filling
+in a blank as it is played (author-on-play, see _handle_play). Play runs the
+agent interpretation graph via asyncio.to_thread (with a "brewing" broadcast),
+applying resulting effects through the engine.
 
 Turn model (auto-draw → play → end turn): drawing is AUTOMATIC. When a turn
 begins (``_start_turn``) the server draws ``rules.draw`` card(s) for the new
@@ -259,7 +260,9 @@ class Room:
     # ── main dispatch ──
 
     # Game actions frozen while a play is being interpreted/resolved (brewing).
-    # Mirrors the _pending_resolution freeze set in _dispatch. Reaction
+    # create_card stays in the set even though _dispatch rejects it outside
+    # setup anyway: this check runs BEFORE the lock, so it keeps a doomed
+    # message from queueing behind the play's long-held lock. Reaction
     # messages (pass_reaction, play + as_reaction) are deliberately exempt:
     # the reaction window only opens AFTER interpretation completes, so a
     # reaction sent mid-brew already bounces off the window machinery
@@ -315,6 +318,14 @@ class Room:
         }:
             await self.connections.send(player_id, {"type": "error", "message": "Spectators cannot take game actions"})
             return
+        # Authoring gate: create_card/preview_card exist ONLY during setup
+        # (each player writes their quota). The one mid-game authoring path is
+        # playing a blank, which rides the `play` message (author-on-play).
+        if mtype in {"create_card", "preview_card"} and self.state.phase != "setup":
+            await self.connections.send(
+                player_id, {"type": "error", "message": "Card authoring is only available during setup"}
+            )
+            return
         # Phase gate: once the game leaves "playing" (results/epilogue/ended —
         # e.g. an end_game card fired mid-deck), in-game actions must not run;
         # a stray play would re-trigger _end_game and double-apply end scoring.
@@ -340,15 +351,11 @@ class Room:
             "pass",
             "end_turn",
             "play",
-            "create_card",
         }:
             await self.connections.send(
                 player_id,
                 {"type": "error", "message": "Waiting for the current card interaction to finish"},
             )
-            return
-        if mtype in {"create_card", "preview_card"} and self.state.phase not in {"setup", "playing"}:
-            await self.connections.send(player_id, {"type": "error", "message": "Card authoring is closed"})
             return
         if mtype == "start":
             await self._handle_start(player_id)
@@ -412,9 +419,9 @@ class Room:
         """Store ``art`` in the out-of-band registry, enforcing the room budget.
 
         Returns False — art dropped, nothing stored — once the aggregate would
-        exceed ``MAX_ROOM_ART_BYTES``: rooms are never evicted and mid-game card
-        creation is uncapped, so the registry needs a hard cap. Callers keep the
-        card, just artless (``has_art: False``).
+        exceed ``MAX_ROOM_ART_BYTES``: rooms are never evicted, so the registry
+        needs a hard cap. Callers keep the card, just artless
+        (``has_art: False``).
         """
         if self._card_art_bytes + len(art) > MAX_ROOM_ART_BYTES:
             return False
@@ -2231,26 +2238,26 @@ class Room:
         return mode
 
     async def _handle_create_card(self, player_id: str, msg) -> None:
-        """Author a new card (allowed off-turn / during setup).
+        """Author a new card during SETUP — the only create_card path
+        (``_dispatch`` rejects the message in every other phase; mid-game
+        authoring happens only by playing a blank, see ``_handle_play``).
 
-        During ``setup`` we DO NOT call the LLM: authored cards are interpreted
+        Authoring never calls the LLM: authored cards are interpreted
         deterministically (via ``compile_card``) or best-effort at play time, so
         setup authoring stays fast and never depends on a live service. The card
         is simply registered with its ``creator_id`` (which drives
         ``setup_progress`` and the start gate) and broadcast.
 
-        Setup authoring is capped at ``CARDS_TO_AUTHOR`` per player: the start
-        gate only enforces a LOWER bound, so without this cap a player could
-        author unlimited cards before the host starts. The cap is scoped STRICTLY
-        to ``phase == "setup"`` — mid-game a player may freely create cards (e.g.
-        blanks), so the playing-phase path below stays uncapped.
+        Authoring is capped at ``CARDS_TO_AUTHOR`` per player: the start gate
+        only enforces a LOWER bound, so without this cap a player could author
+        unlimited cards before the game starts.
 
         Once this card completes the LAST player's authoring quota, the game
         AUTO-STARTS (setup→playing) — no manual "start" is required.
         """
-        # Setup-only upper bound: reject (targeted, not broadcast) once the player
-        # has authored the required number of cards, BEFORE any card is created.
-        if self.state.phase == "setup" and self._authored_count(player_id) >= CARDS_TO_AUTHOR:
+        # Upper bound: reject (targeted, not broadcast) once the player has
+        # authored the required number of cards, BEFORE any card is created.
+        if self._authored_count(player_id) >= CARDS_TO_AUTHOR:
             await self.connections.send(
                 player_id,
                 {"type": "error", "message": f"You've already authored the maximum of {CARDS_TO_AUTHOR} cards."},
@@ -2281,88 +2288,27 @@ class Room:
         }
         self.state = self.state.model_copy(update={"cards": new_cards})
 
-        if self.state.phase == "setup":
-            # Auto-start: once every non-spectator has authored the required
-            # number of cards, transition straight to playing — no manual
-            # "start" needed. Guard the degenerate zero-players case so we never
-            # auto-start an empty table. ``_start_playing`` broadcasts the new
-            # (playing) state itself, so we don't also broadcast the pre-start
-            # setup state on this path.
-            real_players = self.state.turn_players()
-            everyone_done = bool(real_players) and all(
-                self._authored_count(p.id) >= CARDS_TO_AUTHOR for p in real_players
-            )
-            if everyone_done:
-                await self._start_playing()
-            else:
-                await self._broadcast_state()
-            return
-
-        from agent.contract import InterpretResult
-        from agent.runtime import run_agent
-
-        correlation_id = self.state.cards[card_id]["correlation_id"]
-        self._notify_change()
-        await self.connections.broadcast({"type": "brewing", "card_id": card_id})
-        # A just-created card's actor IS its creator (player_id authored it).
-        try:
-            result: InterpretResult = await asyncio.to_thread(
-                run_agent,
-                msg.title,
-                msg.description,
-                self.state,
-                player_id,
-                creator_id=player_id,
-                card_id=card_id,
-                card_art=art,
-            )
-        except Exception:
-            logger.exception("run_agent failed for %s; using deterministic fallback", card_id)
-            result = InterpretResult(verdict="invalid", comment="", persona_action="none")
-
-        # Store the interpretation on the card: human-readable summary fields
-        # plus STRUCTURED canonical ops so the card replays deterministically
-        # (this game and, if kept, every future game — no LLM round-trip).
-        card = {
-            **self.state.cards[card_id],
-            "program": str(result.program) if result.program is not None else None,
-            "snippet": getattr(result.snippet, "code", None),
-            "verdict": result.verdict,
-            "mechanical_status": "applied" if result.verdict == "ok" and result.to_plan().steps else "fallback",
-            "mechanical_reason": (
-                None
-                if result.verdict == "ok" and result.to_plan().steps
-                else "The arbiter could not produce an executable effect."
-            ),
-            "correlation_id": correlation_id,
-            **self._canonicalize_interpretation(result),
-        }
-        merged = {**self.state.cards, card_id: card}
-        self.state = self.state.model_copy(update={"cards": merged})
-
-        await self.connections.broadcast(
-            {
-                "type": "card_interpreted",
-                "card_id": card_id,
-                "program": card["program"],
-                "snippet": card["snippet"],
-                "verdict": card["verdict"],
-                # Carry the in-character comment for the frontend/D1 (not persisted here).
-                "comment": result.comment,
-                "mechanical_status": card["mechanical_status"],
-                "mechanical_reason": card["mechanical_reason"],
-                "correlation_id": correlation_id,
-            }
-        )
-        # D1: persist the arbiter comment so it survives a reconnect (see
-        # _resolve_plan). create_card interprets a card_id exactly once, so no
-        # round-trip guard is needed, but we route through the same helper for a
-        # single consistent format + prefix.
-        await self._log_agent_comment(card_id, result.comment)
-        await self._broadcast_state()
+        # Auto-start: once every non-spectator has authored the required
+        # number of cards, transition straight to playing — no manual
+        # "start" needed. Guard the degenerate zero-players case so we never
+        # auto-start an empty table. ``_start_playing`` broadcasts the new
+        # (playing) state itself, so we don't also broadcast the pre-start
+        # setup state on this path.
+        real_players = self.state.turn_players()
+        everyone_done = bool(real_players) and all(self._authored_count(p.id) >= CARDS_TO_AUTHOR for p in real_players)
+        if everyone_done:
+            await self._start_playing()
+        else:
+            await self._broadcast_state()
 
     async def _handle_preview_card(self, player_id: str, msg) -> None:
-        """Interpret and execute against a clone, returning diagnostics only."""
+        """Interpret and execute against a clone, returning diagnostics only.
+
+        Setup-only, like create_card (gated in ``_dispatch``): an opt-in check
+        of a draft card before submitting it. Unlike setup create_card this DOES
+        call the LLM — the whole point is a real interpretation dry-run — but it
+        never mutates the room, so a dead service just fails the preview.
+        """
         from agent.contract import InterpretResult
         from agent.runtime import run_agent
         from agent.tools.dry_run_effect import dry_run_resolution_plan

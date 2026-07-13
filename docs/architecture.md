@@ -319,9 +319,9 @@ to every client on every action.
 - **Storage** (`board/rooms/room.py`): `Room.card_art` is an out-of-band
   registry (`card_id → data-URL`); the card in `GameState` carries only a
   `has_art` boolean. A per-room running budget (`MAX_ROOM_ART_BYTES`, 4 MiB)
-  guards the registry: rooms are never evicted and mid-game creation is
-  uncapped, so once the budget is hit new art is dropped — the card is still
-  created/played, just artless (`has_art: false`).
+  guards the registry: rooms are never evicted, so once the budget is hit new
+  art is dropped — the card is still created/played, just artless
+  (`has_art: false`).
 - **Serving** (`board/app.py`): clients fetch
   `GET /rooms/{code}/cards/{card_id}/art`, which decodes the registry entry and
   returns raw `image/png` with `X-Content-Type-Options: nosniff` and

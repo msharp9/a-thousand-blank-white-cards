@@ -248,14 +248,18 @@ def test_turn_order_shuffle_is_seedable_and_need_not_start_the_host() -> None:
     assert room.state.active_player().id == room.state.turn_order[0]
 
 
-def test_create_card_off_turn_allowed() -> None:
-    room = _room_with_two_players()
-    room.state = room.state.model_copy(update={"phase": "playing"})
-    room.connections.connect("p2", AsyncMock())
-    fake_result = InterpretResult(program=None, snippet=None, verdict="invalid")
-    with patch("agent.runtime.run_agent", return_value=fake_result):
+def test_create_card_rejected_outside_setup() -> None:
+    # Authoring is setup-only: playing/results creates get the standard error
+    # envelope and register nothing (mid-game authoring is playing a blank).
+    for phase in ("playing", "results"):
+        room = _room_with_two_players()
+        room.state = room.state.model_copy(update={"phase": phase})
+        ws2 = AsyncMock()
+        room.connections.connect("p2", ws2)
         asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do something")))
-    assert len(room.state.cards) == 1
+        assert room.state.cards == {}
+        sent = [json.loads(c.args[0]) for c in ws2.send_text.call_args_list]
+        assert any(m["type"] == "error" for m in sent)
 
 
 def _chooser_room() -> Room:
