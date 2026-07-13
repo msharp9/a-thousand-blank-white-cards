@@ -1,5 +1,9 @@
+"use client";
+
+import { useDroppable } from "@dnd-kit/core";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { getCardArtUrl } from "@/lib/art";
+import { seatDropId } from "@/lib/dnd";
 import { playerColor } from "@/lib/players";
 import type {
   CardSnapshot,
@@ -78,13 +82,27 @@ function OpponentPanel({
     .map((id) => cards[id])
     .filter((c): c is CardSnapshot => Boolean(c));
 
+  // Drop target for a targeted play: dropping a dragged hand card on this
+  // seat plays it with chosen_player_id = this player (see PlayDndContext).
+  const { setNodeRef, isOver } = useDroppable({
+    id: seatDropId(player.id),
+    data: { type: "seat", playerId: player.id },
+  });
+
   return (
     <div
+      ref={setNodeRef}
+      data-seat-drop={player.id}
       className={cn(
         "flex flex-col items-center gap-1.5 rounded-[14px] bg-card/60 px-3 py-2",
+        "transition-[box-shadow,transform] duration-150",
+        isOver && "scale-[1.03]",
         !player.connected && "opacity-50",
       )}
-      style={{ border: `2px dashed ${color}` }}
+      style={{
+        border: `2px dashed ${color}`,
+        boxShadow: isOver ? `0 0 0 3px ${color}, 0 0 16px ${color}` : undefined,
+      }}
     >
       <div className="flex items-center gap-2">
         <PlayerAvatar name={player.name} color={color} size={34} />
