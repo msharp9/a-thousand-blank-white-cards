@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 from unittest.mock import AsyncMock, patch
 
 from conftest import drive_to_playing
@@ -11,7 +12,7 @@ from conftest import drive_to_playing
 from agent.contract import InterpretResult
 from models.effects import AddPointsOp, DestroyCardOp, EffectProgram
 from models.ws_messages import CreateCardMsg, PassMsg, PlayMsg, Placement, StartMsg
-from board.rooms.room import Room
+from board.rooms.room import CARDS_TO_AUTHOR, Room
 
 
 def _room_with_two_players() -> Room:
@@ -153,10 +154,13 @@ def test_start_builds_deck_of_at_least_30_and_deals_hands() -> None:
     total_hands = sum(len(p.hand) for p in room.state.players)
     assert len(room.state.deck) + total_hands == 50
     assert len(room.state.deck) == 39
-    # Starting hands were dealt from the top of the deck; the first player's
-    # turn then began with the automatic draw of their draw_count card(s).
-    assert len(room.state.get_player("p1").hand) == 5 + room.state.draw_count
-    assert len(room.state.get_player("p2").hand) == 5
+    # Starting hands were dealt from the top of the deck; whichever player the
+    # shuffled turn_order put first then began with the automatic draw of
+    # their draw_count card(s) — turn order is randomized, not host-first.
+    first_id = room.state.active_player().id
+    other_id = "p2" if first_id == "p1" else "p1"
+    assert len(room.state.get_player(first_id).hand) == 5 + room.state.draw_count
+    assert len(room.state.get_player(other_id).hand) == 5
     # Every dealt/deck card id resolves in the registry.
     for p in room.state.players:
         assert all(cid in room.state.cards for cid in p.hand)
@@ -164,9 +168,10 @@ def test_start_builds_deck_of_at_least_30_and_deals_hands() -> None:
 
 
 def test_first_player_auto_drawn_at_game_start() -> None:
-    # The setup→playing transition starts the first player's turn, which
-    # auto-draws for them: they begin holding STARTING_HAND_SIZE + draw_count
-    # cards with has_drawn already latched; the next player holds only the deal.
+    # The setup→playing transition starts the shuffled turn_order's first
+    # player's turn, which auto-draws for them: they begin holding
+    # STARTING_HAND_SIZE + draw_count cards with has_drawn already latched;
+    # the other player holds only the deal.
     room = _room_with_two_players()
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
@@ -176,10 +181,71 @@ def test_first_player_auto_drawn_at_game_start() -> None:
     store._client = None
     drive_to_playing(room, ["p1", "p2"])
 
-    assert room.state.turn_index == 0
-    assert len(room.state.get_player("p1").hand) == 5 + room.state.draw_count
-    assert len(room.state.get_player("p2").hand) == 5
+    first_id = room.state.turn_order[0]
+    other_id = "p2" if first_id == "p1" else "p1"
+    assert room.state.active_player().id == first_id
+    assert len(room.state.get_player(first_id).hand) == 5 + room.state.draw_count
+    assert len(room.state.get_player(other_id).hand) == 5
     assert room._has_drawn is True
+
+
+def _room_three_players() -> Room:
+    room = Room("ABCDEF")
+    room.add_player("p1", "Alice")
+    room.add_player("p2", "Bob")
+    room.add_player("p3", "Cy")
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    room.connections.connect("p3", AsyncMock())
+    return room
+
+
+def test_turn_order_is_a_permutation_of_player_ids() -> None:
+    room = _room_three_players()
+    import agent.rag.store as store
+
+    store._client = None
+    drive_to_playing(room, ["p1", "p2", "p3"])
+    assert sorted(room.state.turn_order) == ["p1", "p2", "p3"]
+
+
+def test_turn_order_shuffle_is_seedable_and_need_not_start_the_host() -> None:
+    # Seating order is p1, p2, p3 (p1 is the host/players[0]); a seeded shuffle
+    # can — and here does — put someone else first, proving the game no longer
+    # always opens on the host.
+    room = _room_three_players()
+    asyncio.run(room.handle_action("p1", StartMsg()))  # lobby -> setup
+    for pid in ("p1", "p2"):
+        for i in range(CARDS_TO_AUTHOR):
+            asyncio.run(room.handle_action(pid, CreateCardMsg(title=f"{pid}-{i}", description="gain 1 point")))
+    # p3 authors one card short of the threshold via the normal path so the
+    # last card doesn't trip auto-start (which always calls _start_playing
+    # unseeded); the final card is injected directly so we can drive the
+    # setup -> playing transition ourselves with a pinned rng.
+    for i in range(CARDS_TO_AUTHOR - 1):
+        asyncio.run(room.handle_action("p3", CreateCardMsg(title=f"p3-{i}", description="gain 1 point")))
+    room.state = room.state.model_copy(
+        update={
+            "cards": {
+                **room.state.cards,
+                "p3-last": {
+                    "id": "p3-last",
+                    "title": "p3-last",
+                    "description": "gain 1 point",
+                    "creator_id": "p3",
+                    "origin": "authored",
+                },
+            }
+        }
+    )
+
+    asyncio.run(room._start_playing(rng=random.Random(1)))
+
+    assert room.state.phase == "playing"
+    assert sorted(room.state.turn_order) == ["p1", "p2", "p3"]
+    assert room.state.turn_order == ["p2", "p3", "p1"]
+    assert room.state.turn_order[0] != "p1"  # shuffled, not seating/host order
+    assert room.state.active_player().id == room.state.turn_order[0]
 
 
 def test_create_card_off_turn_allowed() -> None:

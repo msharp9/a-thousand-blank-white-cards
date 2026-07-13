@@ -439,7 +439,7 @@ class Room:
         self.state = self.state.model_copy(update={"phase": "setup", "cards": merged_cards, "deck": list(pool)})
         await self._broadcast_state()
 
-    async def _start_playing(self, player_id: str | None = None) -> None:
+    async def _start_playing(self, player_id: str | None = None, *, rng: random.Random | None = None) -> None:
         """setup → playing: gate on authoring, finalise deck, deal, begin play.
 
         ``player_id`` is the player who requested the manual start; it is used
@@ -447,6 +447,10 @@ class Room:
         the AUTO-START path (called from ``_handle_create_card`` once everyone has
         finished authoring) there is no requesting player, so it is None and the
         gate below never fires (we only auto-start when nobody is behind).
+
+        ``rng`` seeds the turn-order shuffle below — same injectable-``random.Random``
+        idiom as ``finalize_deck`` — so tests can pin a specific order; production
+        callers leave it None for a fresh shuffle each game.
         """
         players = list(self.state.players)
         dealt_to = players
@@ -493,15 +497,24 @@ class Room:
 
         new_players = [p.model_copy(update={"hand": hands[p.id]}) if p.id in hands else p for p in players]
         merged_cards = {**self.state.cards, **blank_cards}
+        # Seed the explicit turn rotation from the real players who made it
+        # into this game, shuffled — IRL the player right of the dealer
+        # starts; online we randomize instead of always starting the host.
+        rng = rng or random.Random()
+        turn_order = [p.id for p in dealt_to]
+        rng.shuffle(turn_order)
+        # active_player() reads players[turn_index], not turn_order directly,
+        # so turn_index must point at turn_order[0] or the shuffle above would
+        # only reorder who goes 2nd/3rd/... while the host still always opens.
+        turn_index = next((i for i, p in enumerate(new_players) if p.id == turn_order[0]), 0) if turn_order else 0
         self.state = self.state.model_copy(
             update={
                 "phase": "playing",
                 "cards": merged_cards,
                 "deck": deck,
                 "players": new_players,
-                # Seed the explicit turn rotation from the real players who
-                # made it into this game, in seating order.
-                "turn_order": [p.id for p in dealt_to],
+                "turn_order": turn_order,
+                "turn_index": turn_index,
             }
         )
         # Begin the first player's turn — _start_turn auto-draws for them, so
