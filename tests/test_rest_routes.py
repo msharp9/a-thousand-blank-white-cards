@@ -209,6 +209,10 @@ def test_dev_autofill_authoring_deals_hands() -> None:
     asyncio.run(room.dev_autofill_authoring())
 
     assert room.state.phase == "playing"
-    assert len(room.state.get_player("p1").hand) == STARTING_HAND_SIZE + room.state.draw_count
-    assert len(room.state.get_player("p2").hand) == STARTING_HAND_SIZE
+    # turn_order is shuffled, so the auto-drawn first player isn't necessarily
+    # the host (p1).
+    first_id = room.state.active_player().id
+    other_id = "p2" if first_id == "p1" else "p1"
+    assert len(room.state.get_player(first_id).hand) == STARTING_HAND_SIZE + room.state.draw_count
+    assert len(room.state.get_player(other_id).hand) == STARTING_HAND_SIZE
     assert all(room._authored_count(pid) >= CARDS_TO_AUTHOR for pid in ("p1", "p2"))

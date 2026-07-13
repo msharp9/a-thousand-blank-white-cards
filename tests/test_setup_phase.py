@@ -147,9 +147,12 @@ def test_full_flow_two_players_reaches_playing_with_dealt_hands() -> None:
     drive_to_playing(room, ["p1", "p2"])
 
     assert room.state.phase == "playing"
-    # The first player's turn began with the automatic draw on top of the deal.
-    assert len(room.state.get_player("p1").hand) == STARTING_HAND_SIZE + room.state.draw_count
-    assert len(room.state.get_player("p2").hand) == STARTING_HAND_SIZE
+    # The shuffled turn_order's first player's turn began with the automatic
+    # draw on top of the deal — turn order is randomized, not host-first.
+    first_id = room.state.active_player().id
+    other_id = "p2" if first_id == "p1" else "p1"
+    assert len(room.state.get_player(first_id).hand) == STARTING_HAND_SIZE + room.state.draw_count
+    assert len(room.state.get_player(other_id).hand) == STARTING_HAND_SIZE
     assert room.state.deck  # deck is non-empty after dealing
 
 
@@ -173,9 +176,12 @@ def test_auto_start_when_last_player_finishes_authoring() -> None:
     # WITHOUT any StartMsg, with hands dealt and the first turn begun.
     asyncio.run(room.handle_action("p2", CreateCardMsg(title="b-last", description="gain 1 point")))
     assert room.state.phase == "playing"
-    # First turn begun: the active player (p1) was auto-drawn to.
-    assert len(room.state.get_player("p1").hand) == STARTING_HAND_SIZE + room.state.draw_count
-    assert len(room.state.get_player("p2").hand) == STARTING_HAND_SIZE
+    # First turn begun: the shuffled turn_order's first player was auto-drawn
+    # to — turn order is randomized, not host-first.
+    first_id = room.state.active_player().id
+    other_id = "p2" if first_id == "p1" else "p1"
+    assert len(room.state.get_player(first_id).hand) == STARTING_HAND_SIZE + room.state.draw_count
+    assert len(room.state.get_player(other_id).hand) == STARTING_HAND_SIZE
     assert room._has_drawn is True
 
 
