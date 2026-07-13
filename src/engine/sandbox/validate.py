@@ -31,6 +31,7 @@ _FORBIDDEN_CALLS: frozenset[str] = frozenset(
         "locals",
     }
 )
+_FORBIDDEN_NAMES: frozenset[str] = frozenset({"__builtins__", "__loader__", "__spec__"})
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,11 @@ class _SafetyVisitor(ast.NodeVisitor):
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
         self.errors.append(f"Line {node.lineno}: from-import statements are not allowed")
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:  # noqa: N802
+        if node.id in _FORBIDDEN_NAMES:
+            self.errors.append(f"Line {node.lineno}: access to '{node.id}' is not allowed")
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802

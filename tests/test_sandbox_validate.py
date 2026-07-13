@@ -118,6 +118,15 @@ def test_unknown_sandbox_method_rejected_with_recommendation() -> None:
     assert "draw_cards" in result.error
 
 
+def test_builtins_namespace_is_rejected() -> None:
+    result = validate_snippet(
+        "def apply(state, ctx):\n    state.custom_note(__builtins__['open']('/etc/hosts').read())\n"
+    )
+
+    assert result.ok is False
+    assert "__builtins__" in result.error
+
+
 def test_private_sandbox_state_rejected() -> None:
     result = validate_snippet("def apply(state, ctx):\n    state._ops.append({})\n")
 

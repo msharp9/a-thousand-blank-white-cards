@@ -67,7 +67,7 @@ def _read_signatures() -> list[str]:
 
     union = get_args(Op)[0]
     op_names = {model.model_fields["op"].default for model in get_args(union)}
-    excluded = {"ops", "skip", "set_draw_count", "note", "shuffle_into_deck", "reject_play"}
+    excluded = {"ops", "skip", "set_draw_count", "note", "shuffle_into_deck"}
     reads = []
     for name, member in inspect.getmembers(SandboxGame):
         if name.startswith("_") or name in op_names or name in excluded:
@@ -89,7 +89,7 @@ def _build_reference() -> str:
     parts.extend(_op_signatures())
 
     parts.append("")
-    parts.append("Sandbox read-only helpers:")
+    parts.append("Sandbox read/control helpers:")
     parts.extend(_read_signatures())
 
     parts.append("")

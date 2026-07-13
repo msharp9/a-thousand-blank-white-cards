@@ -168,6 +168,7 @@ def test_read_engine_methods_lists_targets_and_sandbox_boundary():
     assert "GameEngine" in out
     assert "state.draw is invalid" in out
     assert "state.draw_cards" in out
+    assert "state.reject_play" in out
 
 
 def test_get_read_engine_methods_tool_returns_named_tool():

@@ -112,6 +112,21 @@ def test_compatibility_aliases_record_canonical_ops() -> None:
     assert [op["op"] for op in g.ops()] == ["skip_turn", "change_draw_count", "custom_note", "create_card"]
 
 
+def test_legacy_destroy_card_positional_target_is_preserved() -> None:
+    g = make_game()
+
+    g.destroy_card("this")
+
+    assert g.ops() == [{"op": "destroy_card", "card_target": "this"}]
+
+
+def test_register_hook_rejects_scope_without_code() -> None:
+    g = make_game()
+
+    with pytest.raises(ValueError, match="requires sandbox code"):
+        g.register_hook("on_validate_play", "player")
+
+
 def test_ops_returns_copy() -> None:
     g = make_game()
     g.add_points("p1", 1)

@@ -188,6 +188,13 @@ class SandboxGame:
 
     def destroy_card(self, card_id: str | None = None, card_target: str | None = None) -> None:
         """Destroy cards by CardTarget address ('this', 'all_in_play', 'id:…', 'attr:k=v')."""
+        legacy_targets = {"all_in_hand", "all_in_play", "chosen_card", "this"}
+        if (
+            card_target is None
+            and card_id is not None
+            and (card_id in legacy_targets or card_id.startswith(("id:", "attr:")))
+        ):
+            card_target, card_id = card_id, None
         op: dict[str, Any] = {"op": "destroy_card"}
         if card_target is not None:
             op["card_target"] = card_target
@@ -248,8 +255,9 @@ class SandboxGame:
     def register_hook(self, event: str, scope: str = "center", code: str | None = None) -> None:
         """Install a persistent sandboxed hook (rejected inside hook-produced diffs)."""
         if code is None:
-            code = scope
-            scope = "center"
+            if "def apply" not in scope:
+                raise ValueError("register_hook requires sandbox code; pass code=... with scope='player' or 'center'")
+            code, scope = scope, "center"
         self._ops.append({"op": "register_hook", "event": str(event), "scope": scope, "code": str(code)})
 
     def unregister_hook(self, source_card_id: str) -> None:
