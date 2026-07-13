@@ -118,6 +118,23 @@ def build_agent(tools: list[Any] | None = None, model: Any | None = None, *, sys
     )
 
 
+def _initial_user_content(title: str, card_art: str | None) -> str | list[dict[str, Any]]:
+    """Content for the opening human message.
+
+    Plain text when there is no art; otherwise a text block plus an
+    ``image_url`` block carrying the card's PNG data-URL (the OpenAI
+    chat-completions multimodal format, which ChatOpenAI passes through), so a
+    vision-capable model can read the drawing.
+    """
+    text = f"Interpret the card titled {title!r} and produce the JSON result."
+    if card_art is None:
+        return text
+    return [
+        {"type": "text", "text": text},
+        {"type": "image_url", "image_url": {"url": card_art}},
+    ]
+
+
 def _fallback_result(comment: str, note: str | None = None, persona_action: str = "do_nothing") -> InterpretResult:
     """Build the deterministic bounded fallback returned on cap/timeout/error.
 
@@ -419,6 +436,7 @@ def run_agent(
     *,
     creator_id: str | None = None,
     card_id: str | None = None,
+    card_art: str | None = None,
     tools: list[Any] | None = None,
     model: Any | None = None,
     timeout: float | None = None,
@@ -435,6 +453,11 @@ def run_agent(
         actor_id: The id of the player who played the card.
         creator_id: The card's author id (drives do_nothing vs punish_author).
         card_id: The played card id, used to model its removal during effect dry-runs.
+        card_art: The card's hand-drawn PNG data-URL (Room.card_art), passed as a
+            side-channel — art never rides GameState. Attached to the model input
+            as an image block ONLY when ``Settings.vision_enabled`` is on; ignored
+            otherwise, so the default behavior is unchanged. If the configured
+            model rejects image input, the interpretation retries text-only.
         tools: Tools to bind (default empty — real tools arrive in C2-C9).
         model: Chat model override for tests; defaults to the real provider model.
         timeout: Wall-clock ceiling in seconds (default :data:`AGENT_TIMEOUT_SECONDS`).
@@ -458,12 +481,16 @@ def run_agent(
 
     _configure_langsmith()
 
+    if card_art is not None and not get_settings().vision_enabled:
+        card_art = None
+
     system_prompt = build_system_prompt(
         title=title,
         description=description,
         state=state,
         actor_id=actor_id,
         creator_id=creator_id,
+        has_art=card_art is not None,
     )
 
     bound_tools = _assemble_tools(
@@ -485,7 +512,7 @@ def run_agent(
             note="Agent unavailable: no effect applied.",
         )
 
-    inputs = {"messages": [("user", f"Interpret the card titled {title!r} and produce the JSON result.")]}
+    inputs = {"messages": [("user", _initial_user_content(title, card_art))]}
     config = {"recursion_limit": recursion_limit}
 
     # progress accumulates every intermediate graph state so that, if the graph
@@ -546,6 +573,24 @@ def run_agent(
                 note="Interpretation exceeded step budget: no effect applied.",
             )
         except Exception:  # noqa: BLE001 — any agent-internal error degrades gracefully
+            if card_art is not None:
+                # The likeliest new failure with an image attached is a model
+                # that rejects vision input; a drawing must never fail the play.
+                logger.warning("agent invoke failed with card art attached; retrying text-only", exc_info=True)
+                return run_agent(
+                    title,
+                    description,
+                    state,
+                    actor_id,
+                    creator_id=creator_id,
+                    card_id=card_id,
+                    tools=tools,
+                    model=model,
+                    timeout=timeout,
+                    max_tool_calls=max_tool_calls,
+                    forced_call_timeout=forced_call_timeout,
+                    allow_persistent_tools=allow_persistent_tools,
+                )
             logger.exception("agent invoke failed; returning bounded fallback")
             return _fallback_result(
                 comment="Something broke, and I'm choosing to blame that card.",

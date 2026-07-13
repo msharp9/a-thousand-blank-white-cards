@@ -138,6 +138,14 @@ current board state. This is not optional — even a perfectly clear card gets a
 Keep it tight and funny. Never break character to explain the rules.
 """
 
+CARD_ART_NOTE = """\
+CARD ART: the player's hand-drawn art for this card is attached to your input as an
+image. Treat the drawing as part of the card: it can clarify ambiguous text, supply a
+target or number the text omits, or carry the whole meaning of a near-blank card. When
+the drawing and the text conflict, the text wins; when the text is vague, let the
+drawing steer your interpretation. Feel free to critique the artwork in your comment.
+"""
+
 OUTPUT_CONTRACT = """\
 Produce your FINAL answer as a single JSON object (no prose, no markdown fences) with
 these keys:
@@ -200,6 +208,8 @@ def build_system_prompt(
     state: Any | None = None,
     actor_id: str | None = None,
     creator_id: str | None = None,
+    *,
+    has_art: bool = False,
 ) -> str:
     """Assemble the full system prompt for one card interpretation.
 
@@ -207,6 +217,9 @@ def build_system_prompt(
     prompt is fully testable as a string. ``state`` may be a GameState, a dict
     snapshot, or None; ``actor_id`` and ``creator_id`` let the persona logic decide
     (e.g.) whether the player is the card's author for ``punish_author``.
+    ``has_art`` adds :data:`CARD_ART_NOTE` — set it ONLY when the card's drawing is
+    actually attached to the model input as an image (see agent.runtime); with the
+    default False the prompt is unchanged.
     """
     author_note = ""
     if actor_id is not None and creator_id is not None:
@@ -232,6 +245,7 @@ def build_system_prompt(
             "--- The card that was just played ---",
             f"Title: {title}",
             f"Description: {description}",
+            *([CARD_ART_NOTE] if has_art else []),
             author_note,
             _describe_state(state, actor_id),
         ]

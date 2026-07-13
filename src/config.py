@@ -37,6 +37,11 @@ class Settings(BaseSettings):
 
     llm_chat_model: str = "gpt-5.4-mini"
     llm_embedding_model: str = "text-embedding-3-small"
+    # Vision: when True AND the played/authored card has art, run_agent attaches
+    # the card's PNG data-URL to the model input as an image block. Default OFF —
+    # the agent stays byte-identical to text-only until explicitly enabled, and
+    # LLM_CHAT_MODEL must actually accept image input for it to matter.
+    vision_enabled: bool = False
     # Vector size of the embedding model; feeds the Qdrant collection dimension and
     # MUST match the model. OpenAI text-embedding-3-small is 1536-dim; other
     # servers differ (e.g. Ollama nomic-embed-text is 768) — override to match.

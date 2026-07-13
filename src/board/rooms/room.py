@@ -997,8 +997,17 @@ class Room:
 
         await self.connections.broadcast({"type": "brewing", "card_id": card_id})
         try:
+            # card_art is a side-channel arg: the drawing lives in Room.card_art,
+            # never in the GameState handed to the agent.
             result: InterpretResult = await asyncio.to_thread(
-                run_agent, title, description, self.state, actor_id, creator_id=creator_id, card_id=card_id
+                run_agent,
+                title,
+                description,
+                self.state,
+                actor_id,
+                creator_id=creator_id,
+                card_id=card_id,
+                card_art=self.card_art.get(card_id),
             )
         except Exception:
             logger.exception("run_agent failed for %s; using deterministic fallback", card_id)
@@ -2266,7 +2275,14 @@ class Room:
         # A just-created card's actor IS its creator (player_id authored it).
         try:
             result: InterpretResult = await asyncio.to_thread(
-                run_agent, msg.title, msg.description, self.state, player_id, creator_id=player_id, card_id=card_id
+                run_agent,
+                msg.title,
+                msg.description,
+                self.state,
+                player_id,
+                creator_id=player_id,
+                card_id=card_id,
+                card_art=art,
             )
         except Exception:
             logger.exception("run_agent failed for %s; using deterministic fallback", card_id)
