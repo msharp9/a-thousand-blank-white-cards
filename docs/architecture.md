@@ -184,9 +184,10 @@ discriminated union (`ClientMsg`, keyed on `type`) validated by a single
 `TypeAdapter`; outbound messages are the `ServerMsg` set.
 
 - **Client → server**: `join`, `start`, `draw`, `play`, `pass` / `end_turn`,
-  `create_card`, `preview_card`, `epilogue_vote`.
+  `create_card`, `preview_card`, `interaction_response`, `epilogue_vote`.
 - **Server → client**: `state`, `brewing`, `card_interpreted`, `effect_applied`,
-  `preview_result`, `prompt_choice`, `epilogue`, `error`.
+  `preview_result`, `prompt_choice`, `interaction_request`,
+  `interaction_progress`, `epilogue`, `error`.
 
 **Handshake and close codes** (`board/ws.py`): the socket is accepted, then the
 first message MUST be a `join` carrying a valid `player_id`. The frontend
@@ -216,6 +217,33 @@ failures remain visible after reconnect and can be matched to server logs.
 Every inbound message is serialized through a per-room `asyncio.Lock`
 (`Room.handle_action` → `Room._dispatch`), so concurrent sockets cannot corrupt
 turn order. Spectators are rejected from all game-mutating message types.
+
+### Generic interaction barriers
+
+`ResolutionPlan` can interleave `ops`, `snippet`, and `interaction` steps.
+Interaction descriptors are versioned, bounded data for `choice`, `number`,
+`text`, `card_pick`, `confirm`, or normalized vector `drawing` input, addressed
+to `active`, `all`, `all_others`, or `player:<id>`. The legacy
+`prompt_choice` target flow remains readable and operational.
+
+At a barrier the Room does not commit the working clone. A private,
+persisted `PendingResolution` stores the plan cursor, cloned state, resolved
+audience, deadline, correlation id, and sealed responses outside `GameState`.
+Normal gameplay is frozen. Shared snapshots expose only safe status and counts;
+each audience member receives their own request, which is replayed on reconnect.
+Responses are schema-checked and authenticated, then the plan resumes exactly
+once with validated values in `ctx.interactions[result_key]`. A later stage may
+use `input_refs` to turn prior submissions into choices, enabling drawing then
+voting without revealing drawings before the submission barrier closes.
+
+Plans are capped at eight total steps, four interaction barriers, and 256 KiB of
+aggregate interaction descriptors/references; individual descriptors and
+responses are bounded as well. The deadline defaults to 60 seconds. Partial
+timeouts continue with submitted values and deterministic type defaults. If nobody responds, all pre-barrier
+mechanics are rolled back, the played card is consumed as a visible no-op, and
+the turn continues. `FileRoomStore` persists pending resolutions and turn
+bookkeeping for dev reloads; application startup recreates timeout tasks without
+requiring a client to reconnect.
 
 ```mermaid
 sequenceDiagram
@@ -310,7 +338,7 @@ A card resolves as a `ResolutionPlan`: an ordered sequence of `OpsStep` and
 list of `Op`s from the
 discriminated union in `models/effects.py` (`add_points`, `subtract_points`,
 `set_points`, `steal_points`, `skip_turn`, `extra_turn`, `reverse_order`,
-`scramble_order`, `change_draw_count`, `draw_cards`, `destroy_card`,
+`scramble_order`, `change_draw_count`, `draw_cards`, `destroy_card`, `transfer_card`,
 `set_win_condition`, `set_rule`, `custom_note`, `end_game`). Each op addresses players via a `Target`
 (`self`, `left_neighbor`, `all_others`, `chooser`, `player_with_most_points`, …)
 and, for card manipulation, a `CardTarget` (`this`, `chosen_card`,
@@ -418,7 +446,7 @@ code:
   `SandboxGame` façade, never raw `GameState`. It exposes reads (player views,
   `my_hand`, `hand_size`, `deck_size`, `rules`, `conditions`, `card` metadata,
   `turn_order`) and mutators at FULL op parity (points/turn ops plus
-  `draw_cards`, `destroy_card`, `set_win_condition`, `end_game`, `set_rule`,
+  `draw_cards`, `destroy_card`, `transfer_card`, `set_win_condition`, `end_game`, `set_rule`,
   `set_condition`, `set_card_attribute`, `create_card`, `register_hook`,
   `unregister_hook`, `custom_note`, `reject_play`) that only **record op dicts** —
   they cannot touch real state. Canonical mutator names and parameter order match

@@ -50,3 +50,27 @@ def test_dry_run_tool_requires_one_payload_shape() -> None:
     report = json.loads(tool.invoke({}))
 
     assert report == {"ok": False, "error": "provide exactly one of code or plan"}
+
+
+def test_dry_run_supplies_deterministic_interaction_values_to_later_steps() -> None:
+    plan = ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "bids",
+                    "request": {"kind": "number", "prompt": "Bid", "audience": "all", "minimum": 2},
+                },
+                {
+                    "kind": "snippet",
+                    "code": "def apply(state, ctx):\n    state.add_points('self', int(sum(ctx['interactions']['bids'].values())))\n",
+                },
+            ]
+        }
+    )
+
+    report = dry_run_resolution_plan(_state(), plan, "p1", "played")
+
+    assert report["ok"] is True
+    assert report["interactions"] == {"bids": {"p1": 2, "p2": 2}}
+    assert report["after"]["scores"]["p1"] == 4

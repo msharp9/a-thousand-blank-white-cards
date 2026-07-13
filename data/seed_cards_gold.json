@@ -401,5 +401,70 @@
         {"op": "steal_points", "args": {"amount": 4, "from": "player_with_most_points", "to": "self"}}
       ]
     }
+  },
+  {
+    "title": "Going Once, Going Twice",
+    "description": "Everyone secretly bids points for this card. The highest bidder pays their bid and takes this card into their hand. Ties go to the earliest player in turn order.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "bids",
+          "request": {
+            "kind": "number",
+            "prompt": "How many points do you bid?",
+            "audience": "all",
+            "sealed": true,
+            "minimum": 0,
+            "maximum": 100,
+            "integer": true
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    bids = ctx['interactions']['bids']\n    best = max(bids.values())\n    winner = [pid for pid in state.turn_order if bids[pid] == best][0]\n    state.subtract_points('id:' + winner, int(best))\n    state.transfer_card('this', 'id:' + winner)\n",
+          "explanation": "Resolve a sealed bid deterministically, charge the winner, and move the played card with the canonical transfer_card API."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Cat Show",
+    "description": "Everyone draws a cat, then everyone votes for the best cat. The artist with the most votes gains 3 points; ties all score.",
+    "canonical": {
+      "timing": "immediate",
+      "target": "all",
+      "placement": "center",
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "cats",
+          "request": {
+            "kind": "drawing",
+            "prompt": "Draw your best cat.",
+            "audience": "all",
+            "sealed": true
+          }
+        },
+        {
+          "kind": "interaction",
+          "result_key": "votes",
+          "request": {
+            "kind": "choice",
+            "prompt": "Which cat is best?",
+            "audience": "all"
+          },
+          "input_refs": {"options": {"result_key": "cats"}}
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    counts = {}\n    for picks in ctx['interactions']['votes'].values():\n        for pid in picks:\n            counts[pid] = counts.get(pid, 0) + 1\n    best = max(counts.values())\n    for pid, count in counts.items():\n        if count == best:\n            state.add_points('id:' + pid, 3)\n",
+          "explanation": "Use a drawing barrier, materialize those sealed submissions as vote options, then score every tied winner."
+        }
+      ]
+    }
   }
 ]

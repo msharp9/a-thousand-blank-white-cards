@@ -36,10 +36,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import random
 import re
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 from engine.apply import apply_effect
 from engine.compile import compile_card_plan
@@ -49,9 +51,28 @@ from engine.history import append_history_event, record_draw, record_game_end
 from engine.loop import advance_turn
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.card import MAX_ROOM_ART_BYTES
-from models.effects import CustomNoteOp, EffectProgram, OpsStep, ResolutionPlan, SnippetStep
+from models.effects import CustomNoteOp, EffectProgram, InteractionStep, OpsStep, ResolutionPlan, SnippetStep
 from models.game_state import EndCondition, EpilogueCardOutcome, EpilogueResultSummary, GameState, Player, Spectator
+from models.interactions import (
+    CardPickInteraction,
+    CardPickResponse,
+    ChoiceInteraction,
+    ChoiceResponse,
+    ConfirmInteraction,
+    ConfirmResponse,
+    DrawingInteraction,
+    DrawingResponse,
+    InteractionDescriptor,
+    InteractionOption,
+    InteractionProgress,
+    InteractionResponsePayload,
+    NumberInteraction,
+    NumberResponse,
+    TextInteraction,
+    TextResponse,
+)
 from models.ws_messages import CreateCardMsg
+from board.rooms.interactions import PendingResolution
 from board.rooms.connections import ConnectionManager
 from board.rooms.deck import (
     BLANKS_PER_PLAYER,
@@ -81,6 +102,13 @@ AGENT_COMMENT_PREFIX = "🤖 "
 
 class PlanExecutionError(Exception):
     pass
+
+
+class PlanPaused(Exception):
+    def __init__(self, working_state: GameState, cursor: int, step: InteractionStep) -> None:
+        self.working_state = working_state
+        self.cursor = cursor
+        self.step = step
 
 
 class Room:
@@ -132,6 +160,8 @@ class Room:
         # → follow-up play re-resolves), so this guards against double-logging the
         # arbiter comment for one played card. See _resolve_plan.
         self._comment_logged: set[str] = set()
+        self._pending_resolution: PendingResolution | None = None
+        self._interaction_timer: asyncio.Task | None = None
 
     # ── player management ──
     def add_player(self, player_id: str, name: str) -> None:
@@ -200,6 +230,7 @@ class Room:
             "play",
             "create_card",
             "preview_card",
+            "interaction_response",
         }:
             await self.connections.send(player_id, {"type": "error", "message": "Spectators cannot take game actions"})
             return
@@ -208,6 +239,19 @@ class Room:
         # a stray play would re-trigger _end_game and double-apply end scoring.
         if mtype in {"draw", "pass", "end_turn", "play"} and self.state.phase != "playing":
             await self.connections.send(player_id, {"type": "error", "message": "The game is not in play"})
+            return
+        if self._pending_resolution is not None and mtype in {
+            "start",
+            "draw",
+            "pass",
+            "end_turn",
+            "play",
+            "create_card",
+        }:
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "Waiting for the current card interaction to finish"},
+            )
             return
         if mtype in {"create_card", "preview_card"} and self.state.phase not in {"setup", "playing"}:
             await self.connections.send(player_id, {"type": "error", "message": "Card authoring is closed"})
@@ -252,6 +296,8 @@ class Room:
             await self._handle_create_card(player_id, msg)
         elif mtype == "preview_card":
             await self._handle_preview_card(player_id, msg)
+        elif mtype == "interaction_response":
+            await self._handle_interaction_response(player_id, msg)
         elif mtype == "epilogue_start":
             await self._handle_epilogue_start(player_id)
         elif mtype == "epilogue_vote":
@@ -932,28 +978,38 @@ class Room:
         plan: ResolutionPlan,
         ctx: HookContext,
         card,
+        *,
+        start_cursor: int = 0,
+        working_state: GameState | None = None,
     ) -> GameState:
         from config import get_settings
         from engine.sandbox.revalidate import apply_snippet_diff
         from engine.sandbox.runner import execute_snippet
 
         card_id = ctx.card_id or ""
-        destination = self._play_destination(card)
-        working = base_state.move_card(
-            card_id,
-            "hand",
-            destination,
-            from_player_id=ctx.actor_id,
-            to_player_id=ctx.actor_id,
-        )
+        if working_state is None:
+            destination = self._play_destination(card)
+            working = base_state.move_card(
+                card_id,
+                "hand",
+                destination,
+                from_player_id=ctx.actor_id,
+                to_player_id=ctx.actor_id,
+            )
+        else:
+            working = working_state
         rng = random.Random()
         ctx_dict = {
             "actor_id": ctx.actor_id,
             "event": str(ctx.event),
             "card_id": ctx.card_id,
             "amount": ctx.amount,
+            "interactions": ctx.interactions,
+            "interaction_refs": ctx.interaction_refs,
         }
-        for step in plan.steps:
+        for cursor, step in enumerate(plan.steps[start_cursor:], start=start_cursor):
+            if isinstance(step, InteractionStep):
+                raise PlanPaused(working, cursor, step)
             bus = EventBus(build_registry(working), max_hooks=MAX_HOOKS_PER_EVENT)
             if isinstance(step, OpsStep):
                 working = apply_effect(working, EffectProgram(ops=step.ops), ctx, bus=bus, rng=rng)
@@ -1121,6 +1177,36 @@ class Room:
         deck_count_before = len(self.state.deck)
         try:
             self.state = await self._execute_plan(self.state, plan, ctx, card)
+        except PlanPaused as paused:
+            try:
+                await self._pause_resolution(
+                    paused,
+                    plan=plan,
+                    ctx=ctx,
+                    card=card if isinstance(card, dict) else card.model_dump(),
+                    correlation_id=correlation_id,
+                    before_scores=before,
+                    deck_count_before=deck_count_before,
+                )
+            except Exception as exc:
+                reason = self._public_mechanical_reason(exc, fallback="The interaction could not be started safely.")
+                logger.warning(
+                    "interaction setup failed correlation_id=%s card_id=%s reason=%s",
+                    correlation_id,
+                    card_id,
+                    reason,
+                )
+                self._set_card_mechanical_status(card_id, "fallback", correlation_id, reason)
+                destination = self._play_destination(card)
+                self.state = self.state.move_card(
+                    card_id, "hand", destination, from_player_id=player_id, to_player_id=player_id
+                )
+                await self._log_and_broadcast(f"[interaction error] {title}: {exc}")
+                fallback = EffectProgram(ops=[CustomNoteOp(note=f"Played {title or 'Card'} (no mechanical effect)")])
+                self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
+                await self._log_and_broadcast(self._describe_play(player_id, card, before))
+            else:
+                return
         except Exception as exc:
             reason = self._public_mechanical_reason(
                 exc,
@@ -1173,6 +1259,403 @@ class Room:
         elif self._plays_this_turn < self.state.rules.play:
             # rules.play > 1: the turn continues until the play allowance is
             # spent (or the player passes).
+            await self._broadcast_state()
+        else:
+            await self._advance_turn()
+
+    # ── generic interaction barriers ──
+    @staticmethod
+    def _resolve_interaction_ref(results: dict, result_key: str, path: list[str | int]):
+        try:
+            value = results[result_key]
+            for part in path:
+                value = value[part]
+            return value
+        except (KeyError, IndexError, TypeError) as exc:
+            raise PlanExecutionError(f"interaction reference {result_key!r} has invalid path {path!r}") from exc
+
+    def _resolve_interaction_audience(self, audience: str, actor_id: str) -> list[str]:
+        player_ids = [player.id for player in self.state.players]
+        if audience == "active":
+            return [actor_id]
+        if audience == "all":
+            return player_ids
+        if audience == "all_others":
+            return [player_id for player_id in player_ids if player_id != actor_id]
+        if audience.startswith("player:"):
+            player_id = audience.removeprefix("player:")
+            return [player_id] if player_id in player_ids else []
+        return []
+
+    def _materialize_interaction(
+        self,
+        step: InteractionStep,
+        results: dict[str, object],
+    ) -> tuple[InteractionDescriptor, dict[str, object]]:
+        refs = {
+            name: self._resolve_interaction_ref(results, ref.result_key, ref.path)
+            for name, ref in step.input_refs.items()
+        }
+        request = step.request
+        if isinstance(request, ChoiceInteraction) and "options" in refs:
+            source = refs["options"]
+            if not isinstance(source, dict):
+                raise PlanExecutionError("choice options reference must resolve to an object")
+            options = [
+                InteractionOption(
+                    id=str(player_id),
+                    label=self._name(str(player_id)),
+                    payload=value,
+                )
+                for player_id, value in source.items()
+            ]
+            request = ChoiceInteraction.model_validate(
+                {
+                    **request.model_dump(mode="python"),
+                    "options": [option.model_dump(mode="python") for option in options],
+                    "max_selections": min(request.max_selections, len(options)),
+                }
+            )
+        if isinstance(request, CardPickInteraction) and "card_ids" in refs:
+            if not isinstance(refs["card_ids"], list) or not refs["card_ids"]:
+                raise PlanExecutionError("card_ids reference must resolve to a non-empty list")
+            request = CardPickInteraction.model_validate(
+                {**request.model_dump(mode="python"), "card_ids": list(refs["card_ids"])}
+            )
+        return request, refs
+
+    async def _pause_resolution(
+        self,
+        paused: PlanPaused,
+        *,
+        plan: ResolutionPlan,
+        ctx: HookContext,
+        card: dict,
+        correlation_id: str,
+        before_scores: dict[str, int],
+        deck_count_before: int,
+    ) -> None:
+        request, refs = self._materialize_interaction(paused.step, ctx.interactions)
+        audience = self._resolve_interaction_audience(request.audience, ctx.actor_id)
+        if not audience:
+            raise PlanExecutionError("interaction has no eligible audience")
+        interaction_id = uuid.uuid4().hex
+        deadline = datetime.now(UTC) + timedelta(seconds=request.timeout_seconds)
+        self._pending_resolution = PendingResolution(
+            interaction_id=interaction_id,
+            card_id=ctx.card_id or "",
+            actor_id=ctx.actor_id,
+            card=card,
+            plan=plan,
+            cursor=paused.cursor + 1,
+            working_state=paused.working_state,
+            request=request,
+            result_key=paused.step.result_key,
+            resolved_audience=audience,
+            deadline_at=deadline,
+            interactions=ctx.interactions,
+            interaction_refs=refs,
+            correlation_id=correlation_id,
+            chosen_player_id=ctx.chosen_player_id,
+            chosen_card_id=ctx.chosen_card_id,
+            before_scores=before_scores,
+            deck_count_before=deck_count_before,
+        )
+        self._set_card_mechanical_status(ctx.card_id or "", "pending", correlation_id)
+        self._schedule_interaction_timeout()
+        for player_id in audience:
+            await self._send_interaction_request(player_id)
+        await self._broadcast_interaction_progress()
+        await self._broadcast_state()
+
+    def _interaction_progress(self, player_id: str | None = None) -> InteractionProgress:
+        pending = self._pending_resolution
+        if pending is None:
+            return InteractionProgress(expected_count=0, received_count=0, complete=True)
+        return InteractionProgress(
+            expected_count=len(pending.resolved_audience),
+            received_count=len(pending.responses),
+            submitted=player_id in pending.responses if player_id else False,
+            complete=len(pending.responses) >= len(pending.resolved_audience),
+        )
+
+    async def _send_interaction_request(self, player_id: str) -> None:
+        pending = self._pending_resolution
+        if pending is None or player_id not in pending.resolved_audience:
+            return
+        await self.connections.send(
+            player_id,
+            {
+                "type": "interaction_request",
+                "schema_version": 1,
+                "interaction_id": pending.interaction_id,
+                "descriptor": pending.request.model_dump(mode="json"),
+                "deadline_at": pending.deadline_at.isoformat(),
+                "progress": self._interaction_progress(player_id).model_dump(),
+            },
+        )
+
+    async def _broadcast_interaction_progress(self) -> None:
+        pending = self._pending_resolution
+        if pending is None:
+            return
+        for player_id in self.connections.connected_players:
+            await self.connections.send(
+                player_id,
+                {
+                    "type": "interaction_progress",
+                    "schema_version": 1,
+                    "interaction_id": pending.interaction_id,
+                    "deadline_at": pending.deadline_at.isoformat(),
+                    "progress": self._interaction_progress(player_id).model_dump(),
+                },
+            )
+
+    async def replay_pending_interaction(self, player_id: str) -> None:
+        if self._pending_resolution is None:
+            return
+        self._schedule_interaction_timeout()
+        await self._send_interaction_request(player_id)
+
+    def ensure_pending_timeout(self) -> None:
+        """Resume persisted interaction deadlines without waiting for reconnect."""
+        if self._pending_resolution is not None:
+            self._schedule_interaction_timeout()
+
+    def _schedule_interaction_timeout(self) -> None:
+        pending = self._pending_resolution
+        if pending is None:
+            return
+        if (
+            self._interaction_timer is not None
+            and self._interaction_timer is not asyncio.current_task()
+            and not self._interaction_timer.done()
+        ):
+            self._interaction_timer.cancel()
+        delay = max(0.0, (pending.deadline_at - datetime.now(UTC)).total_seconds())
+        self._interaction_timer = asyncio.create_task(self._interaction_timeout(pending.interaction_id, delay))
+
+    async def _interaction_timeout(self, interaction_id: str, delay: float) -> None:
+        await asyncio.sleep(delay)
+        async with self._lock:
+            pending = self._pending_resolution
+            if pending is None or pending.interaction_id != interaction_id:
+                return
+            await self._resume_pending_resolution(timed_out=True)
+            self._notify_change()
+
+    def _validate_interaction_response(
+        self,
+        request: InteractionDescriptor,
+        payload: InteractionResponsePayload,
+    ) -> object:
+        if payload.kind != request.kind:
+            raise ValueError("response kind does not match request")
+        if isinstance(request, NumberInteraction) and isinstance(payload, NumberResponse):
+            if not request.minimum <= payload.value <= request.maximum:
+                raise ValueError("number is outside the allowed range")
+            if request.integer and not payload.value.is_integer():
+                raise ValueError("an integer is required")
+            return int(payload.value) if request.integer else payload.value
+        if isinstance(request, TextInteraction) and isinstance(payload, TextResponse):
+            if len(payload.value) > request.max_length:
+                raise ValueError("text is too long")
+            return payload.value
+        if isinstance(request, ChoiceInteraction) and isinstance(payload, ChoiceResponse):
+            option_ids = payload.option_ids
+            if not request.min_selections <= len(option_ids) <= request.max_selections:
+                raise ValueError("wrong number of choices")
+            allowed = {option.id for option in request.options}
+            if not set(option_ids) <= allowed:
+                raise ValueError("unknown choice")
+            return option_ids
+        if isinstance(request, CardPickInteraction) and isinstance(payload, CardPickResponse):
+            if payload.card_id not in request.card_ids:
+                raise ValueError("card is not selectable")
+            return payload.card_id
+        if isinstance(request, ConfirmInteraction) and isinstance(payload, ConfirmResponse):
+            return payload.confirmed
+        if isinstance(request, DrawingInteraction) and isinstance(payload, DrawingResponse):
+            if len(payload.strokes) > request.max_strokes or any(
+                len(stroke.points) > request.max_points_per_stroke for stroke in payload.strokes
+            ):
+                raise ValueError("drawing exceeds request limits")
+            return [stroke.model_dump() for stroke in payload.strokes]
+        raise ValueError("invalid interaction response")
+
+    async def _handle_interaction_response(self, player_id: str, msg) -> None:
+        pending = self._pending_resolution
+        if pending is None or msg.interaction_id != pending.interaction_id:
+            await self.connections.send(player_id, {"type": "error", "message": "Interaction is no longer active"})
+            return
+        if player_id not in pending.resolved_audience:
+            await self.connections.send(player_id, {"type": "error", "message": "You are not part of this interaction"})
+            return
+        if player_id in pending.responses:
+            await self.connections.send(player_id, {"type": "error", "message": "Response already submitted"})
+            return
+        if datetime.now(UTC) >= pending.deadline_at:
+            await self._resume_pending_resolution(timed_out=True)
+            await self.connections.send(player_id, {"type": "error", "message": "Interaction deadline passed"})
+            return
+        try:
+            self._validate_interaction_response(pending.request, msg.payload)
+        except ValueError as exc:
+            await self.connections.send(player_id, {"type": "error", "message": str(exc)})
+            return
+        pending.responses[player_id] = msg.payload
+        await self._send_interaction_request(player_id)
+        await self._broadcast_interaction_progress()
+        if len(pending.responses) >= len(pending.resolved_audience):
+            await self._resume_pending_resolution(timed_out=False)
+
+    @staticmethod
+    def _default_interaction_value(request: InteractionDescriptor) -> object:
+        if isinstance(request, NumberInteraction):
+            bounded = max(request.minimum, min(0, request.maximum))
+            return (
+                int(bounded)
+                if request.integer and bounded.is_integer()
+                else (math.ceil(request.minimum) if request.integer else bounded)
+            )
+        if isinstance(request, TextInteraction):
+            return ""
+        if isinstance(request, ChoiceInteraction):
+            return []
+        if isinstance(request, CardPickInteraction):
+            return None
+        if isinstance(request, ConfirmInteraction):
+            return False
+        return []
+
+    async def _resume_pending_resolution(self, *, timed_out: bool) -> None:
+        pending = self._pending_resolution
+        if pending is None:
+            return
+        if (
+            self._interaction_timer is not None
+            and self._interaction_timer is not asyncio.current_task()
+            and not self._interaction_timer.done()
+        ):
+            self._interaction_timer.cancel()
+        if timed_out and not pending.responses:
+            await self._fail_pending_resolution("No one responded before the interaction timed out.")
+            return
+        values: dict[str, object] = {}
+        for player_id in pending.resolved_audience:
+            payload = pending.responses.get(player_id)
+            values[player_id] = (
+                self._validate_interaction_response(pending.request, payload)
+                if payload is not None
+                else self._default_interaction_value(pending.request)
+            )
+        interactions = {**pending.interactions, pending.result_key: values}
+        self._pending_resolution = None
+        ctx = HookContext(
+            event=GameEvent.ON_PLAY,
+            actor_id=pending.actor_id,
+            card_id=pending.card_id,
+            chosen_player_id=pending.chosen_player_id,
+            chosen_card_id=pending.chosen_card_id,
+            interactions=interactions,
+            interaction_refs=pending.interaction_refs,
+        )
+        try:
+            completed = await self._execute_plan(
+                self.state,
+                pending.plan,
+                ctx,
+                pending.card,
+                start_cursor=pending.cursor,
+                working_state=pending.working_state,
+            )
+        except PlanPaused as paused:
+            try:
+                await self._pause_resolution(
+                    paused,
+                    plan=pending.plan,
+                    ctx=ctx,
+                    card=pending.card,
+                    correlation_id=pending.correlation_id,
+                    before_scores=pending.before_scores,
+                    deck_count_before=pending.deck_count_before,
+                )
+            except Exception as exc:
+                await self._fail_pending_resolution(
+                    self._public_mechanical_reason(exc, fallback="The next interaction could not be started safely."),
+                    pending=pending,
+                )
+            return
+        except Exception as exc:
+            await self._fail_pending_resolution(
+                self._public_mechanical_reason(exc, fallback="The interaction effect could not be applied safely."),
+                pending=pending,
+            )
+            return
+        await self._commit_pending_resolution(pending, completed)
+
+    async def _fail_pending_resolution(self, reason: str, *, pending: PendingResolution | None = None) -> None:
+        pending = pending or self._pending_resolution
+        if pending is None:
+            return
+        self._pending_resolution = None
+        self._set_card_mechanical_status(pending.card_id, "fallback", pending.correlation_id, reason)
+        destination = self._play_destination(pending.card)
+        self.state = self.state.move_card(
+            pending.card_id,
+            "hand",
+            destination,
+            from_player_id=pending.actor_id,
+            to_player_id=pending.actor_id,
+        )
+        ctx = HookContext(event=GameEvent.ON_PLAY, actor_id=pending.actor_id, card_id=pending.card_id)
+        self.state = apply_effect(
+            self.state,
+            EffectProgram(ops=[CustomNoteOp(note=f"Played {self._card_title(pending.card)} (no mechanical effect)")]),
+            ctx,
+            bus=self._hook_bus(),
+        )
+        await self._log_and_broadcast(f"[interaction] {reason}")
+        await self._complete_interaction_play(pending, game_ending=False)
+
+    async def _commit_pending_resolution(self, pending: PendingResolution, completed: GameState) -> None:
+        self.state = completed
+        self._set_card_mechanical_status(pending.card_id, "applied", pending.correlation_id)
+        await self._log_and_broadcast(self._describe_play(pending.actor_id, pending.card, pending.before_scores))
+        await self._emit_hooks(GameEvent.ON_PLAY, pending.actor_id, card_id=pending.card_id)
+        await self._complete_interaction_play(
+            pending,
+            game_ending=self._end_now() or win_condition_met(self.state),
+        )
+
+    async def _complete_interaction_play(self, pending: PendingResolution, *, game_ending: bool) -> None:
+        self.state = append_history_event(
+            self.state,
+            "play",
+            actor_id=pending.actor_id,
+            target_player_ids=[pending.actor_id],
+            card_id=pending.card_id,
+            source="resolved",
+        )
+        self.state = append_history_event(
+            self.state,
+            "interaction",
+            actor_id=pending.actor_id,
+            target_player_ids=pending.resolved_audience,
+            card_id=pending.card_id,
+            source=pending.result_key,
+        )
+        if (
+            self.state.rules.end_condition.type == "deck_empty"
+            and pending.deck_count_before > 0
+            and not self.state.deck
+        ):
+            self._deck_exhausted = True
+        self._plays_this_turn += 1
+        await self._broadcast_state()
+        if game_ending:
+            await self._end_game()
+        elif self._plays_this_turn < self.state.rules.play:
             await self._broadcast_state()
         else:
             await self._advance_turn()
@@ -1512,6 +1995,17 @@ class Room:
         snap["can_pass"] = self._can_pass(active_id) if active_id is not None else False
         snap["setup_progress"] = self._setup_progress()
         snap["cards_to_author"] = CARDS_TO_AUTHOR
+        pending = self._pending_resolution
+        snap["pending_interaction"] = (
+            {
+                "interaction_id": pending.interaction_id,
+                "kind": pending.request.kind,
+                "deadline_at": pending.deadline_at.isoformat(),
+                "progress": self._interaction_progress().model_dump(),
+            }
+            if pending is not None
+            else None
+        )
         return snap
 
     async def _log_and_broadcast(self, log_entry: str) -> None:

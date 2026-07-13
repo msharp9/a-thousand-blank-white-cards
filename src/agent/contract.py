@@ -29,7 +29,8 @@ class SnippetEffect(BaseModel):
             "op-recording mutators) and `ctx` (a dict with keys 'actor_id', 'event', "
             "'card_id', 'amount'; ON_VALIDATE_PLAY fires additionally carry 'card_title' "
             "and 'card_attributes'). It returns None (recorded ops are re-validated and "
-            "applied by the engine)."
+            "applied by the engine). After an interaction barrier, ctx['interactions'] "
+            "contains result_key -> {player_id: validated_value}."
         )
     )
     explanation: str = Field(description="Plain-English explanation of what the snippet does.")

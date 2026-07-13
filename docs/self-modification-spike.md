@@ -234,13 +234,11 @@ remaining niche large enough to justify collapsing the security boundary.
 1. **Implemented:** wish-note JSONL telemetry + in-character fallback line.
    `scripts/export_capability_wishes.py` supports offline human triage; no
    runtime issue-tracker or source-writing authority exists.
-2. **After registry phases A–E prove out:** interaction descriptors —
-   `interaction_request`/`interaction_response` envelopes, Room
-   pending-interaction table with barrier + timeout, `InteractionPanel`
-   generic renderer, `bid`/`confirm`/`text`/`card_pick` kinds, facade op
-   `request_interaction` so sandbox snippets/hooks can ask for inputs through
-   the same revalidated pipeline. *Follow-up beads: backend protocol; frontend
-   renderer; facade op.*
+2. **Backend implemented; frontend next:** versioned
+   `interaction_request`/`interaction_response` envelopes, persisted atomic
+   Room barrier + timeout, and choice/number/text/card-pick/confirm/vector-drawing
+   descriptors. Ordered plans can chain submission and vote stages through
+   `input_refs`; the global `InteractionPanel` is the remaining UI layer.
 3. **Only if wish-note telemetry demands it:** agent-authored PRs (2c) as a
    formalized loop — wish note → agent drafts patch on a branch → CI
    (layering + coverage + a new descriptor-schema-compat test) → human merge.
