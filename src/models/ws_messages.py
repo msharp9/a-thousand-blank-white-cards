@@ -12,6 +12,12 @@ from typing import Annotated, Literal, Union
 from pydantic import AfterValidator, BaseModel, Field
 
 from models.card import CARD_ART_PREFIX, MAX_CARD_ART_BYTES, MAX_CARD_DESCRIPTION, MAX_CARD_TITLE, decode_card_art
+from models.interactions import (
+    Identifier,
+    InteractionDescriptor,
+    InteractionProgress,
+    InteractionResponsePayload,
+)
 
 # Length-bounded card text, enforced on every inbound authoring message via the
 # ClientMsg TypeAdapter in board.ws. Limits live in models.card (single source).
@@ -150,6 +156,13 @@ class EpilogueFinalizeMsg(BaseModel):
     type: Literal["epilogue_finalize"] = "epilogue_finalize"
 
 
+class InteractionResponseMsg(BaseModel):
+    type: Literal["interaction_response"] = "interaction_response"
+    schema_version: Literal[1] = 1
+    interaction_id: Identifier
+    payload: InteractionResponsePayload
+
+
 ClientMsg = Annotated[
     Union[
         JoinMsg,
@@ -164,6 +177,7 @@ ClientMsg = Annotated[
         EpilogueVoteMsg,
         EpilogueDoneMsg,
         EpilogueFinalizeMsg,
+        InteractionResponseMsg,
     ],
     Field(discriminator="type"),
 ]
@@ -217,6 +231,23 @@ class PromptChoiceMsg(BaseModel):
     choices: list[dict]  # list of {player_id, name}
 
 
+class InteractionRequestMsg(BaseModel):
+    type: Literal["interaction_request"] = "interaction_request"
+    schema_version: Literal[1] = 1
+    interaction_id: Identifier
+    descriptor: InteractionDescriptor
+    deadline_at: str
+    progress: InteractionProgress
+
+
+class InteractionProgressMsg(BaseModel):
+    type: Literal["interaction_progress"] = "interaction_progress"
+    schema_version: Literal[1] = 1
+    interaction_id: Identifier
+    deadline_at: str
+    progress: InteractionProgress
+
+
 class EpilogueMsg(BaseModel):
     type: Literal["epilogue"] = "epilogue"
     cards: list[dict]  # card snapshots created this game
@@ -240,6 +271,8 @@ ServerMsg = Union[
     CardInterpretedMsg,
     PreviewResultMsg,
     PromptChoiceMsg,
+    InteractionRequestMsg,
+    InteractionProgressMsg,
     EpilogueMsg,
     ErrorMsg,
     BrewingMsg,

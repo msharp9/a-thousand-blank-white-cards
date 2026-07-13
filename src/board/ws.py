@@ -35,9 +35,9 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
          the same player replaces the older one (4009).
       3. Server replays a full `state` snapshot, then loops: it validates each
          client message (join/start/pass/play/create_card/preview_card/
-         epilogue_vote) and dispatches to the room, broadcasting server messages
+         interaction_response/epilogue_vote) and dispatches to the room, broadcasting server messages
          (state, brewing, card_interpreted, effect_applied, preview_result,
-         prompt_choice, epilogue, error). Invalid JSON yields an `error` reply.
+         prompt_choice, interaction_request/progress, epilogue, error). Invalid JSON yields an `error` reply.
          A `play` of a BLANK card additionally carries the authored
          `title`+`description`, which the room persists onto the card (author on
          play) before interpreting it.
@@ -88,6 +88,7 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
 
     # Replay full state (covers reconnect).
     await room.connections.broadcast_state(room.snapshot())
+    await room.replay_pending_interaction(player_id)
 
     try:
         while True:

@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import AfterValidator, BaseModel, Field, model_validator
+
+from models.interactions import (
+    CardPickInteraction,
+    ChoiceInteraction,
+    InteractionDescriptor,
+    InteractionResultRef,
+)
+
+MAX_RESOLUTION_STEPS = 8
+MAX_INTERACTION_STEPS = 4
+MAX_INTERACTION_PLAN_BYTES = 262_144
+MAX_RESOLUTION_PLAN_BYTES = 524_288
 
 # ---------------------------------------------------------------------------
 # Target addresses
@@ -254,6 +267,14 @@ class DestroyCardOp(BaseModel):
     card_target: CardTarget | None = None
 
 
+class TransferCardOp(BaseModel):
+    """Move selected cards from their current zone into a player's hand."""
+
+    op: Literal["transfer_card"] = "transfer_card"
+    card_target: CardTarget = "this"
+    to_target: Target = "self"
+
+
 class SetWinConditionOp(BaseModel):
     op: Literal["set_win_condition"] = "set_win_condition"
     kind: Literal["highest_points", "lowest_points", "first_to", "empty_hand", "last_standing", "none"]
@@ -390,6 +411,7 @@ Op = Annotated[
         StealPointsOp,
         DrawCardsOp,
         DestroyCardOp,
+        TransferCardOp,
         SetWinConditionOp,
         SetRuleOp,
         RegisterHookOp,
@@ -442,20 +464,62 @@ class EffectProgram(BaseModel):
 
 class OpsStep(BaseModel):
     kind: Literal["ops"] = "ops"
-    ops: list[Op] = Field(default_factory=list)
+    ops: list[Op] = Field(default_factory=list, max_length=50)
 
 
 class SnippetStep(BaseModel):
     kind: Literal["snippet"] = "snippet"
-    code: str
+    code: str = Field(max_length=65_536)
     explanation: str = ""
 
 
-ResolutionStep = Annotated[Union[OpsStep, SnippetStep], Field(discriminator="kind")]
+class InteractionStep(BaseModel):
+    kind: Literal["interaction"] = "interaction"
+    result_key: str = Field(pattern=r"^[A-Za-z0-9_.:-]{1,80}$")
+    request: InteractionDescriptor
+    input_refs: dict[str, InteractionResultRef] = Field(default_factory=dict, max_length=20)
+
+
+ResolutionStep = Annotated[Union[OpsStep, SnippetStep, InteractionStep], Field(discriminator="kind")]
 
 
 class ResolutionPlan(BaseModel):
-    steps: list[ResolutionStep] = Field(default_factory=list)
+    steps: list[ResolutionStep] = Field(default_factory=list, max_length=MAX_RESOLUTION_STEPS)
+
+    @model_validator(mode="after")
+    def ordered_interaction_references(self):
+        available: set[str] = set()
+        interaction_count = 0
+        for step in self.steps:
+            if not isinstance(step, InteractionStep):
+                continue
+            interaction_count += 1
+            if step.result_key in available:
+                raise ValueError(f"duplicate interaction result_key: {step.result_key}")
+            missing = {ref.result_key for ref in step.input_refs.values()} - available
+            if missing:
+                raise ValueError(f"interaction refs must point to prior results: {sorted(missing)}")
+            if (
+                isinstance(step.request, ChoiceInteraction)
+                and not step.request.options
+                and "options" not in step.input_refs
+            ):
+                raise ValueError("choice interaction requires options or an options input_ref")
+            if (
+                isinstance(step.request, CardPickInteraction)
+                and not step.request.card_ids
+                and "card_ids" not in step.input_refs
+            ):
+                raise ValueError("card_pick interaction requires card_ids or a card_ids input_ref")
+            available.add(step.result_key)
+        if interaction_count > MAX_INTERACTION_STEPS:
+            raise ValueError(f"resolution plan exceeds {MAX_INTERACTION_STEPS} interaction barriers")
+        interaction_data = [step.model_dump(mode="json") for step in self.steps if isinstance(step, InteractionStep)]
+        if len(json.dumps(interaction_data, default=str).encode()) > MAX_INTERACTION_PLAN_BYTES:
+            raise ValueError(f"interaction plan exceeds {MAX_INTERACTION_PLAN_BYTES} bytes")
+        if len(json.dumps(self.model_dump(mode="json"), default=str).encode()) > MAX_RESOLUTION_PLAN_BYTES:
+            raise ValueError(f"resolution plan exceeds {MAX_RESOLUTION_PLAN_BYTES} bytes")
+        return self
 
     def operations(self) -> list[Op]:
         return [op for step in self.steps if isinstance(step, OpsStep) for op in step.ops]

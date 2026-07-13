@@ -59,7 +59,7 @@ effect for the game engine, given the live game state.
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, destroy_card, set_win_condition, set_rule, set_condition, set_card_attribute,
+  draw_cards, destroy_card, transfer_card, set_win_condition, set_rule, set_condition, set_card_attribute,
   create_card, custom_note, end_game) into an EffectProgram.
   * set_rule writes game rules as data (paths: draw, play, end_condition.type,
     win_condition.kind, extra.<anything>) — rule-changing cards ("draws are now 2", "game
@@ -81,6 +81,11 @@ effect for the game engine, given the live game state.
   `state.draw(...)` is not. Sandbox writes are deferred, so a read after a write in
   the same snippet still sees that step's input state. Use an ordered ResolutionPlan
   with an ops step followed by a snippet step when later logic reads earlier results.
+- For player input, put an interaction step in the ordered plan. Supported kinds are
+  choice, number, text, card_pick, confirm, and drawing; audience is active, all,
+  all_others, or player:<id>. Set sealed=true for bids/submissions. The next snippet
+  reads collected values from ctx['interactions'][result_key]. Chain stages with
+  input_refs, e.g. a vote step can set input_refs.options to a prior drawings result.
 - You MUST call `dry_run_effect` with every generated snippet, hook, or complete
   mixed plan before returning it. Fix any reported validation or runtime error.
 - Use the tools you are given. `read_engine_methods` tells you exactly which ops and
@@ -124,7 +129,7 @@ Produce your FINAL answer as a single JSON object (no prose, no markdown fences)
 these keys:
 
   {
-    "plan":           an ordered ResolutionPlan {"steps": [{"kind":"ops","ops":[...]}, {"kind":"snippet","code":"...","explanation":"..."}]} or null,
+    "plan":           an ordered ResolutionPlan {"steps": [{"kind":"ops","ops":[...]}, {"kind":"interaction","result_key":"bids","request":{"kind":"number","prompt":"Bid","audience":"all","sealed":true}}, {"kind":"snippet","code":"...","explanation":"..."}]} or null,
     "program":        an EffectProgram object {"ops": [...], "requires_choice": bool} or null,
     "snippet":        a snippet object {"code": "...", "explanation": "...", "trigger": null | "on_play" | "on_turn_start" | "on_turn_end" | "on_draw_step" | "on_score_change" | "on_game_end" | "on_validate_play", "scope": "center" | "player"} or null (trigger null = run once now; a GameEvent trigger = persistent hook),
     "verdict":        "ok" | "invalid" | "needs_choice",

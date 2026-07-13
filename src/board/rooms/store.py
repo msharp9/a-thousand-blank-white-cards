@@ -13,7 +13,6 @@ Codes are expected to already be normalised to upper-case by the caller
 ``FileRoomStore`` is a DEV-ONLY convenience (wired in only when
 ``get_settings().dev_mode`` is true) that persists each room to JSON on disk so
 in-progress games survive an API reload. It is deliberately lossy: the Room
-``_deck_exhausted`` latch is NOT persisted and resets on reload, and the
 out-of-band ``Room.card_art`` registry (card art deliberately lives outside
 GameState) is NOT persisted either — dev-mode art does not survive a process
 restart, so restore resets ``has_art`` to False on any card whose art is no
@@ -34,6 +33,7 @@ from typing import Protocol, runtime_checkable
 
 from models.game_state import GameState
 from board.rooms.epilogue import EpilogueManager
+from board.rooms.interactions import PendingResolution
 from board.rooms.room import Room
 
 logger = logging.getLogger(__name__)
@@ -63,6 +63,10 @@ class RoomStore(Protocol):
         """Return the number of rooms currently stored."""
         ...
 
+    def values(self) -> list[Room]:
+        """Return live rooms so startup can restore background deadlines."""
+        ...
+
 
 class InMemoryRoomStore:
     """In-process ``RoomStore`` backed by a plain dict.
@@ -87,6 +91,9 @@ class InMemoryRoomStore:
 
     def count(self) -> int:
         return len(self._rooms)
+
+    def values(self) -> list[Room]:
+        return list(self._rooms.values())
 
 
 class FileRoomStore:
@@ -122,6 +129,9 @@ class FileRoomStore:
     def count(self) -> int:
         return len(self._rooms)
 
+    def values(self) -> list[Room]:
+        return list(self._rooms.values())
+
     def load_all(self) -> None:
         """Rehydrate every persisted room from disk, skipping unreadable files."""
         for path in self._dir.glob("*.json"):
@@ -144,9 +154,20 @@ class FileRoomStore:
 
 
 def _room_to_dict(room: Room) -> dict:
-    data = {"code": room.code, "simple": room._simple, "state": room.state.model_dump(mode="json")}
+    data = {
+        "code": room.code,
+        "simple": room._simple,
+        "state": room.state.model_dump(mode="json"),
+        "turn_state": {
+            "has_drawn": room._has_drawn,
+            "plays_this_turn": room._plays_this_turn,
+            "deck_exhausted": room._deck_exhausted,
+        },
+    }
     if room._epilogue is not None:
         data["epilogue"] = room._epilogue.to_dict()
+    if room._pending_resolution is not None:
+        data["pending_resolution"] = room._pending_resolution.model_dump(mode="json")
     return data
 
 
@@ -164,7 +185,14 @@ def _room_from_dict(data: dict) -> Room:
         for cid, card in state.cards.items()
     }
     room.state = state.model_copy(update={"cards": cards})
+    turn_state = data.get("turn_state") or {}
+    room._has_drawn = bool(turn_state.get("has_drawn", False))
+    room._plays_this_turn = int(turn_state.get("plays_this_turn", 0))
+    room._deck_exhausted = bool(turn_state.get("deck_exhausted", False))
     epilogue_data = data.get("epilogue")
     if epilogue_data is not None:
         room._epilogue = EpilogueManager.from_dict(epilogue_data, room.connections)
+    pending_data = data.get("pending_resolution")
+    if pending_data is not None:
+        room._pending_resolution = PendingResolution.model_validate(pending_data)
     return room

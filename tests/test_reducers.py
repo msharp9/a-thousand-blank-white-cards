@@ -25,6 +25,7 @@ from models.effects import (
     SkipTurnOp,
     StealPointsOp,
     SubtractPointsOp,
+    TransferCardOp,
 )
 from models.game_state import GameState, Player
 
@@ -314,6 +315,35 @@ class TestDestroyCard:
         state = make_state()
         new = apply_op(state, DestroyCardOp(), make_card_ctx("p1"))
         assert new.get_player("p1").hand == state.get_player("p1").hand
+
+
+class TestTransferCard:
+    def test_moves_played_card_from_discard_to_one_hand(self):
+        players = [Player(id="p1", name="Alice"), Player(id="p2", name="Bob")]
+        state = GameState(
+            room_code="TEST",
+            players=players,
+            cards={"auction": {"id": "auction", "title": "Auction"}},
+            discard=["auction"],
+        )
+        ctx = make_card_ctx("p1", card_id="auction")
+        new = apply_op(state, TransferCardOp(card_target="this", to_target="id:p2"), ctx)
+        assert new.discard == []
+        assert new.get_player("p2").hand == ["auction"]
+
+    def test_requires_exactly_one_recipient(self):
+        state = GameState(
+            room_code="TEST",
+            players=[Player(id="p1", name="Alice"), Player(id="p2", name="Bob")],
+            cards={"auction": {"id": "auction", "title": "Auction"}},
+            discard=["auction"],
+        )
+        with pytest.raises(ValueError, match="exactly one"):
+            apply_op(
+                state,
+                TransferCardOp(card_target="this", to_target="all"),
+                make_card_ctx("p1", card_id="auction"),
+            )
 
 
 class TestSetWinCondition:

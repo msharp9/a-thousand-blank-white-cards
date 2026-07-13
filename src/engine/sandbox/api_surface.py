@@ -235,6 +235,10 @@ class SandboxGame:
             op["card_id"] = card_id
         self._ops.append(op)
 
+    def transfer_card(self, card_target: str = "this", to_target: str = "self") -> None:
+        """Move selected cards from their current zone into one player's hand."""
+        self._ops.append({"op": "transfer_card", "card_target": card_target, "to_target": to_target})
+
     def set_win_condition(self, kind: str, threshold: int | None = None) -> None:
         self._ops.append({"op": "set_win_condition", "kind": kind, "threshold": threshold})
 

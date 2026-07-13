@@ -20,6 +20,7 @@ from models.effects import (
     SkipTurnOp,
     StealPointsOp,
     SubtractPointsOp,
+    TransferCardOp,
 )
 
 
@@ -142,6 +143,14 @@ def test_destroy_card_by_id() -> None:
     assert isinstance(op, DestroyCardOp)
     assert op.card_id == "x1"
     assert op.card_target is None
+
+
+def test_transfer_card_uses_canonical_card_and_player_targets() -> None:
+    prog = compile_card(_card([{"op": "transfer_card", "args": {"card_target": "this", "to_target": "chosen_player"}}]))
+    op = prog.ops[0]
+    assert isinstance(op, TransferCardOp)
+    assert op.card_target == "this"
+    assert op.to_target == "chooser"
 
 
 # ---------------------------------------------------------------------------
