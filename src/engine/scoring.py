@@ -188,6 +188,9 @@ def check_win(state: GameState) -> GameState:
     """
     winners = evaluate_win_condition(state)
     if winners:
+        from engine.history import record_game_end
+
         msg = f"Game over! Winner(s): {', '.join(winners)}"
-        return state.model_copy(update={"phase": "ended"}).with_log(msg)
+        state = state.model_copy(update={"phase": "ended"}).with_log(msg)
+        return record_game_end(state, winners, source="check_win")
     return state

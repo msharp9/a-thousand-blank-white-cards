@@ -390,6 +390,13 @@ def _assemble_tools(
             logger.warning("read_game_state tool unavailable; skipping")
 
         try:
+            from agent.tools.read_game_history import make_read_game_history_tool
+
+            tools.append(make_read_game_history_tool(state))
+        except Exception:  # noqa: BLE001
+            logger.warning("read_game_history tool unavailable; skipping")
+
+        try:
             from agent.tools.dry_run_effect import make_dry_run_effect_tool
 
             tools.append(make_dry_run_effect_tool(state, actor_id, card_id))

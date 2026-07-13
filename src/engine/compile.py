@@ -172,7 +172,9 @@ def _compile_op(name: str, args: dict) -> Op | None:
             card_id=args.get("card_id"),
         )
     if name in _END_GAME_OP_NAMES:
-        return EndGameOp()
+        winner = args.get("winner")
+        winners = args.get("winners") or []
+        return EndGameOp(winner=winner, winners=winners)
     if name in _WIN_GAME_OP_NAMES:
         return EndGameOp(winner="self")
     if name == "set_rule":

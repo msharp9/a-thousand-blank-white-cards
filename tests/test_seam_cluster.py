@@ -185,6 +185,7 @@ def test_assemble_tools_includes_read_game_state_when_state_provided():
     tools = _assemble_tools(_sample_state(), "p1", "p1", None)
     names = {t.name for t in tools}
     assert "read_game_state" in names
+    assert "read_game_history" in names
     assert "dry_run_effect" in names
     # read_engine_methods rides in via get_default_tools.
     assert "read_engine_methods" in names
@@ -194,6 +195,7 @@ def test_assemble_tools_excludes_read_game_state_when_state_none():
     tools = _assemble_tools(None, None, None, None)
     names = {t.name for t in tools}
     assert "read_game_state" not in names
+    assert "read_game_history" not in names
     assert "dry_run_effect" not in names
     assert "read_engine_methods" in names
 

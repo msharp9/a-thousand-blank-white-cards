@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field, model_validator
 
+HistoryKind = Literal["draw", "play", "score_change", "rule_change", "interaction", "game_end"]
+
 
 class WinCondition(BaseModel):
     kind: Literal[
@@ -109,6 +111,19 @@ class HookSpec(BaseModel):
     code: str  # sandbox-validated snippet: def apply(state, ctx)
 
 
+class HistoryEvent(BaseModel):
+    """One privacy-safe, append-only fact about completed game mechanics."""
+
+    sequence: int = Field(ge=1)
+    kind: HistoryKind
+    actor_id: str | None = None
+    target_player_ids: list[str] = Field(default_factory=list)
+    card_id: str | None = None
+    amount: int | None = None
+    source: str | None = None
+    rule_path: str | None = None
+
+
 class Spectator(BaseModel):
     """A watcher who joined AFTER the game left the lobby.
 
@@ -183,6 +198,10 @@ class GameState(BaseModel):
 
     # Persistent hooks registered by card plays, in registration order.
     hooks: list[HookSpec] = Field(default_factory=list)
+
+    # Machine-readable history for game logic and reconnects. Unlike ``log``,
+    # events never contain private hand contents or generated prose.
+    history_events: list[HistoryEvent] = Field(default_factory=list)
 
     # Winner ids forced by an EndGameOp with a resolved ``winner`` target
     # ("You win the game" cards). When non-empty, _end_game uses these instead
@@ -359,6 +378,18 @@ class GameState(BaseModel):
     def with_log(self, msg: str) -> GameState:
         """Return a copy of this state with msg appended to log."""
         return self.model_copy(update={"log": [*self.log, msg]})
+
+    def with_history_event(self, event: HistoryEvent) -> GameState:
+        """Return a copy with one event appended using the next sequence id."""
+        next_sequence = self.history_events[-1].sequence + 1 if self.history_events else 1
+        return self.model_copy(
+            update={
+                "history_events": [
+                    *self.history_events,
+                    event.model_copy(update={"sequence": next_sequence}),
+                ]
+            }
+        )
 
     def with_condition(self, player_id: str, key: str, value: Any) -> "GameState":
         """Return a copy with ``player_id``'s ``conditions[key]`` set to ``value``.

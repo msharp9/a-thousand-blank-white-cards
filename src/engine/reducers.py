@@ -11,6 +11,7 @@ import random
 from collections.abc import Callable
 
 from engine.events import HookContext
+from engine.history import record_op_history
 from models.effects import (
     AddPointsOp,
     CardTarget,
@@ -420,6 +421,9 @@ def _reduce_end_game(state: GameState, op: EndGameOp, ctx: HookContext) -> GameS
     update: dict = {"rules": state.rules.model_copy(update={"end_condition": EndCondition(type="now")})}
     if op.winner is not None:
         update["winner_override"] = _resolve_targets(op.winner, ctx, state)
+    elif op.winners:
+        resolved = {player_id for target in op.winners for player_id in _resolve_targets(target, ctx, state)}
+        update["winner_override"] = [player.id for player in state.players if player.id in resolved]
     return state.model_copy(update=update)
 
 
@@ -455,11 +459,15 @@ def apply_op(state: GameState, op: Op, ctx: HookContext, *, rng: random.Random |
     ``rng`` is only consumed by ``scramble_order`` and ``create_card``
     (dependency-injectable for deterministic tests); every other op ignores it.
     """
+    before = state
     if op.op == "scramble_order":
-        return _reduce_scramble_order(state, op, ctx, rng=rng)
-    if op.op == "create_card":
-        return _reduce_create_card(state, op, ctx, rng=rng)
-    return _REDUCERS[op.op](state, op, ctx)
+        state = _reduce_scramble_order(state, op, ctx, rng=rng)
+    elif op.op == "create_card":
+        state = _reduce_create_card(state, op, ctx, rng=rng)
+    else:
+        state = _REDUCERS[op.op](state, op, ctx)
+
+    return record_op_history(before, state, op, ctx)
 
 
 __all__ = ["apply_op"]

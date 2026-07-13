@@ -127,6 +127,38 @@ def test_register_hook_rejects_scope_without_code() -> None:
         g.register_hook("on_validate_play", "player")
 
 
+def test_history_reads_are_bounded_filtered_and_aggregated() -> None:
+    state = copy.deepcopy(STATE)
+    state["history_events"] = [
+        {
+            "sequence": 1,
+            "kind": "draw",
+            "actor_id": "p1",
+            "target_player_ids": ["p2"],
+            "amount": 2,
+        },
+        {
+            "sequence": 2,
+            "kind": "play",
+            "actor_id": "p1",
+            "target_player_ids": ["p1"],
+            "card_id": "public-card",
+        },
+    ]
+    game = SandboxGame(state, dict(CTX))
+
+    assert game.history(kind="draw", player_id="p2", limit=500) == [state["history_events"][0]]
+    assert game.draw_totals() == {"p1": 0, "p2": 2}
+
+
+def test_end_game_records_multiple_explicit_winner_targets() -> None:
+    game = make_game()
+
+    game.end_game(["id:p1", "id:p2"])
+
+    assert game.ops() == [{"op": "end_game", "winners": ["id:p1", "id:p2"]}]
+
+
 def test_ops_returns_copy() -> None:
     g = make_game()
     g.add_points("p1", 1)
@@ -212,6 +244,8 @@ def test_canonical_mutators_match_op_names_and_parameters() -> None:
         "hand_size",
         "conditions",
         "card",
+        "history",
+        "draw_totals",
         "reject_play",
         "ops",
     }

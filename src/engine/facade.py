@@ -19,6 +19,7 @@ from __future__ import annotations
 from engine.apply import apply_effect
 from engine.compile import compile_card
 from engine.events import EventBus, GameEvent, HookContext
+from engine.history import append_history_event
 from engine.loop import draw_step
 from engine.reducers import apply_op
 from engine.scoring import check_win, evaluate_win_condition
@@ -86,10 +87,19 @@ class GameEngine:
         """
         program = compile_card(card)
         if program is not None and program.ops:
-            return apply_effect(state, program, ctx)
-        title = card.get("title") or "Card"
-        fallback = EffectProgram(ops=[CustomNoteOp(note=f"Played {title} (no mechanical effect)")])
-        return apply_effect(state, fallback, ctx)
+            state = apply_effect(state, program, ctx)
+        else:
+            title = card.get("title") or "Card"
+            fallback = EffectProgram(ops=[CustomNoteOp(note=f"Played {title} (no mechanical effect)")])
+            state = apply_effect(state, fallback, ctx)
+        return append_history_event(
+            state,
+            "play",
+            actor_id=ctx.actor_id,
+            target_player_ids=[ctx.actor_id],
+            card_id=ctx.card_id or card.get("id"),
+            source="facade",
+        )
 
     def check_end_game(self, state: GameState) -> GameState:
         """Check the win condition and end the game if met — delegates to

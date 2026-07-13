@@ -44,6 +44,7 @@ from engine.apply import apply_effect
 from engine.compile import compile_card_plan
 from engine.events import EventBus, GameEvent, HookContext
 from engine.hooks import build_registry
+from engine.history import append_history_event, record_draw, record_game_end
 from engine.loop import advance_turn
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.card import MAX_ROOM_ART_BYTES
@@ -489,28 +490,35 @@ class Room:
             await self._broadcast_state()
             return
 
-        self._draw_cards(player_id, amount)
+        actual = self._draw_cards(player_id, amount, source="turn")
         self._has_drawn = True
         await self._emit_hooks(GameEvent.ON_DRAW_STEP, player_id)
         if evaluate_end_condition(self.state):
             # Met at draw time (classically: the last card was just drawn) —
             # the game ends when this player's turn ends.
             self._deck_exhausted = True
-        await self._log_and_broadcast(f"{self._name(player_id)} drew a card")
+        noun = "card" if actual == 1 else "cards"
+        await self._log_and_broadcast(f"{self._name(player_id)} drew {actual} {noun}")
         # Push a fresh snapshot so clients see the new hand + has_drawn without a refresh.
         await self._broadcast_state()
 
-    def _draw_cards(self, player_id: str, count: int) -> None:
+    def _draw_cards(self, player_id: str, count: int, *, source: str) -> int:
         """Move up to ``count`` cards from the top of the deck into a hand (in place
         on self.state via immutable copy). Stops early if the deck runs out."""
         n = min(count, len(self.state.deck))
         if n <= 0:
-            return
+            return 0
         drawn, rest = self.state.deck[:n], self.state.deck[n:]
         new_players = [
             p.model_copy(update={"hand": [*p.hand, *drawn]}) if p.id == player_id else p for p in self.state.players
         ]
-        self.state = self.state.model_copy(update={"deck": rest, "players": new_players})
+        self.state = record_draw(
+            self.state.model_copy(update={"deck": rest, "players": new_players}),
+            player_id,
+            n,
+            source=source,
+        )
+        return n
 
     async def _advance_turn(self) -> None:
         """End the current turn: end the game if it's over, else advance to the
@@ -617,8 +625,10 @@ class Room:
         amount = int((self.state.rules.cannot_play or {}).get("draw", 0) or 0)
         if amount <= 0:
             return
-        self._draw_cards(player_id, amount)
-        await self._log_and_broadcast(f"{self._name(player_id)} cannot play and draws {amount}")
+        actual = self._draw_cards(player_id, amount, source="cannot_play")
+        if self.state.rules.end_condition.type == "deck_empty" and not self.state.deck:
+            self._deck_exhausted = True
+        await self._log_and_broadcast(f"{self._name(player_id)} cannot play and draws {actual}")
         await self._broadcast_state()
 
     def _name(self, player_id: str) -> str:
@@ -695,6 +705,7 @@ class Room:
                 line += f" ({formatted})"
             await self._log_and_broadcast(line)
         winners = self.state.winner_override or evaluate_win_condition(self.state)
+        self.state = record_game_end(self.state, list(winners), actor_id=actor or None, source="room")
         if winners:
             names = [self.state.get_player(w).name for w in winners]
             log_line = f"Game over! Winner(s): {', '.join(names)}"
@@ -1048,6 +1059,7 @@ class Room:
             chosen_card_id=chosen_card_id,
         )
         before = {p.id: p.score for p in self.state.players}
+        deck_count_before = len(self.state.deck)
         try:
             self.state = await self._execute_plan(self.state, plan, ctx, card)
         except Exception as exc:
@@ -1068,6 +1080,17 @@ class Room:
             await self._log_and_broadcast(self._describe_play(player_id, card, before))
             await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id)
             game_ending = self._end_now() or win_condition_met(self.state)
+
+        self.state = append_history_event(
+            self.state,
+            "play",
+            actor_id=player_id,
+            target_player_ids=[player_id],
+            card_id=card_id,
+            source="resolved",
+        )
+        if self.state.rules.end_condition.type == "deck_empty" and deck_count_before > 0 and not self.state.deck:
+            self._deck_exhausted = True
 
         self._plays_this_turn += 1
         await self._broadcast_state()
