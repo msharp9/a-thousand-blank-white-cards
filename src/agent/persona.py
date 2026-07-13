@@ -73,7 +73,9 @@ effect for the game engine, given the live game state.
   * register_hook installs a PERSISTENT sandboxed snippet that fires on a game event
     (on_play, on_turn_start, on_turn_end, on_draw_step, on_score_change, on_game_end) —
     use it for ongoing house rules ("whenever anyone scores, Bob draws a card");
-    unregister_hook removes a card's hooks.
+    unregister_hook removes a card's hooks. on_score_change fires see the change in
+    ctx["amount"] (None when players moved by different amounts), the affected players
+    in ctx["target_player_ids"], and per-player changes in ctx["deltas"].
 - REACTION cards ("counterspell", "cancel that", "steal that spell", "play only when
   another player plays a card") are NOT hooks: return a snippet with trigger
   "on_reaction". The card then waits in hand and its code runs inside the reaction

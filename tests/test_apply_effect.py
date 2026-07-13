@@ -6,7 +6,7 @@ from typing import Any
 
 from engine.apply import apply_effect
 from engine.events import EventBus, GameEvent, HookContext
-from models.effects import AddPointsOp, EffectProgram, ReverseOrderOp
+from models.effects import AddPointsOp, EffectProgram, ReverseOrderOp, StealPointsOp, SubtractPointsOp
 from models.game_state import GameState, Player
 
 
@@ -15,9 +15,11 @@ class SpyBus(EventBus):
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, list[str]]] = []
+        self.ctxs: list[HookContext] = []
 
     def emit(self, event: GameEvent, state: Any, ctx: HookContext) -> Any:
         self.calls.append((str(event), list(ctx.target_player_ids)))
+        self.ctxs.append(ctx)
         return state
 
 
@@ -67,6 +69,41 @@ def test_default_bus_with_empty_registry_is_noop_effect() -> None:
     st = _state()
     out = apply_effect(st, EffectProgram(ops=[AddPointsOp(amount=2)]), _ctx())
     assert out.get_player("p1").score == 12
+
+
+def test_score_change_ctx_carries_amount_and_deltas() -> None:
+    spy = SpyBus()
+    apply_effect(_state(), EffectProgram(ops=[AddPointsOp(amount=3)]), _ctx(), bus=spy)
+    ctx = spy.ctxs[0]
+    assert ctx.amount == 3
+    assert ctx.target_player_ids == ["p1"]
+    assert ctx.extra["deltas"] == {"p1": 3}
+
+
+def test_score_change_ctx_negative_amount_on_subtract() -> None:
+    spy = SpyBus()
+    apply_effect(_state(), EffectProgram(ops=[SubtractPointsOp(amount=4)]), _ctx(), bus=spy)
+    ctx = spy.ctxs[0]
+    assert ctx.amount == -4
+    assert ctx.extra["deltas"] == {"p1": -4}
+
+
+def test_score_change_ctx_uniform_amount_for_all_targets() -> None:
+    spy = SpyBus()
+    apply_effect(_state(), EffectProgram(ops=[AddPointsOp(target="all", amount=1)]), _ctx(), bus=spy)
+    ctx = spy.ctxs[0]
+    assert ctx.amount == 1
+    assert ctx.extra["deltas"] == {"p1": 1, "p2": 1}
+
+
+def test_score_change_ctx_mixed_deltas_on_steal() -> None:
+    spy = SpyBus()
+    prog = EffectProgram(ops=[StealPointsOp(from_target="id:p2", to_target="self", amount=4)])
+    apply_effect(_state(), prog, _ctx(), bus=spy)
+    ctx = spy.ctxs[0]
+    assert ctx.amount is None
+    assert set(ctx.target_player_ids) == {"p1", "p2"}
+    assert ctx.extra["deltas"] == {"p1": 4, "p2": -4}
 
 
 def test_zero_amount_add_does_not_emit() -> None:
