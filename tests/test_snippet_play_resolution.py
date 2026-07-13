@@ -160,6 +160,8 @@ def test_failing_suffix_rolls_back_prefix_but_consumes_card() -> None:
     assert room.state.get_player("p1").hand == []
     assert "c6" in room.state.discard
     assert any("no mechanical effect" in line for line in room.state.log)
+    assert not [event for event in room.state.history_events if event.kind == "draw"]
+    assert len([event for event in room.state.history_events if event.kind == "play"]) == 1
 
 
 def test_snippet_score_change_uses_room_hooks() -> None:

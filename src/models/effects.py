@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Target addresses
@@ -365,6 +365,13 @@ class EndGameOp(BaseModel):
 
     op: Literal["end_game"] = "end_game"
     winner: Target | None = None
+    winners: list[Target] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _exclusive_winner_shapes(self) -> EndGameOp:
+        if self.winner is not None and self.winners:
+            raise ValueError("end_game accepts winner or winners, not both")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -416,6 +423,8 @@ def op_requires_choice(op: Op) -> bool:
         value = getattr(op, field, None)
         if isinstance(value, str) and value in _CHOICE_TARGETS:
             return True
+    if isinstance(op, EndGameOp) and any(target in _CHOICE_TARGETS for target in op.winners):
+        return True
     card_target = getattr(op, "card_target", None)
     return isinstance(card_target, str) and card_target in _CHOICE_CARD_TARGETS
 

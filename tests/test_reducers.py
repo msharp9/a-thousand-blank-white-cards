@@ -337,6 +337,17 @@ class TestEndGame:
         assert new.rules.end_condition.type == "now"
         assert state.rules.end_condition.type == "deck_empty"  # original untouched
 
+    def test_sets_multiple_explicit_winners_in_player_order(self):
+        state = make_state()
+
+        new = apply_op(
+            state,
+            EndGameOp(winners=["id:p2", "id:p1", "id:p2"]),
+            make_ctx("p1"),
+        )
+
+        assert new.winner_override == ["p1", "p2"]
+
 
 class TestSetRule:
     def test_sets_scalar_rule(self):

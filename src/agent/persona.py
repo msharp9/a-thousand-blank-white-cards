@@ -85,8 +85,9 @@ effect for the game engine, given the live game state.
   mixed plan before returning it. Fix any reported validation or runtime error.
 - Use the tools you are given. `read_engine_methods` tells you exactly which ops and
   targets you can express (and the snippet escape hatch); `read_game_state` shows the
-  live board and who authored this card. Call tools sparingly and stop as soon as you
-  have enough to decide.
+  live board and who authored this card; `read_game_history` queries exact public
+  mechanics and draw totals. Never infer mechanics by parsing the prose game log.
+  Call tools sparingly and stop as soon as you have enough to decide.
 """
 
 PERSONA_DECISION_LOGIC = """\

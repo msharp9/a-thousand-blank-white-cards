@@ -361,6 +361,29 @@ a **new** `GameState`, never mutating the input:
   `update_history`). Every method delegates to the underlying pure function and
   reimplements no logic; `resolve_card` is deterministic-only by design.
 
+### Structured mechanics history
+
+`GameState.history_events` is an append-only `HistoryEvent` ledger alongside the
+human-readable `log`. It records public facts only: event sequence and kind,
+actor/target player ids, the public played/source card id, actual numeric amount,
+and rule path/source. Drawn card ids, hand contents, interaction secrets, and
+generated prose never enter this ledger.
+
+`apply_op` records actual draw, score, and rule deltas after each reducer. This
+single seam covers compiled effects, ordered snippets, persistent hooks,
+end-of-game scoring, and direct façade calls without double-counting. The Room
+adds explicit turn/cannot-play draws, committed plays, and final winner ids; the
+pure turn/facade paths add their own play and terminal events. Because atomic
+plans build on a cloned state, failed plans discard their provisional history
+with every other mechanical change.
+
+`engine.history` supplies bounded public queries and exact draw aggregates.
+Those are exposed to generated code as `SandboxGame.history()` and
+`draw_totals()`, and to the interpreter through the context-bound
+`read_game_history` tool. History-based cards therefore inspect typed data, not
+the presentation log. `EndGameOp.winners` also accepts multiple target addresses
+for deterministic co-winner overrides.
+
 ### The snippet sandbox
 
 Genuinely novel effects that no combination of ops can express can be expressed

@@ -21,6 +21,7 @@ from collections.abc import Callable
 
 from engine.apply import apply_effect
 from engine.events import EventBus, GameEvent, HookContext
+from engine.history import append_history_event, record_game_end
 from models.effects import DrawCardsOp, EffectProgram
 from models.game_state import GameState
 
@@ -58,7 +59,8 @@ def draw_step(state: GameState, player_id: str, *, bus: EventBus | None = None) 
     state = active_bus.emit(GameEvent.ON_DRAW_STEP, state, ctx)
 
     if not state.deck:
-        return state.model_copy(update={"phase": "ended"}).with_log("Deck exhausted — game ended.")
+        state = state.model_copy(update={"phase": "ended"}).with_log("Deck exhausted — game ended.")
+        return record_game_end(state, actor_id=player_id, source="deck_empty")
 
     program = EffectProgram(ops=[DrawCardsOp(target="self", amount=state.draw_count)])
     return apply_effect(state, program, ctx, bus=active_bus)
@@ -142,6 +144,14 @@ def run_turn(
 
     state, program, play_ctx = play_fn(state, player_id)
     state = apply_effect(state, program, play_ctx, bus=active_bus)
+    state = append_history_event(
+        state,
+        "play",
+        actor_id=player_id,
+        target_player_ids=[player_id],
+        card_id=play_ctx.card_id,
+        source="run_turn",
+    )
 
     end_ctx = HookContext(event=GameEvent.ON_TURN_END, actor_id=player_id)
     state = active_bus.emit(GameEvent.ON_TURN_END, state, end_ctx)

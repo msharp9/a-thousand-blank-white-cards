@@ -115,6 +115,39 @@ class SandboxGame:
             "origin": card.get("origin"),
         }
 
+    def history(
+        self,
+        kind: str | None = None,
+        player_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return bounded public mechanics history without private card contents."""
+        bounded = max(1, min(limit, 200))
+        events = list(self._state.get("history_events") or [])
+        if kind is not None:
+            events = [event for event in events if event.get("kind") == kind]
+        if player_id is not None:
+            events = [
+                event
+                for event in events
+                if event.get("actor_id") == player_id or player_id in (event.get("target_player_ids") or [])
+            ]
+        return [dict(event) for event in events[-bounded:]]
+
+    def draw_totals(self) -> dict[str, int]:
+        """Return exact cards-drawn totals keyed by player id."""
+        totals = {player["id"]: 0 for player in self._state["players"]}
+        for event in self._state.get("history_events") or []:
+            if event.get("kind") != "draw":
+                continue
+            amount = event.get("amount")
+            if not isinstance(amount, int):
+                continue
+            for player_id in event.get("target_player_ids") or []:
+                if player_id in totals:
+                    totals[player_id] += amount
+        return totals
+
     @property
     def turn_order(self) -> list[str]:
         """The turn rotation order (explicit ``turn_order``, or ``players``
@@ -205,11 +238,17 @@ class SandboxGame:
     def set_win_condition(self, kind: str, threshold: int | None = None) -> None:
         self._ops.append({"op": "set_win_condition", "kind": kind, "threshold": threshold})
 
-    def end_game(self, winner: str | None = None) -> None:
-        """End the game now; `winner` (a Target, e.g. 'self') forces the winner."""
+    def end_game(self, winner: str | list[str] | None = None, winners: list[str] | None = None) -> None:
+        """End now, optionally forcing one target or an explicit target list."""
         op: dict[str, Any] = {"op": "end_game"}
-        if winner is not None:
+        if isinstance(winner, list):
+            if winners is not None:
+                raise ValueError("end_game accepts winner or winners, not both")
+            winners = winner
+        elif winner is not None:
             op["winner"] = winner
+        if winners:
+            op["winners"] = list(winners)
         self._ops.append(op)
 
     def set_rule(self, path: str, value: Any) -> None:

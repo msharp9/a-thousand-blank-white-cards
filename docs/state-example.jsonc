@@ -26,13 +26,27 @@
       }
     },
     "spectators": ["Person1", "Person2"],  // People watching the game but not participating
-    "history": [ // A log of actions taken during the game
-      "player1 turn starts",
-      "player1 draws 1",
-      "player1 plays <Card-name> card",
-      "player1 turn ends",
-      "player2 skips turn due to <Card-name>",
-      "player3 turn starts"
+    "historyEvents": [ // Public mechanics only; never drawn-card ids or private responses
+      {
+        "sequence": 1,
+        "kind": "draw",
+        "actorId": "Player1",
+        "targetPlayerIds": ["Player1"],
+        "amount": 1,
+        "source": "turn"
+      },
+      {
+        "sequence": 2,
+        "kind": "play",
+        "actorId": "Player1",
+        "targetPlayerIds": ["Player1"],
+        "cardId": "Card7",
+        "source": "resolved"
+      }
+    ],
+    "log": [ // Human-readable presentation history; game logic never parses this
+      "Player1 drew 1 card",
+      "Player1 played <Card-name>"
     ]
   }
 }
