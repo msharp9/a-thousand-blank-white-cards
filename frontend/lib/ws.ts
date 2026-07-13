@@ -5,6 +5,8 @@ import type {
   CardSnapshot,
   ClientMsg,
   GameStateSnapshot,
+  InteractionProgressMsg,
+  InteractionRequestMsg,
   PreviewResult,
   PromptChoiceMsg,
   ServerMsg,
@@ -73,6 +75,8 @@ export interface GameSocketState {
   // blanks or shipped seed cards), broadcast once when the epilogue opens.
   // Empty until the 'epilogue' message arrives.
   epilogueCards: CardSnapshot[];
+  interactionRequest: InteractionRequestMsg | null;
+  interactionProgress: InteractionProgressMsg | null;
   send: (msg: ClientMsg) => void;
 }
 
@@ -90,6 +94,10 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     null,
   );
   const [epilogueCards, setEpilogueCards] = useState<CardSnapshot[]>([]);
+  const [interactionRequest, setInteractionRequest] =
+    useState<InteractionRequestMsg | null>(null);
+  const [interactionProgress, setInteractionProgress] =
+    useState<InteractionProgressMsg | null>(null);
 
   // Pending auto-dismiss timer for the current transient error, so a newer
   // error resets the countdown instead of being cut short by an older one.
@@ -146,6 +154,33 @@ export function useGameSocket(code: string, name: string): GameSocketState {
         switch (msg.type) {
           case "state":
             setGameState(msg.state);
+            if (msg.state.pending_interaction) {
+              const pending = msg.state.pending_interaction;
+              setInteractionRequest((current) =>
+                current?.interaction_id === pending.interaction_id
+                  ? current
+                  : null,
+              );
+              setInteractionProgress((current) => ({
+                type: "interaction_progress",
+                schema_version: 1,
+                interaction_id: pending.interaction_id,
+                deadline_at: pending.deadline_at,
+                progress: {
+                  ...pending.progress,
+                  // Shared snapshots deliberately cannot personalize this bit.
+                  // Preserve an already-known submission across reconnect until
+                  // the targeted replayed request refreshes it.
+                  submitted:
+                    current?.interaction_id === pending.interaction_id
+                      ? current.progress.submitted
+                      : false,
+                },
+              }));
+            } else {
+              setInteractionRequest(null);
+              setInteractionProgress(null);
+            }
             // Hydrate the effect log from the authoritative state snapshot so a
             // refresh/reconnect restores full history. The backend keeps
             // state.log in sync with every effect_applied it broadcasts, so
@@ -178,6 +213,20 @@ export function useGameSocket(code: string, name: string): GameSocketState {
           case "prompt_choice":
             setBrewing(null);
             setPromptChoice(msg);
+            break;
+          case "interaction_request":
+            setBrewing(null);
+            setInteractionRequest(msg);
+            setInteractionProgress({
+              type: "interaction_progress",
+              schema_version: 1,
+              interaction_id: msg.interaction_id,
+              deadline_at: msg.deadline_at,
+              progress: msg.progress,
+            });
+            break;
+          case "interaction_progress":
+            setInteractionProgress(msg);
             break;
           case "epilogue":
             setEpilogueCards(msg.cards);
@@ -264,6 +313,8 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     promptChoice,
     clearPromptChoice,
     epilogueCards,
+    interactionRequest,
+    interactionProgress,
     send,
   };
 }

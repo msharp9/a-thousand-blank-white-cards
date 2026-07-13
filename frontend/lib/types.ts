@@ -68,6 +68,28 @@ export type EpilogueFinalizeMsg = { type: "epilogue_finalize" };
 // vote. Only valid while phase === "results".
 export type EpilogueStartMsg = { type: "epilogue_start" };
 
+export type DrawingPoint = { x: number; y: number };
+export type DrawingStroke = {
+  color: string;
+  width: number;
+  points: DrawingPoint[];
+};
+
+export type InteractionResponsePayload =
+  | { kind: "choice"; option_ids: string[] }
+  | { kind: "number"; value: number }
+  | { kind: "text"; value: string }
+  | { kind: "card_pick"; card_id: string }
+  | { kind: "confirm"; confirmed: boolean }
+  | { kind: "drawing"; strokes: DrawingStroke[] };
+
+export type InteractionResponseMsg = {
+  type: "interaction_response";
+  schema_version: 1;
+  interaction_id: string;
+  payload: InteractionResponsePayload;
+};
+
 export type ClientMsg =
   | JoinMsg
   | StartMsg
@@ -80,7 +102,8 @@ export type ClientMsg =
   | EpilogueStartMsg
   | EpilogueVoteMsg
   | EpilogueDoneMsg
-  | EpilogueFinalizeMsg;
+  | EpilogueFinalizeMsg
+  | InteractionResponseMsg;
 
 // ─── server → client ──────────────────────────────────────────────────────
 
@@ -200,6 +223,21 @@ export type GameStateSnapshot = {
   // before then, including during the pre-vote "results" phase.
   epilogue_result: EpilogueResultSummary | null;
   log: string[];
+  pending_interaction?: PendingInteractionSummary | null;
+};
+
+export type InteractionProgress = {
+  expected_count: number;
+  received_count: number;
+  submitted: boolean;
+  complete: boolean;
+};
+
+export type PendingInteractionSummary = {
+  interaction_id: string;
+  kind: string;
+  deadline_at: string;
+  progress: InteractionProgress;
 };
 
 export type StateMsg = { type: "state"; state: GameStateSnapshot };
@@ -249,6 +287,50 @@ export type EpilogueMsg = { type: "epilogue"; cards: CardSnapshot[] };
 export type ErrorMsg = { type: "error"; message: string };
 export type BrewingMsg = { type: "brewing"; card_id: string };
 
+export type InteractionOption = {
+  id: string;
+  label: string;
+  payload?: unknown;
+};
+
+export type InteractionDescriptor = {
+  schema_version: 1;
+  kind: string;
+  prompt: string;
+  audience: string;
+  sealed: boolean;
+  timeout_seconds: number;
+  options?: InteractionOption[];
+  min_selections?: number;
+  max_selections?: number;
+  minimum?: number;
+  maximum?: number;
+  integer?: boolean;
+  max_length?: number;
+  card_ids?: string[];
+  confirm_label?: string;
+  decline_label?: string;
+  max_strokes?: number;
+  max_points_per_stroke?: number;
+};
+
+export type InteractionRequestMsg = {
+  type: "interaction_request";
+  schema_version: 1;
+  interaction_id: string;
+  descriptor: InteractionDescriptor;
+  deadline_at: string;
+  progress: InteractionProgress;
+};
+
+export type InteractionProgressMsg = {
+  type: "interaction_progress";
+  schema_version: 1;
+  interaction_id: string;
+  deadline_at: string;
+  progress: InteractionProgress;
+};
+
 export type ServerMsg =
   | StateMsg
   | EffectAppliedMsg
@@ -257,4 +339,6 @@ export type ServerMsg =
   | PromptChoiceMsg
   | EpilogueMsg
   | ErrorMsg
-  | BrewingMsg;
+  | BrewingMsg
+  | InteractionRequestMsg
+  | InteractionProgressMsg;

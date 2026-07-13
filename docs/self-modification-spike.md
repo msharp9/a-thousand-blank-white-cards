@@ -234,11 +234,12 @@ remaining niche large enough to justify collapsing the security boundary.
 1. **Implemented:** wish-note JSONL telemetry + in-character fallback line.
    `scripts/export_capability_wishes.py` supports offline human triage; no
    runtime issue-tracker or source-writing authority exists.
-2. **Backend implemented; frontend next:** versioned
+2. **Implemented end to end:** versioned
    `interaction_request`/`interaction_response` envelopes, persisted atomic
    Room barrier + timeout, and choice/number/text/card-pick/confirm/vector-drawing
    descriptors. Ordered plans can chain submission and vote stages through
-   `input_refs`; the global `InteractionPanel` is the remaining UI layer.
+   `input_refs`; the global `InteractionPanel` renders every v1 field, including
+   bounded vector drawing and later drawing-vote choices.
 3. **Only if wish-note telemetry demands it:** agent-authored PRs (2c) as a
    formalized loop — wish note → agent drafts patch on a branch → CI
    (layering + coverage + a new descriptor-schema-compat test) → human merge.
