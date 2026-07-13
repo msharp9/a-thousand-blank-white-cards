@@ -89,7 +89,7 @@ class EpilogueManager:
         mgr._connections = connections
         return mgr
 
-    async def tally_and_persist(self) -> Any:
+    async def tally_and_persist(self, card_art: dict[str, str] | None = None) -> Any:
         """Tally votes on top of prior cross-game totals, persist the decision.
 
         Keep/destroy is decided on CUMULATIVE totals, not this game's votes
@@ -98,6 +98,12 @@ class EpilogueManager:
         top, and the verdict follows the combined total (ties keep). Kept cards
         are upserted with their updated running totals; destroyed cards are
         removed from the corpus so they stop re-entering future decks.
+
+        ``card_art`` is the room's out-of-band art registry (card_id -> PNG
+        data-URL, see Room.card_art); a kept card's art rides the Qdrant payload
+        so it re-enters future decks alongside the card. In dev mode this
+        registry is in-memory only (FileRoomStore persists state, not art), so
+        art authored before a process restart is not carried forward.
         """
         from engine.epilogue import tally_votes
         from agent.rag.store import delete_card, get_card_totals, upsert_card
@@ -138,6 +144,7 @@ class EpilogueManager:
                     source="player",
                     keep_votes=tally.keep_votes,
                     destroy_votes=tally.destroy_votes,
+                    art=(card_art or {}).get(card["id"]),
                 )
                 logger.info(
                     "upserted card %s into RAG corpus (totals %d-%d)", card["id"], tally.keep_votes, tally.destroy_votes

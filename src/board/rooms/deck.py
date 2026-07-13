@@ -56,6 +56,7 @@ def _make_blank_card(n: int) -> dict:
         "blank": True,
         "creator_id": "blank",
         "origin": "blank",
+        "has_art": False,
     }
 
 
@@ -100,17 +101,28 @@ def _normalise_card(raw: dict, index: int) -> dict:
     for RAG-kept re-entries (``source == "player"``, upserted by a prior game's
     epilogue). This is the provenance the epilogue vote pool filters on — see
     Room.start_epilogue.
+
+    Art: a RAG-kept card may carry its PNG data-URL in the ``art`` payload.
+    ``has_art`` is stamped on every card; the data-URL itself is surfaced under
+    a TRANSIENT ``art`` key that the room pops into its out-of-band
+    ``Room.card_art`` registry (and strips) before the dict lands in
+    ``GameState.cards`` — art must never ride state snapshots. See
+    Room._absorb_card_art.
     """
     card_id = raw.get("id") or raw.get("card_id") or f"deck-{index:03d}"
     canonical = _coerce_canonical(raw.get("canonical"))
     source = raw.get("source", "seed")
+    art = raw.get("art") or None
     card: dict = {
         "id": card_id,
         "title": raw.get("title", ""),
         "description": raw.get("description", ""),
         "creator_id": source,
         "origin": "authored" if source == "player" else "seed",
+        "has_art": bool(art),
     }
+    if art:
+        card["art"] = art
     if canonical is not None:
         card["canonical"] = canonical
         # Lift ops/venue to the top level so callers need not re-parse canonical.

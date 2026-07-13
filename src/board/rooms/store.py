@@ -13,10 +13,14 @@ Codes are expected to already be normalised to upper-case by the caller
 ``FileRoomStore`` is a DEV-ONLY convenience (wired in only when
 ``get_settings().dev_mode`` is true) that persists each room to JSON on disk so
 in-progress games survive an API reload. It is deliberately lossy: the Room
-``_deck_exhausted`` latch is NOT persisted and resets on reload. Regular
-serialized state — per-player ``conditions``, ``rules``, ``turn_order``,
-registered ``hooks`` (their per-room registry is rebuilt lazily from state) —
-survives the round-trip. Acceptable for a dev loop; not a durable
+``_deck_exhausted`` latch is NOT persisted and resets on reload, and the
+out-of-band ``Room.card_art`` registry (card art deliberately lives outside
+GameState) is NOT persisted either — dev-mode art does not survive a process
+restart, so restore resets ``has_art`` to False on any card whose art is no
+longer in the registry (otherwise restored cards would advertise art that
+404s). Regular serialized state — per-player ``conditions``, ``rules``,
+``turn_order``, registered ``hooks`` (their per-room registry is rebuilt lazily
+from state) — survives the round-trip. Acceptable for a dev loop; not a durable
 multi-worker backend.
 """
 
@@ -148,7 +152,18 @@ def _room_to_dict(room: Room) -> dict:
 
 def _room_from_dict(data: dict) -> Room:
     room = Room(data["code"], mode=data["state"]["mode"], simple=data["simple"])
-    room.state = GameState.model_validate(data["state"])
+    state = GameState.model_validate(data["state"])
+    # card_art is not persisted (module docstring): clear has_art on any card
+    # whose art did not survive the restart so clients never fetch a 404.
+    cards = {
+        cid: (
+            {**card, "has_art": False}
+            if isinstance(card, dict) and card.get("has_art") and cid not in room.card_art
+            else card
+        )
+        for cid, card in state.cards.items()
+    }
+    room.state = state.model_copy(update={"cards": cards})
     epilogue_data = data.get("epilogue")
     if epilogue_data is not None:
         room._epilogue = EpilogueManager.from_dict(epilogue_data, room.connections)

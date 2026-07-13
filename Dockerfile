@@ -22,4 +22,8 @@ ENV PORT=8000
 EXPOSE 8000
 
 # uv run uses the synced venv; bind to 0.0.0.0 and honor the platform's $PORT.
-CMD ["sh", "-c", "uv run uvicorn board.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# --ws-max-size caps inbound WebSocket frames at 256 KiB (uvicorn defaults to
+# 16 MiB): the largest legitimate message is a card-art data-URL (128 KiB cap,
+# see models.card.MAX_CARD_ART_BYTES) plus JSON overhead, so anything bigger is
+# rejected before being buffered and parsed.
+CMD ["sh", "-c", "uv run uvicorn board.app:app --host 0.0.0.0 --port ${PORT:-8000} --ws-max-size 262144"]

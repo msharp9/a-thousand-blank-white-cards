@@ -191,7 +191,7 @@ def test_epilogue_upsert_carries_structured_canonical(monkeypatch) -> None:
 
     captured: dict = {}
 
-    def fake_upsert(card_id, *, title, description, canonical, source, keep_votes=0, destroy_votes=0):
+    def fake_upsert(card_id, *, title, description, canonical, source, keep_votes=0, destroy_votes=0, art=None):
         captured[card_id] = canonical
 
     monkeypatch.setattr(rag_store, "upsert_card", fake_upsert)

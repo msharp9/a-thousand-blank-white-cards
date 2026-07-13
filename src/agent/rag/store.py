@@ -78,19 +78,23 @@ def _card_point(
     vector: list[float],
     keep_votes: int = 0,
     destroy_votes: int = 0,
+    art: str | None = None,
 ) -> PointStruct:
+    payload = {
+        "card_id": card_id,
+        "title": title,
+        "description": description,
+        "canonical": canonical,
+        "source": source,
+        "keep_votes": keep_votes,
+        "destroy_votes": destroy_votes,
+    }
+    if art:
+        payload["art"] = art
     return PointStruct(
         id=_stable_point_id(card_id),  # Qdrant needs a stable uint64 id
         vector=vector,
-        payload={
-            "card_id": card_id,
-            "title": title,
-            "description": description,
-            "canonical": canonical,
-            "source": source,
-            "keep_votes": keep_votes,
-            "destroy_votes": destroy_votes,
-        },
+        payload=payload,
     )
 
 
@@ -102,6 +106,7 @@ def upsert_card(
     source: str = "seed",
     keep_votes: int = 0,
     destroy_votes: int = 0,
+    art: str | None = None,
 ) -> None:
     """Embed title+description and upsert a point into the cards collection.
 
@@ -113,11 +118,14 @@ def upsert_card(
     game this card has survived — Qdrant's upsert replaces the whole payload, so
     callers carrying forward vote history must pass the running totals back in
     (see :func:`get_card_totals`), not just this game's counts.
+
+    art is the card's PNG data-URL (payload only — never embedded), so a kept
+    card's drawing survives into future decks (see deck._normalise_card).
     """
     _validate_card_lengths(card_id, title, description)
     client = _require_client()
     vector = embed_text_cached(_card_text(title, description))
-    point = _card_point(card_id, title, description, canonical, source, vector, keep_votes, destroy_votes)
+    point = _card_point(card_id, title, description, canonical, source, vector, keep_votes, destroy_votes, art)
     client.upsert(collection_name=COLLECTION_NAME, points=[point])
 
 
@@ -134,7 +142,7 @@ def upsert_cards(cards: list[dict[str, Any]]) -> None:
     client = _require_client()
     vectors = embed_texts_cached([_card_text(c["title"], c["description"]) for c in cards])
     points = [
-        _card_point(c["card_id"], c["title"], c["description"], c["canonical"], c["source"], vector)
+        _card_point(c["card_id"], c["title"], c["description"], c["canonical"], c["source"], vector, art=c.get("art"))
         for c, vector in zip(cards, vectors)
     ]
     client.upsert(collection_name=COLLECTION_NAME, points=points)

@@ -7,6 +7,7 @@ Two card varieties:
 
 from __future__ import annotations
 
+import base64
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -16,6 +17,35 @@ from pydantic import BaseModel, Field
 # Single source of truth; imported by models.ws_messages and agent.rag.store.
 MAX_CARD_TITLE = 60
 MAX_CARD_DESCRIPTION = 500
+
+# Card art travels as a PNG data-URL, out-of-band from GameState (see
+# Room.card_art): the required prefix and the cap on the WHOLE data-URL length.
+# 128 KiB keeps a sketch small enough to store/serve without letting a play
+# message smuggle in a megapixel image.
+CARD_ART_PREFIX = "data:image/png;base64,"
+MAX_CARD_ART_BYTES = 131072
+
+# Aggregate cap on all art stored by one room (Room.card_art). Rooms are never
+# evicted and mid-game card creation is uncapped, so without a budget a room's
+# registry could grow without bound; once the budget is hit new art is dropped
+# (cards are still created, just artless).
+MAX_ROOM_ART_BYTES = 4 * 1024 * 1024
+
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def decode_card_art(data_url: str) -> bytes:
+    """Decode a ``CARD_ART_PREFIX`` data-URL to PNG bytes.
+
+    Single decode path shared by the inbound validator (models.ws_messages) and
+    the REST art endpoint (board.app). Raises ValueError when the base64 payload
+    does not decode cleanly or the decoded bytes are not a PNG (magic-byte
+    check), so a prefix claim alone never passes off arbitrary content as PNG.
+    """
+    png = base64.b64decode(data_url[len(CARD_ART_PREFIX) :], validate=True)
+    if not png.startswith(_PNG_MAGIC):
+        raise ValueError("card art payload is not a PNG")
+    return png
 
 
 # ---------------------------------------------------------------------------
