@@ -210,6 +210,56 @@ class TestRunBenchmark:
         ]
         assert all(r.scores["executability"] == 1.0 for r in threaded.rows)
 
+    def test_tracing_off_by_default_for_agent_and_scorers(self, monkeypatch) -> None:
+        _stub_run_agent(monkeypatch)
+        import agent.runtime as runtime
+        from langsmith.run_helpers import get_tracing_context
+
+        from evals.eval_core import Score, create_scorer
+        from evals.runner import EvalConfig, _run_one, load_cards
+
+        seen: dict = {}
+        inner = runtime.run_agent
+
+        def spy(*args, **kwargs):
+            seen["agent_enabled"] = get_tracing_context()["enabled"]
+            return inner(*args, **kwargs)
+
+        def probe(context):
+            seen["scorer_enabled"] = get_tracing_context()["enabled"]
+            return Score(score=1.0)
+
+        monkeypatch.setattr(runtime, "run_agent", spy)
+        card = load_cards("eval", sample_size=1)[0]
+        _run_one(EvalConfig(benchmark="eval"), card, 0, [create_scorer("probe", "records ctx", probe)])
+        assert seen["agent_enabled"] is False
+        assert seen["scorer_enabled"] is False
+
+    def test_tracing_true_inherits_ambient_context(self, monkeypatch) -> None:
+        _stub_run_agent(monkeypatch)
+        import agent.runtime as runtime
+        from langsmith.run_helpers import get_tracing_context
+
+        from evals.runner import EvalConfig, _run_one, load_cards
+
+        seen: dict = {}
+        inner = runtime.run_agent
+
+        def spy(*args, **kwargs):
+            seen["enabled"] = get_tracing_context()["enabled"]
+            return inner(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "run_agent", spy)
+        card = load_cards("eval", sample_size=1)[0]
+        _run_one(EvalConfig(benchmark="eval", tracing=True), card, 0, [])
+        assert seen["enabled"] is None  # ambient — not forced on or off
+
+    def test_config_dict_records_tracing(self) -> None:
+        from evals.runner import EvalConfig
+
+        assert EvalConfig().to_dict()["tracing"] is False
+        assert EvalConfig(tracing=True).to_dict()["tracing"] is True
+
     def test_scorer_failure_is_recorded_not_fatal(self, monkeypatch) -> None:
         _stub_run_agent(monkeypatch)
         from evals.eval_core import create_scorer

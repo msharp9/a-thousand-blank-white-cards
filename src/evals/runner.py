@@ -19,11 +19,14 @@ from __future__ import annotations
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import fmean
 from time import perf_counter
 from typing import Any
+
+from langsmith.run_helpers import tracing_context
 
 from config import EVAL_BENCHMARKS
 from evals.instrumentation import RunMetrics, UsageCallback, cost_usd
@@ -57,6 +60,10 @@ class EvalConfig:
     sample_size: int | None = None
     concurrency: int = 1
     use_judge: bool = True
+    # LangSmith tracing for eval runs. Off by default — evals re-run the
+    # production agent at volume and tracing every sample costs money.
+    # True inherits the ambient LANGSMITH_TRACING behavior for debugging.
+    tracing: bool = False
     prices: dict[str, dict[str, float]] | None = None
     label: str = ""
 
@@ -73,6 +80,7 @@ class EvalConfig:
             "sample_size": self.sample_size,
             "concurrency": self.concurrency,
             "use_judge": self.use_judge,
+            "tracing": self.tracing,
             "label": self.label,
         }
 
@@ -182,41 +190,46 @@ def _run_one(config: EvalConfig, card: dict[str, Any], sample_index: int, scorer
     model = get_chat_model(config.model_name) if config.model_name else None
     callback = UsageCallback()
 
-    t0 = perf_counter()
-    result = run_agent(
-        title,
-        description,
-        state,
-        EVAL_ACTOR_ID,
-        creator_id=EVAL_CREATOR_ID,
-        card_id=EVAL_CARD_ID,
-        card_art=alt_text if config.vision else None,
-        tools=tools,
-        model=model,
-        max_tool_calls=config.max_tool_calls,
-        timeout=config.timeout,
-        allow_persistent_tools=config.allow_persistent_tools,
-        config={"callbacks": [callback]},
-    )
-    latency_ms = (perf_counter() - t0) * 1_000
-    metrics = callback.snapshot()
+    # tracing_context is contextvar-scoped, so it suppresses LangSmith per
+    # worker thread even though run_agent flips the global env flags on. It
+    # must span the scorer loop too — the LLM judge also calls the gateway.
+    trace_ctx = nullcontext() if config.tracing else tracing_context(enabled=False)
+    with trace_ctx:
+        t0 = perf_counter()
+        result = run_agent(
+            title,
+            description,
+            state,
+            EVAL_ACTOR_ID,
+            creator_id=EVAL_CREATOR_ID,
+            card_id=EVAL_CARD_ID,
+            card_art=alt_text if config.vision else None,
+            tools=tools,
+            model=model,
+            max_tool_calls=config.max_tool_calls,
+            timeout=config.timeout,
+            allow_persistent_tools=config.allow_persistent_tools,
+            config={"callbacks": [callback]},
+        )
+        latency_ms = (perf_counter() - t0) * 1_000
+        metrics = callback.snapshot()
 
-    output = normalise_agent_output(result)
-    expected = card.get("human_canonical") or {}
-    from evals.eval_core import EvalItem, ScorerContext
+        output = normalise_agent_output(result)
+        expected = card.get("human_canonical") or {}
+        from evals.eval_core import EvalItem, ScorerContext
 
-    item = EvalItem(id=str(card.get("id", "card")), input=card, expected=expected)
-    ctx = ScorerContext(item=item, output=output)
-    scores: dict[str, float] = {}
-    score_meta: dict[str, dict[str, Any]] = {}
-    for scorer in scorers:
-        try:
-            score = scorer.evaluate(ctx)
-            scores[scorer.name] = score.score
-            score_meta[scorer.name] = dict(score.metadata)
-        except Exception as exc:  # noqa: BLE001 — a scorer failure shouldn't kill the run
-            logger.warning("scorer %s failed on %s: %s", scorer.name, item.id, exc)
-            score_meta[scorer.name] = {"error": str(exc)}
+        item = EvalItem(id=str(card.get("id", "card")), input=card, expected=expected)
+        ctx = ScorerContext(item=item, output=output)
+        scores: dict[str, float] = {}
+        score_meta: dict[str, dict[str, Any]] = {}
+        for scorer in scorers:
+            try:
+                score = scorer.evaluate(ctx)
+                scores[scorer.name] = score.score
+                score_meta[scorer.name] = dict(score.metadata)
+            except Exception as exc:  # noqa: BLE001 — a scorer failure shouldn't kill the run
+                logger.warning("scorer %s failed on %s: %s", scorer.name, item.id, exc)
+                score_meta[scorer.name] = {"error": str(exc)}
 
     return CardResult(
         card_id=item.id,
