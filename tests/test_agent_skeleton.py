@@ -243,6 +243,41 @@ def test_build_agent_binds_passed_tools():
 
 
 # ---------------------------------------------------------------------------
+# Caller contextvars reach the timeout worker thread
+# ---------------------------------------------------------------------------
+
+
+class ContextRecordingFake(GenericFakeChatModel):
+    """Records the LangSmith tracing context seen inside ``_generate`` — which
+    runs on run_agent's timeout worker thread, not the caller's thread."""
+
+    seen: dict = {}
+
+    def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ANN003
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001, ANN003
+        from langsmith.run_helpers import get_tracing_context
+
+        self.seen["enabled"] = get_tracing_context()["enabled"]
+        payload = '{"verdict": "ok", "comment": "ctx probe", "persona_action": "none"}'
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=payload))])
+
+
+def test_caller_tracing_suppression_reaches_worker_thread():
+    """The eval runner disables LangSmith via a contextvar; run_agent streams the
+    model on a separate thread, so the context must be copied across or the
+    suppression silently fails and every eval sample gets traced."""
+    from langsmith.run_helpers import tracing_context
+
+    fake = ContextRecordingFake(messages=iter([]))
+    with tracing_context(enabled=False):
+        result = run_agent("Gain 5 points", "You gain 5 points.", model=fake)
+    assert fake.seen["enabled"] is False
+    assert result.verdict == "ok"
+
+
+# ---------------------------------------------------------------------------
 # Cap / timeout -> bounded fallback
 # ---------------------------------------------------------------------------
 

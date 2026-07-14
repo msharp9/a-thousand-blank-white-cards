@@ -24,6 +24,7 @@ return a deterministic bounded fallback ``InterpretResult`` (verdict
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
@@ -318,7 +319,9 @@ def _forced_final_result(
     # lets us return immediately and abandon the hung thread.
     pool = ThreadPoolExecutor(max_workers=1)
     try:
-        future = pool.submit(chat_model.invoke, messages)
+        # copy_context: the worker thread must see the caller's contextvars
+        # (e.g. the eval runner's LangSmith tracing suppression).
+        future = pool.submit(contextvars.copy_context().run, chat_model.invoke, messages)
         try:
             response = future.result(timeout=timeout)
         except FuturesTimeoutError:
@@ -383,7 +386,7 @@ def _repair_effect(
     ]
     pool = ThreadPoolExecutor(max_workers=1)
     try:
-        future = pool.submit(chat_model.invoke, messages)
+        future = pool.submit(contextvars.copy_context().run, chat_model.invoke, messages)
         try:
             response = future.result(timeout=timeout)
         except FuturesTimeoutError:
@@ -590,7 +593,9 @@ def run_agent(
     # lets us return immediately and abandon the hung thread.
     pool = ThreadPoolExecutor(max_workers=1)
     try:
-        future = pool.submit(_stream_agent)
+        # copy_context: the worker thread must see the caller's contextvars
+        # (e.g. the eval runner's LangSmith tracing suppression).
+        future = pool.submit(contextvars.copy_context().run, _stream_agent)
         try:
             result = future.result(timeout=timeout)
         except FuturesTimeoutError:
