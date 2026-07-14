@@ -28,14 +28,17 @@ A game runs in these steps:
 5. **Take turns.** Play passes around the table. Each turn is exactly:
    1. **Draw** one card from the deck (the app draws for you automatically at
       the start of your turn).
-   2. **Play** one card from your hand.
+   2. **Play** one card from your hand — drag it onto the table for a general
+      play, or onto a player's seat to target them (a click-to-play fallback is
+      also available).
       - If it's a **blank card**, you write it *as you play it* — give it a title
         and effect, then it resolves. (Blanks are the only cards you author
         mid-game; your other cards were written back in step 3.)
       - A played card applies its effect, then goes to the discard pile (or stays
         in front of you if it's a lasting card).
-      - If you can't play a card, you may draw a second card. **Note:** A blank card
-        is always playable.
+      - If none of your cards are playable, you **pass** instead and your turn
+        ends without playing. **Note:** A blank card is always playable, so
+        this is rare.
    3. **End your turn.**
 6. **The game ends** when the **last card is drawn from the deck**: the player who
    drew it finishes their turn, and then the game is over.
