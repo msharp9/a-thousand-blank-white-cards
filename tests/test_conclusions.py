@@ -11,7 +11,7 @@ from evals.eval_core import EvalItem, Score, create_scorer, run_eval
 def _report():
     items = [EvalItem(id="a", input={"title": "t"}, expected={}), EvalItem(id="b", input={"title": "u"}, expected={})]
     scorer = create_scorer("dsl_validity", "structural", lambda ctx: Score(1.0))
-    return run_eval("test", data=items, task=lambda x: {"effect_program": {"ops": []}}, scorers=[scorer])
+    return run_eval("test", data=items, task=lambda x: {"resolution_plan": {"steps": []}}, scorers=[scorer])
 
 
 def test_render_contains_sections() -> None:

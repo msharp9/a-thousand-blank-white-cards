@@ -103,6 +103,14 @@ class TestLoadCards:
 
 
 class TestToolFiltering:
+    def test_available_tool_names_lists_the_toolbox(self) -> None:
+        from evals.runner import available_tool_names
+
+        names = available_tool_names(allow_persistent_tools=False)
+        assert "dry_run_effect" in names
+        assert "read_game_state" in names
+        assert names == sorted(names)
+
     def test_enabled_tools_filters_by_name(self) -> None:
         from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, EVAL_CREATOR_ID, build_eval_state
         from evals.runner import EvalConfig, _build_tools
@@ -180,6 +188,38 @@ class TestRunBenchmark:
         assert agg["unique_cards"] == 2
         assert "consistency" in agg
 
+    def test_concurrency_preserves_row_order_and_results(self, monkeypatch) -> None:
+        _stub_run_agent(monkeypatch)
+        from evals.runner import EvalConfig, run_benchmark
+
+        serial = run_benchmark(
+            EvalConfig(benchmark="eval", sample_size=4, use_judge=False), timestamp="t", progress=False
+        )
+        threaded = run_benchmark(
+            EvalConfig(benchmark="eval", sample_size=4, use_judge=False, concurrency=4),
+            timestamp="t",
+            progress=False,
+        )
+        assert [r.card_id for r in threaded.rows] == [r.card_id for r in serial.rows]
+        assert [(r.card_id, r.sample_index) for r in threaded.rows] == [
+            (r.card_id, r.sample_index) for r in serial.rows
+        ]
+        assert all(r.scores["executability"] == 1.0 for r in threaded.rows)
+
+    def test_scorer_failure_is_recorded_not_fatal(self, monkeypatch) -> None:
+        _stub_run_agent(monkeypatch)
+        from evals.eval_core import create_scorer
+        from evals.runner import EvalConfig, _run_one, load_cards
+
+        def explode(context):
+            raise RuntimeError("scorer bug")
+
+        broken = create_scorer("broken", "always raises", explode)
+        card = load_cards("eval", sample_size=1)[0]
+        row = _run_one(EvalConfig(benchmark="eval"), card, 0, [broken])
+        assert "broken" not in row.scores
+        assert row.score_meta["broken"]["error"] == "scorer bug"
+
     def test_aggregate_has_target_metrics(self, monkeypatch) -> None:
         _stub_run_agent(monkeypatch)
         from evals.runner import EvalConfig, run_benchmark
@@ -207,8 +247,12 @@ class TestStore:
         from evals.runner import EvalConfig, run_benchmark
 
         monkeypatch.setattr(store, "runs_dir", lambda: tmp_path)
-        run = run_benchmark(EvalConfig(benchmark="eval", sample_size=2, use_judge=False), timestamp="t", progress=False)
-        path = store.save_run(run, timestamp="20260714-000000")
+        run = run_benchmark(
+            EvalConfig(benchmark="eval", sample_size=2, use_judge=False),
+            timestamp="20260714-000000",
+            progress=False,
+        )
+        path = store.save_run(run)  # timestamp defaults from the run itself
         assert path.exists()
 
         loaded = store.load_runs()
@@ -216,9 +260,20 @@ class TestStore:
         payload = loaded[0]
         assert payload["timestamp"] == "20260714-000000"
         assert payload["summary"]["cases"] == 2
+        assert store._slug(payload["summary"]["model"]) in path.name  # filename carries the resolved model
         assert len(payload["rows"]) == 2
         # payload is plain JSON-serialisable
         json.dumps(payload)
+
+    def test_save_run_requires_some_timestamp(self, monkeypatch, tmp_path) -> None:
+        _stub_run_agent(monkeypatch)
+        import evals.store as store
+        from evals.runner import EvalConfig, run_benchmark
+
+        monkeypatch.setattr(store, "runs_dir", lambda: tmp_path)
+        run = run_benchmark(EvalConfig(benchmark="eval", sample_size=1, use_judge=False), progress=False)
+        with pytest.raises(ValueError, match="timestamp"):
+            store.save_run(run)
 
 
 # --------------------------------------------------------------------------- #
@@ -251,9 +306,11 @@ def _fake_summary(label: str, **overrides) -> dict:
 
 
 class TestViz:
-    def test_all_charts_and_tables_render(self) -> None:
-        import matplotlib
+    """Chart smoke tests need matplotlib (the `evals` dependency group); skip
+    cleanly in a dev-only environment rather than fail on import."""
 
+    def test_all_charts_and_tables_render(self) -> None:
+        matplotlib = pytest.importorskip("matplotlib")
         matplotlib.use("Agg")
 
         from evals import viz
@@ -270,8 +327,7 @@ class TestViz:
         assert list(table["label"]) == ["baseline", "no-rag"]
 
     def test_tool_usage_handles_no_tools(self) -> None:
-        import matplotlib
-
+        matplotlib = pytest.importorskip("matplotlib")
         matplotlib.use("Agg")
 
         from evals import viz

@@ -177,14 +177,14 @@ def worst_cards(run_payload: dict[str, Any], metric: str = "executability", n: i
 
     rows = []
     for r in run_payload.get("rows", []):
+        meta = r.get("score_meta") or {}
         rows.append(
             {
                 "card_id": r.get("card_id"),
                 "title": r.get("title"),
                 "verdict": r.get("verdict"),
                 metric: (r.get("scores") or {}).get(metric),
-                "reason": (r.get("score_meta") or {}).get("intent_match", {}).get("reason")
-                or (r.get("score_meta") or {}).get(metric, {}).get("reason"),
+                "reason": meta.get(metric, {}).get("reason") or meta.get("intent_match", {}).get("reason"),
             }
         )
     df = pd.DataFrame(rows)

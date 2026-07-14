@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import fmean
@@ -27,7 +28,7 @@ from typing import Any
 from config import EVAL_BENCHMARKS
 from evals.instrumentation import RunMetrics, UsageCallback, cost_usd
 from evals.paths import find_repo_root
-from evals.scorers import ALL_SCORERS, DETERMINISTIC_SCORERS
+from evals.scorers import ALL_SCORERS, DETERMINISTIC_SCORERS, reset_run_caches
 
 logger = logging.getLogger("evals.runner")
 
@@ -40,7 +41,9 @@ class EvalConfig:
     filters the assembled tools by ``tool.name`` (empty set = no tools).
     ``benchmark`` keys into :data:`config.EVAL_BENCHMARKS`. ``sample_size`` caps
     cards per benchmark (None = all); ``n_samples`` repeats each card to measure
-    stochastic consistency (default 1).
+    stochastic consistency. ``concurrency`` > 1 runs that many cards in parallel
+    worker threads — each card is fully isolated (own state, callback, agent),
+    matching how production rooms already invoke run_agent concurrently.
     """
 
     benchmark: str = "eval"
@@ -52,6 +55,7 @@ class EvalConfig:
     vision: bool = False
     n_samples: int = 1
     sample_size: int | None = None
+    concurrency: int = 1
     use_judge: bool = True
     prices: dict[str, dict[str, float]] | None = None
     label: str = ""
@@ -67,6 +71,7 @@ class EvalConfig:
             "vision": self.vision,
             "n_samples": self.n_samples,
             "sample_size": self.sample_size,
+            "concurrency": self.concurrency,
             "use_judge": self.use_judge,
             "label": self.label,
         }
@@ -117,8 +122,8 @@ def load_cards(benchmark: str, sample_size: int | None = None) -> list[dict[str,
     path = find_repo_root(Path(__file__)) / str(spec["path"])
     cards: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
     key = str(spec["canonical_key"])
-    for card in cards:
-        if key != "human_canonical":
+    if key != "human_canonical":
+        for card in cards:
             card["human_canonical"] = card.get(key)
     if sample_size is not None and sample_size < len(cards):
         logger.warning("benchmark %s: sampling first %d of %d cards", benchmark, sample_size, len(cards))
@@ -236,21 +241,35 @@ def _resolved_model_name() -> str:
 def run_benchmark(config: EvalConfig, *, timestamp: str = "", progress: bool = True) -> EvalRunResult:
     """Run one benchmark end-to-end and return the collected result.
 
-    Serial by design (25–70 cards, plus N samples): simple and stays within the
-    agent's own worker-thread timeout. If ``real`` at full size proves too slow,
-    bounded concurrency can be added here later — not built speculatively.
+    Rows come back in dataset order regardless of ``concurrency``, so runs over
+    the same benchmark stay directly comparable.
     """
+    reset_run_caches()
     scorers = ALL_SCORERS if config.use_judge else DETERMINISTIC_SCORERS
     cards = load_cards(config.benchmark, config.sample_size)
-    rows: list[CardResult] = []
-    total = len(cards) * config.n_samples
-    done = 0
-    for card in cards:
-        for sample_index in range(config.n_samples):
+    work = [(card, sample_index) for card in cards for sample_index in range(config.n_samples)]
+
+    def _report(done: int, card: dict[str, Any], sample_index: int) -> None:
+        if progress:
+            logger.info("[%d/%d] %s (sample %d)", done, len(work), card.get("title", "?"), sample_index)
+
+    if config.concurrency <= 1:
+        rows = []
+        for done, (card, sample_index) in enumerate(work, start=1):
             rows.append(_run_one(config, card, sample_index, scorers))
-            done += 1
-            if progress:
-                logger.info("[%d/%d] %s (sample %d)", done, total, card.get("title", "?"), sample_index)
+            _report(done, card, sample_index)
+    else:
+        rows = [None] * len(work)
+        with ThreadPoolExecutor(max_workers=config.concurrency) as pool:
+            futures = {
+                pool.submit(_run_one, config, card, sample_index, scorers): i
+                for i, (card, sample_index) in enumerate(work)
+            }
+            for done, future in enumerate(as_completed(futures), start=1):
+                i = futures[future]
+                rows[i] = future.result()
+                _report(done, *work[i])
+
     return EvalRunResult(
         config=config,
         scorer_names=tuple(s.name for s in scorers),

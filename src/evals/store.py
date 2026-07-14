@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from evals.paths import find_repo_root
-from evals.runner import CardResult, EvalRunResult
+from evals.runner import EvalRunResult
 
 
 def runs_dir() -> Path:
@@ -28,32 +28,29 @@ def _slug(text: str) -> str:
     return "".join(c if c.isalnum() else "-" for c in text).strip("-").lower() or "run"
 
 
-def save_run(run: EvalRunResult, *, timestamp: str) -> Path:
+def save_run(run: EvalRunResult, *, timestamp: str = "") -> Path:
     """Write one run to ``data/eval/runs/<ts>_<benchmark>_<model>.json``.
 
-    ``timestamp`` should be filename-safe (e.g. ``20260714-153000``). Returns the
-    path written.
+    ``timestamp`` should be filename-safe (e.g. ``20260714-153000``); it defaults
+    to the timestamp the run was created with. Returns the path written.
     """
+    timestamp = timestamp or run.timestamp
+    if not timestamp:
+        raise ValueError("save_run needs a timestamp (pass one here or to run_benchmark).")
     directory = runs_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    model = run.config.model_name or "default"
-    name = f"{timestamp}_{_slug(run.config.benchmark)}_{_slug(model)}.json"
+    summary = run.aggregate()
+    name = f"{timestamp}_{_slug(run.config.benchmark)}_{_slug(str(summary.get('model', 'default')))}.json"
     payload = {
         "timestamp": timestamp,
         "config": run.config.to_dict(),
         "scorer_names": list(run.scorer_names),
-        "summary": run.aggregate(),
-        "rows": [_row_to_dict(r) for r in run.rows],
+        "summary": summary,
+        "rows": [asdict(row) for row in run.rows],
     }
     path = directory / name
     path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
     return path
-
-
-def _row_to_dict(row: CardResult) -> dict[str, Any]:
-    data = asdict(row)
-    # RunMetrics is a dataclass; asdict already flattened it into a nested dict.
-    return data
 
 
 def load_run(path: Path) -> dict[str, Any]:
