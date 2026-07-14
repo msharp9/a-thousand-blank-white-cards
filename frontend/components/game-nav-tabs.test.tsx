@@ -16,7 +16,7 @@ function baseState(
         name: "Alice",
         score: 5,
         hand: [],
-        in_play: [],
+        in_play: ["zap"],
         connected: true,
         conditions: {},
       },

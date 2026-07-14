@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { EffectLog } from "@/components/effect-log";
-import { PlayerAvatar } from "@/components/player-avatar";
+import { MEDALS, StandingRow } from "@/components/standing-row";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
 import { getCardArtUrl } from "@/lib/art";
 import { playerColor } from "@/lib/players";
@@ -20,8 +20,6 @@ interface ResultsScreenProps {
   send: (msg: ClientMsg) => void;
   onBack: () => void;
 }
-
-const MEDALS = ["🥇", "🥈", "🥉"];
 
 // Shared end-of-game screen for both stops in the results-first flow:
 // - phase "results": scores + full history, host advances into the epilogue
@@ -92,47 +90,16 @@ export function ResultsScreen({
 
       <div className="flex w-full flex-col gap-3.5">
         {standings.map(({ player, color }, rank) => (
-          <div
+          <StandingRow
             key={player.id}
-            className={cn(
-              "flex items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-card px-4 py-3.5 panel-shadow",
-              rank % 2 ? "rotate-[0.5deg]" : "-rotate-[0.5deg]",
-            )}
-          >
-            <span
-              className="w-11 shrink-0 text-center font-marker text-3xl"
-              style={{
-                color:
-                  rank === 0 ? "var(--color-amber)" : "var(--muted-foreground)",
-              }}
-            >
-              #{rank + 1}
-            </span>
-            <PlayerAvatar name={player.name} color={color} size={50} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-hand text-2xl leading-[0.95]">
-                {player.name}
-                {player.id === myPlayerId && " (you)"} {MEDALS[rank] ?? ""}
-              </p>
-              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full border-[1.5px] border-ink bg-muted">
-                <div
-                  className="h-full"
-                  style={{
-                    width: `${Math.round(
-                      (Math.max(0, player.score) / maxScore) * 100,
-                    )}%`,
-                    background: color,
-                  }}
-                />
-              </div>
-            </div>
-            <span
-              className="shrink-0 font-marker text-[34px] tabular-nums"
-              style={{ color }}
-            >
-              {player.score}
-            </span>
-          </div>
+            name={player.name}
+            score={player.score}
+            color={color}
+            rank={rank}
+            maxScore={maxScore}
+            avatarSize={50}
+            nameSuffix={`${player.id === myPlayerId ? " (you)" : ""} ${MEDALS[rank] ?? ""}`}
+          />
         ))}
       </div>
 

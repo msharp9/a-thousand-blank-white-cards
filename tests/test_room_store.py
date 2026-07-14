@@ -154,6 +154,28 @@ class TestFileRoomStore:
         assert reloaded.exists("GOODAA")
         assert not reloaded.exists("BADCODE")
 
+    def test_legacy_state_without_turn_number_backfills_to_at_least_one(self, tmp_path) -> None:
+        """A room persisted before ``turn_number`` existed must restore >=1 once
+        it has left the lobby (documented contract)."""
+        store = FileRoomStore(tmp_path)
+        code = "ABCDEF"
+        room = Room(code)
+        store.put(code, room)
+        room.add_player(player_id="p1", name="Alice")
+        room.add_player(player_id="p2", name="Bob")
+        drive_to_playing(room, ["p1", "p2"])
+        store.put(code, room)
+
+        path = tmp_path / f"{code}.json"
+        data = json.loads(path.read_text())
+        data["state"]["phase"] = "playing"
+        data["state"].pop("turn_number", None)
+        path.write_text(json.dumps(data))
+
+        reloaded = FileRoomStore(tmp_path).get(code)
+        assert reloaded is not None
+        assert reloaded.state.turn_number >= 1
+
     def test_rewire_on_change_attaches_hook(self, tmp_path) -> None:
         FileRoomStore(tmp_path).put("ABCDEF", Room("ABCDEF"))
         reloaded = FileRoomStore(tmp_path)

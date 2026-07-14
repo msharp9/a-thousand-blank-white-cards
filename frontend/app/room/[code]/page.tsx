@@ -236,7 +236,7 @@ export default function RoomPage() {
   if (!nameSet) {
     return (
       <main className="flex h-dvh flex-col items-center justify-center p-4">
-        <div className="flex w-full max-w-sm -rotate-[0.5deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-white p-6 panel-shadow">
+        <div className="flex w-full max-w-sm -rotate-[0.5deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-card p-6 panel-shadow">
           <p className="text-center font-hand text-xl">
             Enter your name to join room{" "}
             <span className="font-mono text-lg">{code}</span>
@@ -267,7 +267,7 @@ export default function RoomPage() {
   if (fatalError) {
     return (
       <main className="flex h-dvh flex-col items-center justify-center p-4">
-        <div className="flex w-full max-w-sm rotate-[0.5deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-white p-6 panel-shadow">
+        <div className="flex w-full max-w-sm rotate-[0.5deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-card p-6 panel-shadow">
           <p className="text-center font-hand text-xl text-destructive">
             {fatalError}
           </p>
@@ -282,7 +282,7 @@ export default function RoomPage() {
   if (!connected && !gameState) {
     return (
       <main className="flex h-dvh items-center justify-center p-4">
-        <p className="-rotate-[0.5deg] rounded-2xl border-[2.5px] border-ink bg-white px-8 py-5 font-hand text-xl panel-shadow">
+        <p className="-rotate-[0.5deg] rounded-2xl border-[2.5px] border-ink bg-card px-8 py-5 font-hand text-xl panel-shadow">
           Connecting to room <span className="font-mono text-lg">{code}</span>…
         </p>
       </main>
@@ -297,7 +297,7 @@ export default function RoomPage() {
       {transientError && (
         <div
           role="alert"
-          className="fixed inset-x-0 top-3 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] -rotate-[0.5deg] items-center gap-3 rounded-xl border-2 border-ink bg-white px-3 py-2 font-hand text-base text-destructive sticker-shadow-sm"
+          className="fixed inset-x-0 top-3 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] -rotate-[0.5deg] items-center gap-3 rounded-xl border-2 border-ink bg-card px-3 py-2 font-hand text-base text-destructive sticker-shadow-sm"
         >
           <span>{transientError}</span>
           <Button
@@ -333,11 +333,11 @@ export default function RoomPage() {
         />
       )}
       {reactionResultText && (
-        <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit rotate-[0.4deg] rounded-xl border-2 border-ink bg-white px-4 py-2 font-hand text-lg sticker-shadow-sm">
+        <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit rotate-[0.4deg] rounded-xl border-2 border-ink bg-card px-4 py-2 font-hand text-lg sticker-shadow-sm">
           {reactionResultText}
         </div>
       )}
-      <header className="sticky top-0 z-40 flex items-center gap-3.5 border-b-[2.5px] border-ink bg-white px-5 py-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)]">
+      <header className="sticky top-0 z-40 flex items-center gap-3.5 border-b-[2.5px] border-ink bg-card px-5 py-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)]">
         <Link
           href="/"
           className="shrink-0 font-marker text-xl leading-[0.95] !text-ink"
@@ -346,12 +346,12 @@ export default function RoomPage() {
         </Link>
         <span className="h-6 w-0.5 bg-ink/20" />
         <span className="font-mono text-sm text-muted-foreground">{code}</span>
-        <span className="font-hand text-[17px] text-[#444]">
+        <span className="font-hand text-[17px] text-muted-foreground">
           {PHASE_LABELS[phase]}
         </span>
         {phase === "playing" && gameState && (
           <>
-            <span className="font-hand text-[17px] text-[#444]">
+            <span className="font-hand text-[17px] text-muted-foreground">
               Turn {gameState.turn_number}
             </span>
             <GameNavTabs gameState={gameState} roomCode={code} />
@@ -385,7 +385,7 @@ export default function RoomPage() {
 
         {gameState && phase === "lobby" && (
           <div className="flex flex-col items-center pt-10">
-            <div className="flex w-full max-w-sm -rotate-[0.6deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-white p-6 panel-shadow">
+            <div className="flex w-full max-w-sm -rotate-[0.6deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-card p-6 panel-shadow">
               <h2 className="font-marker text-2xl">The Lobby</h2>
               <p className="text-center font-hand text-lg text-muted-foreground">
                 Waiting for players — share the room code{" "}
@@ -500,14 +500,14 @@ export default function RoomPage() {
 
               {/* your zone */}
               {isSpectator ? (
-                <div className="border-t-[2.5px] border-ink bg-white px-5 py-4">
+                <div className="border-t-[2.5px] border-ink bg-card px-5 py-4">
                   <p className="mx-auto w-fit rounded-xl border-2 border-dashed border-ink/40 px-5 py-3 font-hand text-base text-muted-foreground">
                     You joined after the game started — you are spectating and
                     cannot play cards.
                   </p>
                 </div>
               ) : (
-                <div className="border-t-[2.5px] border-ink bg-white px-5 pt-3 pb-4">
+                <div className="border-t-[2.5px] border-ink bg-card px-5 pt-3 pb-4">
                   <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2.5">
                     <div className="flex items-center gap-2.5">
                       {me && (
@@ -549,7 +549,7 @@ export default function RoomPage() {
                   </div>
                   {myInPlayCards.length > 0 && (
                     <div className="mb-1 flex items-center gap-2">
-                      <span className="font-hand text-sm text-[#888]">
+                      <span className="font-hand text-sm text-muted-foreground">
                         In front of you:
                       </span>
                       {myInPlayCards.map((card) => (
@@ -594,7 +594,7 @@ export default function RoomPage() {
         {gameState && phase === "epilogue" && (
           <div className="flex flex-col gap-4">
             {epilogueWinnerNames.length > 0 && (
-              <div className="mx-auto -rotate-[0.5deg] rounded-xl border-2 border-ink bg-white px-5 py-2 text-center panel-shadow">
+              <div className="mx-auto -rotate-[0.5deg] rounded-xl border-2 border-ink bg-card px-5 py-2 text-center panel-shadow">
                 <p className="font-hand text-lg">
                   {epilogueWinnerNames.length > 1 ? "Winners" : "Winner"}:{" "}
                   <span className="font-marker text-base text-primary">
@@ -735,7 +735,11 @@ function TargetPickerDialog({
               </Button>
             );
           })}
-          <Button variant="ghost" className="text-[#888]" onClick={onCancel}>
+          <Button
+            variant="ghost"
+            className="text-muted-foreground"
+            onClick={onCancel}
+          >
             Cancel
           </Button>
         </div>

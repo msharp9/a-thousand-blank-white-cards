@@ -252,9 +252,10 @@ export type GameStateSnapshot = {
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
   hooks: HookSnapshot[];
-  // Whether the active player's turn-start auto-draw has happened. Drawing is
-  // automatic, so this is true for the whole turn in practice; kept in the
-  // snapshot for compatibility.
+  // Whether the active player's turn-start auto-draw has happened. Mirrors the
+  // backend snapshot field; the client does not currently read it (draw is
+  // automatic, with no Draw button or gate), so it is present only to keep this
+  // type an exact mirror of the wire payload.
   has_drawn: boolean;
   // Whether the active player may end their turn without playing. True only when
   // they hold NO playable card (e.g. no blank to author), so the Pass/End turn

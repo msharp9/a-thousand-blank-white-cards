@@ -156,7 +156,7 @@ describe("HistoryModal", () => {
     expect(screen.queryByText(/→/)).toBeNull();
   });
 
-  it("labels a multi-player target as Everyone", () => {
+  it("labels a target covering every player as Everyone", () => {
     const state = baseState({
       cards: { zap },
       history_events: [
@@ -172,6 +172,37 @@ describe("HistoryModal", () => {
       />,
     );
     expect(screen.getByText(/Everyone/)).toBeTruthy();
+  });
+
+  it("joins names for a multi-player target that is a strict subset", () => {
+    const state = baseState({
+      players: [
+        ...baseState().players,
+        {
+          id: "p3",
+          name: "Cara",
+          score: 0,
+          hand: [],
+          in_play: [],
+          connected: true,
+          conditions: {},
+        },
+      ],
+      cards: { zap },
+      history_events: [
+        playEvent({ actor_id: "p3", target_player_ids: ["p1", "p2"] }),
+      ],
+    });
+    render(
+      <HistoryModal
+        open
+        onOpenChange={() => {}}
+        gameState={state}
+        roomCode="ABCD"
+      />,
+    );
+    expect(screen.getByText(/Alice, Bob/)).toBeTruthy();
+    expect(screen.queryByText(/Everyone/)).toBeNull();
   });
 
   it("ignores non-play history events", () => {

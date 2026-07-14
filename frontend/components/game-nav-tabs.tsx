@@ -62,9 +62,7 @@ export function GameNavTabs({ gameState, roomCode }: GameNavTabsProps) {
       </nav>
       {tab === "gallery" && (
         <GalleryOverlay
-          cards={gameState.cards}
-          players={gameState.players}
-          spectators={gameState.spectators}
+          gameState={gameState}
           roomCode={roomCode}
           onClose={() => setTab("table")}
         />
