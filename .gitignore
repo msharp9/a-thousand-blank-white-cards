@@ -180,6 +180,8 @@ plan/
 !data/seed_cards_fillers.json
 !data/seed_cards.json
 !data/seed_cards_simple.json
+# ...and keep the bundled game-rules snapshot served by the game_rules tool
+!data/game_rules.txt
 # ...and keep the eval corpus tooling and annotations
 !data/eval/
 !data/eval/**
