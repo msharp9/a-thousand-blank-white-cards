@@ -200,6 +200,14 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             // state.log in sync with every effect_applied it broadcasts, so
             // replacing here is idempotent with the live appends below.
             setLog(msg.state.log ?? []);
+            // brewing is a transient set by the one-shot "brewing" push and
+            // cleared by its card_interpreted/effect_applied follow-up. An
+            // authoritative state means any in-flight interpretation for this
+            // client is over (the room lock serialises a play's whole
+            // interpretation, so no state snapshot interleaves the pair in
+            // normal flow) — clearing here rescues a reconnect that missed the
+            // clearing push, which would otherwise soft-lock the hand.
+            setBrewing(null);
             // A fresh authoritative state means whatever the last transient
             // error complained about has been superseded — clear it early.
             clearTransientError();

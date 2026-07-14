@@ -336,7 +336,18 @@ class Room:
         # reaction plays are made by non-active players, and normal turn actions
         # are frozen while a play is suspended behind an open window.
         if mtype == "play" and getattr(msg, "as_reaction", False):
-            await self._handle_reaction_play(player_id, msg)
+            # A reaction resolves via the same LLM round-trip as a direct play,
+            # so freeze the room for its duration too — otherwise the active
+            # player's queued turn actions execute against post-resolution state
+            # (the stale-queue race the direct-play freeze closes). Reaction
+            # messages are exempt from the freeze themselves (they carry
+            # as_reaction and are gated by the window), so this only blocks
+            # non-reaction actions. Cleared unconditionally.
+            self._resolving_play = msg.card_id
+            try:
+                await self._handle_reaction_play(player_id, msg)
+            finally:
+                self._resolving_play = None
             return
         if mtype == "pass_reaction":
             await self._handle_pass_reaction(player_id, msg)
