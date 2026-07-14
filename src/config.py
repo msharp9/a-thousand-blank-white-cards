@@ -161,9 +161,26 @@ def get_settings() -> Settings:
 # gateway's actual billing; the eval notebook may override this dict at runtime.
 # Unknown models fall back to "default". Prices are estimates for planning, not
 # billing truth.
+# Bedrock on-demand US-region rates (via the bifrost gateway), July 2026. Each
+# model is keyed under every name the gateway serves it as. Sonnet 5 has promo
+# pricing of 2.00/10.00 through 2026-08-31; we carry the standard rate so
+# projections don't understate post-promo cost.
+_PRICE_HAIKU = {"input": 1.00, "output": 5.00}
+_PRICE_SONNET = {"input": 3.00, "output": 15.00}
+_PRICE_OPUS = {"input": 5.00, "output": 25.00}
+_PRICE_GEMMA_4_31B = {"input": 0.14, "output": 0.40}
+_PRICE_GPT_5_4 = {"input": 2.75, "output": 16.50}
+
 EVAL_MODEL_PRICES: dict[str, dict[str, float]] = {
-    "gpt-5.4-mini": {"input": 0.25, "output": 2.00},
-    "gpt-5.4": {"input": 1.25, "output": 10.00},
+    "us.anthropic.claude-haiku-4-5-20251001-v1:0": _PRICE_HAIKU,
+    "claude-haiku-4-5": _PRICE_HAIKU,
+    "claude-haiku-4-5-20251001": _PRICE_HAIKU,
+    "us.anthropic.claude-sonnet-5": _PRICE_SONNET,
+    "claude-sonnet-5": _PRICE_SONNET,
+    "us.anthropic.claude-opus-4-8": _PRICE_OPUS,
+    "claude-opus-4-8": _PRICE_OPUS,
+    "google.gemma-4-31b": _PRICE_GEMMA_4_31B,
+    "openai.gpt-5.4": _PRICE_GPT_5_4,
     "default": {"input": 0.50, "output": 1.50},
 }
 

@@ -70,14 +70,18 @@ class TestUsageCallback:
 class TestCost:
     def test_known_model(self) -> None:
         m = RunMetrics(prompt_tokens=1_000_000, completion_tokens=0)
-        assert cost_usd(m, "gpt-5.4-mini") == pytest.approx(0.25)
+        assert cost_usd(m, "us.anthropic.claude-sonnet-5") == pytest.approx(3.00)
+
+    def test_bedrock_prefix_is_stripped(self) -> None:
+        m = RunMetrics(prompt_tokens=1_000_000, completion_tokens=0)
+        assert cost_usd(m, "bedrock/us.anthropic.claude-sonnet-5") == pytest.approx(3.00)
 
     def test_unknown_model_uses_default(self) -> None:
         m = RunMetrics(prompt_tokens=1_000_000, completion_tokens=0)
         assert cost_usd(m, "totally-unknown") == pytest.approx(0.50)
 
     def test_no_usage_is_none(self) -> None:
-        assert cost_usd(RunMetrics(), "gpt-5.4-mini") is None
+        assert cost_usd(RunMetrics(), "us.anthropic.claude-sonnet-5") is None
 
     def test_override_price_table(self) -> None:
         m = RunMetrics(prompt_tokens=0, completion_tokens=1_000_000)

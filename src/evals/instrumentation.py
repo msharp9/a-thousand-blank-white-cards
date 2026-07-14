@@ -124,7 +124,13 @@ def cost_usd(metrics: RunMetrics, model: str, prices: dict[str, dict[str, float]
     if metrics.prompt_tokens is None and metrics.completion_tokens is None:
         return None
     table = prices if prices is not None else EVAL_MODEL_PRICES
-    rate = table.get(model) or table.get("default") or {"input": 0.0, "output": 0.0}
+    # bifrost serves models both bare and under a "bedrock/" prefix — accept either.
+    rate = (
+        table.get(model)
+        or table.get(model.removeprefix("bedrock/"))
+        or table.get("default")
+        or {"input": 0.0, "output": 0.0}
+    )
     prompt = metrics.prompt_tokens or 0
     completion = metrics.completion_tokens or 0
     return (prompt * rate["input"] + completion * rate["output"]) / 1_000_000
