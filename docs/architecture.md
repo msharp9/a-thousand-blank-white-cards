@@ -147,6 +147,9 @@ layer up in `board.rooms.room.Room._resolve_program`.
 Rooms are created and joined over REST (`board.app.create_app`):
 
 - `POST /rooms` → `RoomManager.create_room(mode)` returns a 6-char code.
+- `GET /rooms` → lists active rooms, newest first (joinable-only by default;
+  `?all=true` also includes rooms already in progress). Backs a "join a game"
+  lobby screen.
 - `POST /rooms/{code}/join` → `RoomManager.join(code, name)` returns a
   `player_id` (an opaque UUID the client stores per-room in `sessionStorage`)
   and a `spectator` flag. **Join policy**: a joiner arriving while the room is
@@ -183,8 +186,10 @@ Envelopes are typed in `models/ws_messages.py`. Inbound messages form a Pydantic
 discriminated union (`ClientMsg`, keyed on `type`) validated by a single
 `TypeAdapter`; outbound messages are the `ServerMsg` set.
 
-- **Client → server**: `join`, `start`, `draw`, `play`, `pass` / `end_turn`,
-  `create_card`, `preview_card`, `interaction_response`, `epilogue_vote`.
+- **Client → server**: `join`, `start`, `play`, `pass` / `end_turn`,
+  `create_card`, `preview_card`, `interaction_response`, `epilogue_vote`. There
+  is no client `draw` message: drawing is auto-triggered server-side at the
+  start of each turn (see `_start_turn` in `board/rooms/room.py`).
 - **Server → client**: `state`, `brewing`, `card_interpreted`, `effect_applied`,
   `preview_result`, `prompt_choice`, `interaction_request`,
   `interaction_progress`, `epilogue`, `error`.
