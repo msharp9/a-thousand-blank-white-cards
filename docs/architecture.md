@@ -271,7 +271,7 @@ sequenceDiagram
 
   C->>WS: play {card_id, ...}
   WS->>R: handle_action(player_id, msg)
-  Note over R: turn / draw-first / spectator guards
+  Note over R: turn / spectator guards
   R->>R: author-on-play (fill blank if needed)
   R->>CO: compile_card_plan(card)
   alt compiled plan exists (deterministic)
@@ -294,8 +294,8 @@ sequenceDiagram
 
 Key behaviours enforced in `Room`:
 
-- **Turn model is draw → play → end** (`draw` first, explicit; playing/passing
-  before drawing is rejected while the deck is non-empty). Drawing the last card
+- **Turn model is auto-draw → play → end**: `_start_turn` draws for the active
+  player automatically (there is no client `draw` message). Drawing the last card
   latches `_deck_exhausted`; the drawer finishes their turn, then the game ends.
 - **Author-on-play**: the game is *A Thousand Blank White Cards*, so a blank card
   is authored at the moment it's played. `_handle_play` persists the authored
@@ -699,5 +699,6 @@ studio — title input, freehand pointer-drawn canvas (vector strokes redrawn at
 device pixel ratio), ink/nib pickers, undo/clear, and an emoji stamp grid.
 `getArt()` exports a PNG data-URL, retrying at smaller scales until it fits the
 backend's 128 KiB art cap. It is a pure authoring surface with no WS knowledge;
-`CreateCardDialog` (setup / mid-game authoring) and `PlayBlankDialog`
-(author-on-play) own submission and pass a flow-specific caption.
+`CreateCardDialog` (setup-only authoring; the server rejects `create_card`
+outside the setup phase) and `PlayBlankDialog` (author-on-play of a blank, the
+only mid-game authoring path) own submission and pass a flow-specific caption.
