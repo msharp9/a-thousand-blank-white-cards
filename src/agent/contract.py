@@ -95,6 +95,13 @@ class InterpretResult(BaseModel):
             "Populated by the real agent later; 'none' for now."
         ),
     )
+    agent_error: bool = Field(
+        default=False,
+        description=(
+            "True when this result is a runtime fallback (exception, timeout, or "
+            "unparseable final message), not a genuine judgment of the card."
+        ),
+    )
 
     def to_plan(self) -> ResolutionPlan:
         if self.plan is not None:

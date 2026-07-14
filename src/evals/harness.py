@@ -71,6 +71,7 @@ def normalise_agent_output(result: Any) -> dict[str, Any]:
         "verdict": getattr(result, "verdict", None),
         "comment": getattr(result, "comment", ""),
         "persona_action": getattr(result, "persona_action", "none"),
+        "agent_error": bool(getattr(result, "agent_error", False)),
     }
     to_plan = getattr(result, "to_plan", None)
     if callable(to_plan):

@@ -60,9 +60,6 @@ class EvalConfig:
     sample_size: int | None = None
     concurrency: int = 1
     use_judge: bool = True
-    # LangSmith tracing for eval runs. Off by default — evals re-run the
-    # production agent at volume and tracing every sample costs money.
-    # True inherits the ambient LANGSMITH_TRACING behavior for debugging.
     tracing: bool = False
     prices: dict[str, dict[str, float]] | None = None
     label: str = ""
@@ -190,9 +187,6 @@ def _run_one(config: EvalConfig, card: dict[str, Any], sample_index: int, scorer
     model = get_chat_model(config.model_name) if config.model_name else None
     callback = UsageCallback()
 
-    # tracing_context is contextvar-scoped, so it suppresses LangSmith per
-    # worker thread even though run_agent flips the global env flags on. It
-    # must span the scorer loop too — the LLM judge also calls the gateway.
     trace_ctx = nullcontext() if config.tracing else tracing_context(enabled=False)
     with trace_ctx:
         t0 = perf_counter()
@@ -339,6 +333,7 @@ def _aggregate(run: EvalRunResult) -> dict[str, Any]:
         "mean_total_tokens": fmean(total_tokens) if total_tokens else None,
         "verdict_counts": verdict_counts,
         "invalid_rate": verdict_counts.get("invalid", 0) / len(rows),
+        "agent_error_rate": sum(1 for r in rows if r.output.get("agent_error")) / len(rows),
     }
     for name in run.scorer_names:
         vals = [r.scores[name] for r in rows if name in r.scores]

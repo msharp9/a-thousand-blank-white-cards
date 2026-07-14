@@ -173,6 +173,7 @@ def _fallback_result(comment: str, note: str | None = None, persona_action: str 
         verdict="invalid",
         comment=comment,
         persona_action=persona_action,  # type: ignore[arg-type]
+        agent_error=True,
     )
 
 
@@ -190,6 +191,33 @@ def _extract_final_text(result: dict[str, Any]) -> str:
             parts = [b.get("text", "") if isinstance(b, dict) else str(b) for b in content]
             return "".join(parts)
     return ""
+
+
+def _extract_json_object(text: str) -> Any:
+    """Parse the first contract-shaped JSON object in ``text``, tolerating prose and fences.
+
+    Models sometimes wrap the contract JSON in commentary or a ```json fence;
+    scanning forward with ``raw_decode`` recovers the object wherever it starts
+    and ignores anything after it. Embedded candidates must carry the contract's
+    ``verdict`` key so an inner op object (e.g. ``{\"op\": \"add_points\", ...}``)
+    can't masquerade as a result. Raises ``json.JSONDecodeError`` when no
+    suitable object exists.
+    """
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        idx = text.find("{")
+        while idx != -1:
+            try:
+                payload, _ = decoder.raw_decode(text, idx)
+            except json.JSONDecodeError:
+                pass
+            else:
+                if isinstance(payload, dict) and "verdict" in payload:
+                    return payload
+            idx = text.find("{", idx + 1)
+        raise
 
 
 def _parse_result(result: dict[str, Any]) -> InterpretResult:
@@ -213,16 +241,13 @@ def _parse_result(result: dict[str, Any]) -> InterpretResult:
 
     text = _extract_final_text(result).strip()
     if text:
-        # Tolerate a ```json fence around the object.
-        if text.startswith("```"):
-            text = text.strip("`")
-            text = text[text.find("{") :] if "{" in text else text
         try:
-            payload = json.loads(text)
-            return InterpretResult.model_validate(payload)
+            payload = _extract_json_object(text)
         except json.JSONDecodeError:
             logger.warning("agent final message was not valid JSON; using it as a comment")
-            return InterpretResult(verdict="invalid", comment=text[:280], persona_action="do_nothing")
+            return InterpretResult(verdict="invalid", comment=text[:280], persona_action="do_nothing", agent_error=True)
+        try:
+            return InterpretResult.model_validate(payload)
         except Exception:  # noqa: BLE001 — schema mismatch degrades gracefully
             logger.warning("agent final message JSON did not match InterpretResult")
 

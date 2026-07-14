@@ -287,8 +287,26 @@ class TestRunBenchmark:
             "executability",
             "did_something",
             "invalid_rate",
+            "agent_error_rate",
         ):
             assert key in agg
+        assert agg["agent_error_rate"] == 0.0
+
+    def test_agent_error_rate_counts_runtime_fallbacks(self, monkeypatch) -> None:
+        from agent.contract import InterpretResult
+
+        import agent.runtime as runtime
+
+        monkeypatch.setattr(
+            runtime,
+            "run_agent",
+            lambda *args, **kwargs: InterpretResult(verdict="invalid", comment="boom", agent_error=True),
+        )
+        from evals.runner import EvalConfig, run_benchmark
+
+        cfg = EvalConfig(benchmark="eval", sample_size=2, use_judge=False)
+        agg = run_benchmark(cfg, timestamp="t", progress=False).aggregate()
+        assert agg["agent_error_rate"] == 1.0
 
 
 # --------------------------------------------------------------------------- #

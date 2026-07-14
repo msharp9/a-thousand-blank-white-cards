@@ -48,6 +48,11 @@ def test_normalise_omits_plan_when_no_effect() -> None:
     assert out["verdict"] == "invalid"
 
 
+def test_normalise_passes_agent_error_flag() -> None:
+    assert normalise_agent_output(InterpretResult(verdict="invalid", agent_error=True))["agent_error"] is True
+    assert normalise_agent_output(InterpretResult(verdict="ok"))["agent_error"] is False
+
+
 def test_normalise_preserves_complete_mixed_resolution_plan() -> None:
     plan = ResolutionPlan(
         steps=[

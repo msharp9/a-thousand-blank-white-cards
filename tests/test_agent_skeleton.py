@@ -397,6 +397,7 @@ def test_run_agent_invoke_error_returns_fallback():
     result = run_agent("Card", "desc", model=fake)
     assert result.verdict == "invalid"
     assert result.comment
+    assert result.agent_error is True
 
 
 def test_run_agent_non_json_final_message_degrades_to_comment():
@@ -404,6 +405,7 @@ def test_run_agent_non_json_final_message_degrades_to_comment():
     result = run_agent("Card", "desc", model=fake)
     assert result.verdict == "invalid"
     assert "not json" in result.comment
+    assert result.agent_error is True
 
 
 def test_run_agent_parses_fenced_json():
@@ -412,6 +414,35 @@ def test_run_agent_parses_fenced_json():
     result = run_agent("Card", "desc", model=fake)
     assert result.verdict == "ok"
     assert result.comment == "Fenced but fine."
+    assert result.agent_error is False
+
+
+def test_run_agent_parses_json_wrapped_in_prose():
+    payload = 'Confirmed and clean.\n\n```json\n{"verdict": "ok", "comment": "Wrapped in prose."}\n```\nEnjoy!'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "ok"
+    assert result.comment == "Wrapped in prose."
+    assert result.agent_error is False
+
+
+def test_run_agent_skips_stray_braces_before_the_json():
+    payload = 'The card says {gain points}, so here it is: {"verdict": "ok", "comment": "Found it."} done.'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "ok"
+    assert result.comment == "Found it."
+
+
+def test_run_agent_ignores_embedded_non_contract_objects():
+    # A truncated answer whose only complete object is an inner op must degrade
+    # to the comment fallback, not validate as an all-defaults InterpretResult.
+    payload = 'Here is the plan: {"op": "add_points", "target": "self", "amount": 3} and the verdict is'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "invalid"
+    assert result.agent_error is True
+    assert "add_points" in result.comment
 
 
 def test_langsmith_tracing_off_by_default(monkeypatch):
