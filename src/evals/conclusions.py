@@ -2,7 +2,7 @@
 """Run the eval harness and write a conclusions report to data/eval/conclusions.md.
 
 Usage:
-    LLM_API_KEY=... uv run python -m evals.conclusions [--data PATH] [--limit N]
+    LLM_API_KEY=... uv run python -m evals.conclusions [--suite gold|hard|all] [--data PATH] [--limit N]
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import argparse
 from pathlib import Path
 
 from evals.eval_core import EvalRunReport
-from evals.harness import run_harness
+from evals.harness import SUITES, run_harness
 from evals.paths import find_repo_root
 
 OUTPUT_PATH = find_repo_root(Path(__file__)) / "data" / "eval" / "conclusions.md"
@@ -34,7 +34,7 @@ def render_conclusions_md(report: EvalRunReport) -> str:
     lines = [
         "# Eval Conclusions — TBWC Card Interpretation",
         "",
-        f"Evaluated **{n}** hand-annotated gold cards from `data/eval/eval_cards.json`.",
+        f"Evaluated **{n}** hand-annotated cards.",
         "",
         "## Per-dimension scores",
         "",
@@ -44,7 +44,7 @@ def render_conclusions_md(report: EvalRunReport) -> str:
         "",
         "## Pipeline metrics",
         "",
-        f"- Valid EffectProgram (dsl_validity == 1.0): **{valid_pct:.1f}%** of cards",
+        f"- Structurally valid plan (dsl_validity == 1.0): **{valid_pct:.1f}%** of cards",
         f"- Mean task latency: **{mean_task_ms:.1f} ms/card**",
         "",
         "## Analysis",
@@ -64,10 +64,10 @@ def _analysis_paragraph(summary: dict, scorer_names: list[str], valid_pct: float
         return (
             f"The pipeline scores highest on **{best}** ({summary.get(best, 0.0):.3f}) and lowest on "
             f"**{worst}** ({summary.get(worst, 0.0):.3f}). {valid_pct:.1f}% of interpretations produced a "
-            "structurally valid EffectProgram. Weaker dimensions indicate where prompt tuning or few-shot "
-            "exemplars (Phase 6) should focus."
+            "structurally valid plan. Weaker dimensions indicate where prompt tuning or few-shot "
+            "exemplars should focus."
         )
-    return f"{valid_pct:.1f}% of interpretations produced a structurally valid EffectProgram."
+    return f"{valid_pct:.1f}% of interpretations produced a structurally valid plan."
 
 
 def write_conclusions(report: EvalRunReport, output_path: Path | None = None) -> Path:
@@ -80,10 +80,11 @@ def write_conclusions(report: EvalRunReport, output_path: Path | None = None) ->
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run evals and write conclusions.md.")
-    parser.add_argument("--data", type=Path, default=None)
+    parser.add_argument("--data", type=Path, default=None, help="explicit dataset path (overrides --suite)")
+    parser.add_argument("--suite", choices=sorted(SUITES), default="gold")
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
-    report = run_harness(args.data, args.limit)
+    report = run_harness(args.data, args.limit, suite=args.suite)
     path = write_conclusions(report)
     print(f"Wrote {path}")
     print(report.summary())

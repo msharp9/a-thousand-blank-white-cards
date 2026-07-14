@@ -22,14 +22,30 @@ def test_load_eval_items(tmp_path: Path) -> None:
     assert items[0].expected == {"placement": "discard"}
 
 
-def test_normalise_maps_program_to_effect_program() -> None:
+def test_load_suite_items_all_combines_gold_and_hard() -> None:
+    from evals.harness import load_suite_items
+
+    items = load_suite_items("all", limit=2)
+    assert len(items) == 4
+    assert {t for item in items for t in item.tags} == {"real_card", "hard_card"}
+
+
+def test_normalise_folds_legacy_program_into_resolution_plan() -> None:
     prog = EffectProgram(ops=[AddPointsOp(target="self", amount=3)])
     result = InterpretResult(program=prog, verdict="ok")
     out = normalise_agent_output(result)
-    assert "effect_program" in out
-    assert out["effect_program"]["ops"][0]["op"] == "add_points"
-    assert out["resolution_plan"]["steps"][0]["kind"] == "ops"
+    steps = out["resolution_plan"]["steps"]
+    assert steps[0]["kind"] == "ops"
+    assert steps[0]["ops"][0]["op"] == "add_points"
     assert out["verdict"] == "ok"
+    assert "effect_program" not in out
+    assert "snippet_effect" not in out
+
+
+def test_normalise_omits_plan_when_no_effect() -> None:
+    out = normalise_agent_output(InterpretResult(verdict="invalid", comment="nope"))
+    assert "resolution_plan" not in out
+    assert out["verdict"] == "invalid"
 
 
 def test_normalise_preserves_complete_mixed_resolution_plan() -> None:
@@ -81,5 +97,4 @@ def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
     assert isinstance(report, EvalRunReport)
     summary = report.summary()
     assert summary["cases"] == 1
-    # dsl_validity should be 1.0 (valid non-empty EffectProgram)
     assert summary["dsl_validity"] == 1.0

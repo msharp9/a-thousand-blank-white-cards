@@ -63,23 +63,10 @@ def load_suite_items(suite: str, limit: int | None = None) -> list[EvalItem]:
 def normalise_agent_output(result: Any) -> dict[str, Any]:
     """Map an :class:`~agent.contract.InterpretResult` to the dict the scorers read.
 
-    The scorers (see evals.scorers) consume the ordered plan plus legacy mirrors:
-      - ``resolution_plan``: the full ordered ResolutionPlan, including mixed
-        ops/snippet effects.
-      - ``effect_program``: the EffectProgram as a plain dict (dsl_validity re-validates
-        it, the judge summarises it). Produced from ``result.program``.
-      - ``snippet_effect``: the generated Python hook body, if any. Produced from
-        ``result.snippet.code``.
-      - ``verdict``: the agent's overall verdict string ("ok"/"invalid"/"needs_choice").
-
-    Note: the old graph exposed a "classification" dict (from a dedicated classify
-    node) that the judge could fall back to. The new single agent has no separate
-    classify step, so there is no "classification" key to derive; the judge instead
-    summarises the effect_program / snippet directly (both richer signals of intent),
-    which is why _effect_summary already prefers those. No sub-metric is lost.
+    ``to_plan()`` folds any legacy program/snippet into the ordered plan, so
+    ``resolution_plan`` is the single mechanical form scorers consume; it is
+    omitted when the agent produced no effect (e.g. verdict="invalid").
     """
-    program = getattr(result, "program", None)
-    snippet = getattr(result, "snippet", None)
     out: dict[str, Any] = {
         "verdict": getattr(result, "verdict", None),
         "comment": getattr(result, "comment", ""),
@@ -90,11 +77,6 @@ def normalise_agent_output(result: Any) -> dict[str, Any]:
         plan = to_plan()
         if plan.steps:
             out["resolution_plan"] = plan.model_dump()
-    if program is not None:
-        # EffectProgram -> plain dict for dsl_validity's EffectProgram.model_validate.
-        out["effect_program"] = program.model_dump() if hasattr(program, "model_dump") else program
-    if snippet is not None:
-        out["snippet_effect"] = getattr(snippet, "code", snippet)
     return out
 
 
@@ -116,6 +98,9 @@ def run_harness(data_path: Path | None = None, limit: int | None = None, suite: 
     ``suite`` ("gold"/"hard"/"all") selects the standard testsets; an explicit
     ``data_path`` overrides it for ad-hoc files.
     """
+    from evals.scorers import reset_run_caches
+
+    reset_run_caches()
     if data_path is not None:
         items = load_eval_items(data_path, limit=limit)
     else:

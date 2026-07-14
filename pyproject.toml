@@ -42,6 +42,13 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.15.12",
 ]
+# Notebook-only deps for scripts/evals.ipynb (the eval visualization driver).
+# Kept separate from dev so CI/test installs stay lean: `uv sync --group evals`.
+evals = [
+    "matplotlib>=3.9",
+    "ipykernel>=6.29",
+    "jupyter>=1.1",
+]
 
 [tool.ruff]
 line-length = 120
