@@ -426,3 +426,67 @@ def test_reaction_fires_on_reaction_hooks() -> None:
     _connect_all(room)
     _open_then_react(room, "p2", PlayMsg(card_id="cs", as_reaction=True))
     assert any("Bob reacts with Nuh-Uh" in line for line in room.state.log)
+
+
+# ── play-freeze coverage on the reaction path (bead phy.13) ─────────────────
+
+
+def test_freeze_engaged_while_reaction_resolves_and_clears_after() -> None:
+    # A reaction resolves via the same interpretation path as a direct play, so
+    # the room must be frozen for its duration (else the active player's queued
+    # turn actions execute against post-resolution state). We park the reactor
+    # inside _execute_reaction and, from there, fire an EndTurn from the active
+    # player: it must be rejected up front while _resolving_play is set.
+    room = _reaction_room()
+    socks = _connect_all(room)
+    seen: dict[str, object] = {}
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="atk"))
+        assert room._pending is not None
+
+        real_execute = room._execute_reaction
+
+        async def parked_execute(*args, **kwargs):
+            seen["resolving_during"] = room._resolving_play
+            # A non-reaction action from the active player mid-resolution is
+            # rejected by the pre-lock freeze, not queued behind the lock.
+            await room.handle_action("p1", EndTurnMsg())
+            return await real_execute(*args, **kwargs)
+
+        room._execute_reaction = parked_execute
+        await room.handle_action("p2", PlayMsg(card_id="cs", as_reaction=True))
+
+    asyncio.run(scenario())
+
+    assert seen["resolving_during"] == "cs"
+    assert room._resolving_play is None  # cleared via finally
+    p1_errors = [m for m in _sent(socks["p1"]) if m["type"] == "error"]
+    assert any("finish resolving" in m["message"] for m in p1_errors)
+    # The counter still resolved normally and consumed the turn.
+    assert room._pending is None
+    assert _score(room, "p1") == 0
+    assert room.state.turn_index == 1
+
+
+def test_reaction_message_is_exempt_from_the_freeze() -> None:
+    # The freeze must not block reaction messages themselves — the reactor's own
+    # as_reaction play carries the flag set, and pass_reaction is exempt too.
+    room = _reaction_room(p3_hand=[_counterspell("cs3")])
+    socks = _connect_all(room)
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="atk"))
+        # Simulate a resolution already in flight: the freeze flag is set, yet a
+        # reaction / pass_reaction must still be accepted (not bounced).
+        room._resolving_play = "atk"
+        await room.handle_action("p3", PassReactionMsg())
+        room._resolving_play = None
+        await room.handle_action("p2", PlayMsg(card_id="cs", as_reaction=True))
+
+    asyncio.run(scenario())
+
+    p3_errors = [m["message"] for m in _sent(socks["p3"]) if m["type"] == "error"]
+    assert not any("finish resolving" in m for m in p3_errors)
+    assert room._pending is None
+    assert _score(room, "p1") == 0  # countered
