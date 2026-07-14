@@ -77,6 +77,38 @@ def test_destroy_card_op_discriminates_from_program() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Authoring `args` wrapper tolerance (the LLM interpreter frequently emits the
+# nested authoring shape into program.ops; without flattening, Pydantic accepts
+# it and silently drops the args — a destroy_card/transfer_card then no-ops).
+# ---------------------------------------------------------------------------
+
+
+def test_program_flattens_destroy_card_args_wrapper() -> None:
+    prog = EffectProgram.model_validate({"ops": [{"op": "destroy_card", "args": {"card_target": "all_in_hand"}}]})
+    assert isinstance(prog.ops[0], DestroyCardOp)
+    assert prog.ops[0].card_target == "all_in_hand"
+
+
+def test_program_flattens_add_points_args_wrapper() -> None:
+    prog = EffectProgram.model_validate({"ops": [{"op": "add_points", "args": {"target": "self", "amount": 50}}]})
+    assert isinstance(prog.ops[0], AddPointsOp)
+    assert prog.ops[0].amount == 50
+
+
+def test_program_flat_shape_still_works() -> None:
+    prog = EffectProgram.model_validate({"ops": [{"op": "add_points", "target": "self", "amount": 7}]})
+    assert prog.ops[0].amount == 7
+
+
+def test_program_flat_sibling_wins_over_args() -> None:
+    """A mixed payload prefers the explicit flat runtime key over the wrapper."""
+    prog = EffectProgram.model_validate(
+        {"ops": [{"op": "add_points", "args": {"amount": 10}, "target": "self", "amount": 50}]}
+    )
+    assert prog.ops[0].amount == 50
+
+
+# ---------------------------------------------------------------------------
 # map_authoring_target
 # ---------------------------------------------------------------------------
 

@@ -252,7 +252,12 @@ def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) 
         card_ids = []
 
     if not card_ids:
-        return state
+        # A destroy_card that names no target (both fields None) or resolves to an
+        # empty zone would otherwise vanish with no trace — the classic "the card
+        # did nothing" bug. Log it so a mis-authored/mis-interpreted discard is
+        # diagnosable rather than mysteriously inert.
+        addr = op.card_target if op.card_target is not None else op.card_id
+        return state.with_log(f"[destroy_card no-op] resolved no cards for target {addr!r}")
 
     targets = set(card_ids)
     new_players = [

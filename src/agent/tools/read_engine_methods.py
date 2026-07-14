@@ -124,7 +124,11 @@ def _build_reference() -> str:
         "'audience':'all','sealed':true}}. Kinds: choice, number, text, card_pick, confirm, drawing. "
         "Audiences: active, all, all_others, player:<id>. Later snippets read "
         "ctx['interactions'][result_key]. Use input_refs {'options':{'result_key':'drawings','path':[]}} "
-        "to turn prior submissions into options for a chained vote."
+        "to turn prior submissions into options for a chained vote. "
+        "A card_pick with 'from_hand':true shows EACH audience member their OWN hand "
+        "(no static card_ids needed) — the way to run 'everyone discards a card they "
+        "choose'; the following snippet reads ctx['interactions'][result_key] as "
+        "{player_id: chosen_card_id} and calls state.destroy_card(card_id=...) on each."
     )
     return "\n".join(parts)
 

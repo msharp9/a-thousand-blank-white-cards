@@ -1677,11 +1677,36 @@ class Room:
                 "type": "interaction_request",
                 "schema_version": 1,
                 "interaction_id": pending.interaction_id,
-                "descriptor": pending.request.model_dump(mode="json"),
+                "descriptor": self._descriptor_for(pending.request, player_id),
                 "deadline_at": pending.deadline_at.isoformat(),
                 "progress": self._interaction_progress(player_id).model_dump(),
             },
         )
+
+    def _descriptor_for(self, request: InteractionDescriptor, player_id: str) -> dict:
+        """Serialise the descriptor for one recipient.
+
+        A ``from_hand`` card_pick is personalised: each player is shown THEIR OWN
+        hand as the selectable ``card_ids`` (see :func:`_validate_interaction_response`,
+        which mirrors this by validating against the responder's hand)."""
+        descriptor = request.model_dump(mode="json")
+        if isinstance(request, CardPickInteraction) and request.from_hand:
+            descriptor["card_ids"] = list(self._from_hand_options(player_id))
+        return descriptor
+
+    def _from_hand_options(self, player_id: str) -> list[str]:
+        """The hand a from_hand card_pick offers ``player_id``.
+
+        Reads the paused resolution's working_state when one is live (the played
+        card has already left the actor's hand there), so the actor is never
+        offered the card they are mid-play — falling back to committed state."""
+        source = self.state
+        if self._pending_resolution is not None:
+            source = self._pending_resolution.working_state
+        try:
+            return list(source.get_player(player_id).hand)
+        except KeyError:
+            return []
 
     async def _broadcast_interaction_progress(self) -> None:
         pending = self._pending_resolution
@@ -1736,6 +1761,7 @@ class Room:
         self,
         request: InteractionDescriptor,
         payload: InteractionResponsePayload,
+        player_id: str | None = None,
     ) -> object:
         if payload.kind != request.kind:
             raise ValueError("response kind does not match request")
@@ -1758,7 +1784,14 @@ class Room:
                 raise ValueError("unknown choice")
             return option_ids
         if isinstance(request, CardPickInteraction) and isinstance(payload, CardPickResponse):
-            if payload.card_id not in request.card_ids:
+            # from_hand picks are validated against the responder's own hand (the
+            # per-player option set _send_interaction_request presented), not the
+            # static card_ids (which is empty for a from_hand pick).
+            if request.from_hand:
+                selectable = set(self._from_hand_options(player_id)) if player_id is not None else set()
+            else:
+                selectable = set(request.card_ids)
+            if payload.card_id not in selectable:
                 raise ValueError("card is not selectable")
             return payload.card_id
         if isinstance(request, ConfirmInteraction) and isinstance(payload, ConfirmResponse):
@@ -1787,7 +1820,7 @@ class Room:
             await self.connections.send(player_id, {"type": "error", "message": "Interaction deadline passed"})
             return
         try:
-            self._validate_interaction_response(pending.request, msg.payload)
+            self._validate_interaction_response(pending.request, msg.payload, player_id)
         except ValueError as exc:
             await self.connections.send(player_id, {"type": "error", "message": str(exc)})
             return
@@ -1833,7 +1866,7 @@ class Room:
         for player_id in pending.resolved_audience:
             payload = pending.responses.get(player_id)
             values[player_id] = (
-                self._validate_interaction_response(pending.request, payload)
+                self._validate_interaction_response(pending.request, payload, player_id)
                 if payload is not None
                 else self._default_interaction_value(pending.request)
             )

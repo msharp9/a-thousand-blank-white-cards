@@ -68,6 +68,13 @@ effect for the game engine, given the live game state.
     accept open forms 'id:<player_id>' and 'has:<condition_key>' besides the named set.
   * set_card_attribute tags cards with metadata (e.g. give every card a color); card
     targets accept 'id:<card_id>' and 'attr:<key>=<value>'.
+  * destroy_card is ALSO how you DISCARD (destroyed cards go to the discard pile — same
+    thing here). "Discard a card from your hand" = destroy_card with card_target
+    "chosen_card" (the actor is prompted to pick, requires_choice=true). "Discard your
+    whole hand" = destroy_card with card_target "all_in_hand" (the actor's hand only).
+    "Everyone discards a card THEY choose" = an ordered plan with ONE card_pick
+    interaction, audience "all", card_target "each_own_hand" — each player picks from
+    their own hand simultaneously; the collected picks are destroyed automatically.
   * create_card mints new cards (with their own ops!) into the deck or a hand — a card
     can add Draw 2s / Reverses / whole new mechanics to the game.
   * register_hook installs a PERSISTENT sandboxed snippet that fires on a game event

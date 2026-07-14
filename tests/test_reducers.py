@@ -316,6 +316,13 @@ class TestDestroyCard:
         new = apply_op(state, DestroyCardOp(), make_card_ctx("p1"))
         assert new.get_player("p1").hand == state.get_player("p1").hand
 
+    def test_no_target_logs_noop_for_visibility(self):
+        """A destroy_card resolving to nothing must leave a log trace, not vanish
+        silently — otherwise a mis-targeted discard looks like it 'did nothing'."""
+        state = make_state()
+        new = apply_op(state, DestroyCardOp(), make_card_ctx("p1"))
+        assert any("destroy_card no-op" in entry for entry in new.log)
+
 
 class TestTransferCard:
     def test_moves_played_card_from_discard_to_one_hand(self):

@@ -171,6 +171,24 @@ def test_static_candidate_interactions_cannot_fail_open() -> None:
             )
 
 
+def test_from_hand_card_pick_needs_no_static_card_ids() -> None:
+    """A from_hand pick fills each player's own hand at send time, so an empty
+    static card_ids is valid (unlike a plain card_pick, which fails open)."""
+    plan = ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "discards",
+                    "request": {"kind": "card_pick", "prompt": "Discard a card", "audience": "all", "from_hand": True},
+                }
+            ]
+        }
+    )
+    assert isinstance(plan.steps[0], InteractionStep)
+    assert plan.steps[0].request.from_hand is True
+
+
 def test_numeric_protocol_rejects_non_finite_values() -> None:
     adapter = TypeAdapter(InteractionDescriptor)
     with pytest.raises(ValidationError):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import AfterValidator, BaseModel, Field, model_validator
+from pydantic import AfterValidator, BaseModel, Field, field_validator, model_validator
 
 from models.interactions import (
     CardPickInteraction,
@@ -471,6 +471,34 @@ def op_requires_choice(op: Op) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Op-list normalization
+# ---------------------------------------------------------------------------
+def _flatten_op_args(ops: Any) -> Any:
+    """Lower the authoring ``{"op": X, "args": {...}}`` shape to flat runtime ops.
+
+    The runtime Op union is flat (``{"op": "destroy_card", "card_target": ...}``),
+    but the LLM interpreter frequently emits the *authoring* vocabulary's nested
+    ``args`` wrapper into ``program.ops`` — a shape Pydantic would otherwise accept
+    while silently discarding the ``args`` key. For all-optional ops
+    (destroy_card, transfer_card) that produced a no-arg op that resolved to
+    nothing and applied invisibly. Merging ``args`` up keeps both shapes valid.
+    """
+    if not isinstance(ops, list):
+        return ops
+    flattened = []
+    for entry in ops:
+        if isinstance(entry, dict) and isinstance(entry.get("args"), dict):
+            merged = {k: v for k, v in entry.items() if k != "args"}
+            # Flat sibling keys win over args (explicit runtime shape takes
+            # precedence over the wrapper) so a mixed payload is not clobbered.
+            merged = {**entry["args"], **merged}
+            flattened.append(merged)
+        else:
+            flattened.append(entry)
+    return flattened
+
+
+# ---------------------------------------------------------------------------
 # EffectProgram: the full payload attached to a card play
 # ---------------------------------------------------------------------------
 class EffectProgram(BaseModel):
@@ -480,10 +508,14 @@ class EffectProgram(BaseModel):
     # the agent's emitted program is compiled (see engine.compile).
     requires_choice: bool = False
 
+    _flatten_ops = field_validator("ops", mode="before")(_flatten_op_args)
+
 
 class OpsStep(BaseModel):
     kind: Literal["ops"] = "ops"
     ops: list[Op] = Field(default_factory=list, max_length=50)
+
+    _flatten_ops = field_validator("ops", mode="before")(_flatten_op_args)
 
 
 class SnippetStep(BaseModel):
@@ -527,9 +559,10 @@ class ResolutionPlan(BaseModel):
             if (
                 isinstance(step.request, CardPickInteraction)
                 and not step.request.card_ids
+                and not step.request.from_hand
                 and "card_ids" not in step.input_refs
             ):
-                raise ValueError("card_pick interaction requires card_ids or a card_ids input_ref")
+                raise ValueError("card_pick interaction requires card_ids, from_hand, or a card_ids input_ref")
             available.add(step.result_key)
         if interaction_count > MAX_INTERACTION_STEPS:
             raise ValueError(f"resolution plan exceeds {MAX_INTERACTION_STEPS} interaction barriers")

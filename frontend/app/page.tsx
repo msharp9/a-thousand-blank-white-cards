@@ -10,7 +10,6 @@ import { storePlayerId } from "@/lib/ws";
 import type { Mode } from "@/lib/types";
 
 const MODE_OPTIONS: { value: Mode; label: string }[] = [
-  { value: "both", label: "Both" },
   { value: "online", label: "Online" },
   { value: "in_person", label: "In-person" },
 ];
@@ -40,7 +39,7 @@ export default function LandingPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [joinCode, setJoinCode] = useState("");
-  const [mode, setMode] = useState<Mode>("both");
+  const [mode, setMode] = useState<Mode>("online");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 

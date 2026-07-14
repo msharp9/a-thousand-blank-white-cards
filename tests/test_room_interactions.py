@@ -245,6 +245,104 @@ def test_response_at_or_after_deadline_is_not_accepted() -> None:
     assert room.state.cards["card"]["mechanical_status"] == "fallback"
 
 
+def test_from_hand_pick_lets_everyone_discard_a_card_they_choose() -> None:
+    """End-to-end 'everyone discards a card they choose': a from_hand card_pick
+    shows each player THEIR OWN hand, and the following snippet destroys each
+    player's pick. This is the path a plain destroy_card cannot express."""
+    plan = ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "discards",
+                    "request": {"kind": "card_pick", "prompt": "Discard a card", "audience": "all", "from_hand": True},
+                },
+                {
+                    "kind": "snippet",
+                    "code": (
+                        "def apply(state, ctx):\n"
+                        "    for cid in ctx['interactions']['discards'].values():\n"
+                        "        if cid:\n"
+                        "            state.destroy_card(card_id=cid)\n"
+                    ),
+                },
+            ]
+        }
+    )
+    room = _room_with_plan(plan)
+    # p1 holds the played card plus a discardable one; p2 holds two.
+    cards = {
+        **room.state.cards,
+        "p1a": {"id": "p1a", "title": "P1-A"},
+        "p2a": {"id": "p2a", "title": "P2-A"},
+        "p2b": {"id": "p2b", "title": "P2-B"},
+    }
+    players = [
+        p.model_copy(update={"hand": ["card", "p1a"]})
+        if p.id == "p1"
+        else p.model_copy(update={"hand": ["p2a", "p2b"]})
+        for p in room.state.players
+    ]
+    room.state = room.state.model_copy(update={"cards": cards, "players": players})
+
+    sent: dict[str, list] = {"p1": [], "p2": []}
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        pending = room._pending_resolution
+        assert pending is not None and pending.request.from_hand is True
+        interaction_id = pending.interaction_id
+        # Each player is offered only their own hand (played "card" already left p1's hand).
+        for pid in ("p1", "p2"):
+            messages = [json.loads(c.args[0]) for c in room.connections._connections[pid].send_text.call_args_list]
+            reqs = [m for m in messages if m["type"] == "interaction_request"]
+            sent[pid] = reqs[-1]["descriptor"]["card_ids"]
+        # p1 discards p1a; p2 discards p2b.
+        await room.handle_action("p1", _response(interaction_id, "card_pick", card_id="p1a"))
+        await room.handle_action("p2", _response(interaction_id, "card_pick", card_id="p2b"))
+
+    asyncio.run(scenario())
+    assert sent["p1"] == ["p1a"]  # played card excluded; own hand only
+    assert set(sent["p2"]) == {"p2a", "p2b"}
+    assert room._pending_resolution is None
+    assert room.state.get_player("p1").hand == []
+    assert room.state.get_player("p2").hand == ["p2a"]
+    assert "p1a" in room.state.discard and "p2b" in room.state.discard
+
+
+def test_from_hand_pick_rejects_a_card_not_in_the_responders_hand() -> None:
+    plan = ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "discards",
+                    "request": {"kind": "card_pick", "prompt": "Discard", "audience": "all", "from_hand": True},
+                },
+                {"kind": "snippet", "code": "def apply(state, ctx):\n    return None\n"},
+            ]
+        }
+    )
+    room = _room_with_plan(plan)
+    players = [
+        p.model_copy(update={"hand": ["card"]}) if p.id == "p1" else p.model_copy(update={"hand": ["p2a"]})
+        for p in room.state.players
+    ]
+    room.state = room.state.model_copy(
+        update={"cards": {**room.state.cards, "p2a": {"id": "p2a", "title": "P2-A"}}, "players": players}
+    )
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        interaction_id = room._pending_resolution.interaction_id
+        # p2 tries to discard a card that isn't theirs — must be rejected.
+        await room.handle_action("p2", _response(interaction_id, "card_pick", card_id="p1a"))
+        assert room._pending_resolution is not None  # invalid response did not resolve
+        assert "p2" not in room._pending_resolution.responses
+
+    asyncio.run(scenario())
+
+
 def test_zero_response_timeout_rolls_back_prefix_and_consumes_visible_noop() -> None:
     plan = ResolutionPlan.model_validate(
         {

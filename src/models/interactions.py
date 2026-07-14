@@ -99,6 +99,12 @@ class TextInteraction(_Descriptor):
 class CardPickInteraction(_Descriptor):
     kind: Literal["card_pick"] = "card_pick"
     card_ids: list[Identifier] = Field(default_factory=list, max_length=200)
+    # When true, ignore the static ``card_ids`` and present EACH audience member
+    # their OWN hand to pick from (the room fills the per-player options at send
+    # time and validates each response against that player's hand). This is the
+    # only way to run a simultaneous "everyone discards a card they choose" —
+    # a shared ``card_ids`` list can't, and snippets can't read other hands.
+    from_hand: bool = False
 
 
 class ConfirmInteraction(_Descriptor):
