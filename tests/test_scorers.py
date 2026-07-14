@@ -5,8 +5,13 @@ from __future__ import annotations
 from evals.eval_core import EvalItem, ScorerContext
 from evals.scorers import (
     ALL_SCORERS,
+    DETERMINISTIC_SCORERS,
+    JUDGE_SCORERS,
+    did_something,
     dsl_validity,
+    executability,
     intent_match_judge,
+    magnitude_sign,
     persistence_accuracy,
     sandbox_behavior,
     target_accuracy,
@@ -19,11 +24,64 @@ def _ctx(output, expected=None) -> ScorerContext:
 
 
 def test_all_scorers_count() -> None:
-    assert len(ALL_SCORERS) == 5
-    assert sandbox_behavior in ALL_SCORERS
-    assert intent_match_judge in ALL_SCORERS
-    assert target_accuracy in ALL_SCORERS
-    assert persistence_accuracy in ALL_SCORERS
+    assert len(ALL_SCORERS) == 8
+    assert set(ALL_SCORERS) == set(JUDGE_SCORERS) | set(DETERMINISTIC_SCORERS)
+    for scorer in (
+        sandbox_behavior,
+        intent_match_judge,
+        target_accuracy,
+        persistence_accuracy,
+        magnitude_sign,
+        executability,
+        did_something,
+    ):
+        assert scorer in ALL_SCORERS
+
+
+class TestExecutability:
+    def test_valid_ops_plan_runs(self) -> None:
+        output = {
+            "verdict": "ok",
+            "resolution_plan": {
+                "steps": [{"kind": "ops", "ops": [{"op": "add_points", "target": "self", "amount": 5}]}]
+            },
+        }
+        assert executability.evaluate(_ctx(output)).score == 1.0
+
+    def test_no_plan_scores_zero(self) -> None:
+        assert executability.evaluate(_ctx({"verdict": "invalid"})).score == 0.0
+
+    def test_invalid_snippet_scores_zero(self) -> None:
+        output = {
+            "verdict": "ok",
+            "resolution_plan": {"steps": [{"kind": "snippet", "code": "def apply(state, ctx):\n    state.nope(5)\n"}]},
+        }
+        score = executability.evaluate(_ctx(output))
+        assert score.score == 0.0
+        assert "reason" in score.metadata
+
+
+class TestDidSomething:
+    def test_real_effect_scores_one(self) -> None:
+        output = {
+            "verdict": "ok",
+            "resolution_plan": {
+                "steps": [{"kind": "ops", "ops": [{"op": "add_points", "target": "self", "amount": 5}]}]
+            },
+        }
+        assert did_something.evaluate(_ctx(output)).score == 1.0
+
+    def test_invalid_verdict_scores_zero(self) -> None:
+        assert did_something.evaluate(_ctx({"verdict": "invalid"})).score == 0.0
+
+    def test_custom_note_only_is_a_noop(self) -> None:
+        output = {
+            "verdict": "ok",
+            "resolution_plan": {"steps": [{"kind": "ops", "ops": [{"op": "custom_note", "note": "nothing"}]}]},
+        }
+        score = did_something.evaluate(_ctx(output))
+        assert score.score == 0.0
+        assert "no-op" in score.metadata["reason"]
 
 
 def test_dsl_validity_valid_effect_program() -> None:

@@ -465,6 +465,7 @@ def run_agent(
     max_tool_calls: int | None = None,
     forced_call_timeout: float | None = None,
     allow_persistent_tools: bool = True,
+    config: dict[str, Any] | None = None,
 ) -> InterpretResult:
     """Interpret one card into an :class:`InterpretResult`. Never hangs, never raises.
 
@@ -492,6 +493,11 @@ def run_agent(
             :data:`FORCED_FINAL_CALL_TIMEOUT_SECONDS`).
         allow_persistent_tools: Whether tools that write decision memory or
             capability telemetry may be bound. Preview callers disable them.
+        config: Extra keys merged into the LangGraph run config passed to
+            ``agent.stream`` (e.g. ``{"callbacks": [...]}`` for eval usage
+            instrumentation). ``recursion_limit`` is always set from
+            ``max_tool_calls`` and cannot be overridden here. Default None keeps
+            production behavior byte-identical.
 
     Returns:
         A well-formed InterpretResult. On recursion cap or timeout, one forced
@@ -538,7 +544,9 @@ def run_agent(
         )
 
     inputs = {"messages": [("user", _initial_user_content(title, card_art))]}
-    config = {"recursion_limit": recursion_limit}
+    # recursion_limit is authoritative and set last so a passed-in config can add
+    # callbacks/tags/metadata but never weaken the step cap.
+    config = {**(config or {}), "recursion_limit": recursion_limit}
 
     # progress accumulates every intermediate graph state so that, if the graph
     # is interrupted by the recursion cap or the timeout below, we still have the
@@ -617,6 +625,7 @@ def run_agent(
                     max_tool_calls=max_tool_calls,
                     forced_call_timeout=forced_call_timeout,
                     allow_persistent_tools=allow_persistent_tools,
+                    config=config,
                 )
             logger.exception("agent invoke failed; returning bounded fallback")
             return _fallback_result(

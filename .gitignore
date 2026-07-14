@@ -186,6 +186,9 @@ plan/
 # ...but never track caches under the eval dir
 data/eval/**/__pycache__/
 data/eval/**/*.pyc
+# ...and never track eval run artifacts (timestamped, machine/config-specific;
+# produced by scripts/evals.ipynb -> evals.store.save_run).
+data/eval/runs/
 # ...and never track the downloaded card-photo dataset (large binaries).
 # The images are fetched on demand via data/eval/download_images.py; only the
 # manifest is kept so downstream tooling can join URLs -> local filenames.

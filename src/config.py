@@ -154,6 +154,34 @@ def get_settings() -> Settings:
     return Settings()
 
 
+# --- Eval model pricing --------------------------------------------------- #
+# USD per 1,000,000 tokens, keyed by chat-model name. Consumed only by the eval
+# harness (evals.instrumentation.cost_usd) to turn token counts into a dollar
+# figure — never read by the production agent. Keep these current with the
+# gateway's actual billing; the eval notebook may override this dict at runtime.
+# Unknown models fall back to "default". Prices are estimates for planning, not
+# billing truth.
+EVAL_MODEL_PRICES: dict[str, dict[str, float]] = {
+    "gpt-5.4-mini": {"input": 0.25, "output": 2.00},
+    "gpt-5.4": {"input": 1.25, "output": 10.00},
+    "default": {"input": 0.50, "output": 1.50},
+}
+
+
+# --- Eval benchmarks ------------------------------------------------------- #
+# The four scored datasets, each a distinct benchmark. ``canonical_key`` names
+# the per-card label field (seed cards use "canonical"; eval/real use
+# "human_canonical"). ``path`` is repo-root-relative. ``scored`` marks whether
+# every card carries a usable label — "real" cards are mostly unlabeled, so
+# similarity metrics there are only meaningful on the annotated subset.
+EVAL_BENCHMARKS: dict[str, dict[str, object]] = {
+    "seed": {"path": "data/seed_cards.json", "canonical_key": "canonical", "scored": True},
+    "eval": {"path": "data/eval/eval_cards.json", "canonical_key": "human_canonical", "scored": True},
+    "eval_hard": {"path": "data/eval/eval_cards_hard.json", "canonical_key": "human_canonical", "scored": True},
+    "real": {"path": "data/eval/real_cards.json", "canonical_key": "human_canonical", "scored": False},
+}
+
+
 def warn_if_no_llm_credentials() -> None:
     """SOFT check: warn (never raise) when the LLM gateway is likely unusable.
 

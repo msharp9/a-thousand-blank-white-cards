@@ -1,0 +1,297 @@
+"""Tests for the revamped eval harness: instrumentation, runner, and store.
+
+All offline — run_agent and the judge are never called for real. The live
+end-to-end run is exercised from scripts/evals.ipynb, not here.
+"""
+
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from evals.instrumentation import RunMetrics, UsageCallback, cost_usd
+
+
+# --------------------------------------------------------------------------- #
+# Instrumentation
+# --------------------------------------------------------------------------- #
+class TestUsageCallback:
+    def test_counts_tool_starts_by_name(self) -> None:
+        cb = UsageCallback()
+        cb.on_tool_start({"name": "card_rag"}, "q")
+        cb.on_tool_start({"name": "card_rag"}, "q2")
+        cb.on_tool_start({"name": "web_search"}, "q3")
+        snap = cb.snapshot()
+        assert snap.tool_calls == 3
+        assert snap.per_tool == {"card_rag": 2, "web_search": 1}
+
+    def test_sums_usage_metadata_across_llm_calls(self) -> None:
+        cb = UsageCallback()
+        for _ in range(2):
+            gen = SimpleNamespace(
+                message=SimpleNamespace(
+                    usage_metadata={
+                        "input_tokens": 100,
+                        "output_tokens": 50,
+                        "total_tokens": 150,
+                    }
+                )
+            )
+            response = SimpleNamespace(generations=[[gen]], llm_output=None)
+            cb.on_llm_end(response)
+        snap = cb.snapshot()
+        assert snap.llm_calls == 2
+        assert snap.prompt_tokens == 200
+        assert snap.completion_tokens == 100
+        assert snap.total_tokens == 300
+
+    def test_absent_usage_reports_none_not_crash(self) -> None:
+        cb = UsageCallback()
+        cb.on_llm_end(SimpleNamespace(generations=[[SimpleNamespace(message=None)]], llm_output=None))
+        snap = cb.snapshot()
+        assert snap.llm_calls == 1
+        assert snap.total_tokens is None
+        assert snap.prompt_tokens is None
+
+    def test_classic_llm_output_shape(self) -> None:
+        cb = UsageCallback()
+        response = SimpleNamespace(
+            generations=[[SimpleNamespace(message=None)]],
+            llm_output={"token_usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}},
+        )
+        cb.on_llm_end(response)
+        snap = cb.snapshot()
+        assert snap.prompt_tokens == 10
+        assert snap.completion_tokens == 5
+
+
+class TestCost:
+    def test_known_model(self) -> None:
+        m = RunMetrics(prompt_tokens=1_000_000, completion_tokens=0)
+        assert cost_usd(m, "gpt-5.4-mini") == pytest.approx(0.25)
+
+    def test_unknown_model_uses_default(self) -> None:
+        m = RunMetrics(prompt_tokens=1_000_000, completion_tokens=0)
+        assert cost_usd(m, "totally-unknown") == pytest.approx(0.50)
+
+    def test_no_usage_is_none(self) -> None:
+        assert cost_usd(RunMetrics(), "gpt-5.4-mini") is None
+
+    def test_override_price_table(self) -> None:
+        m = RunMetrics(prompt_tokens=0, completion_tokens=1_000_000)
+        assert cost_usd(m, "x", {"x": {"input": 0.0, "output": 10.0}}) == pytest.approx(10.0)
+
+
+# --------------------------------------------------------------------------- #
+# Runner: dataset loading + tool filtering
+# --------------------------------------------------------------------------- #
+class TestLoadCards:
+    def test_seed_normalises_canonical_key(self) -> None:
+        from evals.runner import load_cards
+
+        cards = load_cards("seed", sample_size=3)
+        assert len(cards) == 3
+        assert all("human_canonical" in c for c in cards)
+
+    def test_unknown_benchmark_raises(self) -> None:
+        from evals.runner import load_cards
+
+        with pytest.raises(ValueError, match="Unknown benchmark"):
+            load_cards("nope")
+
+
+class TestToolFiltering:
+    def test_enabled_tools_filters_by_name(self) -> None:
+        from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, EVAL_CREATOR_ID, build_eval_state
+        from evals.runner import EvalConfig, _build_tools
+
+        cfg = EvalConfig(enabled_tools=frozenset({"card_rag"}))
+        tools = _build_tools(cfg, build_eval_state(), EVAL_ACTOR_ID, EVAL_CREATOR_ID, EVAL_CARD_ID)
+        assert [t.name for t in tools] == ["card_rag"]
+
+    def test_none_means_full_toolbox(self) -> None:
+        from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, EVAL_CREATOR_ID, build_eval_state
+        from evals.runner import EvalConfig, _build_tools
+
+        cfg = EvalConfig(enabled_tools=None)
+        tools = _build_tools(cfg, build_eval_state(), EVAL_ACTOR_ID, EVAL_CREATOR_ID, EVAL_CARD_ID)
+        assert len(tools) > 1
+
+
+# --------------------------------------------------------------------------- #
+# Runner: end-to-end with a stubbed agent (no LLM), deterministic scorers only
+# --------------------------------------------------------------------------- #
+def _stub_run_agent(monkeypatch, verdict="ok"):
+    """Patch run_agent to return a fixed InterpretResult and record kwargs."""
+    from agent.contract import InterpretResult
+    from models.effects import AddPointsOp, EffectProgram
+
+    captured: dict = {}
+
+    def fake_run_agent(title, description, state=None, actor_id=None, **kwargs):
+        captured["title"] = title
+        captured["state"] = state
+        captured["actor_id"] = actor_id
+        captured.update(kwargs)
+        # exercise the callback so tool/usage metrics are populated
+        cb = kwargs["config"]["callbacks"][0]
+        cb.on_tool_start({"name": "card_rag"}, "q")
+        return InterpretResult(
+            program=EffectProgram(ops=[AddPointsOp(op="add_points", target="self", amount=5)]),
+            verdict=verdict,
+            comment="stub",
+        )
+
+    import agent.runtime as runtime
+
+    monkeypatch.setattr(runtime, "run_agent", fake_run_agent)
+    return captured
+
+
+class TestRunBenchmark:
+    def test_threads_production_parity_inputs(self, monkeypatch) -> None:
+        captured = _stub_run_agent(monkeypatch)
+        from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, EVAL_CREATOR_ID
+        from evals.runner import EvalConfig, run_benchmark
+
+        cfg = EvalConfig(benchmark="eval", sample_size=2, use_judge=False, max_tool_calls=7)
+        run = run_benchmark(cfg, timestamp="t", progress=False)
+
+        assert captured["state"] is not None  # full parity: live state threaded
+        assert captured["actor_id"] == EVAL_ACTOR_ID
+        assert captured["creator_id"] == EVAL_CREATOR_ID
+        assert captured["card_id"] == EVAL_CARD_ID
+        assert captured["max_tool_calls"] == 7
+        assert len(run.rows) == 2
+        assert all(r.metrics.tool_calls == 1 for r in run.rows)
+        assert all(r.scores["executability"] == 1.0 for r in run.rows)
+
+    def test_n_samples_multiplies_rows_and_reports_consistency(self, monkeypatch) -> None:
+        _stub_run_agent(monkeypatch)
+        from evals.runner import EvalConfig, run_benchmark
+
+        cfg = EvalConfig(benchmark="eval", sample_size=2, n_samples=3, use_judge=False)
+        run = run_benchmark(cfg, timestamp="t", progress=False)
+        assert len(run.rows) == 6
+        agg = run.aggregate()
+        assert agg["cases"] == 6
+        assert agg["unique_cards"] == 2
+        assert "consistency" in agg
+
+    def test_aggregate_has_target_metrics(self, monkeypatch) -> None:
+        _stub_run_agent(monkeypatch)
+        from evals.runner import EvalConfig, run_benchmark
+
+        cfg = EvalConfig(benchmark="eval", sample_size=2, use_judge=False)
+        agg = run_benchmark(cfg, timestamp="t", progress=False).aggregate()
+        for key in (
+            "mean_tool_calls",
+            "per_tool_calls",
+            "p95_latency_ms",
+            "executability",
+            "did_something",
+            "invalid_rate",
+        ):
+            assert key in agg
+
+
+# --------------------------------------------------------------------------- #
+# Store round-trip
+# --------------------------------------------------------------------------- #
+class TestStore:
+    def test_save_and_load_roundtrip(self, monkeypatch, tmp_path) -> None:
+        _stub_run_agent(monkeypatch)
+        import evals.store as store
+        from evals.runner import EvalConfig, run_benchmark
+
+        monkeypatch.setattr(store, "runs_dir", lambda: tmp_path)
+        run = run_benchmark(EvalConfig(benchmark="eval", sample_size=2, use_judge=False), timestamp="t", progress=False)
+        path = store.save_run(run, timestamp="20260714-000000")
+        assert path.exists()
+
+        loaded = store.load_runs()
+        assert len(loaded) == 1
+        payload = loaded[0]
+        assert payload["timestamp"] == "20260714-000000"
+        assert payload["summary"]["cases"] == 2
+        assert len(payload["rows"]) == 2
+        # payload is plain JSON-serialisable
+        json.dumps(payload)
+
+
+# --------------------------------------------------------------------------- #
+# Viz smoke: charts render without error on synthetic summaries
+# --------------------------------------------------------------------------- #
+def _fake_summary(label: str, **overrides) -> dict:
+    base = {
+        "label": label,
+        "benchmark": "eval",
+        "model": "gpt-5.4-mini",
+        "cases": 5,
+        "n_samples": 1,
+        "intent_match": 0.8,
+        "target_accuracy": 0.7,
+        "persistence_accuracy": 0.6,
+        "magnitude_sign": 0.9,
+        "sandbox_behavior": 0.5,
+        "executability": 0.85,
+        "did_something": 0.9,
+        "mean_tool_calls": 2.3,
+        "mean_cost_usd": 0.0012,
+        "total_cost_usd": 0.006,
+        "p50_latency_ms": 800.0,
+        "p95_latency_ms": 2100.0,
+        "invalid_rate": 0.1,
+        "per_tool_calls": {"card_rag": 12, "web_search": 3},
+    }
+    base.update(overrides)
+    return base
+
+
+class TestViz:
+    def test_all_charts_and_tables_render(self) -> None:
+        import matplotlib
+
+        matplotlib.use("Agg")
+
+        from evals import viz
+
+        summaries = [
+            _fake_summary("baseline"),
+            _fake_summary("no-rag", intent_match=0.7, per_tool_calls={"web_search": 5}),
+        ]
+        viz.plot_quality(summaries)
+        viz.plot_efficiency(summaries)
+        viz.plot_tool_usage(summaries)
+        viz.plot_cost_vs_quality(summaries)
+        table = viz.summary_table(summaries)
+        assert list(table["label"]) == ["baseline", "no-rag"]
+
+    def test_tool_usage_handles_no_tools(self) -> None:
+        import matplotlib
+
+        matplotlib.use("Agg")
+
+        from evals import viz
+
+        viz.plot_tool_usage([_fake_summary("x", per_tool_calls={})])
+
+    def test_worst_cards_sorts_ascending(self) -> None:
+        from evals import viz
+
+        payload = {
+            "rows": [
+                {"card_id": "a", "title": "A", "verdict": "ok", "scores": {"executability": 1.0}, "score_meta": {}},
+                {
+                    "card_id": "b",
+                    "title": "B",
+                    "verdict": "invalid",
+                    "scores": {"executability": 0.0},
+                    "score_meta": {},
+                },
+            ]
+        }
+        df = viz.worst_cards(payload, metric="executability", n=5)
+        assert list(df["card_id"]) == ["b", "a"]
