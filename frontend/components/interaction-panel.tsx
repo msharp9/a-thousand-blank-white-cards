@@ -386,28 +386,79 @@ function InteractionForm({
       const cardIds = Array.isArray(descriptor.card_ids)
         ? descriptor.card_ids
         : [];
-      return cardIds.length ? (
+      const maxPicks = descriptor.max_picks ?? 1;
+      const minPicks = descriptor.min_picks ?? 1;
+      if (!cardIds.length) {
+        return (
+          <p
+            role="status"
+            className="rounded-xl border-2 border-dashed border-ink/40 bg-card p-4 font-hand"
+          >
+            No cards are available to pick. The server will resolve this card
+            safely.
+          </p>
+        );
+      }
+      // Single pick: one tap submits immediately (unchanged behavior).
+      if (maxPicks <= 1) {
+        return (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {cardIds.map((cardId) => (
+              <Button
+                type="button"
+                variant="outline"
+                key={cardId}
+                disabled={disabled}
+                onClick={() => onSubmit({ kind: "card_pick", card_id: cardId })}
+              >
+                {cards[cardId]?.title || cardId}
+              </Button>
+            ))}
+          </div>
+        );
+      }
+      // Multi pick: toggle a set, then submit (mirrors the choice case). The
+      // effective floor never exceeds the number of cards offered.
+      const floor = Math.min(minPicks, cardIds.length);
+      const toggle = (id: string) => {
+        setSelected((current) => {
+          if (current.includes(id))
+            return current.filter((value) => value !== id);
+          return current.length < maxPicks ? [...current, id] : current;
+        });
+      };
+      return (
         <div className="grid gap-2 sm:grid-cols-2">
-          {cardIds.map((cardId) => (
-            <Button
-              type="button"
-              variant="outline"
-              key={cardId}
-              disabled={disabled}
-              onClick={() => onSubmit({ kind: "card_pick", card_id: cardId })}
-            >
-              {cards[cardId]?.title || cardId}
-            </Button>
-          ))}
+          {cardIds.map((cardId) => {
+            const active = selected.includes(cardId);
+            return (
+              <button
+                type="button"
+                key={cardId}
+                aria-pressed={active}
+                disabled={disabled}
+                onClick={() => toggle(cardId)}
+                className={`rounded-xl border-2 p-3 text-left font-hand text-lg transition ${
+                  active
+                    ? "border-primary bg-primary/10"
+                    : "border-ink bg-card hover:bg-accent/30"
+                }`}
+              >
+                {cards[cardId]?.title || cardId}
+              </button>
+            );
+          })}
+          <Button
+            type="button"
+            className="sm:col-span-2"
+            disabled={
+              disabled || selected.length < floor || selected.length > maxPicks
+            }
+            onClick={() => onSubmit({ kind: "card_pick", card_ids: selected })}
+          >
+            {`Submit ${selected.length}/${maxPicks}`}
+          </Button>
         </div>
-      ) : (
-        <p
-          role="status"
-          className="rounded-xl border-2 border-dashed border-ink/40 bg-card p-4 font-hand"
-        >
-          No cards are available to pick. The server will resolve this card
-          safely.
-        </p>
       );
     }
     case "confirm":

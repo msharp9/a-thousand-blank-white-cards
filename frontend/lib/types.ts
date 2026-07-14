@@ -84,7 +84,8 @@ export type InteractionResponsePayload =
   | { kind: "choice"; option_ids: string[] }
   | { kind: "number"; value: number }
   | { kind: "text"; value: string }
-  | { kind: "card_pick"; card_id: string }
+  // Single-pick sends card_id; multi-pick (max_picks > 1) sends card_ids.
+  | { kind: "card_pick"; card_id?: string; card_ids?: string[] }
   | { kind: "confirm"; confirmed: boolean }
   | { kind: "drawing"; strokes: DrawingStroke[] };
 
@@ -375,6 +376,10 @@ export type InteractionDescriptor = {
   integer?: boolean;
   max_length?: number;
   card_ids?: string[];
+  from_hand?: boolean;
+  // card_pick multi-select bounds (default 1/1 = single pick).
+  min_picks?: number;
+  max_picks?: number;
   confirm_label?: string;
   decline_label?: string;
   max_strokes?: number;

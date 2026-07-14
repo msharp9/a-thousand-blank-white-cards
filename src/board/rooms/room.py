@@ -1791,9 +1791,19 @@ class Room:
                 selectable = set(self._from_hand_options(player_id)) if player_id is not None else set()
             else:
                 selectable = set(request.card_ids)
-            if payload.card_id not in selectable:
+            picks = payload.picks
+            if not set(picks) <= selectable:
                 raise ValueError("card is not selectable")
-            return payload.card_id
+            # Never demand more than the responder can offer (a 2-card hand can't
+            # satisfy "discard 3"); the floor clamps to the options available.
+            low = min(request.min_picks, len(selectable))
+            if not low <= len(picks) <= request.max_picks:
+                raise ValueError("wrong number of cards picked")
+            # Back-compat: a single-pick request returns a bare card id (what
+            # existing snippets read); a multi-pick request returns the list.
+            if request.max_picks == 1:
+                return picks[0] if picks else None
+            return picks
         if isinstance(request, ConfirmInteraction) and isinstance(payload, ConfirmResponse):
             return payload.confirmed
         if isinstance(request, DrawingInteraction) and isinstance(payload, DrawingResponse):
@@ -1844,7 +1854,9 @@ class Room:
         if isinstance(request, ChoiceInteraction):
             return []
         if isinstance(request, CardPickInteraction):
-            return None
+            # Mirror the pick shape: a single-pick request defaults to no card;
+            # a multi-pick request defaults to the empty set.
+            return None if request.max_picks == 1 else []
         if isinstance(request, ConfirmInteraction):
             return False
         return []

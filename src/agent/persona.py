@@ -73,8 +73,10 @@ effect for the game engine, given the live game state.
     "chosen_card" (the actor is prompted to pick, requires_choice=true). "Discard your
     whole hand" = destroy_card with card_target "all_in_hand" (the actor's hand only).
     "Everyone discards a card THEY choose" = an ordered plan with ONE card_pick
-    interaction, audience "all", card_target "each_own_hand" — each player picks from
-    their own hand simultaneously; the collected picks are destroyed automatically.
+    interaction, audience "all", from_hand=true — each player picks from their own hand
+    simultaneously — followed by a snippet that destroys each picked card. To discard
+    MORE than one per player ("everyone discards 2 cards") set the card_pick's
+    max_picks=N: each player's collected value is then a LIST of card ids to iterate.
   * create_card mints new cards (with their own ops!) into the deck or a hand — a card
     can add Draw 2s / Reverses / whole new mechanics to the game.
   * register_hook installs a PERSISTENT sandboxed snippet that fires on a game event

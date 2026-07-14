@@ -105,6 +105,25 @@ class CardPickInteraction(_Descriptor):
     # only way to run a simultaneous "everyone discards a card they choose" —
     # a shared ``card_ids`` list can't, and snippets can't read other hands.
     from_hand: bool = False
+    # How many cards each responder must pick. Defaults 1/1 (single pick). With
+    # max_picks > 1 the responder picks a SET ("discard 2 cards"); min_picks 0
+    # allows "up to N". The stored value follows suit: a single card_id string
+    # when max_picks == 1 (back-compat), else a list of card_ids (see the room's
+    # _validate_interaction_response). A responder is never forced to pick more
+    # cards than they can select — the room clamps the effective range to the
+    # number offered.
+    min_picks: int = Field(default=1, ge=0, le=200)
+    max_picks: int = Field(default=1, ge=1, le=200)
+
+    @model_validator(mode="after")
+    def valid_pick_range(self):
+        if self.min_picks > self.max_picks:
+            raise ValueError("min_picks exceeds max_picks")
+        # A static candidate list can't satisfy a floor larger than itself. Skip
+        # this when the options are filled elsewhere (from_hand / input_ref).
+        if self.card_ids and not self.from_hand and self.min_picks > len(self.card_ids):
+            raise ValueError("min_picks exceeds the number of candidate cards")
+        return self
 
 
 class ConfirmInteraction(_Descriptor):
@@ -166,7 +185,25 @@ class TextResponse(StrictModel):
 
 class CardPickResponse(StrictModel):
     kind: Literal["card_pick"] = "card_pick"
-    card_id: Identifier
+    # Legacy single-pick field; still accepted from older clients. Exactly one of
+    # card_id / card_ids must be present, and ``picks`` exposes the unified list.
+    card_id: Identifier | None = None
+    # Multi-pick field: the set of chosen cards ("discard 2 cards"). Uniqueness is
+    # enforced so a responder can't pad a required count with duplicates.
+    card_ids: list[Identifier] | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def exactly_one_shape(self):
+        if (self.card_id is None) == (self.card_ids is None):
+            raise ValueError("card_pick response requires exactly one of card_id or card_ids")
+        if self.card_ids is not None and len(self.card_ids) != len(set(self.card_ids)):
+            raise ValueError("card_pick selections must be unique")
+        return self
+
+    @property
+    def picks(self) -> list[str]:
+        """The chosen card ids as a list, regardless of which field was sent."""
+        return [self.card_id] if self.card_id is not None else list(self.card_ids or [])
 
 
 class ConfirmResponse(StrictModel):

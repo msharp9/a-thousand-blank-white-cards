@@ -343,6 +343,107 @@ def test_from_hand_pick_rejects_a_card_not_in_the_responders_hand() -> None:
     asyncio.run(scenario())
 
 
+def test_from_hand_multi_pick_lets_each_player_discard_n_cards() -> None:
+    """'Everyone discards 2 cards they choose': a from_hand card_pick with
+    max_picks=2 collects a LIST per player, which the snippet destroys."""
+    plan = ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "discards",
+                    "request": {
+                        "kind": "card_pick",
+                        "prompt": "Discard 2 cards",
+                        "audience": "all",
+                        "from_hand": True,
+                        "min_picks": 2,
+                        "max_picks": 2,
+                    },
+                },
+                {
+                    "kind": "snippet",
+                    "code": (
+                        "def apply(state, ctx):\n"
+                        "    for picks in ctx['interactions']['discards'].values():\n"
+                        "        for cid in picks:\n"
+                        "            state.destroy_card(card_id=cid)\n"
+                    ),
+                },
+            ]
+        }
+    )
+    room = _room_with_plan(plan)
+    cards = {
+        **room.state.cards,
+        **{cid: {"id": cid, "title": cid} for cid in ("p1a", "p1b", "p1c", "p2a", "p2b")},
+    }
+    players = [
+        p.model_copy(update={"hand": ["card", "p1a", "p1b", "p1c"]})
+        if p.id == "p1"
+        else p.model_copy(update={"hand": ["p2a", "p2b"]})
+        for p in room.state.players
+    ]
+    room.state = room.state.model_copy(update={"cards": cards, "players": players})
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        interaction_id = room._pending_resolution.interaction_id
+        await room.handle_action("p1", _response(interaction_id, "card_pick", card_ids=["p1a", "p1c"]))
+        await room.handle_action("p2", _response(interaction_id, "card_pick", card_ids=["p2a", "p2b"]))
+
+    asyncio.run(scenario())
+    assert room._pending_resolution is None
+    assert room.state.get_player("p1").hand == ["p1b"]  # p1a + p1c discarded
+    assert room.state.get_player("p2").hand == []  # both discarded
+    assert {"p1a", "p1c", "p2a", "p2b"} <= set(room.state.discard)
+
+
+def test_from_hand_multi_pick_rejects_wrong_count() -> None:
+    plan = ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "discards",
+                    "request": {
+                        "kind": "card_pick",
+                        "prompt": "Discard 2",
+                        "audience": "all",
+                        "from_hand": True,
+                        "min_picks": 2,
+                        "max_picks": 2,
+                    },
+                },
+                {"kind": "snippet", "code": "def apply(state, ctx):\n    return None\n"},
+            ]
+        }
+    )
+    room = _room_with_plan(plan)
+    players = [
+        p.model_copy(update={"hand": ["card", "p1a", "p1b"]})
+        if p.id == "p1"
+        else p.model_copy(update={"hand": ["p2a", "p2b"]})
+        for p in room.state.players
+    ]
+    room.state = room.state.model_copy(
+        update={
+            "cards": {**room.state.cards, **{cid: {"id": cid, "title": cid} for cid in ("p1a", "p1b", "p2a", "p2b")}},
+            "players": players,
+        }
+    )
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        interaction_id = room._pending_resolution.interaction_id
+        # Only one card when two are required — rejected, response not recorded.
+        await room.handle_action("p1", _response(interaction_id, "card_pick", card_ids=["p1a"]))
+        assert room._pending_resolution is not None
+        assert "p1" not in room._pending_resolution.responses
+
+    asyncio.run(scenario())
+
+
 def test_zero_response_timeout_rolls_back_prefix_and_consumes_visible_noop() -> None:
     plan = ResolutionPlan.model_validate(
         {

@@ -6,7 +6,13 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from models.effects import InteractionStep, ResolutionPlan
-from models.interactions import ChoiceResponse, DrawingResponse, InteractionDescriptor
+from models.interactions import (
+    CardPickInteraction,
+    CardPickResponse,
+    ChoiceResponse,
+    DrawingResponse,
+    InteractionDescriptor,
+)
 from models.ws_messages import ClientMsg, InteractionResponseMsg
 
 
@@ -187,6 +193,38 @@ def test_from_hand_card_pick_needs_no_static_card_ids() -> None:
     )
     assert isinstance(plan.steps[0], InteractionStep)
     assert plan.steps[0].request.from_hand is True
+
+
+def test_card_pick_response_accepts_single_or_multi_shape() -> None:
+    single = CardPickResponse.model_validate({"card_id": "c1"})
+    assert single.picks == ["c1"]
+    multi = CardPickResponse.model_validate({"card_ids": ["c1", "c2"]})
+    assert multi.picks == ["c1", "c2"]
+
+
+def test_card_pick_response_requires_exactly_one_shape() -> None:
+    with pytest.raises(ValidationError, match="exactly one"):
+        CardPickResponse.model_validate({"card_id": "c1", "card_ids": ["c2"]})
+    with pytest.raises(ValidationError, match="exactly one"):
+        CardPickResponse.model_validate({})
+
+
+def test_card_pick_response_rejects_duplicate_multi_picks() -> None:
+    with pytest.raises(ValidationError, match="unique"):
+        CardPickResponse.model_validate({"card_ids": ["c1", "c1"]})
+
+
+def test_card_pick_interaction_rejects_inverted_pick_range() -> None:
+    with pytest.raises(ValidationError, match="min_picks exceeds max_picks"):
+        CardPickInteraction.model_validate({"prompt": "Discard", "min_picks": 3, "max_picks": 2})
+
+
+def test_card_pick_interaction_floor_cannot_exceed_static_candidates() -> None:
+    with pytest.raises(ValidationError, match="candidate cards"):
+        CardPickInteraction.model_validate({"prompt": "Discard", "card_ids": ["c1"], "min_picks": 2, "max_picks": 2})
+    # from_hand fills options later, so a floor beyond the static (empty) list is fine.
+    ok = CardPickInteraction.model_validate({"prompt": "Discard", "from_hand": True, "min_picks": 2, "max_picks": 2})
+    assert ok.max_picks == 2
 
 
 def test_numeric_protocol_rejects_non_finite_values() -> None:

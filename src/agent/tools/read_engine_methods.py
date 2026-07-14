@@ -128,7 +128,10 @@ def _build_reference() -> str:
         "A card_pick with 'from_hand':true shows EACH audience member their OWN hand "
         "(no static card_ids needed) — the way to run 'everyone discards a card they "
         "choose'; the following snippet reads ctx['interactions'][result_key] as "
-        "{player_id: chosen_card_id} and calls state.destroy_card(card_id=...) on each."
+        "{player_id: chosen_card_id} and calls state.destroy_card(card_id=...) on each. "
+        "Set card_pick 'max_picks':N (and 'min_picks', default 1) to let each responder "
+        "pick a SET of N cards ('discard 2 cards'); the collected value for that player "
+        "is then a LIST of card ids instead of a single id (iterate it in the snippet)."
     )
     return "\n".join(parts)
 
