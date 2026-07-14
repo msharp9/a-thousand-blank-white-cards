@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -38,6 +38,11 @@ from board.rooms.interactions import PendingResolution
 from board.rooms.room import Room
 
 logger = logging.getLogger(__name__)
+
+# Dev-only rooms are never reaped while live, so the on-disk registry grows
+# without bound across playtests. Drop anything older than this on load to keep
+# a dev loop from resurrecting thousands of stale rooms after a restart.
+_ROOM_MAX_AGE = timedelta(days=1)
 
 
 @runtime_checkable
@@ -134,10 +139,26 @@ class FileRoomStore:
         return list(self._rooms.values())
 
     def load_all(self) -> None:
-        """Rehydrate every persisted room from disk, skipping unreadable files."""
+        """Rehydrate every persisted room from disk, skipping unreadable files.
+
+        Rooms older than ``_ROOM_MAX_AGE`` are deleted rather than loaded so the
+        dev registry stays bounded across restarts; deletion is best-effort.
+        """
+        cutoff = datetime.now(UTC) - _ROOM_MAX_AGE
         for path in self._dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text())
+            except Exception:
+                logger.warning("skipping unreadable room file %s", path, exc_info=True)
+                continue
+            # A stale room is dropped rather than loaded so the dev registry
+            # stays bounded on restart. A timestamp-less file (pre-created_at
+            # format) is left to load and backfill — see _room_from_dict.
+            created_at = _parse_created_at(data.get("created_at"))
+            if created_at is not None and created_at < cutoff:
+                path.unlink(missing_ok=True)
+                continue
+            try:
                 room = _room_from_dict(data)
             except Exception:
                 logger.warning("skipping unreadable room file %s", path, exc_info=True)
@@ -152,6 +173,17 @@ class FileRoomStore:
         """
         for room in self._rooms.values():
             room.on_change = cb
+
+
+def _parse_created_at(raw: object) -> datetime | None:
+    """Parse a persisted ``created_at`` to aware UTC, or ``None`` if unusable."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 def _room_to_dict(room: Room) -> dict:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 
@@ -18,7 +18,12 @@ from board.rooms.manager import (
     check_single_worker,
 )
 from board.rooms.room import Room
-from board.rooms.store import FileRoomStore, InMemoryRoomStore, RoomStore
+from board.rooms.store import (
+    _ROOM_MAX_AGE,
+    FileRoomStore,
+    InMemoryRoomStore,
+    RoomStore,
+)
 
 
 class TestInMemoryRoomStore:
@@ -130,6 +135,29 @@ class TestFileRoomStore:
         assert reloaded is not None
         assert isinstance(reloaded.created_at, datetime)
         assert reloaded.created_at.tzinfo is not None
+
+    def _write_room_aged(self, tmp_path, code: str, age: timedelta) -> None:
+        """Persist a room whose created_at is ``age`` in the past."""
+        store = FileRoomStore(tmp_path)
+        room = Room(code)
+        room.created_at = datetime.now(UTC) - age
+        store.put(code, room)
+
+    def test_stale_room_is_pruned_on_load(self, tmp_path) -> None:
+        """A room older than the max age is deleted, not rehydrated."""
+        self._write_room_aged(tmp_path, "STALE0", _ROOM_MAX_AGE + timedelta(hours=1))
+
+        reloaded = FileRoomStore(tmp_path)
+        assert reloaded.get("STALE0") is None
+        assert not (tmp_path / "STALE0.json").exists()
+
+    def test_fresh_room_survives_load(self, tmp_path) -> None:
+        """A room within the max age is kept on disk and rehydrated."""
+        self._write_room_aged(tmp_path, "FRESH0", _ROOM_MAX_AGE - timedelta(hours=1))
+
+        reloaded = FileRoomStore(tmp_path)
+        assert reloaded.get("FRESH0") is not None
+        assert (tmp_path / "FRESH0.json").exists()
 
     def test_created_at_is_utc_aware(self, tmp_path) -> None:
         before = datetime.now(UTC)
