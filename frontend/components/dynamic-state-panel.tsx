@@ -69,6 +69,7 @@ export function DynamicStatePanel({
                 <span key={id} className="contents">
                   {index > 0 && <span aria-hidden>→</span>}
                   <span
+                    data-active={isActive || undefined}
                     className={
                       isActive
                         ? "rounded-md border-2 px-1.5 font-semibold"

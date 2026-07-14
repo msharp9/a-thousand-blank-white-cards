@@ -28,9 +28,9 @@ describe("EffectLog", () => {
       />,
     );
     const arbiterEntry = screen.getByText(/that felt oddly personal/i);
-    expect(arbiterEntry.className).toContain("bg-ink");
+    expect(arbiterEntry).toHaveAttribute("data-arbiter", "true");
     const mechanicalEntry = screen.getByText("Alice played Zap");
-    expect(mechanicalEntry.className).not.toContain("bg-ink");
+    expect(mechanicalEntry).not.toHaveAttribute("data-arbiter");
   });
 
   it("shows the brewing indicator above the log entries", () => {

@@ -73,6 +73,28 @@ REPAIR_INSTRUCTION = (
     "Do not call tools and do not explain the correction outside the JSON."
 )
 
+# Substrings a provider uses when it rejects image/vision input. Matched
+# case-insensitively against the exception's string. Kept deliberately narrow:
+# only these trigger the text-only retry, so an unrelated failure (network,
+# tool, parse) is handled by the outer fallback instead of paying to re-run the
+# whole agent — which would double the room-wide play freeze (bead phy.14).
+_IMAGE_REJECTION_SIGNALS = (
+    "image",
+    "vision",
+    "multimodal",
+    "image_url",
+)
+
+
+def _is_image_rejection(exc: BaseException) -> bool:
+    """Whether ``exc`` looks like the model rejecting the attached image input.
+
+    Providers signal this inconsistently (no dedicated exception type), so we
+    sniff the message. False on anything unrecognized so we never strip art for
+    an error that has nothing to do with the image."""
+    text = str(exc).lower()
+    return any(signal in text for signal in _IMAGE_REJECTION_SIGNALS)
+
 
 def _configure_langsmith() -> None:
     """Enable LangSmith tracing env vars IFF Settings.langsmith_tracing is True.
@@ -457,7 +479,10 @@ def run_agent(
             side-channel — art never rides GameState. Attached to the model input
             as an image block ONLY when ``Settings.vision_enabled`` is on; ignored
             otherwise, so the default behavior is unchanged. If the configured
-            model rejects image input, the interpretation retries text-only.
+            model rejects image input (detected via :func:`_is_image_rejection`),
+            the interpretation retries once text-only; unrelated failures skip
+            the retry and degrade through the bounded fallback so they don't
+            double the room-wide play freeze.
         tools: Tools to bind (default empty — real tools arrive in C2-C9).
         model: Chat model override for tests; defaults to the real provider model.
         timeout: Wall-clock ceiling in seconds (default :data:`AGENT_TIMEOUT_SECONDS`).
@@ -572,11 +597,13 @@ def run_agent(
                 comment="I went in circles trying to make sense of that. I give up.",
                 note="Interpretation exceeded step budget: no effect applied.",
             )
-        except Exception:  # noqa: BLE001 — any agent-internal error degrades gracefully
-            if card_art is not None:
-                # The likeliest new failure with an image attached is a model
-                # that rejects vision input; a drawing must never fail the play.
-                logger.warning("agent invoke failed with card art attached; retrying text-only", exc_info=True)
+        except Exception as exc:  # noqa: BLE001 — any agent-internal error degrades gracefully
+            if card_art is not None and _is_image_rejection(exc):
+                # The model rejected the attached image; a drawing must never
+                # fail the play, so re-run once text-only. Only image-rejection
+                # errors get this retry — anything else falls through to the
+                # bounded fallback rather than doubling the play-freeze duration.
+                logger.warning("agent invoke rejected card art; retrying text-only", exc_info=True)
                 return run_agent(
                     title,
                     description,

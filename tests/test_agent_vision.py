@@ -94,6 +94,14 @@ class ImageRejectingFake(RecordingFake):
         return ChatResult(generations=[ChatGeneration(message=AIMessage(content=FINAL_PAYLOAD))])
 
 
+class AlwaysFailingFake(RecordingFake):
+    """Raises a non-image error on every invoke, image blocks or not."""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001, ANN003
+        self.recorded.append(list(messages))
+        raise RuntimeError("connection reset by peer")
+
+
 def _fresh_fake(cls: type[RecordingFake]) -> RecordingFake:
     fake = cls(messages=iter([]))
     fake.recorded = []
@@ -196,6 +204,25 @@ def test_model_rejecting_images_retries_text_only(
     last = [m.content for m in fake.recorded[-1] if getattr(m, "type", None) == "human"]
     assert isinstance(first[0], list)
     assert last == [TEXT_ONLY_CONTENT]
+
+
+def test_non_image_error_does_not_trigger_art_stripping_retry(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _enable_vision(monkeypatch)
+    fake = _fresh_fake(AlwaysFailingFake)
+
+    with caplog.at_level(logging.WARNING, logger="agent.runtime"):
+        result = run_agent("Doodle", "A drawing.", model=fake, card_art=ART)
+
+    # Degrades through the bounded fallback, not a second text-only run: a
+    # non-image failure must not double the room-wide play freeze.
+    assert result.verdict == "invalid"
+    assert not any("retrying text-only" in r.message for r in caplog.records)
+    # Exactly one invoke — the retry never fired.
+    assert len(fake.recorded) == 1
+    human = [m.content for m in fake.recorded[0] if getattr(m, "type", None) == "human"]
+    assert isinstance(human[0], list)  # that one attempt still carried the image
 
 
 # ---------------------------------------------------------------------------

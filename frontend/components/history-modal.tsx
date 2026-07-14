@@ -10,6 +10,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SketchCard } from "@/components/sketch-card";
 import { getCardArtUrl } from "@/lib/art";
+import { resolvePlayerName } from "@/lib/players";
 import type { GameStateSnapshot, HistoryEventSnapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -40,14 +41,12 @@ export function HistoryModal({
   gameState,
   roomCode,
 }: HistoryModalProps) {
-  const playerName = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const player of gameState.players) names.set(player.id, player.name);
-    for (const spectator of gameState.spectators)
-      names.set(spectator.id, spectator.name);
-    return (id: string | null | undefined) =>
-      id ? (names.get(id) ?? id) : undefined;
-  }, [gameState.players, gameState.spectators]);
+  const people = useMemo(
+    () => [...gameState.players, ...gameState.spectators],
+    [gameState.players, gameState.spectators],
+  );
+  const playerName = (id: string | null | undefined) =>
+    resolvePlayerName(people, id) ?? id ?? undefined;
 
   const plays = useMemo(
     () =>
@@ -81,9 +80,14 @@ export function HistoryModal({
                 const targetNames = event.target_player_ids
                   .map((id) => playerName(id))
                   .filter((name): name is string => Boolean(name));
+                // The backend resolves target_player_ids to the actual audience,
+                // which can be a strict subset of the table — only call it
+                // "Everyone" when it truly covers every player.
                 const target =
                   targetNames.length > 1
-                    ? "Everyone"
+                    ? targetNames.length === gameState.players.length
+                      ? "Everyone"
+                      : targetNames.join(", ")
                     : (targetNames[0] ?? undefined);
                 return (
                   <li

@@ -179,6 +179,12 @@ def _room_from_dict(data: dict) -> Room:
     if created_at is not None:
         room.created_at = datetime.fromisoformat(created_at)
     state = GameState.model_validate(data["state"])
+    # A room persisted before turn_number existed (or any mid-game state whose
+    # count was never bumped) restores as 0, violating the >=1 contract once the
+    # game has left the lobby. Backfill so the "Turn N" display and any
+    # turn-number logic stay honest across a restart.
+    if state.phase in {"playing", "results", "epilogue", "ended"} and state.turn_number < 1:
+        state = state.model_copy(update={"turn_number": 1})
     # card_art is not persisted (module docstring): clear has_art on any card
     # whose art did not survive the restart so clients never fetch a 404.
     cards = {

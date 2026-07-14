@@ -92,12 +92,12 @@ describe("DynamicStatePanel", () => {
     expect(bob.style.color).toBe("var(--player-1)");
   });
 
-  it("marks the active player with a border, not a different background", () => {
+  it("marks the active player with a data flag, not a different background", () => {
     render(<DynamicStatePanel gameState={makeGameState({ turn_index: 1 })} />);
     const active = screen.getByText("Bob");
     const inactive = screen.getByText("Alice");
-    expect(active.className).toContain("border-2");
-    expect(inactive.className).not.toContain("border-2");
+    expect(active).toHaveAttribute("data-active", "true");
+    expect(inactive).not.toHaveAttribute("data-active");
     expect(active.className).not.toMatch(/bg-/);
     expect(inactive.className).not.toMatch(/bg-/);
   });

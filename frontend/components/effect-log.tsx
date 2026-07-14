@@ -53,6 +53,7 @@ export function EffectLog({ log, brewing, className }: EffectLogProps) {
               return (
                 <span
                   key={log.length - 1 - i}
+                  data-arbiter={isArbiter || undefined}
                   className={cn(
                     "animate-popin rounded-[10px] border-[1.5px] border-ink bg-card px-2.5 py-1.5 font-hand text-[15px] leading-snug break-words whitespace-pre-wrap",
                     isArbiter &&

@@ -256,13 +256,3 @@
     border-radius: 6px;
   }
 }
-
-/* Dark-mode repaint for hardcoded paper classes in files owned by parallel
-   beads (room page, hand, dynamic-state-panel). Unlayered so it outranks the
-   utility layer; delete once those files use bg-card/text tokens. */
-.dark :is(.bg-white, .bg-white\/90) {
-  background-color: var(--card);
-}
-.dark .text-\[\#444\] {
-  color: var(--muted-foreground);
-}
