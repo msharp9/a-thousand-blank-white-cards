@@ -228,6 +228,28 @@ def test_assemble_tools_appends_extra_tools():
     assert "extra_tool" in names
 
 
+def test_run_agent_explicit_tools_replace_assembled_toolbox(monkeypatch):
+    """An explicit ``tools`` list is bound verbatim — the assembled production
+    toolbox must NOT be added alongside it (the eval runner's enabled_tools
+    filter depends on this)."""
+    import agent.runtime as rt
+
+    captured: dict[str, list] = {}
+    real_build = rt.build_agent
+
+    def spy(tools=None, model=None, *, system_prompt=None):  # noqa: ANN001
+        captured["tools"] = list(tools or [])
+        return real_build(tools=tools, model=model, system_prompt=system_prompt)
+
+    monkeypatch.setattr(rt, "build_agent", spy)
+
+    fake = ToolAwareFake(messages=iter([AIMessage(content='{"verdict": "ok", "comment": "Fine."}')]))
+    result = rt.run_agent("C", "d", state=_sample_state(), actor_id="p1", model=fake, tools=[])
+
+    assert result.verdict == "ok"
+    assert captured["tools"] == []
+
+
 # ---------------------------------------------------------------------------
 # run_agent — routes a tool_call through read_game_state
 # ---------------------------------------------------------------------------

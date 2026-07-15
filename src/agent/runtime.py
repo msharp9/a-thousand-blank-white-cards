@@ -512,7 +512,10 @@ def run_agent(
             the interpretation retries once text-only; unrelated failures skip
             the retry and degrade through the bounded fallback so they don't
             double the room-wide play freeze.
-        tools: Tools to bind (default empty — real tools arrive in C2-C9).
+        tools: Explicit tool list to bind AS-IS, replacing the assembled
+            production toolbox (callers like the eval runner pre-filter it; an
+            empty list binds no tools). None (the default) assembles the
+            production toolbox via :func:`_assemble_tools`.
         model: Chat model override for tests; defaults to the real provider model.
         timeout: Wall-clock ceiling in seconds (default :data:`AGENT_TIMEOUT_SECONDS`).
         max_tool_calls: Recursion/step cap (default :data:`MAX_TOOL_CALLS`).
@@ -552,14 +555,20 @@ def run_agent(
         has_art=card_art is not None,
     )
 
-    bound_tools = _assemble_tools(
-        state,
-        actor_id,
-        creator_id,
-        tools,
-        card_id,
-        allow_persistent_tools=allow_persistent_tools,
-    )
+    # An explicit tool list is authoritative — the caller already decided the
+    # toolbox (e.g. the eval runner's enabled_tools filter). Only assemble the
+    # production toolbox when no list was passed.
+    if tools is not None:
+        bound_tools = list(tools)
+    else:
+        bound_tools = _assemble_tools(
+            state,
+            actor_id,
+            creator_id,
+            None,
+            card_id,
+            allow_persistent_tools=allow_persistent_tools,
+        )
 
     try:
         chat_model = model if model is not None else get_chat_model()
