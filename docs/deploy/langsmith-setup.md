@@ -96,21 +96,19 @@ then `LANGSMITH_TRACING` is not set to `true` — recheck step 3 and redeploy.
    (Depending on routing, a run resolves to either `emit_ops` or `gen_snippet`
    before `judge`.)
 
-## Helper: `ops/verify_langsmith.py`
+## Helper: smoke-test check
 
-A convenience script is provided to sanity-check configuration and emit one sample
-trace without needing a live game:
+The deploy smoke test has a LangSmith check that makes a cheap authenticated call
+to the LangSmith API against the deployed configuration:
 
 ```bash
-LLM_API_KEY=... LANGSMITH_API_KEY=... LANGSMITH_TRACING=true \
-    LANGSMITH_PROJECT=tbwc-prod \
-    uv run python ops/verify_langsmith.py
+uv run python scripts/smoke_test.py \
+  --backend https://a-thousand-blank-white-cards.onrender.com \
+  --check-langsmith
 ```
 
-It validates the required env vars, runs the compiled graph on a sample card, and
-prints a link to the project's Traces view along with the expected span order. Use
-it locally (or in a one-off Render shell) to confirm end-to-end tracing before
-relying on it in production.
+Use it to confirm the API key is valid before relying on tracing in production;
+then verify a real trace appears (section 6) by playing one card.
 
 ## Troubleshooting
 

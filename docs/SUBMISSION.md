@@ -64,7 +64,7 @@ VERIFIED` and a note on what to check.
       [`docs/deploy/render-steps.md`](deploy/render-steps.md); frontend on Vercel
       per [`docs/deploy/vercel-steps.md`](deploy/vercel-steps.md).
       `⚠️ NOT VERIFIED`: the actual live URLs
-      (`https://tbwc-backend.onrender.com`, `https://tbwc.vercel.app`) are examples
+      (`https://a-thousand-blank-white-cards.onrender.com`, `https://tbwc.vercel.app`) are examples
       in the docs — confirm the real deployed URLs respond before submitting (see
       Part B).
 
@@ -153,10 +153,12 @@ deploy healthy until every box below is checked.
 
 ### Render backend env vars
 
-Set the `sync: false` secrets on the `tbwc-backend` service Environment tab
-([`docs/deploy/render-steps.md`](deploy/render-steps.md)):
+Set the `sync: false` secrets on the `a-thousand-blank-white-cards` service
+Environment tab ([`docs/deploy/render-steps.md`](deploy/render-steps.md)):
 
 - [ ] `LLM_API_KEY` set (and `LLM_BASE_URL` if using a gateway; blank = hosted OpenAI).
+- [ ] `LLM_CHAT_MODEL` / `LLM_EMBEDDING_MODEL` set to ids that exist on the
+      gateway (code defaults assume hosted OpenAI).
 - [ ] `TAVILY_API_KEY` set (required for the `web_search` tool to work in prod).
 - [ ] `LANGSMITH_API_KEY` set; inline `LANGSMITH_TRACING=true`,
       `LANGSMITH_PROJECT=tbwc-prod` per

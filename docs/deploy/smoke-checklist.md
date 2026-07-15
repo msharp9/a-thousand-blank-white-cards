@@ -8,7 +8,7 @@ Do not announce a deploy as healthy until both parts pass.
 
 ## Prerequisites
 
-- The backend URL (Render), e.g. `https://tbwc-backend.onrender.com`
+- The backend URL (Render), e.g. `https://a-thousand-blank-white-cards.onrender.com`
 - The frontend URL (Vercel), e.g. `https://tbwc.vercel.app`
 - Two devices/browsers (laptop + phone) for the real-time checks
 - A local checkout with `uv` available
@@ -20,7 +20,7 @@ together (not just each service in isolation):
 
 ```bash
 uv run python scripts/smoke_test.py \
-  --backend https://tbwc-backend.onrender.com \
+  --backend https://a-thousand-blank-white-cards.onrender.com \
   --frontend https://tbwc.vercel.app
 ```
 
@@ -49,7 +49,7 @@ Three more checks are opt-in because they spend third-party quota or hit a
 paid API — pass the flag to run them:
 
 ```bash
-uv run python scripts/smoke_test.py --backend https://tbwc-backend.onrender.com \
+uv run python scripts/smoke_test.py --backend https://a-thousand-blank-white-cards.onrender.com \
   --check-tavily --check-langsmith --check-llm
 ```
 

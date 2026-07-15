@@ -6,7 +6,7 @@ wiring it up to the backend hosted on Render.
 ## Prerequisites
 
 - A [Vercel](https://vercel.com) account.
-- The backend already deployed (e.g. `https://tbwc-backend.onrender.com`).
+- The backend already deployed (e.g. `https://a-thousand-blank-white-cards.onrender.com`).
 - Node.js installed locally (the steps below use `npx`, so no global install is needed).
 
 ## 1. Log in and link the project
@@ -30,10 +30,10 @@ The frontend reads two public env vars at build time. Set them in Vercel for the
 
 ```bash
 npx vercel env add NEXT_PUBLIC_API_URL production
-# value: https://tbwc-backend.onrender.com
+# value: https://a-thousand-blank-white-cards.onrender.com
 
 npx vercel env add NEXT_PUBLIC_WS_URL production
-# value: wss://tbwc-backend.onrender.com
+# value: wss://a-thousand-blank-white-cards.onrender.com
 ```
 
 Notes:

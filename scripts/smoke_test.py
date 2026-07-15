@@ -2,15 +2,15 @@
 """Smoke test for a deployed TBWC stack (backend, frontend, and their wiring).
 
 Usage:
-    uv run python scripts/smoke_test.py --backend https://tbwc-backend.onrender.com \\
+    uv run python scripts/smoke_test.py --backend https://a-thousand-blank-white-cards.onrender.com \\
         --frontend https://tbwc.vercel.app
 
     # opt in to checks that spend quota / hit third-party APIs
-    uv run python scripts/smoke_test.py --backend https://tbwc-backend.onrender.com \\
+    uv run python scripts/smoke_test.py --backend https://a-thousand-blank-white-cards.onrender.com \\
         --check-tavily --check-langsmith --check-llm
 
     # skip a normally-on check
-    uv run python scripts/smoke_test.py --backend https://tbwc-backend.onrender.com --skip cors,ws
+    uv run python scripts/smoke_test.py --backend https://a-thousand-blank-white-cards.onrender.com --skip cors,ws
 
 Probes a RUNNING stack over the network via URLs — it never imports
 board/app.py or otherwise stands up the app in-process. Importing config /
@@ -282,7 +282,9 @@ async def run(args: argparse.Namespace) -> int:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Smoke test a deployed TBWC stack.")
-    parser.add_argument("--backend", required=True, help="Backend base URL, e.g. https://tbwc-backend.onrender.com")
+    parser.add_argument(
+        "--backend", required=True, help="Backend base URL, e.g. https://a-thousand-blank-white-cards.onrender.com"
+    )
     parser.add_argument("--frontend", default=None, help="Frontend base URL, e.g. https://tbwc.vercel.app")
     parser.add_argument("--origin", default=None, help="Expected CORS origin; defaults to --frontend if given")
     parser.add_argument("--check-tavily", action="store_true", help="Run a live Tavily search (spends quota)")

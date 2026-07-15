@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: tbwc-backend
+    name: a-thousand-blank-white-cards
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
@@ -13,6 +13,16 @@ services:
         sync: false
       - key: LLM_BASE_URL
         sync: false
+      # Must be a model id that exists on the LLM_BASE_URL gateway — the code
+      # default (gpt-5.4-mini) assumes hosted OpenAI.
+      - key: LLM_CHAT_MODEL
+        sync: false
+      - key: LLM_EMBEDDING_MODEL
+        sync: false
+      # Must match the embedding model's output size; the Qdrant collection is
+      # created with this dimension and mismatches fail every upsert.
+      - key: LLM_EMBEDDING_DIMENSIONS
+        value: "1536"
       - key: TAVILY_API_KEY
         sync: false
       - key: LANGSMITH_API_KEY
@@ -21,5 +31,9 @@ services:
         value: tbwc-prod
       - key: LANGSMITH_TRACING
         value: "true"
+      - key: TRIAGE_AGENT_ENABLED
+        value: "true"
+      # JSON array string, e.g. ["https://tbwc.vercel.app"] — a bare URL fails
+      # pydantic-settings list parsing and crashes the app at boot.
       - key: CORS_ORIGINS
         sync: false
