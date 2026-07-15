@@ -9,13 +9,33 @@ all; an `uncounterable` source card ends the chain early.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 # A hook handler signature: (state: GameState, ctx: HookContext) -> GameState
 HookHandler = Callable[..., Any]
+
+_hook_error_drain: ContextVar[list[dict[str, Any]] | None] = ContextVar("hook_error_drain", default=None)
+
+
+@contextmanager
+def collect_hook_errors() -> Iterator[list[dict[str, Any]]]:
+    """Collect structured hook-snippet failures for the duration of the block.
+
+    The engine layer records failures here so the board can surface them without
+    the engine importing board. ContextVar propagation makes this visible across
+    ``asyncio.to_thread``.
+    """
+    errors: list[dict[str, Any]] = []
+    token = _hook_error_drain.set(errors)
+    try:
+        yield errors
+    finally:
+        _hook_error_drain.reset(token)
 
 
 class RegisteredHook(BaseModel):
@@ -99,6 +119,15 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
             raw_ops = execute_snippet(code, state_dict, ctx_dict)
             return apply_snippet_diff(state, raw_ops, ctx, origin="hook")
         except (SnippetExecutionError, DiffValidationError) as exc:
+            drain = _hook_error_drain.get()
+            if drain is not None:
+                drain.append(
+                    {
+                        "card_id": card_id,
+                        "error": str(exc),
+                        "event": str(getattr(ctx, "event", "")),
+                    }
+                )
             return state.with_log(f"[hook error] {card_id}: {exc}")
 
     return _handler
