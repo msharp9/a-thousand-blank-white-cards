@@ -108,13 +108,13 @@ source of truth; the client just draws whatever state arrives."
 `AGENT_TIMEOUT_SECONDS` caps, the "never raises — returns a fallback"
 comment), then `src/agent/contract.py` (`InterpretResult`: `program` /
 `snippet` / `verdict` / `comment` / `persona_action`), then the `src/agent/tools/`
-directory — call out `card_rag.py` (the RAG tool) and `web_search.py` (Tavily).
+directory — call out `card_rag_hybrid.py` (the RAG tool — BM25+dense hybrid) and `web_search.py` (Tavily).
 
 **Say:** "When a card can't be compiled deterministically, `run_agent` builds one
 LangChain tool-calling agent with an in-character persona. Its output contract is
 `InterpretResult` — a structured effect program *or* a generated snippet, plus a
-verdict and the arbiter's comment. It has a real toolbox: `card_rag` retrieves
-similar cards from Qdrant so interpretation is grounded in precedent, and
+verdict and the arbiter's comment. It has a real toolbox: `card_rag_hybrid` retrieves
+similar cards from Qdrant (dense + BM25 keyword fusion) so interpretation is grounded in precedent, and
 `web_search` hits Tavily when a card references a meme or game term it needs to
 look up. It's bounded on purpose — a hard tool-call cap and a wall-clock timeout
 — and it *never* raises to its caller; on timeout, cap, or error it returns a

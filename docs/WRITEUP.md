@@ -159,7 +159,7 @@ flowchart TB
   [`src/agent/runtime.py`](../src/agent/runtime.py); a *single* tool-calling agent
   (not multi-agent) with a hard tool-call cap and wall-clock timeout gives the model
   the freedom to look things up while staying bounded and never hanging.
-- **Tools (Tavily `web_search`, `card_rag`, `game_rules`, `mtg_lookup`,
+- **Tools (Tavily `web_search`, `card_rag_hybrid`, `game_rules`, `mtg_lookup`,
   `read_engine_methods`, `read_game_state`, `agent_memory`)** — the agent needs to
   look up outside references, retrieve similar past cards, read the actual engine
   vocabulary, and inspect the live board to interpret a card correctly rather than
@@ -325,8 +325,9 @@ Each card carries a structured `human_canonical` label (timing, target, placemen
 trigger_event, ops, magnitude_sign) that spot-checks as correct and consistent with the
 engine's op vocabulary. It is small (n=35) — good for a directional baseline, too small
 for tight confidence intervals — and authored rather than photo-derived (the larger
-unlabelled transcription pool is used only for retrieval, not scoring). Full
-assessment: [`docs/EVAL_ASSESSMENT.md`](EVAL_ASSESSMENT.md).
+unlabelled transcription pool is used only for retrieval, not scoring). It is joined by
+a 25-card compositional `eval_hard` suite and the 69-card seed corpus as additional
+benchmarks (`config.EVAL_BENCHMARKS`).
 
 ### Harness and scorers
 
@@ -347,74 +348,97 @@ The three judge dimensions come from a single structured-output `Verdict` judge
 
 ### Conclusions
 
-`TODO(82f.11): verified figures pending eval-suite fix.` The eval **design** is sound
-(a real, well-labelled gold set plus structural + LLM-judge scorers), but the suite
-**cannot currently run against the configured LLM gateway** — three concrete code
-defects block it (a hard-coded repo-depth data path, a hard-coded judge model that
-overrides the configured chat model, and an unconditional `temperature=0` the
-gateway's model rejects), all tracked in bead **82f.11**. **No trustworthy
-end-to-end numbers exist yet**; every figure in the analysis docs is an explicit
-hand-authored placeholder. Do not cite any eval number as measured until 82f.11 lands
-and the harness is re-run. See [`docs/EVAL_ASSESSMENT.md`](EVAL_ASSESSMENT.md) for the
-full honest assessment.
+The suite now runs end-to-end against the configured gateway (bead 82f.11), driven
+from [`scripts/evals.ipynb`](../scripts/evals.ipynb) via the production-faithful
+runner ([`src/evals/runner.py`](../src/evals/runner.py)); every run is persisted to
+`data/eval/runs/` with its full config, per-card rows, tool-call counts, tokens,
+cost, and latency. All figures below and in Task 6 are measured, from runs dated
+2026-07-14. Headline (haiku-4-5, `eval_hard`, tool cap 12): `intent_match` 0.84,
+`dsl_validity` 0.96, `executability` 0.96, ~$0.04/card. Caveats: single-sample runs
+(`n_samples=1`), so judge-scored deltas smaller than ~±0.05 should be read as noise,
+and `sandbox_behavior` remains the weakest, noisiest scorer.
 
 ---
 
 ## Task 6 — Improving the Prototype
 
-### Advanced retriever — multi-query
+### Advanced retriever — BM25 + dense hybrid with Reciprocal Rank Fusion
 
-The advanced retrieval technique is **multi-query retrieval**
-(`MultiQueryCardRetriever` / `advanced_retriever()` in
-[`src/agent/rag/retrievers.py`](../src/agent/rag/retrievers.py)). It prompts the LLM
-to generate a few short, intent-focused paraphrases of the card description, runs the
-original query **plus** each paraphrase through the same dense base retriever, and
-returns the deduplicated union. **Why it fits TBWC:** card text is terse,
-colloquial, and paraphrase-heavy — "give a player 5 points", "someone gets +5", and
-"5 pts to a friend" are the *same* effect program phrased three ways, and a single
-embedding tends to return a narrow cluster of lexical near-duplicates. Paraphrasing
-the query into several intent-variants broadens recall into structurally-relevant
-exemplars the single embedding misses, trading a little latency (one paraphrase call +
-extra lookups) for higher recall. Full justification:
-[`docs/RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md).
+The advanced retrieval technique is **hybrid retrieval**: the dense (cosine) search
+is fused with a **BM25** keyword pass over the same card corpus using **Reciprocal
+Rank Fusion** (`hybrid_retriever()` / `_rrf()` in
+[`src/agent/rag/retrievers.py`](../src/agent/rag/retrievers.py), exposed to the agent
+as the [`card_rag_hybrid`](../src/agent/tools/card_rag_hybrid.py) tool). **Why it
+fits TBWC:** card queries hinge on rare, exact game-mechanic keywords — *draw*,
+*discard*, *steal*, *swap*, *skip* — that dense similarity blurs into generic
+"points-and-cards" neighborhoods, while BM25 excels at exactly those rare tokens; RRF
+fuses the two ranked lists without score-scale problems. Each call builds the BM25
+index fresh from `store.list_all_cards()`, so kept cards from live games are
+searchable immediately, and both legs see the identical corpus.
 
 ### Before / after results
 
-Retriever A/B (dense vs. advanced multi-query), measured structurally against the gold
-labels:
+The A/B uses the production eval harness with the `enabled_tools` filter: two arms
+identical except for which card-RAG tool the agent gets (dense `card_rag` vs.
+`card_rag_hybrid`). Benchmark: **seed** (69 cards — the corpus with real precedent
+overlap, and where the agent actually calls card-RAG), haiku-4-5, tool cap 12,
+LLM judge on:
 
-| Metric | dense | advanced | delta |
+| Metric | dense `card_rag` | `card_rag_hybrid` | delta |
 | --- | ---: | ---: | ---: |
-| recall_nonempty | `TODO(82f.11)` | `TODO(82f.11)` | `TODO(82f.11)` |
-| timing_match | `TODO(82f.11)` | `TODO(82f.11)` | `TODO(82f.11)` |
-| target_match | `TODO(82f.11)` | `TODO(82f.11)` | `TODO(82f.11)` |
-| mean_task_latency_ms | `TODO(82f.11)` | `TODO(82f.11)` | `TODO(82f.11)` |
+| intent_match | 0.622 | 0.627 | +0.005 |
+| target_accuracy | 0.713 | 0.700 | −0.013 |
+| persistence_accuracy | 0.771 | 0.830 | **+0.059** |
+| magnitude_sign | 0.780 | 0.816 | **+0.036** |
+| dsl_validity | 0.754 | 0.754 | 0.000 |
+| executability | 0.739 | 0.739 | 0.000 |
+| sandbox_behavior | 0.355 | 0.370 | +0.014 |
+| card-RAG tool calls | 15 | 19 | +4 |
+| mean tool calls / card | 4.90 | 4.65 | −0.25 |
+| run cost (USD) | 2.41 | 2.28 | −0.13 |
 
-`TODO(82f.11): verified figures pending eval-suite fix.` The A/B driver
-(`src/evals/retriever_ab.py`) exists and the expected *direction* is higher
-timing/target match at the cost of latency, but numbers must be regenerated once the
-suite runs (see Task 5 and [`docs/RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md)).
+A qualified win: persistence and magnitude judged meaningfully better, everything
+else at parity, and the run is slightly cheaper with *more* retrieval (the fused
+results resolve cards in fewer other tool calls). Two honest caveats. First, on the
+`eval_hard` benchmark the A/B is a wash by construction — the agent calls card-RAG
+~3 times in 25 cards there, so retrieval quality can't move those numbers. Second,
+single-sample judge variance means the small deltas are directional, not proof;
+the +0.059/+0.036 lifts are the ones outside typical noise.
 
-### One other change — few-shot exemplar priming
+The most valuable finding was **tool adoption, not retriever quality**: the first
+hybrid arm scored *worse* across the board because the agent never called the new
+tool — zero calls in two full runs. The system prompt names no RAG tool, so selection
+rides entirely on the tool description, and the original description explained the
+*mechanism* ("semantic similarity combined with keyword matching") instead of the
+*purpose*. Rewriting it to lead with purpose ("retrieve previously-seen cards … to
+compare against precedent interpretations") took adoption from 0 to 19 calls and
+flipped the result. An improved retriever behind an unpicked tool improves nothing.
 
-The second improvement targets **generation, not retrieval**: prime the agent with the
-top-3 retrieved exemplars and their canonical effects, prepended to the card
-description before interpretation, so the model mirrors real, in-vocabulary op shapes
-instead of inventing plausible-but-wrong ones. Driver: `src/evals/improvement_ab.py`.
-The two improvements compound — better retrieval yields better exemplars, which makes
-priming more effective.
+### One other change — model choice and tool-call budget
 
-| Metric | before (no few-shot) | after (few-shot) | delta |
-| --- | ---: | ---: | ---: |
-| intent_match | `TODO(82f.11)` | `TODO(82f.11)` | `TODO(82f.11)` |
-| dsl_validity | `TODO(82f.11)` | `TODO(82f.11)` | `TODO(82f.11)` |
-| target_accuracy | `TODO(82f.11)` | `TODO(82f.11)` | `TODO(82f.11)` |
-| timing_accuracy | `TODO(82f.11)` | `TODO(82f.11)` | `TODO(82f.11)` |
-| mean_task_latency_ms | `TODO(82f.11)` | `TODO(82f.11)` | `TODO(82f.11)` |
+The second improvement was measured earlier the same day with the identical harness:
+pick the serving model and bound the agent's tool budget. The model sweep
+(`eval` / `eval_hard` benchmarks) showed sonnet-5 is the quality ceiling but ~6× the
+cost, gemma-4-31b collapses (≈0.50 intent_match, ~0.48 invalid rate), and haiku-4-5
+is the price/quality sweet spot. Fixing haiku and sweeping `max_tool_calls` on
+`eval_hard` (`MAX_TOOL_CALLS` in [`src/agent/runtime.py`](../src/agent/runtime.py),
+default was 24):
 
-`TODO(82f.11): verified figures pending eval-suite fix.` Expected shape is the largest
-lift on `dsl_validity` (its whole purpose is to stop the model inventing invalid op
-shapes), with a secondary lift to `intent_match`.
+| Metric | cap 6 | cap 12 | cap 18 | uncapped (24) |
+| --- | ---: | ---: | ---: | ---: |
+| intent_match | 0.680 | **0.840** | 0.694 | 0.852 |
+| target_accuracy | 0.700 | **0.874** | 0.692 | 0.840 |
+| persistence_accuracy | 0.772 | **0.936** | 0.772 | 0.844 |
+| dsl_validity | 0.880 | **0.960** | 0.840 | 0.880 |
+| executability | 0.880 | **0.960** | 0.840 | 0.880 |
+| invalid rate | 0.200 | **0.040** | 0.120 | 0.040 |
+
+A cap of 12 dominates: versus the old 24 it lifts `dsl_validity`/`executability`
+0.88 → 0.96 and `persistence_accuracy` 0.844 → 0.936 at equal intent, while 6 starves
+the agent (invalid rate 0.04 → 0.20) and 18 lets it wander. Tool-ablation runs backed
+the full toolbox: cutting the agent down to just state/engine/dry-run tools dropped
+`intent_match` to 0.766 (and to 0.508 without `read_engine_methods`). The cap is now
+12 in production, demonstrated end-to-end by the eval harness rather than asserted.
 
 ---
 
@@ -437,10 +461,10 @@ shapes), with a secondary lift to `intent_match`.
 
 **What to change or improve, and why:**
 
-- **Land bead 82f.11 first.** The eval suite must actually run against the gateway
-  before Demo Day — right now every eval number is a placeholder, and we can't claim
-  improvements we haven't measured. This is the top priority: it converts Tasks 5–6
-  from "expected direction" into evidence.
+- **Tighten the eval numbers.** The harness runs and every Task 5–6 figure is
+  measured, but at `n_samples=1`; re-run the tool-cap sweep and the retrieval A/B at
+  `n_samples≥3` (bead `sit`) and triage the handful of cards that fail under every
+  config (bead `3om`) so small judge-scored deltas become trustworthy.
 - **Add a judge-calibration check** against the 35 gold labels to quantify judge
   reliability, and **grow the gold set past 35** for firmer, per-category numbers.
 - **Move Qdrant and room state off in-memory / single-worker** for a real multiplayer

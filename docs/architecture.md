@@ -79,7 +79,7 @@ top-level `config` / `logging_config` modules. Run the backend with
 | **`engine`** | The game "physics": pure reducers over `GameState`, the turn loop, scoring/win-condition, card compilation, the event bus + persistent hooks, and the untrusted-snippet execution sandbox. Never calls the LLM. | `facade.py` (`GameEngine`), `reducers.py` (`apply_op`), `apply.py` (`apply_effect`), `compile.py` (`compile_card`), `loop.py` (`advance_turn`, `draw_step`), `scoring.py`, `events.py`, `hooks.py`, `epilogue.py` (`tally_votes`), `sandbox/` |
 | **`agent`** | The single tool-calling interpretation agent: the persona system prompt, the interpretation result contract, the LLM factory, the RAG pipeline, and the bound toolbox. Reaches down into `engine`/`models` but never up into `board`. | `runtime.py` (`build_agent`, `run_agent`), `contract.py` (`InterpretResult`), `persona.py`, `llm.py` (`get_chat_model`), `rag/` (`embeddings`, `store`, `retrievers`, `seed`), `tools/` |
 | **`board`** | The server surface: FastAPI app factory + REST routes, the WebSocket endpoint, and the room state machine (turn enforcement, deck building, epilogue voting, connection registry). The only layer that orchestrates engine + agent together. | `app.py` (`create_app`), `ws.py` (`ws_handler`), `rooms/` (`room.py`, `manager.py`, `connections.py`, `deck.py`, `epilogue.py`, `store.py`) |
-| **`evals`** | Offline evaluation of the interpretation pipeline: a self-contained harness, an LLM-as-judge, scorers, and A/B experiments (retriever, improvement). Not part of the serving path. | `harness.py`, `judge.py`, `scorers.py`, `eval_core.py`, `retriever_ab.py`, `improvement_ab.py`, `conclusions.py` |
+| **`evals`** | Offline evaluation of the interpretation pipeline: the production-faithful benchmark runner (per-run config, `enabled_tools` filtering, cost/latency instrumentation, persisted runs), an LLM-as-judge, scorers, and the legacy standalone harness. Not part of the serving path. | `runner.py`, `judge.py`, `scorers.py`, `harness.py`, `eval_core.py`, `store.py`, `analysis.py`, `viz.py`, `conclusions.py` |
 
 ---
 
@@ -530,8 +530,8 @@ flowchart LR
   LOAD --> STORE
   EMB["rag.embeddings<br/>OpenAIEmbeddings (gateway)"] --> STORE
   STORE["rag.store<br/>Qdrant :memory: 'cards'"]
-  RET["rag.retrievers<br/>dense / multi-query"] --> STORE
-  TOOL["agent.tools.card_rag"] --> RET
+  RET["rag.retrievers<br/>dense / hybrid (BM25+RRF)"] --> STORE
+  TOOL["agent.tools.card_rag_hybrid"] --> RET
   RUN["agent.run_agent"] --> TOOL
   KEPT["epilogue kept cards"] -->|upsert source='player'| STORE
 ```
@@ -562,9 +562,10 @@ flowchart LR
   cannot drift. Gold entries are executable full plans, including static chains,
   post-draw computation, structured-history scoring, and basic/spicy/wild Uno.
 - **Retrievers** (`rag/retrievers.py`): `dense_retriever()` is the baseline
-  cosine retriever; `advanced_retriever()` is a `MultiQueryCardRetriever` that
-  paraphrases the query via the chat model, retrieves each paraphrase, and
-  returns the deduplicated union.
+  cosine retriever; `hybrid_retriever()` — the one bound in the default toolbox
+  via `card_rag_hybrid` — fuses that dense search with a per-call BM25 pass over
+  `list_all_cards()` using Reciprocal Rank Fusion, so exact game-mechanic
+  keywords (draw, discard, steal, swap) match even when the embedding blurs them.
 - **How the agent uses it** (`agent/runtime.py`, `agent/tools/`): `run_agent`
   builds a LangChain tool-calling agent (`create_agent`) with the persona system
   prompt and a bound toolbox. `get_default_tools()` returns the context-free

@@ -134,10 +134,10 @@ uvx prek install
 Offline evaluation of the agent + retriever. All eval scripts call the LLM gateway, so configure `LLM_API_KEY` (and optionally `LLM_BASE_URL`) first.
 
 ```bash
-uv run python -m evals.harness          # main eval harness
+uv run python -m evals.harness          # legacy standalone harness
 ```
 
-See [`docs/RETRIEVER_ANALYSIS.md`](docs/RETRIEVER_ANALYSIS.md) for retriever analysis.
+The main benchmark runner is driven from [`scripts/evals.ipynb`](scripts/evals.ipynb); runs persist to `data/eval/runs/` and results are written up in [`docs/WRITEUP.md`](docs/WRITEUP.md) Tasks 5–6.
 
 ## Deployment
 
@@ -149,6 +149,5 @@ See [`docs/RETRIEVER_ANALYSIS.md`](docs/RETRIEVER_ANALYSIS.md) for retriever ana
 ## Docs & links
 
 - [Project write-up](docs/WRITEUP.md) — problem, solution, architecture diagrams, eval results, and Demo Day notes (rubric tasks 1–7).
-- [Retriever analysis](docs/RETRIEVER_ANALYSIS.md) — eval findings.
 - [Loom demo script](docs/loom-script.md) — timed ≤10-minute demo walkthrough.
 - [Deployment docs](docs/deploy/) — Render, Vercel, LangSmith, and smoke checklist.
