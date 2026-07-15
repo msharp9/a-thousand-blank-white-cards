@@ -1,7 +1,10 @@
 """agent.tools.card_rag — LangChain tool wrapping the dense RAG retriever.
 
 Exposes a single ``card_rag`` @tool the agent can call to find precedent cards
-similar to the one it is interpreting. This is the project's RAG requirement.
+similar to the one it is interpreting. This is the dense baseline retriever
+tool; ``card_rag_hybrid`` (BM25+dense RRF) is the one bound in the default
+toolbox. This module stays importable for tests and eval experiments, and
+``card_rag_hybrid`` reuses its ``_format_hits`` helper.
 
 The tool uses the deterministic dense (cosine) retriever from
 ``agent.rag.retrievers`` and degrades gracefully: if the store is empty,

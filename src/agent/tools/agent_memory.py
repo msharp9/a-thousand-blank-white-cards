@@ -2,14 +2,14 @@
 
 This tool lets the interpretation agent PERSIST and RECALL its OWN prior
 card-interpretation decisions, so its rulings stay consistent across cards and
-games. It is distinct from card_rag: card_rag retrieves the interpreted-card
-*corpus* (exemplar cards to imitate); agent_memory stores the *agent's* concrete
-decisions plus the reasoning behind them.
+games. It is distinct from card_rag_hybrid: card_rag_hybrid retrieves the
+interpreted-card *corpus* (exemplar cards to imitate); agent_memory stores the
+*agent's* concrete decisions plus the reasoning behind them.
 
 Persistence decision — WHY sqlite (not Qdrant)
 ----------------------------------------------
 The backing store is stdlib ``sqlite3``, chosen deliberately over reusing the
-Qdrant instance that already backs card_rag:
+Qdrant instance that already backs card_rag_hybrid:
 
 * No embeddings key required. Qdrant recall needs an OpenAI/embeddings key to
   vectorize queries, and that key is frequently absent in dev / CI. sqlite needs
