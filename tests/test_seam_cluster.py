@@ -211,7 +211,6 @@ def test_assemble_tools_read_only_mode_excludes_persistent_writers():
     names = {tool.name for tool in tools}
     assert "remember_decision" not in names
     assert "recall_decisions" not in names
-    assert "wish" not in names
     assert "dry_run_effect" in names
 
 

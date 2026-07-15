@@ -38,7 +38,6 @@ def get_default_tools(*, allow_persistent_tools: bool = True) -> list[Any]:
 
     from agent.tools.agent_memory import get_agent_memory_tools
     from agent.tools.card_rag_hybrid import get_card_rag_hybrid_tool
-    from agent.tools.capability_wish import get_capability_wish_tool
     from agent.tools.game_rules import get_game_rules_tool
     from agent.tools.mtg_lookup import get_mtg_lookup_tool
     from agent.tools.read_engine_methods import get_read_engine_methods_tool
@@ -51,8 +50,6 @@ def get_default_tools(*, allow_persistent_tools: bool = True) -> list[Any]:
         get_mtg_lookup_tool,
         get_read_engine_methods_tool,
     ]
-    if allow_persistent_tools:
-        factories.append(get_capability_wish_tool)
     for factory in factories:
         try:
             tools.append(factory())

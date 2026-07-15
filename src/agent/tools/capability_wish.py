@@ -8,8 +8,6 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from langchain_core.tools import StructuredTool
-
 from config import get_settings
 
 _write_lock = threading.Lock()
@@ -48,31 +46,3 @@ def record_capability_wish(
     except OSError:
         return {"recorded": False, "error": "capability wish store is unavailable"}
     return {"recorded": True, **record}
-
-
-def get_capability_wish_tool() -> StructuredTool:
-    def wish(
-        card_title: str,
-        card_description: str,
-        what_i_wanted: str,
-        missing_capability: str,
-    ) -> str:
-        """Record a missing board capability only after ops, sandbox code, hooks, and interactions cannot express a card. This writes telemetry for human review; it never edits source code or files an issue at runtime."""
-        record = record_capability_wish(
-            card_title,
-            card_description,
-            what_i_wanted,
-            missing_capability,
-        )
-        if not record["recorded"]:
-            return json.dumps(record)
-        return json.dumps({"recorded": True, "wish_id": record["id"]})
-
-    return StructuredTool.from_function(
-        func=wish,
-        name="wish",
-        description=(
-            "Persist a capability gap for human review when no available op, SandboxGame method, hook, "
-            "or interaction can implement the card. Never edits runtime source or invokes bd."
-        ),
-    )
