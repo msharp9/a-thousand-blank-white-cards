@@ -161,7 +161,9 @@ def test_plan_execution_failure_reports_sandbox_failure(monkeypatch) -> None:
     assert payload.kind == "sandbox_failure"
     assert "sandbox blew up" in (payload.exception or "")
     assert room.state.cards["c1"]["mechanical_status"] == "fallback"
-    assert any("[snippet error]" in line for line in room.state.log)
+    # The raw sandbox error stays out of the shared player log (dev-only warning).
+    assert not any("[snippet error]" in line for line in room.state.log)
+    assert not any("sandbox blew up" in line for line in room.state.log)
 
 
 def test_reports_dedupe_per_card_and_kind(monkeypatch) -> None:

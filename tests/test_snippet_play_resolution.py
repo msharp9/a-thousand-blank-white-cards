@@ -5,9 +5,9 @@ Before this bead, a snippet-only interpretation (``result.snippet`` set, no usab
 back to a bare CustomNoteOp ("[note] Played X (no mechanical effect)"). These tests
 assert the snippet now runs through the same sandbox pipeline persistent hooks use
 (``execute_snippet`` -> ``apply_snippet_diff``) and mutates state via the real
-reducers, that a sandbox failure logs a visible "[snippet error]" line and leaves
-state unchanged (falling back to the note), and that the feature flag preserves
-today's behavior exactly when off.
+reducers, that a sandbox failure falls back cleanly (a friendly "no mechanical effect"
+note, card discarded, mechanical_status "fallback") WITHOUT leaking the raw error into
+the shared player log, and that the feature flag preserves today's behavior when off.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ def test_snippet_only_interpretation_mutates_state_via_sandbox() -> None:
     assert not any("no mechanical effect" in line for line in room.state.log)
 
 
-def test_failing_snippet_logs_error_and_leaves_state_unchanged() -> None:
+def test_failing_snippet_falls_back_without_leaking_error() -> None:
     card = _snippet_card("c2")
     room = _room_with_card(card)
     agent_result = InterpretResult(
@@ -79,9 +79,14 @@ def test_failing_snippet_logs_error_and_leaves_state_unchanged() -> None:
 
     assert room.state.get_player("p1").score == 0
     assert room.state.get_player("p2").score == 0
-    assert any("[snippet error] Chess" in line for line in room.state.log)
-    # No mechanical effect: the play still resolves (never a silent no-op).
+    # The raw failure never reaches the shared player log...
+    assert not any("[snippet error]" in line for line in room.state.log)
+    assert not any("boom" in line for line in room.state.log)
+    # ...but the play still resolves (never a silent no-op) and the technical
+    # reason is captured privately on the card for dev/triage.
     assert any("no mechanical effect" in line for line in room.state.log)
+    assert room.state.cards["c2"]["mechanical_status"] == "fallback"
+    assert room.state.cards["c2"]["mechanical_reason"]
     assert "c2" in room.state.discard
 
 
@@ -106,7 +111,7 @@ def test_snippet_execution_disabled_preserves_current_behavior() -> None:
     assert "c3" in room.state.discard
 
 
-def test_choice_target_snippet_diff_logs_error_instead_of_crashing() -> None:
+def test_choice_target_snippet_diff_falls_back_instead_of_crashing() -> None:
     card = _snippet_card("c4")
     room = _room_with_card(card)
     agent_result = InterpretResult(
@@ -122,7 +127,8 @@ def test_choice_target_snippet_diff_logs_error_instead_of_crashing() -> None:
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c4")))
 
     assert room.state.get_player("p1").score == score_before
-    assert any("[snippet error]" in line for line in room.state.log)
+    assert not any("[snippet error]" in line for line in room.state.log)
+    assert room.state.cards["c4"]["mechanical_status"] == "fallback"
 
 
 def test_non_ok_verdict_never_executes_snippet() -> None:

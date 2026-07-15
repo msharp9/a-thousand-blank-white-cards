@@ -4,8 +4,10 @@ import asyncio
 import json
 import pathlib
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
+import agent.triage as triage_module
+from config import get_settings
 from models.effects import ResolutionPlan
 from models.ws_messages import InteractionResponseMsg, PlayMsg
 from board.rooms.room import Room
@@ -669,3 +671,99 @@ def test_restored_timeout_runs_at_manager_start_without_reconnect(tmp_path) -> N
     assert restored._pending_resolution is None
     assert restored.state.discard == ["card"]
     assert restored.state.cards["card"]["mechanical_status"] == "fallback"
+
+
+def _resume_failure_plan() -> ResolutionPlan:
+    """A number interaction (bids) whose follow-up snippet crashes on resume."""
+    return ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "bids",
+                    "request": {"kind": "number", "prompt": "Bid", "audience": "all", "minimum": 0},
+                },
+                {"kind": "snippet", "code": "def apply(state, ctx):\n    raise RuntimeError('boom on resume')\n"},
+            ]
+        }
+    )
+
+
+def test_resume_failure_reports_triage_and_never_leaks_to_player_log(monkeypatch) -> None:
+    monkeypatch.setenv("TRIAGE_AGENT_ENABLED", "true")
+    get_settings.cache_clear()
+    spy = MagicMock()
+    monkeypatch.setattr(triage_module, "schedule_triage", spy)
+
+    room = _room_with_plan(_resume_failure_plan())
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        interaction_id = room._pending_resolution.interaction_id
+        await room.handle_action("p1", _response(interaction_id, "number", value=3))
+        await room.handle_action("p2", _response(interaction_id, "number", value=5))
+
+    asyncio.run(scenario())
+
+    # The resume-path failure is now visible to triage...
+    spy.assert_called_once()
+    assert spy.call_args.args[0].kind == "interaction_resolve"
+    # ...but its raw mechanical detail never reaches the shared player log.
+    assert not any("[interaction] Op" in line for line in room.state.log)
+    assert not any("boom on resume" in line for line in room.state.log)
+    assert not any("failed validation" in line for line in room.state.log)
+    # The card still resolves cleanly into the fallback.
+    assert room._pending_resolution is None
+    assert room.state.cards["card"]["mechanical_status"] == "fallback"
+
+
+# The original Auction bug: an agent snippet minted the won card with
+# ``create_card(destination='id:<winner>')`` — an unsupported destination that
+# failed op validation on resume. per-player routing + the sandbox coercion make
+# the exact scenario work end-to-end.
+_AUCTION_SNIPPET = (
+    "def apply(state, ctx):\n"
+    "    bids = ctx['interactions']['bids']\n"
+    "    winner_id = max(bids, key=lambda pid: bids[pid])\n"
+    "    for pid, bid in bids.items():\n"
+    "        if bid > 0:\n"
+    "            state.subtract_points(f'id:{pid}', int(bid))\n"
+    "    state.create_card(title='Double Cat', description='A dubious asset.', "
+    "destination=f'id:{winner_id}', count=1)\n"
+)
+
+
+def test_auction_delivers_created_card_to_the_winner() -> None:
+    plan = ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "bids",
+                    "request": {"kind": "number", "prompt": "Bid for the Double Cat", "audience": "all", "minimum": 0},
+                },
+                {"kind": "snippet", "code": _AUCTION_SNIPPET},
+            ]
+        }
+    )
+    room = _room_with_plan(plan)
+    room.state = room.state.model_copy(
+        update={"players": [player.model_copy(update={"score": 10}) for player in room.state.players]}
+    )
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        interaction_id = room._pending_resolution.interaction_id
+        await room.handle_action("p1", _response(interaction_id, "number", value=3))
+        await room.handle_action("p2", _response(interaction_id, "number", value=5))
+
+    asyncio.run(scenario())
+
+    # p2 outbid p1 and receives the minted card; both paid their bids.
+    assert room.state.get_player("p1").score == 7
+    assert room.state.get_player("p2").score == 5
+    created = [cid for cid in room.state.get_player("p2").hand if cid.startswith("created-")]
+    assert created and room.state.cards[created[0]]["title"] == "Double Cat"
+    # No validation error, no fallback: the card resolved for real.
+    assert room.state.cards["card"]["mechanical_status"] == "applied"
+    assert not any("failed validation" in line for line in room.state.log)

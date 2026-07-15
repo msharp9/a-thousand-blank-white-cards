@@ -120,6 +120,35 @@ def test_legacy_destroy_card_positional_target_is_preserved() -> None:
     assert g.ops() == [{"op": "destroy_card", "card_target": "this"}]
 
 
+def test_create_card_routes_to_target_player() -> None:
+    g = make_game()
+
+    g.create_card("Double Cat", destination="hand", target="id:p2")
+
+    op = g.ops()[0]
+    assert op["destination"] == "hand"
+    assert op["target"] == "id:p2"
+
+
+def test_create_card_coerces_player_target_passed_as_destination() -> None:
+    # The exact mistake the agent made: a player Target given as `destination`.
+    g = make_game()
+
+    g.create_card("Double Cat", destination="id:p2")
+
+    op = g.ops()[0]
+    assert op["destination"] == "hand"
+    assert op["target"] == "id:p2"
+
+
+def test_create_card_defaults_target_to_self() -> None:
+    g = make_game()
+
+    g.create_card("Gift", destination="hand")
+
+    assert g.ops()[0]["target"] == "self"
+
+
 def test_register_hook_rejects_scope_without_code() -> None:
     g = make_game()
 

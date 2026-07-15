@@ -786,7 +786,9 @@ class Room:
             try:
                 raw_ops = await asyncio.to_thread(execute_snippet, spec.code, state_dict, ctx_dict)
             except SnippetExecutionError as exc:
-                await self._log_and_broadcast(f"[hook error] {spec.source_card_id}: {exc}")
+                logger.warning(
+                    "validation hook failed card_id=%s source=%s reason=%s", card_id, spec.source_card_id, exc
+                )
                 self._report_failure_for_triage("hook_failure", card, card_id, exc=exc)
                 continue
             reason = extract_veto(raw_ops)
@@ -1579,7 +1581,6 @@ class Room:
                     self.state = self.state.move_card(
                         card_id, "hand", destination, from_player_id=player_id, to_player_id=player_id
                     )
-                    await self._log_and_broadcast(f"[interaction error] {title}: {exc}")
                     fallback = EffectProgram(
                         ops=[CustomNoteOp(note=f"Played {title or 'Card'} (no mechanical effect)")]
                     )
@@ -1608,7 +1609,6 @@ class Room:
                     from_player_id=player_id,
                     to_player_id=player_id,
                 )
-                await self._log_and_broadcast(f"[snippet error] {title}: {exc}")
                 fallback = EffectProgram(ops=[CustomNoteOp(note=f"Played {title or 'Card'} (no mechanical effect)")])
                 self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
                 await self._log_and_broadcast(self._describe_play(player_id, card, before))
@@ -2003,7 +2003,8 @@ class Room:
         ):
             self._interaction_timer.cancel()
         if timed_out and not pending.responses:
-            await self._fail_pending_resolution("No one responded before the interaction timed out.")
+            timeout_notice = "No one responded before the interaction timed out."
+            await self._fail_pending_resolution(timeout_notice, notice=timeout_notice)
             return
         values: dict[str, object] = {}
         for player_id in pending.resolved_audience:
@@ -2045,12 +2046,14 @@ class Room:
                     deck_count_before=pending.deck_count_before,
                 )
             except Exception as exc:
+                self._report_failure_for_triage("interaction_resolve", pending.card, pending.correlation_id, exc=exc)
                 await self._fail_pending_resolution(
                     self._public_mechanical_reason(exc, fallback="The next interaction could not be started safely."),
                     pending=pending,
                 )
             return
         except Exception as exc:
+            self._report_failure_for_triage("interaction_resolve", pending.card, pending.correlation_id, exc=exc)
             await self._fail_pending_resolution(
                 self._public_mechanical_reason(exc, fallback="The interaction effect could not be applied safely."),
                 pending=pending,
@@ -2058,7 +2061,17 @@ class Room:
             return
         await self._commit_pending_resolution(pending, completed)
 
-    async def _fail_pending_resolution(self, reason: str, *, pending: PendingResolution | None = None) -> None:
+    async def _fail_pending_resolution(
+        self, reason: str, *, pending: PendingResolution | None = None, notice: str | None = None
+    ) -> None:
+        """Resolve a paused card into its no-effect fallback.
+
+        ``reason`` is a dev/triage-facing detail: stored as the card's private
+        mechanical_reason and logged, never broadcast — mechanical errors must
+        not leak into the shared player log. ``notice`` is an optional
+        player-facing line (e.g. a timeout explanation); when omitted, players
+        just see the normal "played the card" description.
+        """
         pending = pending or self._pending_resolution
         if pending is None:
             return
@@ -2073,6 +2086,12 @@ class Room:
             from_player_id=owner,
             to_player_id=owner,
         )
+        logger.warning(
+            "interaction resolve failed correlation_id=%s card_id=%s reason=%s",
+            pending.correlation_id,
+            pending.card_id,
+            reason,
+        )
         ctx = HookContext(event=GameEvent.ON_PLAY, actor_id=pending.actor_id, card_id=pending.card_id)
         self.state = apply_effect(
             self.state,
@@ -2080,7 +2099,9 @@ class Room:
             ctx,
             bus=self._hook_bus(),
         )
-        await self._log_and_broadcast(f"[interaction] {reason}")
+        await self._log_and_broadcast(
+            notice or self._describe_play(pending.actor_id, pending.card, pending.before_scores)
+        )
         await self._complete_interaction_play(pending, game_ending=False)
 
     async def _commit_pending_resolution(self, pending: PendingResolution, completed: GameState) -> None:

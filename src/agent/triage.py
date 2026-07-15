@@ -26,7 +26,9 @@ from config import get_settings
 
 logger = logging.getLogger("agent.triage")
 
-KIND = Literal["sandbox_failure", "no_op", "invalid_verdict", "hook_failure", "interaction_setup"]
+KIND = Literal[
+    "sandbox_failure", "no_op", "invalid_verdict", "hook_failure", "interaction_setup", "interaction_resolve"
+]
 _VALID_KINDS: frozenset[str] = frozenset(get_args(KIND))
 
 

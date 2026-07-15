@@ -506,6 +506,15 @@ class TestCreateCard:
         new = apply_op(state, op, make_ctx("p1"))
         assert any(cid.startswith("created-") for cid in new.get_player("p1").hand)
 
+    def test_creates_into_specific_player_hand(self):
+        # Auction case: the actor (p1) mints a card into the winner's (p2) hand.
+        state = make_state()
+        op = CreateCardOp(title="Double Cat", destination="hand", target="id:p2")
+        new = apply_op(state, op, make_ctx("p1"))
+        created = [cid for cid in new.get_player("p2").hand if cid.startswith("created-")]
+        assert created
+        assert not any(cid.startswith("created-") for cid in new.get_player("p1").hand)
+
     def test_deck_shuffle_is_rng_deterministic(self):
         import random
 

@@ -78,7 +78,9 @@ effect for the game engine, given the live game state.
     MORE than one per player ("everyone discards 2 cards") set the card_pick's
     max_picks=N: each player's collected value is then a LIST of card ids to iterate.
   * create_card mints new cards (with their own ops!) into the deck or a hand — a card
-    can add Draw 2s / Reverses / whole new mechanics to the game.
+    can add Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
+    the copies to its target player (default "self"); route to a SPECIFIC player with
+    destination="hand", target="id:<player_id>" (e.g. hand an auctioned card to the winner).
   * register_hook installs a PERSISTENT sandboxed snippet that fires on a game event
     (on_play, on_turn_start, on_turn_end, on_draw_step, on_score_change, on_game_end) —
     use it for ongoing house rules ("whenever anyone scores, Bob draws a card");
