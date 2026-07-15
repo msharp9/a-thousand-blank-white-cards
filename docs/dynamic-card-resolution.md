@@ -42,7 +42,7 @@ and the agent must dry-run the complete plan before it can be committed.
 | Keep sandbox and op APIs aligned | all generated snippets and hooks | `tests/test_sandbox_api_surface.py::TestWideFacade::test_mutators_record_full_op_parity`, `::test_canonical_mutators_match_op_names_and_parameters` |
 
 The gold exemplars live in `data/seed_cards_gold.json`. Run
-`scripts/build_seed_corpus.py --check` to prove that the served
+`scripts/data_prep/build_seed_corpus.py --check` to prove that the served
 `data/seed_cards.json` has not drifted from the reviewed sources. The eval
 corpus contains the same capability ladder and scores complete ordered plans,
 not isolated first effects.

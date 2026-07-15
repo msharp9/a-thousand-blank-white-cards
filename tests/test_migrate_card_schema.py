@@ -1,4 +1,4 @@
-"""Unit tests for scripts/migrate_card_schema.py (v1 → v2 dataset migration)."""
+"""Unit tests for scripts/data_prep/migrate_card_schema.py (v1 → v2 dataset migration)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from engine.sandbox.validate import validate_snippet
 
 _SPEC = importlib.util.spec_from_file_location(
-    "migrate_card_schema", Path(__file__).parent.parent / "scripts" / "migrate_card_schema.py"
+    "migrate_card_schema", Path(__file__).parent.parent / "scripts" / "data_prep" / "migrate_card_schema.py"
 )
 migrate = importlib.util.module_from_spec(_SPEC)
 sys.modules["migrate_card_schema"] = migrate

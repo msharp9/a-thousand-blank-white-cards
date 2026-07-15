@@ -557,7 +557,7 @@ flowchart LR
   `data/seed_cards.json` in one batched `upsert_cards` call (a single embedding
   round-trip for cache misses). A missing file or offline gateway degrades
   gracefully.
-  `scripts/build_seed_corpus.py` deterministically generates that combined file
+  `scripts/data_prep/build_seed_corpus.py` deterministically generates that combined file
   from `seed_cards_gold.json` plus `seed_cards_fillers.json`; CI checks the files
   cannot drift. Gold entries are executable full plans, including static chains,
   post-draw computation, structured-history scoring, and basic/spicy/wild Uno.

@@ -7,7 +7,7 @@ later human annotation (see ``ANNOTATION_GUIDE.md``).
 
 Run it directly::
 
-    OPENAI_API_KEY=... IMGUR_CLIENT_ID=... uv run python data/eval/transcribe_imgur.py
+    OPENAI_API_KEY=... IMGUR_CLIENT_ID=... uv run python scripts/data_prep/transcribe_imgur.py
 
 The core functions accept injected dependencies so the module is importable and
 unit-testable without any network or API access.
@@ -44,7 +44,7 @@ IMGUR_ALBUM_ID = "rWS9A"
 VISION_MODEL = "gpt-5.4-mini"
 
 # Default output location for the transcribed corpus.
-DEFAULT_OUTPUT_PATH = Path(__file__).resolve().parent / "real_cards.json"
+DEFAULT_OUTPUT_PATH = Path(__file__).resolve().parents[2] / "data" / "eval" / "real_cards.json"
 
 # Imgur serves at most this many images per album page.
 _IMGUR_PAGE_SIZE = 50

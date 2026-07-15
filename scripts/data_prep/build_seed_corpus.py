@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
 GOLD = DATA / "seed_cards_gold.json"
 FILLERS = DATA / "seed_cards_fillers.json"
@@ -26,7 +26,7 @@ def main() -> int:
     rendered = render_corpus()
     if args.check:
         if not COMBINED.exists() or COMBINED.read_text() != rendered:
-            print("data/seed_cards.json is stale; run scripts/build_seed_corpus.py")
+            print("data/seed_cards.json is stale; run scripts/data_prep/build_seed_corpus.py")
             return 1
         return 0
     COMBINED.write_text(rendered)

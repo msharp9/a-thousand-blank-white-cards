@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-_SCRIPT = Path(__file__).resolve().parent.parent / "data" / "eval" / "transcribe_imgur.py"
+_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "data_prep" / "transcribe_imgur.py"
 
 
 def _load_module():
