@@ -26,7 +26,7 @@ _UNAVAILABLE = "card retrieval unavailable"
 
 @tool
 def card_rag_hybrid(query: str, k: int = 4) -> str:
-    """Retrieve cards using semantic similarity combined with keyword matching, so game-mechanic terms (draw, discard, steal, swap, etc.) surface precedents even when embedding alone might miss them."""
+    """Retrieve previously-seen cards similar to the given text, to compare a new card against precedent interpretations. Matches by meaning AND by exact game-mechanic keywords (draw, discard, steal, swap, ...), so it finds precedents plain semantic search misses."""
     try:
         retrieve = hybrid_retriever()
         hits = retrieve(query, k)
