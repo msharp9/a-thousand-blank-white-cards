@@ -27,6 +27,10 @@ from board.ws import router as ws_router
 
 logger = logging.getLogger(__name__)
 
+# Eval-agent telemetry is droppable, so shutdown only waits this long for
+# in-flight failure-triage tasks before cancelling stragglers.
+EVAL_DRAIN_TIMEOUT_SECONDS = 5.0
+
 
 # Rendered at the top of /docs. WebSocket routes are never included in the
 # OpenAPI schema by FastAPI, so the live-gameplay /ws protocol is documented here.
@@ -169,6 +173,9 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("DEV_MODE enabled — room persistence and /dev endpoints are ACTIVE (do not use in production)")
     yield
     # shutdown
+    from evals.effect_failure_agent import get_scheduler
+
+    await get_scheduler().drain(timeout=EVAL_DRAIN_TIMEOUT_SECONDS)
 
 
 def create_app() -> FastAPI:
