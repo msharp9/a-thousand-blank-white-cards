@@ -74,16 +74,19 @@ Plans are deliberately bounded: at most eight steps, four interaction barriers,
 plan. Timeouts are 10–300 seconds. A partial timeout continues with deterministic
 defaults; zero responses roll back the plan and produce a visible fallback.
 
-## Automatic failure triage (eval agent)
+## Automatic failure triage (triage agent)
 
 Every plan failure above previously vanished into a fallback `custom_note` —
-the interpreting agent had a `wish` tool it was told to reach for "if none [of
-ops/snippet/hooks/interactions] can express the card" (see
+the interpreting agent had an in-loop `wish` tool it was told to reach for "if
+none [of ops/snippet/hooks/interactions] can express the card" (see
 [Deliberate boundaries](#deliberate-boundaries)), but in practice the persona
-almost never called it, so capability gaps went mostly unrecorded.
+almost never called it, so capability gaps went mostly unrecorded. That
+in-loop `wish` tool has since been removed from the interpreter entirely: on
+failure the interpreter now just returns a visible fallback, with no tool call
+of its own.
 
 The trigger now lives one layer up, in the Room itself, independent of
-whether the interpreter ever reaches for `wish`. `Room._report_effect_failure`
+anything the interpreter does. `Room._report_failure_for_triage`
 (`src/board/rooms/room.py`) fires from every point a play falls back to its
 mechanical no-op: a sandbox/snippet crash at play time (`sandbox_failure`), an
 "ok" verdict with an empty plan (`no_op`), a non-"ok" verdict (`invalid_verdict`),
@@ -91,13 +94,13 @@ a persistent hook's snippet crashing (`hook_failure`, drained via
 `engine.hooks.collect_hook_errors`), or an interaction barrier failing to start
 (`interaction_setup`).
 
-The report is scheduled fire-and-forget onto a global `EvalAgentScheduler`
-(`src/evals/effect_failure_agent.py`) — the play always completes on the
+The report is scheduled fire-and-forget onto a global `TriageScheduler`
+(`src/agent/triage.py`) — the play always completes on the
 fallback path already computed; nothing in the request path awaits the
 triage. An LLM triage call diagnoses the failure, and the result is folded
-into the same `record_capability_wish` sink the `wish` tool writes to
-(`.devstate/capability_wishes.jsonl`), so both paths land in one human-review
-queue. Off by default (`Settings.eval_agent_enabled`); see
+into the `record_capability_wish` sink (`.devstate/capability_wishes.jsonl`)
+so reported capability gaps land in one human-review queue. Off by default
+(`Settings.triage_agent_enabled`); see
 [architecture.md §5](architecture.md#5-engine-reducer--sandbox-model) for the
 full context gathered, the config flags, and the LangSmith trace linkage.
 
