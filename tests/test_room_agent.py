@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from agent.contract import InterpretResult, SnippetEffect
 from models.effects import AddPointsOp, EffectProgram
@@ -87,6 +87,103 @@ def test_play_status_is_durable_in_snapshot() -> None:
     assert card["mechanical_status"] == "applied"
     assert card["mechanical_reason"] is None
     assert card["correlation_id"]
+
+
+# ── failure-triggered eval-agent reporting ──
+# _report_effect_failure imports schedule_effect_failure_report lazily, so the
+# spy patches the source module attribute (evals.effect_failure_agent); the
+# room-side eval_agent_enabled gate is what these tests exercise.
+
+
+def _eval_room(monkeypatch, spy, *, enabled: bool = True) -> Room:
+    from config import get_settings
+
+    monkeypatch.setenv("EVAL_AGENT_ENABLED", "true" if enabled else "false")
+    get_settings.cache_clear()
+    monkeypatch.setattr("evals.effect_failure_agent.schedule_effect_failure_report", spy)
+    room = _room()
+    room.state = room.state.model_copy(
+        update={"cards": {"c1": {"id": "c1", "title": "Weird", "description": "Do something impossible."}}}
+    )
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    return room
+
+
+def test_invalid_verdict_reports_and_play_still_completes(monkeypatch) -> None:
+    spy = MagicMock()
+    room = _eval_room(monkeypatch, spy)
+    result = InterpretResult(program=None, snippet=None, verdict="invalid", comment="nope")
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
+
+    spy.assert_called_once()
+    payload = spy.call_args.args[0]
+    assert payload.kind == "invalid_verdict"
+    assert payload.card_id == "c1"
+    assert payload.verdict == "invalid"
+    assert payload.comment == "nope"
+    # the play completed via the CustomNote fallback and the turn advanced
+    assert room.state.cards["c1"]["mechanical_status"] == "fallback"
+    assert room.state.turn_index == 1
+
+
+def test_ok_verdict_with_empty_plan_reports_no_op(monkeypatch) -> None:
+    spy = MagicMock()
+    room = _eval_room(monkeypatch, spy)
+    result = InterpretResult(program=None, snippet=None, verdict="ok", comment="sure")
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
+
+    spy.assert_called_once()
+    payload = spy.call_args.args[0]
+    assert payload.kind == "no_op"
+    assert payload.verdict == "ok"
+    assert payload.run_metrics is not None  # UsageCallback snapshot captured for the eval agent
+    assert room.state.turn_index == 1
+
+
+def test_plan_execution_failure_reports_sandbox_failure(monkeypatch) -> None:
+    spy = MagicMock()
+    room = _eval_room(monkeypatch, spy)
+
+    async def boom(self, base_state, plan, ctx, card, **kwargs):
+        raise RuntimeError("sandbox blew up")
+
+    monkeypatch.setattr(Room, "_execute_plan", boom)
+    result = InterpretResult(program=EffectProgram(ops=[AddPointsOp(target="self", amount=3)]), verdict="ok")
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
+
+    spy.assert_called_once()
+    payload = spy.call_args.args[0]
+    assert payload.kind == "sandbox_failure"
+    assert "sandbox blew up" in (payload.exception or "")
+    assert room.state.cards["c1"]["mechanical_status"] == "fallback"
+    assert any("[snippet error]" in line for line in room.state.log)
+
+
+def test_reports_dedupe_per_card_and_kind(monkeypatch) -> None:
+    spy = MagicMock()
+    room = _eval_room(monkeypatch, spy)
+    card = room.state.cards["c1"]
+    room._report_effect_failure("no_op", card, "corr-1", verdict="ok")
+    room._report_effect_failure("no_op", card, "corr-2", verdict="ok")
+    spy.assert_called_once()
+    room._report_effect_failure("sandbox_failure", card, "corr-3", exc=RuntimeError("x"))
+    assert spy.call_count == 2
+
+
+def test_disabled_eval_agent_never_reports(monkeypatch) -> None:
+    spy = MagicMock()
+    room = _eval_room(monkeypatch, spy, enabled=False)
+    result = InterpretResult(program=None, snippet=None, verdict="invalid")
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
+
+    spy.assert_not_called()
+    room._report_effect_failure("no_op", room.state.cards["c1"], "corr-x")
+    spy.assert_not_called()
 
 
 def test_preview_interprets_and_dry_runs_without_mutating_room() -> None:
