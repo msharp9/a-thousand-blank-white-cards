@@ -277,9 +277,20 @@ class SandboxGame:
         ops: list[dict[str, Any]] | None = None,
         attributes: dict[str, Any] | None = None,
         destination: str = "deck_shuffle",
+        target: str | None = None,
         count: int = 1,
     ) -> None:
-        """Mint `count` copies of a new card (authoring ops compile when it is later played)."""
+        """Mint `count` copies of a new card (authoring ops compile when it is later played).
+
+        `destination` is "deck_shuffle" (default), "deck_top", or "hand". With
+        "hand" the copies go to the `target` player(s) — default "self" (the
+        actor); pass a player Target (e.g. "id:<player_id>") to hand cards to a
+        specific player. Passing a player Target as `destination` (e.g.
+        `destination="id:X"`) is treated as `destination="hand", target="X"`.
+        """
+        _DESTINATIONS = {"deck_shuffle", "deck_top", "hand"}
+        if target is None and destination not in _DESTINATIONS:
+            target, destination = destination, "hand"
         self._ops.append(
             {
                 "op": "create_card",
@@ -288,6 +299,7 @@ class SandboxGame:
                 "ops": list(ops or []),
                 "attributes": dict(attributes or {}),
                 "destination": destination,
+                "target": target if target is not None else "self",
                 "count": count,
             }
         )

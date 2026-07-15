@@ -316,8 +316,11 @@ class CreateCardOp(BaseModel):
     Created cards carry structured authoring ``ops`` (compiled deterministically
     when later drawn/played — no LLM round-trip) plus optional ``attributes``.
     ``destination``: "deck_shuffle" (random deck positions), "deck_top", or
-    "hand" (the actor's). Capped at 10 copies per op so one card cannot flood
-    the game.
+    "hand". When "hand", copies go to the resolved ``target`` player(s) —
+    defaulting to "self" (the actor), but any Target works, so
+    ``destination="hand", target="id:<player_id>"`` hands cards to a specific
+    player (e.g. an auction winner). Capped at 10 copies per op so one card
+    cannot flood the game.
     """
 
     op: Literal["create_card"] = "create_card"
@@ -326,6 +329,7 @@ class CreateCardOp(BaseModel):
     ops: list[dict[str, Any]] = Field(default_factory=list)
     attributes: dict[str, Any] = Field(default_factory=dict)
     destination: Literal["deck_shuffle", "deck_top", "hand"] = "deck_shuffle"
+    target: Target = "self"
     count: int = Field(default=1, ge=1, le=10)
 
 

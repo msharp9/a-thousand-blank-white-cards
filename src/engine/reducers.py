@@ -385,16 +385,19 @@ def _reduce_create_card(
         }
         new_ids.append(cid)
 
+    destination_label = op.destination
     if op.destination == "deck_top":
         deck = [*new_ids, *deck]
     elif op.destination == "deck_shuffle":
         for cid in new_ids:
             deck.insert(rng.randint(0, len(deck)), cid)
     else:
-        players = [p.model_copy(update={"hand": [*p.hand, *new_ids]}) if p.id == ctx.actor_id else p for p in players]
+        targets = set(_resolve_targets(op.target, ctx, state))
+        players = [p.model_copy(update={"hand": [*p.hand, *new_ids]}) if p.id in targets else p for p in players]
+        destination_label = f"hand({op.target})"
 
     return state.model_copy(update={"cards": cards, "deck": deck, "players": players}).with_log(
-        f"[created] {op.count}x '{op.title}' -> {op.destination}"
+        f"[created] {op.count}x '{op.title}' -> {destination_label}"
     )
 
 
