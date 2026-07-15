@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from board.app import EVAL_DRAIN_TIMEOUT_SECONDS, create_app
+from agent import triage as efa
+from board.app import TRIAGE_DRAIN_TIMEOUT_SECONDS, create_app
 from config import get_settings
-from evals import effect_failure_agent as efa
 
 
 @pytest.fixture
@@ -76,8 +76,8 @@ def test_startup_succeeds_with_gateway_base_url(monkeypatch: pytest.MonkeyPatch,
     get_settings.cache_clear()
 
 
-def test_shutdown_drains_eval_agent_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Shutdown drains the eval-agent scheduler exactly once, with the bounded timeout."""
+def test_shutdown_drains_triage_agent_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Shutdown drains the triage-agent scheduler exactly once, with the bounded timeout."""
     monkeypatch.setenv("LLM_API_KEY", "test-key")
     get_settings.cache_clear()
     mock_scheduler = MagicMock()
@@ -88,5 +88,5 @@ def test_shutdown_drains_eval_agent_scheduler(monkeypatch: pytest.MonkeyPatch) -
         mock_scheduler.drain.assert_not_called()
         assert c.get("/health").status_code == 200
 
-    mock_scheduler.drain.assert_awaited_once_with(timeout=EVAL_DRAIN_TIMEOUT_SECONDS)
+    mock_scheduler.drain.assert_awaited_once_with(timeout=TRIAGE_DRAIN_TIMEOUT_SECONDS)
     get_settings.cache_clear()

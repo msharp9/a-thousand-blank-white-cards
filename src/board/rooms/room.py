@@ -202,12 +202,12 @@ class Room:
         # → follow-up play re-resolves), so this guards against double-logging the
         # arbiter comment for one played card. See _resolve_plan.
         self._comment_logged: set[str] = set()
-        # (card_id, kind) pairs already reported to the eval agent — one triage
-        # report per distinct failure mode per card (see _report_effect_failure;
-        # gated by Settings.eval_agent_dedupe).
+        # (card_id, kind) pairs already reported to the triage agent — one triage
+        # report per distinct failure mode per card (see _report_failure_for_triage;
+        # gated by Settings.triage_agent_dedupe).
         self._reported_failures: set[tuple[str, str]] = set()
         # Interpretation RunMetrics per card (serialized dicts), captured in
-        # _resolve_plan for the eval agent, popped when a failure report
+        # _resolve_plan for the triage agent, popped when a failure report
         # consumes them; cleared at turn start to bound growth.
         self._last_run_metrics: dict[str, dict] = {}
         self._pending_resolution: PendingResolution | None = None
@@ -738,7 +738,7 @@ class Room:
         subprocess) and adopt the resulting state. No-op when nothing subscribes.
 
         Hook-snippet failures are drained via ``collect_hook_errors`` and reported
-        to the eval agent; ``correlation_id`` ties a report to the triggering play
+        to the triage agent; ``correlation_id`` ties a report to the triggering play
         when the caller has one, else the failing hook's own card id stands in.
         """
         bus = self._hook_bus()
@@ -749,7 +749,7 @@ class Room:
             self.state = await asyncio.to_thread(bus.emit, event, self.state, ctx)
         for err in errors:
             card = self.state.cards.get(err["card_id"]) or {"id": err["card_id"], "title": err["card_id"]}
-            self._report_effect_failure(
+            self._report_failure_for_triage(
                 "hook_failure", card, correlation_id or err["card_id"], exc=RuntimeError(err["error"])
             )
 
@@ -787,7 +787,7 @@ class Room:
                 raw_ops = await asyncio.to_thread(execute_snippet, spec.code, state_dict, ctx_dict)
             except SnippetExecutionError as exc:
                 await self._log_and_broadcast(f"[hook error] {spec.source_card_id}: {exc}")
-                self._report_effect_failure("hook_failure", card, card_id, exc=exc)
+                self._report_failure_for_triage("hook_failure", card, card_id, exc=exc)
                 continue
             reason = extract_veto(raw_ops)
             if reason is not None:
@@ -1010,7 +1010,7 @@ class Room:
         self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: updated}})
         self._notify_change()
 
-    def _report_effect_failure(
+    def _report_failure_for_triage(
         self,
         kind: str,
         card,
@@ -1020,10 +1020,10 @@ class Room:
         verdict: str | None = None,
         comment: str | None = None,
     ) -> None:
-        """Queue an eval-agent triage report for one failed effect execution.
+        """Queue a triage-agent report for one failed effect execution.
 
         Best-effort by contract: never raises and never blocks the play path —
-        the report is scheduled fire-and-forget (evals.effect_failure_agent) and
+        the report is scheduled fire-and-forget (agent.triage) and
         any error here is swallowed at debug level. Deduped per (card_id, kind)
         so a card that keeps hitting the same failure mode reports once.
         """
@@ -1031,11 +1031,11 @@ class Room:
             from config import get_settings
 
             settings = get_settings()
-            if not settings.eval_agent_enabled:
+            if not settings.triage_agent_enabled:
                 return
             card_id = (card.get("id") if isinstance(card, dict) else getattr(card, "id", None)) or correlation_id
             key = (card_id, kind)
-            if settings.eval_agent_dedupe and key in self._reported_failures:
+            if settings.triage_agent_dedupe and key in self._reported_failures:
                 return
             self._reported_failures.add(key)
             description = card.get("description") if isinstance(card, dict) else getattr(card, "description", None)
@@ -1052,9 +1052,9 @@ class Room:
                 history_summary = f"{public_history(self.state, limit=20)}\ndraw totals: {draw_totals(self.state)}"
             except Exception:
                 history_summary = ""
-            from evals.effect_failure_agent import EffectFailurePayload, schedule_effect_failure_report
+            from agent.triage import CardFailure, schedule_triage
 
-            payload = EffectFailurePayload(
+            payload = CardFailure(
                 kind=kind,
                 card_title=self._card_title(card),
                 card_description=description or "",
@@ -1074,7 +1074,7 @@ class Room:
                     else None
                 ),
             )
-            schedule_effect_failure_report(payload)
+            schedule_triage(payload)
         except Exception:
             logger.debug("effect-failure report skipped (kind=%s)", kind, exc_info=True)
 
@@ -1144,12 +1144,12 @@ class Room:
         from config import get_settings
 
         settings = get_settings()
-        # Instrumentation is attached only when the eval agent is on: the
+        # Instrumentation is attached only when the triage agent is on: the
         # callback and metrics bookkeeping exist solely to feed failure triage,
         # so the production-default path pays nothing.
         callback = None
         agent_config: dict | None = None
-        if settings.eval_agent_enabled:
+        if settings.triage_agent_enabled:
             from evals.instrumentation import UsageCallback
 
             callback = UsageCallback()
@@ -1223,7 +1223,7 @@ class Room:
             correlation_id,
             "The arbiter could not produce an executable effect.",
         )
-        self._report_effect_failure(
+        self._report_failure_for_triage(
             "no_op" if result.verdict == "ok" else "invalid_verdict",
             card,
             correlation_id,
@@ -1574,7 +1574,7 @@ class Room:
                         reason,
                     )
                     self._set_card_mechanical_status(card_id, "fallback", correlation_id, reason)
-                    self._report_effect_failure("interaction_setup", card, correlation_id, exc=exc)
+                    self._report_failure_for_triage("interaction_setup", card, correlation_id, exc=exc)
                     destination = self._play_destination(card)
                     self.state = self.state.move_card(
                         card_id, "hand", destination, from_player_id=player_id, to_player_id=player_id
@@ -1599,7 +1599,7 @@ class Room:
                     reason,
                 )
                 self._set_card_mechanical_status(card_id, "fallback", correlation_id, reason)
-                self._report_effect_failure("sandbox_failure", card, correlation_id, exc=exc)
+                self._report_failure_for_triage("sandbox_failure", card, correlation_id, exc=exc)
                 destination = self._play_destination(card)
                 self.state = self.state.move_card(
                     card_id,

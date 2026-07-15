@@ -1,12 +1,12 @@
-"""evals.effect_failure_agent — LLM triage of card effects the engine failed to execute.
+"""agent.triage — LLM triage of card effects the engine failed to execute.
 
 When a played card falls back to a mechanical no-op (sandbox crash, invalid
 verdict, hook failure, …), this module diagnoses why via a structured-output
 LLM call and folds the result into the existing capability-wish telemetry sink
-for human review. Everything here is best-effort: ``build_report`` degrades to
-a deterministic report when the LLM/gateway is unavailable, and the scheduler
-runs reports fire-and-forget under a concurrency cap so triage never blocks or
-breaks gameplay.
+for human review. Everything here is best-effort: ``build_triage_report``
+degrades to a deterministic report when the LLM/gateway is unavailable, and
+the scheduler runs reports fire-and-forget under a concurrency cap so triage
+never blocks or breaks gameplay.
 """
 
 from __future__ import annotations
@@ -24,14 +24,14 @@ from agent.llm import get_chat_model
 from agent.tools.capability_wish import record_capability_wish
 from config import get_settings
 
-logger = logging.getLogger("evals.effect_failure_agent")
+logger = logging.getLogger("agent.triage")
 
 KIND = Literal["sandbox_failure", "no_op", "invalid_verdict", "hook_failure", "interaction_setup"]
 _VALID_KINDS: frozenset[str] = frozenset(get_args(KIND))
 
 
 @dataclass(frozen=True, slots=True)
-class EffectFailurePayload:
+class CardFailure:
     """Pure-data snapshot of one failed effect execution.
 
     Deliberately free of board/agent-runtime imports so any layer can construct
@@ -59,7 +59,7 @@ class EffectFailurePayload:
         return (self.card_id, self.kind)
 
 
-class EvalReport(BaseModel):
+class TriageReport(BaseModel):
     """Structured triage verdict for one effect failure."""
 
     diagnosis: str = Field(description="What went wrong, in 1-2 sentences.")
@@ -82,7 +82,7 @@ Be specific and terse.
 """
 
 
-def _render_payload(payload: EffectFailurePayload) -> str:
+def _render_payload(payload: CardFailure) -> str:
     parts = [
         f"FAILURE KIND: {payload.kind}",
         f"CARD TITLE: {payload.card_title}",
@@ -99,12 +99,12 @@ def _render_payload(payload: EffectFailurePayload) -> str:
     return "\n\n".join(parts)
 
 
-def _fallback_report(payload: EffectFailurePayload) -> EvalReport:
+def _fallback_report(payload: CardFailure) -> TriageReport:
     """Deterministic report used when the LLM call/parse fails; keeps tests and
     gateway-down operation working."""
     bucket = payload.kind if payload.kind in _VALID_KINDS else "sandbox_failure"
     exception_suffix = f": {payload.exception}" if payload.exception else ""
-    return EvalReport(
+    return TriageReport(
         diagnosis=f"Effect execution failed ({payload.kind}){exception_suffix}",
         root_cause_bucket=bucket,  # type: ignore[arg-type]
         what_the_card_wanted=payload.card_description or "unknown",
@@ -115,28 +115,28 @@ def _fallback_report(payload: EffectFailurePayload) -> EvalReport:
     )
 
 
-def build_report(payload: EffectFailurePayload, *, model: str | None = None) -> EvalReport:
+def build_triage_report(payload: CardFailure, *, model: str | None = None) -> TriageReport:
     """Diagnose one effect failure via a structured-output LLM call.
 
     Never raises: any LLM/parse error degrades to the deterministic fallback
     report built purely from the payload.
     """
-    resolved = model or get_settings().eval_agent_model or None
+    resolved = model or get_settings().triage_agent_model or None
     try:
-        llm = get_chat_model(resolved).with_structured_output(EvalReport)
+        llm = get_chat_model(resolved).with_structured_output(TriageReport)
         response = llm.invoke([SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=_render_payload(payload))])
-        if not isinstance(response, EvalReport):
-            raise TypeError(f"eval agent returned unexpected type: {type(response)}")
+        if not isinstance(response, TriageReport):
+            raise TypeError(f"triage agent returned unexpected type: {type(response)}")
         return response
     except Exception:
         logger.debug("LLM triage failed; using deterministic fallback report", exc_info=True)
         return _fallback_report(payload)
 
 
-async def report_effect_failure(payload: EffectFailurePayload, *, model: str | None = None) -> dict:
+async def run_triage(payload: CardFailure, *, model: str | None = None) -> dict:
     """Triage one failure and persist it as a capability wish. Never raises."""
     try:
-        report = await asyncio.to_thread(build_report, payload, model=model)
+        report = await asyncio.to_thread(build_triage_report, payload, model=model)
         what_i_wanted = f"[{payload.kind}] {report.what_the_card_wanted} — recommendation: {report.recommendation}"
         record = await asyncio.to_thread(
             record_capability_wish,
@@ -154,15 +154,15 @@ async def report_effect_failure(payload: EffectFailurePayload, *, model: str | N
         )
         return record
     except Exception as exc:
-        logger.exception("report_effect_failure failed (card=%s kind=%s)", payload.card_id, payload.kind)
+        logger.exception("run_triage failed (card=%s kind=%s)", payload.card_id, payload.kind)
         return {"recorded": False, "error": str(exc)}
 
 
-class EvalAgentScheduler:
+class TriageScheduler:
     """Fire-and-forget task scheduler with a concurrency cap.
 
     The semaphore is loop-bound, so it is created lazily on first use inside a
-    running loop (sized to ``eval_agent_max_concurrency``); tests rebind it via
+    running loop (sized to ``triage_agent_max_concurrency``); tests rebind it via
     ``reset_scheduler``.
     """
 
@@ -172,7 +172,7 @@ class EvalAgentScheduler:
 
     def _get_semaphore(self) -> asyncio.Semaphore:
         if self._semaphore is None:
-            self._semaphore = asyncio.Semaphore(get_settings().eval_agent_max_concurrency)
+            self._semaphore = asyncio.Semaphore(get_settings().triage_agent_max_concurrency)
         return self._semaphore
 
     def schedule(self, coro_factory: Callable[[], Awaitable[object]]) -> None:
@@ -181,7 +181,7 @@ class EvalAgentScheduler:
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            logger.warning("no running event loop; dropping eval-agent report")
+            logger.warning("no running event loop; dropping triage-agent report")
             return
         task = loop.create_task(self._run(coro_factory))
         self._tasks.add(task)
@@ -192,7 +192,7 @@ class EvalAgentScheduler:
             try:
                 await coro_factory()
             except Exception:
-                logger.exception("scheduled eval-agent report failed")
+                logger.exception("scheduled triage-agent report failed")
 
     async def drain(self, timeout: float | None = None) -> None:
         """Await pending tasks (up to ``timeout``), cancel stragglers. Never raises."""
@@ -204,24 +204,24 @@ class EvalAgentScheduler:
             for task in still_pending:
                 task.cancel()
         except Exception:
-            logger.exception("eval-agent drain failed")
+            logger.exception("triage-agent drain failed")
 
 
-_scheduler = EvalAgentScheduler()
+_scheduler = TriageScheduler()
 
 
-def get_scheduler() -> EvalAgentScheduler:
+def get_scheduler() -> TriageScheduler:
     return _scheduler
 
 
 def reset_scheduler() -> None:
     """Rebuild the singleton so its semaphore rebinds to the current test loop."""
     global _scheduler
-    _scheduler = EvalAgentScheduler()
+    _scheduler = TriageScheduler()
 
 
-def schedule_effect_failure_report(payload: EffectFailurePayload, *, model: str | None = None) -> None:
-    """Queue an async triage report for ``payload`` when the eval agent is enabled."""
-    if not get_settings().eval_agent_enabled:
+def schedule_triage(payload: CardFailure, *, model: str | None = None) -> None:
+    """Queue an async triage report for ``payload`` when the triage agent is enabled."""
+    if not get_settings().triage_agent_enabled:
         return
-    get_scheduler().schedule(lambda: report_effect_failure(payload, model=model))
+    get_scheduler().schedule(lambda: run_triage(payload, model=model))
