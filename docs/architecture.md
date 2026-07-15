@@ -516,6 +516,84 @@ the `wish` tool appends bounded capability telemetry to configured JSONL.
 sink has a hard byte cap and failures are best-effort/non-throwing. The runtime
 never invokes `bd`, writes source, or attempts self-modification.
 
+### Failure-triggered eval agent
+
+Until this feature, the interpreting agent's only capability-gap signal was
+the `wish` tool call above — invoked "if none can express the card" — and the
+persona all but never reached for it, so capability gaps went mostly
+unrecorded. The trigger has moved out of the interpreter: the Room now watches
+every point a play falls back to its mechanical no-op and reports it,
+independent of what (if anything) the agent decided to do.
+
+`Room._report_effect_failure(kind, card, correlation_id, *, exc, verdict, comment)`
+(`board/rooms/room.py`) is the single funnel, called from the sites covering
+five failure kinds:
+
+- **`sandbox_failure`** — a generated snippet raised, timed out, or produced an
+  invalid plan at play time; caught by `_finish_play`'s generic except, which
+  logs `[snippet error]` and substitutes a `CustomNoteOp` fallback.
+- **`no_op`** — the interpretation returned `verdict="ok"` but an empty plan
+  (`_resolve_plan`'s fallback branch).
+- **`invalid_verdict`** — `verdict != "ok"` (the agent gave up, or a repair
+  attempt still failed) (`_resolve_plan`).
+- **`hook_failure`** — a persistent hook's snippet crashed. Errors are drained
+  from the engine via `engine.hooks.collect_hook_errors`, which the Room reads
+  around `_emit_hooks`; the `on_validate_play` path (`_check_play_veto`)
+  reports the same way.
+- **`interaction_setup`** — an interaction barrier failed to start safely.
+
+`_report_effect_failure` builds an `EffectFailurePayload` and hands it to
+`evals.effect_failure_agent.schedule_effect_failure_report`, which — only when
+`Settings.eval_agent_enabled` — schedules the triage on a process-global
+`EvalAgentScheduler`: a loop-bound semaphore sized to
+`eval_agent_max_concurrency`, tracked in a task set. Scheduling returns
+immediately; the play and turn advance on the fallback already computed
+regardless of how (or whether) the triage completes. `board/app.py`'s lifespan
+drains the scheduler on shutdown (`EVAL_DRAIN_TIMEOUT_SECONDS`, 5s) so
+in-flight reports get a chance to finish rather than being silently abandoned.
+
+The payload carries what a human reviewer needs to triage the gap: the card's
+title/description, the failure kind, the agent's verdict/comment (when there
+was one), a sanitized exception, the mechanical fallback note, a game-state
+summary (`_summarize_state`), recent public history (`public_history` +
+`draw_totals`), and the interpretation's `RunMetrics` — token and tool-call
+counts captured by attaching `evals.instrumentation.UsageCallback` to the
+`run_agent` call. That callback is attached only when the eval agent is
+enabled, so the production-default path pays nothing for it; metrics are
+stashed per-card in `Room._last_run_metrics` and popped once a failure report
+consumes them.
+
+`build_report` (`src/evals/effect_failure_agent.py`) is a structured-output
+LLM call returning an `EvalReport` — diagnosis, root-cause bucket, what the
+card wanted, the missing capability, a recommendation, severity, and
+confidence. If the LLM/gateway call fails, it degrades to a deterministic
+report built from the payload alone. `report_effect_failure` maps the report
+into the same four fields the in-loop `wish` tool writes
+(`record_capability_wish`: card title, description, a
+`[kind] ... — recommendation: ...` "what I wanted" string, and the missing
+capability), so both paths land in the one `.devstate/capability_wishes.jsonl`
+sink with no beads/DB dependency. Reports are deduplicated per `(card_id,
+kind)` per room session (`Room._reported_failures`, gated by
+`eval_agent_dedupe`) so a card that keeps hitting the same failure mode is
+reported once.
+
+Everything is config-gated and off by default (`Settings` in `config.py`):
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `eval_agent_enabled` | `False` | Master gate. When off, `_report_effect_failure` returns immediately and no `UsageCallback` is attached — production is byte-identical to before this feature. |
+| `eval_agent_max_concurrency` | `2` | Concurrent triage LLM calls in flight. |
+| `eval_agent_model` | `""` (blank) | Overrides the chat model for triage; blank uses the default chat model. |
+| `eval_agent_timeout_seconds` | `30.0` | Reserved per-report timeout budget. |
+| `eval_agent_dedupe` | `True` | One report per `(card_id, kind)` per room session. |
+
+RunMetrics are captured in-process regardless of LangSmith. When
+`Settings.langsmith_tracing` is also on, the interpretation's `run_agent` call
+additionally carries LangSmith metadata (`card_id`, `correlation_id`, a
+`run_name`), and the failure payload carries `{project, correlation_id}` so a
+human triaging a capability wish can jump straight to the trace (see
+`docs/deploy/langsmith-setup.md`).
+
 ---
 
 ## 6. RAG pipeline
