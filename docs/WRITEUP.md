@@ -295,24 +295,29 @@ the turn.
 
 ## Task 4 — End-to-End Agentic RAG Prototype
 
-The prototype is **built end-to-end and deployed to public endpoints**:
+The prototype is **built end-to-end and deployed to public endpoints**, live as of
+2026-07-15:
 
-- **Backend** — the FastAPI + WebSocket server (single worker) deploys to **Render**
-  from a Docker image via [`render.yaml`](../render.yaml), with a `/health` health
-  check. Steps: [`docs/deploy/render-steps.md`](deploy/render-steps.md).
-- **Frontend** — the Next.js client deploys to **Vercel**. Steps:
+- **Play it:** <https://a-thousand-blank-white-cards.vercel.app>
+- **Backend** — the FastAPI + WebSocket server (single worker) runs on **Render**
+  at <https://a-thousand-blank-white-cards.onrender.com>, built from the repo's
+  Docker image with a `/health` health check. Steps:
+  [`docs/deploy/render-steps.md`](deploy/render-steps.md).
+- **Frontend** — the Next.js client is served by **Vercel**. Steps:
   [`docs/deploy/vercel-steps.md`](deploy/vercel-steps.md).
 - **Observability** — LangSmith setup:
   [`docs/deploy/langsmith-setup.md`](deploy/langsmith-setup.md).
 - **Post-deploy smoke test** — [`docs/deploy/smoke-checklist.md`](deploy/smoke-checklist.md).
+  The automated probe (health, CORS, WebSocket round-trip, frontend page,
+  cross-origin wiring, plus LLM/Tavily/LangSmith credential checks) passes against
+  the deployed pair.
 
 The full stack runs the loop described in Task 2: browser → REST/WebSocket → room
 state machine → deterministic engine and/or the tool-calling agent (with Qdrant RAG +
-Tavily) → live broadcast back to every player.
-
-> Live URLs are provisioned per the deploy docs above; **confirm the live URL before
-> submission** (deployed via `docs/deploy/*` — do not cite a URL that hasn't been
-> verified against the running services).
+Tavily) → live broadcast back to every player. Note: the deployment is a free-tier
+POC — services spin down when idle (cold starts up to ~1 minute) and game/RAG state
+is in-memory (see the persistence caveats in
+[`docs/deploy/render-steps.md`](deploy/render-steps.md)).
 
 ---
 

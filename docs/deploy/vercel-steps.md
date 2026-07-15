@@ -56,7 +56,7 @@ npx vercel --prod
 ```
 
 This builds and deploys the frontend. When it finishes, Vercel prints the production
-URL (e.g. `https://tbwc-frontend.vercel.app`). Note this URL — you need it for the
+URL (e.g. `https://a-thousand-blank-white-cards.vercel.app`). Note this URL — you need it for the
 next step.
 
 ## 4. Update the backend CORS allow-list
@@ -69,7 +69,7 @@ On Render, update the backend service's `CORS_ORIGINS` environment variable to a
 array that includes the Vercel URL, for example:
 
 ```json
-["http://localhost:3000", "https://tbwc-frontend.vercel.app"]
+["http://localhost:3000", "https://a-thousand-blank-white-cards.vercel.app"]
 ```
 
 Then **redeploy the backend** on Render so the new value takes effect.

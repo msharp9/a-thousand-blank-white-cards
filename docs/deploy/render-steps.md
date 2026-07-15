@@ -94,18 +94,21 @@ Two footguns worth calling out:
    fail to parse and **crash the app at boot**. Use a JSON array:
 
    ```
-   ["https://tbwc.vercel.app"]
+   ["https://a-thousand-blank-white-cards.vercel.app"]
    ```
 
    For multiple origins:
 
    ```
-   ["https://tbwc.vercel.app", "https://www.tbwc.app"]
+   ["https://a-thousand-blank-white-cards.vercel.app", "https://www.tbwc.app"]
    ```
 
-2. **Don't copy `DEV_MODE=true` from a local `.env`.** Dev mode wires
-   unauthenticated `POST /rooms/{code}/dev/*` endpoints and file-backed room
-   persistence. Leave `DEV_MODE` unset (defaults to `false`) in production.
+2. **`DEV_MODE=true` enables unauthenticated `POST /rooms/{code}/dev/*`
+   endpoints** (skip-setup, end-game) and file-backed room persistence. The
+   current deployment **deliberately keeps it on** so demos can fast-forward
+   rooms; anyone with a room code can invoke those endpoints. Set it to
+   `false` (the default) once demo convenience is no longer worth that
+   exposure.
 
 Render redeploys automatically when environment variables change.
 

@@ -33,7 +33,7 @@ services:
         value: "true"
       - key: TRIAGE_AGENT_ENABLED
         value: "true"
-      # JSON array string, e.g. ["https://tbwc.vercel.app"] — a bare URL fails
+      # JSON array string, e.g. ["https://a-thousand-blank-white-cards.vercel.app"] — a bare URL fails
       # pydantic-settings list parsing and crashes the app at boot.
       - key: CORS_ORIGINS
         sync: false

@@ -9,7 +9,7 @@ Do not announce a deploy as healthy until both parts pass.
 ## Prerequisites
 
 - The backend URL (Render), e.g. `https://a-thousand-blank-white-cards.onrender.com`
-- The frontend URL (Vercel), e.g. `https://tbwc.vercel.app`
+- The frontend URL (Vercel), e.g. `https://a-thousand-blank-white-cards.vercel.app`
 - Two devices/browsers (laptop + phone) for the real-time checks
 - A local checkout with `uv` available
 
@@ -21,7 +21,7 @@ together (not just each service in isolation):
 ```bash
 uv run python scripts/smoke_test.py \
   --backend https://a-thousand-blank-white-cards.onrender.com \
-  --frontend https://tbwc.vercel.app
+  --frontend https://a-thousand-blank-white-cards.vercel.app
 ```
 
 This runs the checks that are on by default and prints a pass/fail/skip
@@ -92,18 +92,32 @@ Do these against the **live Vercel URL** with two devices.
       reflected in game state / the effect log.
 - [ ] **Reconnect** — Refresh one device mid-game and confirm it reconnects to
       the same room and restores state (no lost session).
-- [ ] **Ordered post-draw effect** — Play or author a Chess Master-style card
-      that draws two cards and then scores from the resulting hand. Confirm the
-      draw happens once and the score uses the post-draw hand size.
-- [ ] **Rule replacement** — Play an Uno-style card and confirm draw count 0,
-      empty-hand end/win rules, and any color-alignment rule appear in the
-      dynamic-state panel and affect later turns.
-- [ ] **Sealed auction** — Play `Going Once, Going Twice`, bid from both
-      devices, and confirm no values leak before completion. Confirm the winner
-      pays, receives the played card, and tied bids follow visible turn order.
-- [ ] **Drawing and vote chain** — Play `Cat Show`, submit a drawing from both
-      devices, and confirm the vote appears only after both submissions. Vote,
-      then confirm every tied winning artist receives 3 points.
+The next four checks exercise specific card behaviors. What matters is the
+card's **description** — that is what the agent interprets; the title is
+flavor. Author a wild card with the description given (or play the matching
+seed card if you happen to draw it).
+
+- [ ] **Ordered post-draw effect** — Author a card described like: *"Draw two
+      cards, then gain a point for each card in your hand."* Confirm the draw
+      happens once and the score uses the post-draw hand size.
+- [ ] **Rule replacement** — Author a card described like: *"Use Uno's
+      empty-hand ending and zero-draw rule. Track the color of each played
+      card and reject plays that do not match the current color."* (seed deck:
+      "Wild Uno"). Confirm draw count 0, the empty-hand end/win rules, and the
+      color-alignment rule appear in the dynamic-state panel and affect later
+      turns.
+- [ ] **Sealed auction** — Author a card described like: *"Everyone secretly
+      bids points for this card. The highest bidder pays their bid and takes
+      this card into their hand. Ties go to the earliest player in turn
+      order."* (seed deck: "Going Once, Going Twice"). Bid from both devices
+      and confirm no values leak before completion. Confirm the winner pays,
+      receives the played card, and tied bids follow visible turn order.
+- [ ] **Drawing and vote chain** — Author a card described like: *"Everyone
+      draws a cat, then everyone votes for the best cat. The artist with the
+      most votes gains 3 points; ties all score."* (seed deck: "Cat Show").
+      Submit a drawing from both devices and confirm the vote appears only
+      after both submissions. Vote, then confirm every tied winning artist
+      receives 3 points.
 - [ ] **Reconnect during interaction** — Refresh one device after submitting a
       sealed bid or drawing. Confirm it returns to the same barrier marked as
       submitted without revealing values, then complete the interaction from

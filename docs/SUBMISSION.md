@@ -59,14 +59,13 @@ VERIFIED` and a note on what to check.
       memory + game-introspection toolbox; FastAPI backend
       ([`src/board/app.py`](../src/board/app.py), REST + WebSocket) and the Next.js
       frontend.
-- [ ] **Deployed to a public endpoint** — backend on Render via
-      [`render.yaml`](../render.yaml) (Docker, `/health` check) per
-      [`docs/deploy/render-steps.md`](deploy/render-steps.md); frontend on Vercel
-      per [`docs/deploy/vercel-steps.md`](deploy/vercel-steps.md).
-      `⚠️ NOT VERIFIED`: the actual live URLs
-      (`https://a-thousand-blank-white-cards.onrender.com`, `https://tbwc.vercel.app`) are examples
-      in the docs — confirm the real deployed URLs respond before submitting (see
-      Part B).
+- [x] **Deployed to a public endpoint** — LIVE and verified 2026-07-15:
+      backend <https://a-thousand-blank-white-cards.onrender.com> (Render, Docker,
+      `/health` check) per [`docs/deploy/render-steps.md`](deploy/render-steps.md);
+      frontend <https://a-thousand-blank-white-cards.vercel.app> (Vercel) per
+      [`docs/deploy/vercel-steps.md`](deploy/vercel-steps.md). The full automated
+      smoke probe (health, CORS, WebSocket round-trip, frontend, wiring, plus the
+      Tavily/LangSmith/LLM credential checks) passes against the pair (Part B).
 
 ### Task 5 requirements (evals)
 
@@ -113,22 +112,21 @@ These are prose/diagram deliverables. All should live in
 - Diagram assets exist and can be embedded:
   [`docs/game.excalidraw.svg`](game.excalidraw.svg),
   [`docs/agent.excalidraw.svg`](agent.excalidraw.svg).
-- [ ] `⚠️ NOT VERIFIED — BLOCKER`: [`docs/WRITEUP.md`](WRITEUP.md) is currently the
-      stub `TODO: Recreate, but good.` None of the Task 1/2/3/7 written deliverables
-      are actually present. This must be written before submission.
+- [x] [`docs/WRITEUP.md`](WRITEUP.md) contains all Task 1/2/3/7 written
+      deliverables (problem statement + user + workflow diagram + eval pairs,
+      solution + infrastructure/agent diagrams, chunking + data sources,
+      Demo Day reflection). Give it a final proofread before submitting.
 
 ### Final submission bundle (GitHub repo)
 
 - [ ] **Public GitHub repo containing all relevant code** — this repository
       (backend `src/`, frontend `frontend/`, evals `src/evals/`, deploy docs). Make
       it public or share access before submitting.
-- [ ] **Written document addressing every deliverable/question** —
-      [`docs/WRITEUP.md`](WRITEUP.md). `⚠️ NOT VERIFIED — BLOCKER`: still a stub (see
-      above).
+- [x] **Written document addressing every deliverable/question** —
+      [`docs/WRITEUP.md`](WRITEUP.md) (complete; see above).
 - [ ] **Loom video (≤10 min) demoing the app + use case, linked from the repo** —
-      script scaffold at [`docs/loom-script.md`](loom-script.md).
-      `⚠️ NOT VERIFIED — BLOCKER`: `loom-script.md` is still the stub `TODO:
-      Recreate, but good.` and no `loom.com` link exists anywhere in the repo.
+      a full timed script exists at [`docs/loom-script.md`](loom-script.md).
+      `⚠️ NOT VERIFIED — BLOCKER`: no `loom.com` link exists anywhere in the repo.
       Record the video and add its URL to the README and/or WRITEUP.
 
 ---
@@ -140,12 +138,14 @@ deploy healthy until every box below is checked.
 
 ### Pre-deploy
 
-- [ ] **Backend Docker image builds and runs locally** — `docker build -t tbwc .`
+- [x] **Backend Docker image builds and runs locally** — `docker build -t tbwc .`
       then `docker run -p 8000:8000 --env-file .env tbwc`; `curl
       localhost:8000/health` returns `{"status": "ok"}`
       ([`docs/deploy/render-steps.md`](deploy/render-steps.md) Prerequisites).
-- [ ] **Quality gates pass** — `uv run pytest`, `uv run ruff check .`,
-      `uv run ruff format --check .`.
+      Verified 2026-07-15.
+- [x] **Quality gates pass** — `uv run pytest`, `uv run ruff check .`,
+      `uv run ruff format --check .`. Verified 2026-07-15 (1491 passed, 92.7%
+      coverage).
 - [ ] **Eval numbers current** — the [`WRITEUP.md`](WRITEUP.md) Task 5/6 tables come
       from persisted runs in `data/eval/runs/`; if the agent, prompts, or toolbox
       changed since 2026-07-14, re-run the affected configs from
@@ -156,39 +156,48 @@ deploy healthy until every box below is checked.
 Set the `sync: false` secrets on the `a-thousand-blank-white-cards` service
 Environment tab ([`docs/deploy/render-steps.md`](deploy/render-steps.md)):
 
-- [ ] `LLM_API_KEY` set (and `LLM_BASE_URL` if using a gateway; blank = hosted OpenAI).
-- [ ] `LLM_CHAT_MODEL` / `LLM_EMBEDDING_MODEL` set to ids that exist on the
+All verified 2026-07-15 via `smoke_test.py --check-llm --check-tavily
+--check-langsmith` plus the default `cors` check:
+
+- [x] `LLM_API_KEY` set (and `LLM_BASE_URL` if using a gateway; blank = hosted OpenAI).
+- [x] `LLM_CHAT_MODEL` / `LLM_EMBEDDING_MODEL` set to ids that exist on the
       gateway (code defaults assume hosted OpenAI).
-- [ ] `TAVILY_API_KEY` set (required for the `web_search` tool to work in prod).
-- [ ] `LANGSMITH_API_KEY` set; inline `LANGSMITH_TRACING=true`,
+- [x] `TAVILY_API_KEY` set (required for the `web_search` tool to work in prod).
+- [x] `LANGSMITH_API_KEY` set; inline `LANGSMITH_TRACING=true`,
       `LANGSMITH_PROJECT=tbwc-prod` per
       [`docs/deploy/langsmith-setup.md`](deploy/langsmith-setup.md).
-- [ ] `CORS_ORIGINS` set to a **JSON array** string including the Vercel URL, e.g.
-      `["https://tbwc.vercel.app"]` (a bare URL fails pydantic parsing).
+- [x] `CORS_ORIGINS` set to a **JSON array** string including the Vercel URL:
+      `["https://a-thousand-blank-white-cards.vercel.app"]` (a bare URL fails pydantic parsing).
 
 ### Vercel frontend env vars
 
 Set for the `production` environment
 ([`docs/deploy/vercel-steps.md`](deploy/vercel-steps.md)):
 
-- [ ] `NEXT_PUBLIC_API_URL` = the Render backend HTTPS URL (no trailing slash).
-- [ ] `NEXT_PUBLIC_WS_URL` = the Render backend `wss://` URL (must be secure — no
-      `ws://`, browsers block mixed content). No Vercel WebSocket proxy; the browser
-      talks straight to Render.
-- [ ] Redeploy the frontend after changing any `NEXT_PUBLIC_*` var (they inline at
-      build time).
+- [x] `NEXT_PUBLIC_API_URL` = `https://a-thousand-blank-white-cards.onrender.com`
+      (no trailing slash).
+- [x] `NEXT_PUBLIC_WS_URL` = `wss://a-thousand-blank-white-cards.onrender.com`
+      (must be secure — no `ws://`, browsers block mixed content). No Vercel
+      WebSocket proxy; the browser talks straight to Render.
+- [x] Redeploy the frontend after changing any `NEXT_PUBLIC_*` var (they inline at
+      build time). Verified 2026-07-15: the deployed bundle contains both
+      production URLs and no localhost fallbacks.
 
 ### Post-deploy verification
 
-- [ ] **Backend `/health` green** — `curl https://<render-url>/health` returns
+- [x] **Backend `/health` green** —
+      `curl https://a-thousand-blank-white-cards.onrender.com/health` returns
       `200 {"status": "ok"}` (allow ~30–60s for free-tier cold start).
 - [ ] **LangSmith tracing confirmed** — Render logs show `LangSmith tracing
       ENABLED project=tbwc-prod`; a trace appears in the `tbwc-prod` project after
       interpreting one card ([`docs/deploy/langsmith-setup.md`](deploy/langsmith-setup.md) §5–6).
-- [ ] **Automated smoke probe passes** —
-      `uv run python scripts/smoke_test.py --backend <render-url> --origin <vercel-url>`
-      exits `0` (checks `/health`, CORS preflight, and a live WebSocket round-trip)
-      ([`docs/deploy/smoke-checklist.md`](deploy/smoke-checklist.md) §1).
+      (The API key itself is verified — `--check-langsmith` passes — but confirm a
+      real trace lands after playing one card.)
+- [x] **Automated smoke probe passes** —
+      `uv run python scripts/smoke_test.py --backend https://a-thousand-blank-white-cards.onrender.com --frontend https://a-thousand-blank-white-cards.vercel.app`
+      exits `0` (health, CORS preflight, live WebSocket round-trip, frontend page,
+      and cross-origin wiring) ([`docs/deploy/smoke-checklist.md`](deploy/smoke-checklist.md) §1).
+      Verified 2026-07-15.
 - [ ] **Manual two-device end-to-end passes** — run every box in
       [`docs/deploy/smoke-checklist.md`](deploy/smoke-checklist.md) §2: laptop +
       phone load, create/join room, real-time state sync, play a card, author a wild

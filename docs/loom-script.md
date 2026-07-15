@@ -5,12 +5,15 @@ A timed script for a graded Loom video, **≤10 minutes total**:
 / approach walkthrough. Each beat gives a **time range**, *what to show on
 screen*, and what to say.
 
-> Setup before you hit record: backend running (`uv run uvicorn board.app:app`),
-> frontend running (`cd frontend && npm run dev`), a laptop browser tab and a
-> phone (or a second, narrow browser window) both open to
-> [localhost:3000](http://localhost:3000), side by side and in frame. A `.env`
-> with a real `LLM_API_KEY` (and ideally `TAVILY_API_KEY`) so the agent runs
-> live. Pre-decide your two demo players' names.
+> Setup before you hit record: either use the live deployment — laptop tab and
+> phone both open to
+> [a-thousand-blank-white-cards.vercel.app](https://a-thousand-blank-white-cards.vercel.app)
+> (wake the free-tier backend with one request a minute or two before
+> recording) — or run locally: backend (`uv run uvicorn board.app:app`),
+> frontend (`cd frontend && npm run dev`), both devices open to
+> [localhost:3000](http://localhost:3000), with a `.env` carrying a real
+> `LLM_API_KEY` (and ideally `TAVILY_API_KEY`) so the agent runs live. Either
+> way, side by side and in frame; pre-decide your two demo players' names.
 
 ---
 
