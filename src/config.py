@@ -88,6 +88,13 @@ class Settings(BaseSettings):
     capability_wish_path: str = ".devstate/capability_wishes.jsonl"
     capability_wish_max_bytes: int = Field(default=1_048_576, ge=1024)
 
+    # --- Eval agent (LLM-based failure triage) ---
+    eval_agent_enabled: bool = False
+    eval_agent_max_concurrency: int = Field(default=2, ge=1)
+    eval_agent_model: str = ""
+    eval_agent_timeout_seconds: float = 30.0
+    eval_agent_dedupe: bool = True
+
     # --- Sandbox ---
     snippet_execution_enabled: bool = True
 

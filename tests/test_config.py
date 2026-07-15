@@ -76,6 +76,31 @@ def test_accessors_follow_config(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.embedding_dimensions == 768
 
 
+def test_eval_agent_defaults() -> None:
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.eval_agent_enabled is False
+    assert s.eval_agent_max_concurrency == 2
+    assert s.eval_agent_model == ""
+    assert s.eval_agent_timeout_seconds == 30.0
+    assert s.eval_agent_dedupe is True
+
+
+def test_eval_agent_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("EVAL_AGENT_ENABLED", "true")
+    monkeypatch.setenv("EVAL_AGENT_MAX_CONCURRENCY", "5")
+    monkeypatch.setenv("EVAL_AGENT_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("EVAL_AGENT_TIMEOUT_SECONDS", "12.5")
+    monkeypatch.setenv("EVAL_AGENT_DEDUPE", "false")
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.eval_agent_enabled is True
+    assert s.eval_agent_max_concurrency == 5
+    assert s.eval_agent_model == "gpt-4o-mini"
+    assert s.eval_agent_timeout_seconds == 12.5
+    assert s.eval_agent_dedupe is False
+    get_settings.cache_clear()
+
+
 def test_dev_mode_defaults_false() -> None:
     get_settings.cache_clear()
     assert get_settings().dev_mode is False
