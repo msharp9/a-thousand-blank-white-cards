@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
+import agent.triage as triage_module
 from board.rooms.room import Room
 from models.effects import DrawCardsOp, EffectProgram
 from models.ws_messages import PlayMsg
@@ -183,15 +184,15 @@ def test_kept_hook_card_replays_deterministically_next_game() -> None:
 BAD_HOOK_CODE = "def apply(state, ctx):\n    1 / 0\n"
 
 
-def test_crashing_hook_snippet_reports_hook_failure_to_eval_agent(monkeypatch) -> None:
+def test_crashing_hook_snippet_reports_hook_failure_to_triage_agent(monkeypatch) -> None:
     from unittest.mock import MagicMock
 
     from config import get_settings
 
-    monkeypatch.setenv("EVAL_AGENT_ENABLED", "true")
+    monkeypatch.setenv("TRIAGE_AGENT_ENABLED", "true")
     get_settings.cache_clear()
     spy = MagicMock()
-    monkeypatch.setattr("evals.effect_failure_agent.schedule_effect_failure_report", spy)
+    monkeypatch.setattr(triage_module, "schedule_triage", spy)
 
     bad = {
         "id": "badh",

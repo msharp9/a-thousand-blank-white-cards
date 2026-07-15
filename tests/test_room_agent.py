@@ -6,6 +6,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import agent.triage as triage_module
 from agent.contract import InterpretResult, SnippetEffect
 from models.effects import AddPointsOp, EffectProgram
 from models.ws_messages import CreateCardMsg, Placement, PlayMsg, PreviewCardMsg
@@ -89,18 +90,18 @@ def test_play_status_is_durable_in_snapshot() -> None:
     assert card["correlation_id"]
 
 
-# ── failure-triggered eval-agent reporting ──
-# _report_effect_failure imports schedule_effect_failure_report lazily, so the
-# spy patches the source module attribute (evals.effect_failure_agent); the
-# room-side eval_agent_enabled gate is what these tests exercise.
+# ── failure-triggered triage-agent reporting ──
+# _report_failure_for_triage imports schedule_triage lazily, so the
+# spy patches the source module attribute (agent.triage); the
+# room-side triage_agent_enabled gate is what these tests exercise.
 
 
-def _eval_room(monkeypatch, spy, *, enabled: bool = True) -> Room:
+def _triage_room(monkeypatch, spy, *, enabled: bool = True) -> Room:
     from config import get_settings
 
-    monkeypatch.setenv("EVAL_AGENT_ENABLED", "true" if enabled else "false")
+    monkeypatch.setenv("TRIAGE_AGENT_ENABLED", "true" if enabled else "false")
     get_settings.cache_clear()
-    monkeypatch.setattr("evals.effect_failure_agent.schedule_effect_failure_report", spy)
+    monkeypatch.setattr(triage_module, "schedule_triage", spy)
     room = _room()
     room.state = room.state.model_copy(
         update={"cards": {"c1": {"id": "c1", "title": "Weird", "description": "Do something impossible."}}}
@@ -112,7 +113,7 @@ def _eval_room(monkeypatch, spy, *, enabled: bool = True) -> Room:
 
 def test_invalid_verdict_reports_and_play_still_completes(monkeypatch) -> None:
     spy = MagicMock()
-    room = _eval_room(monkeypatch, spy)
+    room = _triage_room(monkeypatch, spy)
     result = InterpretResult(program=None, snippet=None, verdict="invalid", comment="nope")
     with patch("agent.runtime.run_agent", return_value=result):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
@@ -130,7 +131,7 @@ def test_invalid_verdict_reports_and_play_still_completes(monkeypatch) -> None:
 
 def test_ok_verdict_with_empty_plan_reports_no_op(monkeypatch) -> None:
     spy = MagicMock()
-    room = _eval_room(monkeypatch, spy)
+    room = _triage_room(monkeypatch, spy)
     result = InterpretResult(program=None, snippet=None, verdict="ok", comment="sure")
     with patch("agent.runtime.run_agent", return_value=result):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
@@ -139,13 +140,13 @@ def test_ok_verdict_with_empty_plan_reports_no_op(monkeypatch) -> None:
     payload = spy.call_args.args[0]
     assert payload.kind == "no_op"
     assert payload.verdict == "ok"
-    assert payload.run_metrics is not None  # UsageCallback snapshot captured for the eval agent
+    assert payload.run_metrics is not None  # UsageCallback snapshot captured for the triage agent
     assert room.state.turn_index == 1
 
 
 def test_plan_execution_failure_reports_sandbox_failure(monkeypatch) -> None:
     spy = MagicMock()
-    room = _eval_room(monkeypatch, spy)
+    room = _triage_room(monkeypatch, spy)
 
     async def boom(self, base_state, plan, ctx, card, **kwargs):
         raise RuntimeError("sandbox blew up")
@@ -165,24 +166,24 @@ def test_plan_execution_failure_reports_sandbox_failure(monkeypatch) -> None:
 
 def test_reports_dedupe_per_card_and_kind(monkeypatch) -> None:
     spy = MagicMock()
-    room = _eval_room(monkeypatch, spy)
+    room = _triage_room(monkeypatch, spy)
     card = room.state.cards["c1"]
-    room._report_effect_failure("no_op", card, "corr-1", verdict="ok")
-    room._report_effect_failure("no_op", card, "corr-2", verdict="ok")
+    room._report_failure_for_triage("no_op", card, "corr-1", verdict="ok")
+    room._report_failure_for_triage("no_op", card, "corr-2", verdict="ok")
     spy.assert_called_once()
-    room._report_effect_failure("sandbox_failure", card, "corr-3", exc=RuntimeError("x"))
+    room._report_failure_for_triage("sandbox_failure", card, "corr-3", exc=RuntimeError("x"))
     assert spy.call_count == 2
 
 
-def test_disabled_eval_agent_never_reports(monkeypatch) -> None:
+def test_disabled_triage_agent_never_reports(monkeypatch) -> None:
     spy = MagicMock()
-    room = _eval_room(monkeypatch, spy, enabled=False)
+    room = _triage_room(monkeypatch, spy, enabled=False)
     result = InterpretResult(program=None, snippet=None, verdict="invalid")
     with patch("agent.runtime.run_agent", return_value=result):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c1")))
 
     spy.assert_not_called()
-    room._report_effect_failure("no_op", room.state.cards["c1"], "corr-x")
+    room._report_failure_for_triage("no_op", room.state.cards["c1"], "corr-x")
     spy.assert_not_called()
 
 

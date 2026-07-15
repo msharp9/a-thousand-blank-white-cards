@@ -1,4 +1,4 @@
-"""Tests for evals.effect_failure_agent (report mapping, fallback, scheduler)."""
+"""Tests for agent.triage (report mapping, fallback, scheduler)."""
 
 from __future__ import annotations
 
@@ -9,19 +9,19 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from config import get_settings
-from evals import effect_failure_agent as efa
-from evals.effect_failure_agent import (
-    EffectFailurePayload,
-    EvalReport,
-    build_report,
+from agent import triage as efa
+from agent.triage import (
+    CardFailure,
+    TriageReport,
+    build_triage_report,
     get_scheduler,
-    report_effect_failure,
+    run_triage,
     reset_scheduler,
-    schedule_effect_failure_report,
+    schedule_triage,
 )
 
 
-def _payload(**overrides) -> EffectFailurePayload:
+def _payload(**overrides) -> CardFailure:
     base: dict = {
         "kind": "sandbox_failure",
         "card_title": "Auction",
@@ -30,11 +30,11 @@ def _payload(**overrides) -> EffectFailurePayload:
         "correlation_id": "corr-1",
     }
     base.update(overrides)
-    return EffectFailurePayload(**base)
+    return CardFailure(**base)
 
 
-def _report() -> EvalReport:
-    return EvalReport(
+def _report() -> TriageReport:
+    return TriageReport(
         diagnosis="Sandbox crashed collecting sealed bids.",
         root_cause_bucket="sandbox_failure",
         what_the_card_wanted="Sealed bids from every player",
@@ -54,9 +54,9 @@ def wish_path(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 
 def test_report_maps_to_wish_fields(wish_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(efa, "build_report", lambda payload, *, model=None: _report())
+    monkeypatch.setattr(efa, "build_triage_report", lambda payload, *, model=None: _report())
 
-    result = asyncio.run(report_effect_failure(_payload()))
+    result = asyncio.run(run_triage(_payload()))
 
     assert result["recorded"] is True
     lines = wish_path.read_text().splitlines()
@@ -77,13 +77,13 @@ def test_llm_down_yields_deterministic_report_and_still_records_wish(
     monkeypatch.setattr(efa, "get_chat_model", MagicMock(side_effect=RuntimeError("gateway down")))
     payload = _payload(kind="hook_failure", exception="boom")
 
-    report = build_report(payload)
+    report = build_triage_report(payload)
     assert report.root_cause_bucket == "hook_failure"
     assert report.confidence == 0.0
     assert report.severity == "low"
     assert "boom" in report.diagnosis
 
-    result = asyncio.run(report_effect_failure(payload))
+    result = asyncio.run(run_triage(payload))
     assert result["recorded"] is True
     stored = json.loads(wish_path.read_text().splitlines()[0])
     assert stored["what_i_wanted"].startswith("[hook_failure]")
@@ -91,13 +91,13 @@ def test_llm_down_yields_deterministic_report_and_still_records_wish(
 
 def test_fallback_coerces_unknown_kind_to_sandbox_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(efa, "get_chat_model", MagicMock(side_effect=RuntimeError("down")))
-    report = build_report(_payload(kind="something_new"))
+    report = build_triage_report(_payload(kind="something_new"))
     assert report.root_cause_bucket == "sandbox_failure"
 
 
-def test_report_effect_failure_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(efa, "build_report", MagicMock(side_effect=RuntimeError("explode")))
-    result = asyncio.run(report_effect_failure(_payload()))
+def test_run_triage_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(efa, "build_triage_report", MagicMock(side_effect=RuntimeError("explode")))
+    result = asyncio.run(run_triage(_payload()))
     assert result == {"recorded": False, "error": "explode"}
 
 
@@ -107,7 +107,7 @@ def test_dedupe_key() -> None:
 
 
 def test_scheduler_caps_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("EVAL_AGENT_MAX_CONCURRENCY", "2")
+    monkeypatch.setenv("TRIAGE_AGENT_MAX_CONCURRENCY", "2")
     get_settings.cache_clear()
     reset_scheduler()
 
@@ -140,20 +140,20 @@ def test_scheduler_caps_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_disabled_gate_schedules_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("EVAL_AGENT_ENABLED", "false")
+    monkeypatch.setenv("TRIAGE_AGENT_ENABLED", "false")
     get_settings.cache_clear()
     reset_scheduler()
-    with patch.object(efa.EvalAgentScheduler, "schedule") as mock_schedule:
-        schedule_effect_failure_report(_payload())
+    with patch.object(efa.TriageScheduler, "schedule") as mock_schedule:
+        schedule_triage(_payload())
         mock_schedule.assert_not_called()
 
 
 def test_enabled_gate_schedules_report(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("EVAL_AGENT_ENABLED", "true")
+    monkeypatch.setenv("TRIAGE_AGENT_ENABLED", "true")
     get_settings.cache_clear()
     reset_scheduler()
-    with patch.object(efa.EvalAgentScheduler, "schedule") as mock_schedule:
-        schedule_effect_failure_report(_payload())
+    with patch.object(efa.TriageScheduler, "schedule") as mock_schedule:
+        schedule_triage(_payload())
         mock_schedule.assert_called_once()
 
 
