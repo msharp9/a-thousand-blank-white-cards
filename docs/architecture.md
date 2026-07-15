@@ -638,23 +638,6 @@ SVGs are the source of intent; these are notes, not contradictions):
    (`chaos_monkey`) and a pick-a-reading-at-random branch (`random_solution`),
    plus the `none` value for cleanly-interpreted cards.
 
-3. **"Multi-agent or middleware?" / LLM / framework** (`agent.excalidraw.svg`).
-   The sketch poses the open question "Do I need multi-agent, or just middleware
-   with tool-call limits?" and marks the LLM as undecided ("LLM - ?"). The code
-   resolves these: a **single** tool-calling agent (`agent/runtime.py`, one
-   `create_agent`) with a hard tool-call cap and wall-clock timeout — no
-   multi-agent orchestration — over a **generic OpenAI-compatible gateway**
-   (`config.Settings`, one base_url/key for both chat and embeddings). The
-   framework is LangChain's `create_agent` (built on LangGraph — the recursion
-   cap surfaces as `GraphRecursionError`), and LangSmith tracing is wired but
-   off by default behind `Settings.langsmith_tracing`.
-
-4. **Tool names.** The six agent tools in `agent/tools/` map to the sketch's tool
-   nodes: `web_search` → Web Search, `card_rag` → Card Database, `game_rules` →
-   Game Rules, `read_engine_methods` → Read Game Engine Methods, `read_game_state`
-   → Read Game State, `agent_memory` → Memory. (`mtg_lookup` is an additional
-   tool not drawn in the sketch.)
-
 ---
 
 ## 8. Frontend design system — "Sketchbook Tabletop"

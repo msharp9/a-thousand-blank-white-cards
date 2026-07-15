@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 # a handful of tool round-trips (each tool call is ~2 steps: model -> tool ->
 # model) while still being low enough that hitting it forces a final answer
 # rather than letting the agent burn an unbounded number of tool calls.
-MAX_TOOL_CALLS: int = 24
+MAX_TOOL_CALLS: int = 12
 
 # Wall-clock ceiling for a single interpretation, in seconds. Guards against a
 # tool or model call that hangs on the network even when the step count is low.
