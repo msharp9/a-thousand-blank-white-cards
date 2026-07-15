@@ -7,7 +7,7 @@ agent turns free-text cards into game effects.
 ## Three corpora
 
 - **`real_cards.json`** — the full Imgur album transcribed verbatim (~700 cards).
-  Photos were downloaded to `images/` (see [`download_images.py`](./download_images.py))
+  Photos were downloaded to `images/` (see [`download_images.py`](../../scripts/data_prep/download_images.py))
   and transcribed by a vision model. Each record has a real `image_url`, a
   verbatim `title` + `description`, an `alt_text` (the art description, split
   out of the old bracketed description prefix), and a filled `human_canonical`.

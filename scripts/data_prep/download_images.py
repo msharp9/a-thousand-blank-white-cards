@@ -6,7 +6,7 @@ folder so the corpus is available offline for eval / annotation work.
 
 Run it directly::
 
-    uv run python data/eval/download_images.py
+    uv run python scripts/data_prep/download_images.py
 
 No API key is required: the album's full media manifest is embedded in the
 public album HTML (``window.postDataJSON``), so we parse the direct
@@ -45,12 +45,13 @@ IMGUR_ALBUM_ID = "rWS9A"
 ALBUM_URL = "https://imgur.com/a/blank-white-cards-5-2012-5-2013-rWS9A"
 
 # Local, gitignored destination for the downloaded photos + manifest.
-IMAGES_DIR = Path(__file__).resolve().parent / "images"
+_EVAL_DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "eval"
+IMAGES_DIR = _EVAL_DATA_DIR / "images"
 MANIFEST_PATH = IMAGES_DIR / "manifest.json"
 
 # Tracked (committed) list of the album's direct image URLs, so the link set is
 # available without re-scraping. Written by :func:`run`.
-URLS_PATH = Path(__file__).resolve().parent / "image_urls.json"
+URLS_PATH = _EVAL_DATA_DIR / "image_urls.json"
 
 # A genuine Imgur direct image link, e.g. https://i.imgur.com/abc123.jpeg.
 _IMGUR_DIRECT_URL_RE = re.compile(

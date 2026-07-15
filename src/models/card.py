@@ -109,7 +109,7 @@ def normalise_canonical(raw: dict[str, Any]) -> dict[str, Any]:
     """Normalise a v1 canonical dict to the v2 schema (idempotent on v2 input).
 
     The single legacy shim, shared by CardCanonical's before-validator,
-    board.rooms.deck._normalise_card, and scripts/migrate_card_schema.py.
+    board.rooms.deck._normalise_card, and scripts/data_prep/migrate_card_schema.py.
     Permanent, not migration-only: persisted room canonicals, Qdrant payloads,
     and agent memory carry v1 dicts forever. Mapping table lives in
     data/eval/CANONICAL_SPEC.md (appendix).

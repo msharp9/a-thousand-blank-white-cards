@@ -1,6 +1,6 @@
 """Validate canonical annotations against schema v2 (CANONICAL_SPEC.md).
 
-Usage: python data/eval/validate_canonical.py [path-to-cards.json]
+Usage: python scripts/data_prep/validate_canonical.py [path-to-cards.json]
 Prints any schema violations and a distribution summary. Exit 1 on violations.
 Reads the ``human_canonical`` key (eval datasets) or ``canonical`` (seed
 datasets), whichever a card carries.
@@ -126,5 +126,9 @@ def validate(path: Path) -> int:
 
 
 if __name__ == "__main__":
-    p = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / "real_cards.json"
+    p = (
+        Path(sys.argv[1])
+        if len(sys.argv) > 1
+        else Path(__file__).resolve().parents[2] / "data" / "eval" / "real_cards.json"
+    )
     sys.exit(validate(p))

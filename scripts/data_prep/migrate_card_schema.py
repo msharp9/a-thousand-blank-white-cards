@@ -13,9 +13,9 @@ verifies exactly that). Cards whose effect the mechanical pass cannot express
 an authoring worklist for the hand/agent pass; nothing is guessed.
 
 Usage:
-    uv run python scripts/migrate_card_schema.py --all
-    uv run python scripts/migrate_card_schema.py --file data/eval/real_cards.json
-    uv run python scripts/migrate_card_schema.py --check
+    uv run python scripts/data_prep/migrate_card_schema.py --all
+    uv run python scripts/data_prep/migrate_card_schema.py --file data/eval/real_cards.json
+    uv run python scripts/data_prep/migrate_card_schema.py --check
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from engine.sandbox.validate import validate_snippet  # noqa: E402
@@ -300,7 +300,7 @@ def main() -> int:
             print(f"unchanged {path.relative_to(ROOT)}")
 
     if args.check and stale:
-        print("stale (run scripts/migrate_card_schema.py --all):", *stale, sep="\n  ")
+        print("stale (run scripts/data_prep/migrate_card_schema.py --all):", *stale, sep="\n  ")
         return 1
     if worklist:
         print(f"\nauthoring worklist ({len(worklist)} cards need hand/agent sandbox work):")
