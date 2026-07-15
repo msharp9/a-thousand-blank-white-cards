@@ -43,9 +43,9 @@ VERIFIED` and a note on what to check.
       startup) and the hand-annotated gold set
       [`data/eval/eval_cards.json`](../data/eval/eval_cards.json) plus
       [`data/eval/real_cards.json`](../data/eval/real_cards.json). Retrieval is
-      exposed to the agent via the `card_rag` tool
-      ([`src/agent/tools/card_rag.py`](../src/agent/tools/card_rag.py)) over
-      [`src/agent/rag/`](../src/agent/rag/).
+      exposed to the agent via the `card_rag_hybrid` tool
+      ([`src/agent/tools/card_rag_hybrid.py`](../src/agent/tools/card_rag_hybrid.py))
+      over [`src/agent/rag/`](../src/agent/rag/).
 - [ ] **Agentic public-data search** — Tavily-backed `web_search` tool
       ([`src/agent/tools/web_search.py`](../src/agent/tools/web_search.py)), keyed by
       `TAVILY_API_KEY` in [`src/config.py`](../src/config.py) and bound by default
@@ -74,33 +74,28 @@ VERIFIED` and a note on what to check.
       [`data/eval/eval_cards.json`](../data/eval/eval_cards.json)
       (+ [`ANNOTATION_GUIDE.md`](../data/eval/ANNOTATION_GUIDE.md),
       [`CANONICAL_SPEC.md`](../data/eval/CANONICAL_SPEC.md)).
-- [ ] **Evaluation harness built** — [`src/evals/`](../src/evals/): `harness.py`,
-      `eval_core.py`, `scorers.py`, LLM-as-judge in `judge.py`. Run with
-      `uv run python -m evals.harness`.
-- [ ] **Conclusions drawn about pipeline performance** — written analysis in
-      [`src/evals/RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md) §5
-      and `src/evals/conclusions.py`.
-      `⚠️ NOT VERIFIED`: the result tables are explicitly labelled **illustrative
-      placeholders**, and the suite is not yet runnable against the configured
-      gateway — see [`EVAL_ASSESSMENT.md`](EVAL_ASSESSMENT.md) and bead **82f.11**.
-      Regenerate with a live gateway key and replace the numbers + delete the caveat
-      banners before submission.
+- [ ] **Evaluation harness built** — [`src/evals/`](../src/evals/): the
+      production-faithful runner `runner.py` (per-run configs, `enabled_tools`
+      filtering, cost/latency instrumentation), `scorers.py`, LLM-as-judge in
+      `judge.py`, plus the legacy standalone `harness.py`. Driven from
+      [`scripts/evals.ipynb`](../scripts/evals.ipynb); runs persist to
+      `data/eval/runs/`.
+- [ ] **Conclusions drawn about pipeline performance** — measured 2026-07-14 runs
+      summarized in [`WRITEUP.md`](WRITEUP.md) Task 5 Conclusions, with analysis in
+      [`scripts/analyze_evals.ipynb`](../scripts/analyze_evals.ipynb).
 
 ### Task 6 requirements (improvement)
 
-- [ ] **Advanced retriever implemented + justified** — multi-query expansion
-      retriever (`MultiQueryCardRetriever` / `advanced_retriever()`) in
-      [`src/agent/rag/retrievers.py`](../src/agent/rag/retrievers.py); rationale in
-      [`RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md) §1.
-- [ ] **Before/after results in a table** — A/B drivers `evals.retriever_ab` and
-      `evals.improvement_ab`; tables in
-      [`RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md) §2 and §3.
-      `⚠️ NOT VERIFIED`: same placeholder caveat as Task 5 — regenerate with a real
-      key.
-- [ ] **One other improvement, evidenced by the harness** — few-shot exemplar
-      priming, driven by
-      [`src/evals/improvement_ab.py`](../src/evals/improvement_ab.py); documented in
-      [`RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md) §3.
+- [ ] **Advanced retriever implemented + justified** — BM25 + dense hybrid with
+      Reciprocal Rank Fusion (`hybrid_retriever()` in
+      [`src/agent/rag/retrievers.py`](../src/agent/rag/retrievers.py)), bound as the
+      default `card_rag_hybrid` tool; rationale in [`WRITEUP.md`](WRITEUP.md) Task 6.
+- [ ] **Before/after results in a table** — dense vs. hybrid A/B via the runner's
+      `enabled_tools` filter on the seed benchmark; measured table in
+      [`WRITEUP.md`](WRITEUP.md) Task 6.
+- [ ] **One other improvement, evidenced by the harness** — model selection +
+      `max_tool_calls=12` cap, measured by the model sweep and tool-cap sweep tables
+      in [`WRITEUP.md`](WRITEUP.md) Task 6.
 
 ### Tasks 1, 2, 3, 7 written deliverables
 
@@ -151,10 +146,10 @@ deploy healthy until every box below is checked.
       ([`docs/deploy/render-steps.md`](deploy/render-steps.md) Prerequisites).
 - [ ] **Quality gates pass** — `uv run pytest`, `uv run ruff check .`,
       `uv run ruff format --check .`.
-- [ ] **Eval numbers regenerated** — run `evals.retriever_ab` and
-      `evals.improvement_ab` with a live `LLM_API_KEY`, paste real tables into
-      [`RETRIEVER_ANALYSIS.md`](RETRIEVER_ANALYSIS.md), remove the
-      placeholder banners.
+- [ ] **Eval numbers current** — the [`WRITEUP.md`](WRITEUP.md) Task 5/6 tables come
+      from persisted runs in `data/eval/runs/`; if the agent, prompts, or toolbox
+      changed since 2026-07-14, re-run the affected configs from
+      [`scripts/evals.ipynb`](../scripts/evals.ipynb) and refresh the tables.
 
 ### Render backend env vars
 
