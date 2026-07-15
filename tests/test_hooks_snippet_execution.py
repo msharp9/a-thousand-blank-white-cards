@@ -61,6 +61,25 @@ def test_score_doubler_hook_doubles_delta_end_to_end() -> None:
     assert out.get_player("p1").score == 6
 
 
+def test_player_scoped_hook_does_not_fire_for_other_players_score_change() -> None:
+    """p1's player-scoped doubler must not double p2's unrelated score gain."""
+    from engine.apply import apply_effect
+    from engine.events import EventBus
+    from models.effects import AddPointsOp, EffectProgram
+
+    reg = HookRegistry()
+    state = _state_with_card("doubler")
+    state = state.model_copy(update={"players": [*state.players, Player(id="p2", name="Bob", score=0)]})
+    hook = RegisteredHook(source_card_id="doubler", event=str(GameEvent.ON_SCORE_CHANGE), scope="player", owner_id="p1")
+    reg.register(hook, make_snippet_handler("doubler", SCORE_DOUBLER))
+
+    ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p2", card_id="unrelated")
+    out = apply_effect(state, EffectProgram(ops=[AddPointsOp(target="self", amount=3)]), ctx, bus=EventBus(reg))
+
+    assert out.get_player("p2").score == 3  # not doubled — p1's hook isn't p2's
+    assert out.get_player("p1").score == 0
+
+
 def test_score_change_hook_sees_target_player_ids_and_deltas() -> None:
     from engine.apply import apply_effect
     from engine.events import EventBus

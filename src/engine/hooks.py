@@ -183,7 +183,9 @@ def fire_hooks(
 ) -> Any:  # returns GameState
     """Fire all hooks subscribed to `event` in the correct order.
 
-    1. Partition hooks into player-scoped and center-scoped.
+    1. Partition hooks into player-scoped and center-scoped. A player-scoped
+       hook only fires for events relevant to its owner (owner_id in
+       ctx.target_player_ids, or ctx.actor_id when no targets are set).
     2. Player hooks fire first, center hooks fire last (outermost/override).
     3. Within each group, fire in REGISTRATION order (first-registered fires
        first; last-registered fires last/outermost, getting the final say).
@@ -195,7 +197,8 @@ def fire_hooks(
     if not matching:
         return state
 
-    player_hooks = [h for h in matching if h.scope == "player"]
+    relevant_ids = ctx.target_player_ids or ([ctx.actor_id] if ctx.actor_id else [])
+    player_hooks = [h for h in matching if h.scope == "player" and h.owner_id in relevant_ids]
     center_hooks = [h for h in matching if h.scope == "center"]
     ordered = player_hooks + center_hooks
     if max_hooks is not None and len(ordered) > max_hooks:

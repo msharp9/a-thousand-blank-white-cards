@@ -326,11 +326,11 @@ def compile_card_plan(card: dict) -> ResolutionPlan | None:
     if program is not None and program.ops:
         steps.append(OpsStep(ops=program.ops))
 
-    # Schema v2 carries executable code under "sandbox"; legacy persisted
-    # canonicals may still carry "snippet", which is only usable when it is
-    # real code — prose snippets used to produce doomed SnippetSteps that
-    # failed at execution time.
-    if isinstance(canonical, dict):
+    # Seed-authored sandbox mirrors ops for the same effect (a RAG exemplar,
+    # not a second step) — running both would double it. Agent/player-authored
+    # cards may legitimately chain ops + sandbox for one effect.
+    is_seed_mirror = card.get("origin") == "seed" and program is not None and program.ops
+    if not is_seed_mirror and isinstance(canonical, dict):
         code = canonical.get("sandbox")
         if not (isinstance(code, str) and code.strip()):
             legacy = canonical.get("snippet")

@@ -24,6 +24,31 @@ def test_legacy_ops_and_snippet_compile_in_order() -> None:
     assert plan.steps[1].code == SNIPPET
 
 
+def test_seed_origin_skips_sandbox_mirror_of_ops() -> None:
+    card = {
+        "origin": "seed",
+        "canonical": {
+            "ops": [{"op": "add_points", "args": {"target": "self", "amount": 5}}],
+            "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)\n",
+        },
+    }
+
+    plan = compile_card_plan(card)
+
+    assert plan is not None
+    assert [step.kind for step in plan.steps] == ["ops"]
+
+
+def test_seed_origin_still_uses_sandbox_when_ops_missing() -> None:
+    card = {"origin": "seed", "canonical": {"ops": [], "sandbox": SNIPPET}}
+
+    plan = compile_card_plan(card)
+
+    assert plan is not None
+    assert [step.kind for step in plan.steps] == ["snippet"]
+    assert plan.steps[0].code == SNIPPET
+
+
 def test_explicit_steps_take_precedence_over_legacy_fields() -> None:
     card = {
         "canonical": {
