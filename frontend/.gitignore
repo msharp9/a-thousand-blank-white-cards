@@ -43,3 +43,4 @@ next-env.d.ts
 # app source lib dir (the root Python .gitignore ignores "lib/", which would
 # otherwise silently drop this Next.js/shadcn source directory)
 !/lib/
+.env*
