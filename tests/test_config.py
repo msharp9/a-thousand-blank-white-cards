@@ -76,9 +76,12 @@ def test_accessors_follow_config(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.embedding_dimensions == 768
 
 
-def test_triage_agent_defaults() -> None:
+def test_triage_agent_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The hermetic fixture forces TRIAGE_AGENT_ENABLED=false for test isolation;
+    # drop it here to observe the real code default (on).
+    monkeypatch.delenv("TRIAGE_AGENT_ENABLED", raising=False)
     s = Settings(_env_file=None)  # type: ignore[call-arg]
-    assert s.triage_agent_enabled is False
+    assert s.triage_agent_enabled is True
     assert s.triage_agent_max_concurrency == 2
     assert s.triage_agent_model == ""
     assert s.triage_agent_timeout_seconds == 30.0

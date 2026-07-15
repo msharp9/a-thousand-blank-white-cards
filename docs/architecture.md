@@ -583,9 +583,9 @@ summary (`_summarize_state`), recent public history (`public_history` +
 `draw_totals`), and the interpretation's `RunMetrics` — token and tool-call
 counts captured by attaching `evals.instrumentation.UsageCallback` to the
 `run_agent` call. That callback is attached only when the triage agent is
-enabled, so the production-default path pays nothing for it; metrics are
-stashed per-card in `Room._last_run_metrics` and popped once a failure report
-consumes them.
+enabled (the default); disabling triage makes the play path pay nothing for it.
+Metrics are stashed per-card in `Room._last_run_metrics` and popped once a
+failure report consumes them.
 
 `build_triage_report` (`src/agent/triage.py`) is a structured-output
 LLM call returning a `TriageReport` — diagnosis, root-cause bucket, what the
@@ -601,14 +601,15 @@ kind)` per room session (`Room._reported_failures`, gated by
 `triage_agent_dedupe`) so a card that keeps hitting the same failure mode is
 reported once.
 
-Everything is config-gated and off by default (`Settings` in `config.py`):
+Everything is config-gated and on by default (`Settings` in `config.py`, env
+vars in `.env.example`):
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `triage_agent_enabled` | `False` | Master gate. When off, `_report_failure_for_triage` returns immediately and no `UsageCallback` is attached — production is byte-identical to before this feature. |
-| `triage_agent_max_concurrency` | `2` | Concurrent triage LLM calls in flight. |
-| `triage_agent_model` | `""` (blank) | Overrides the chat model for triage; blank uses the default chat model. |
-| `triage_agent_timeout_seconds` | `30.0` | Reserved per-report timeout budget. |
+| `triage_agent_enabled` | `True` | Master gate. Set `false` to make `_report_failure_for_triage` return immediately and skip attaching `UsageCallback` — the play path is then byte-identical to before this feature. |
+| `triage_agent_max_concurrency` | `2` | Concurrent triage LLM calls in flight (across all rooms). |
+| `triage_agent_model` | `""` (blank) | Model for triage; blank inherits the interpreter's `llm_chat_model`. Override to triage on a different/cheaper model. |
+| `triage_agent_timeout_seconds` | `30.0` | Per-report time budget. |
 | `triage_agent_dedupe` | `True` | One report per `(card_id, kind)` per room session. |
 
 RunMetrics are captured in-process regardless of LangSmith. When
