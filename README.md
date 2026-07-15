@@ -135,8 +135,6 @@ Offline evaluation of the agent + retriever. All eval scripts call the LLM gatew
 
 ```bash
 uv run python -m evals.harness          # main eval harness
-uv run python -m evals.retriever_ab     # retriever A/B comparison
-uv run python -m evals.improvement_ab   # few-shot before/after eval
 ```
 
 See [`docs/RETRIEVER_ANALYSIS.md`](docs/RETRIEVER_ANALYSIS.md) for retriever analysis.

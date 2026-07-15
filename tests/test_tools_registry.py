@@ -10,7 +10,7 @@ def test_default_tools_include_all_context_free_tools() -> None:
     names = {t.name for t in get_default_tools()}
     assert {
         "web_search",
-        "card_rag",
+        "card_rag_hybrid",
         "game_rules",
         "mtg_lookup",
         "remember_decision",
@@ -39,4 +39,4 @@ def test_one_bad_tool_does_not_break_the_toolbox(monkeypatch) -> None:
     names = {t.name for t in get_default_tools()}
     # web_search is dropped, the rest survive.
     assert "web_search" not in names
-    assert "card_rag" in names
+    assert "card_rag_hybrid" in names

@@ -119,9 +119,9 @@ class TestToolFiltering:
         from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, EVAL_CREATOR_ID, build_eval_state
         from evals.runner import EvalConfig, _build_tools
 
-        cfg = EvalConfig(enabled_tools=frozenset({"card_rag"}))
+        cfg = EvalConfig(enabled_tools=frozenset({"card_rag_hybrid"}))
         tools = _build_tools(cfg, build_eval_state(), EVAL_ACTOR_ID, EVAL_CREATOR_ID, EVAL_CARD_ID)
-        assert [t.name for t in tools] == ["card_rag"]
+        assert [t.name for t in tools] == ["card_rag_hybrid"]
 
     def test_none_means_full_toolbox(self) -> None:
         from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, EVAL_CREATOR_ID, build_eval_state
