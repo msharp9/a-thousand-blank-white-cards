@@ -42,13 +42,13 @@ import re
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 from engine.apply import apply_effect
 from engine.compile import compile_card_plan
 from engine.events import EventBus, GameEvent, HookContext
-from engine.hooks import build_registry
+from engine.hooks import build_registry, collect_hook_errors
 from engine.history import append_history_event, record_draw, record_game_end
 from engine.loop import advance_turn
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
@@ -202,6 +202,14 @@ class Room:
         # → follow-up play re-resolves), so this guards against double-logging the
         # arbiter comment for one played card. See _resolve_plan.
         self._comment_logged: set[str] = set()
+        # (card_id, kind) pairs already reported to the triage agent — one triage
+        # report per distinct failure mode per card (see _report_failure_for_triage;
+        # gated by Settings.triage_agent_dedupe).
+        self._reported_failures: set[tuple[str, str]] = set()
+        # Interpretation RunMetrics per card (serialized dicts), captured in
+        # _resolve_plan for the triage agent, popped when a failure report
+        # consumes them; cleared at turn start to bound growth.
+        self._last_run_metrics: dict[str, dict] = {}
         self._pending_resolution: PendingResolution | None = None
         self._interaction_timer: asyncio.Task | None = None
         # Card id of the play currently being interpreted/resolved (brewing),
@@ -630,6 +638,7 @@ class Room:
         """
         self._has_drawn = False
         self._plays_this_turn = 0
+        self._last_run_metrics.clear()
         await self._emit_hooks(GameEvent.ON_TURN_START, player_id)
         await self._auto_draw(player_id)
         await self._broadcast_state()
@@ -717,14 +726,32 @@ class Room:
             self._hook_fingerprint = fingerprint
         return EventBus(self._hook_registry, max_hooks=MAX_HOOKS_PER_EVENT)
 
-    async def _emit_hooks(self, event: GameEvent, actor_id: str, *, card_id: str | None = None) -> None:
+    async def _emit_hooks(
+        self,
+        event: GameEvent,
+        actor_id: str,
+        *,
+        card_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
         """Fire registered hooks for ``event`` (off-loop: each fire is a sandbox
-        subprocess) and adopt the resulting state. No-op when nothing subscribes."""
+        subprocess) and adopt the resulting state. No-op when nothing subscribes.
+
+        Hook-snippet failures are drained via ``collect_hook_errors`` and reported
+        to the triage agent; ``correlation_id`` ties a report to the triggering play
+        when the caller has one, else the failing hook's own card id stands in.
+        """
         bus = self._hook_bus()
         if not self._hook_registry.hooks_for_event(str(event)):
             return
         ctx = HookContext(event=event, actor_id=actor_id, card_id=card_id)
-        self.state = await asyncio.to_thread(bus.emit, event, self.state, ctx)
+        with collect_hook_errors() as errors:
+            self.state = await asyncio.to_thread(bus.emit, event, self.state, ctx)
+        for err in errors:
+            card = self.state.cards.get(err["card_id"]) or {"id": err["card_id"], "title": err["card_id"]}
+            self._report_failure_for_triage(
+                "hook_failure", card, correlation_id or err["card_id"], exc=RuntimeError(err["error"])
+            )
 
     async def _check_play_veto(self, player_id: str, card_id: str, card) -> str | None:
         """Fire ON_VALIDATE_PLAY hooks; return the first veto reason, or None.
@@ -760,6 +787,7 @@ class Room:
                 raw_ops = await asyncio.to_thread(execute_snippet, spec.code, state_dict, ctx_dict)
             except SnippetExecutionError as exc:
                 await self._log_and_broadcast(f"[hook error] {spec.source_card_id}: {exc}")
+                self._report_failure_for_triage("hook_failure", card, card_id, exc=exc)
                 continue
             reason = extract_veto(raw_ops)
             if reason is not None:
@@ -982,6 +1010,74 @@ class Room:
         self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: updated}})
         self._notify_change()
 
+    def _report_failure_for_triage(
+        self,
+        kind: str,
+        card,
+        correlation_id: str,
+        *,
+        exc: Exception | None = None,
+        verdict: str | None = None,
+        comment: str | None = None,
+    ) -> None:
+        """Queue a triage-agent report for one failed effect execution.
+
+        Best-effort by contract: never raises and never blocks the play path —
+        the report is scheduled fire-and-forget (agent.triage) and
+        any error here is swallowed at debug level. Deduped per (card_id, kind)
+        so a card that keeps hitting the same failure mode reports once.
+        """
+        try:
+            from config import get_settings
+
+            settings = get_settings()
+            if not settings.triage_agent_enabled:
+                return
+            card_id = (card.get("id") if isinstance(card, dict) else getattr(card, "id", None)) or correlation_id
+            key = (card_id, kind)
+            if settings.triage_agent_dedupe and key in self._reported_failures:
+                return
+            self._reported_failures.add(key)
+            description = card.get("description") if isinstance(card, dict) else getattr(card, "description", None)
+            creator_id = card.get("creator_id") if isinstance(card, dict) else getattr(card, "creator_id", None)
+            try:
+                from agent.tools.read_game_state import _summarize_state
+
+                state_summary = _summarize_state(self.state, None, creator_id, card_id)
+            except Exception:
+                state_summary = ""
+            try:
+                from engine.history import draw_totals, public_history
+
+                history_summary = f"{public_history(self.state, limit=20)}\ndraw totals: {draw_totals(self.state)}"
+            except Exception:
+                history_summary = ""
+            from agent.triage import CardFailure, schedule_triage
+
+            payload = CardFailure(
+                kind=kind,
+                card_title=self._card_title(card),
+                card_description=description or "",
+                card_id=card_id,
+                correlation_id=correlation_id,
+                verdict=verdict,
+                comment=comment,
+                exception=(
+                    self._public_mechanical_reason(exc, fallback="effect execution failed") if exc is not None else None
+                ),
+                state_summary=state_summary,
+                history_summary=history_summary,
+                run_metrics=self._last_run_metrics.pop(card_id, None),
+                langsmith=(
+                    {"project": settings.langsmith_project, "correlation_id": correlation_id}
+                    if settings.langsmith_tracing
+                    else None
+                ),
+            )
+            schedule_triage(payload)
+        except Exception:
+            logger.debug("effect-failure report skipped (kind=%s)", kind, exc_info=True)
+
     def _can_pass(self, player_id: str) -> bool:
         """True if the active player may end their turn WITHOUT playing.
 
@@ -1045,6 +1141,26 @@ class Room:
 
         from agent.contract import InterpretResult
         from agent.runtime import run_agent
+        from config import get_settings
+
+        settings = get_settings()
+        # Instrumentation is attached only when the triage agent is on: the
+        # callback and metrics bookkeeping exist solely to feed failure triage,
+        # so the production-default path pays nothing.
+        callback = None
+        agent_config: dict | None = None
+        if settings.triage_agent_enabled:
+            from evals.instrumentation import UsageCallback
+
+            callback = UsageCallback()
+            agent_config = {"callbacks": [callback]}
+            if settings.langsmith_tracing:
+                agent_config["metadata"] = {
+                    "card_id": card_id,
+                    "correlation_id": correlation_id,
+                    "kind_hint": "interpretation",
+                }
+                agent_config["run_name"] = f"interpret:{card_id}"
 
         await self.connections.broadcast({"type": "brewing", "card_id": card_id})
         try:
@@ -1059,10 +1175,16 @@ class Room:
                 creator_id=creator_id,
                 card_id=card_id,
                 card_art=self.card_art.get(card_id),
+                config=agent_config,
             )
         except Exception:
             logger.exception("run_agent failed for %s; using deterministic fallback", card_id)
             result = InterpretResult(verdict="invalid", comment="", persona_action="none")
+        finally:
+            # In finally so a failed interpretation still records its metrics
+            # for the eval-agent report.
+            if callback is not None:
+                self._last_run_metrics[card_id] = asdict(callback.snapshot())
 
         await self.connections.broadcast(
             {
@@ -1100,6 +1222,13 @@ class Room:
             "fallback",
             correlation_id,
             "The arbiter could not produce an executable effect.",
+        )
+        self._report_failure_for_triage(
+            "no_op" if result.verdict == "ok" else "invalid_verdict",
+            card,
+            correlation_id,
+            verdict=result.verdict,
+            comment=result.comment,
         )
         note = title or "Card"
         return ResolutionPlan(steps=[OpsStep(ops=[CustomNoteOp(note=f"Played {note} (no mechanical effect)")])])
@@ -1445,6 +1574,7 @@ class Room:
                         reason,
                     )
                     self._set_card_mechanical_status(card_id, "fallback", correlation_id, reason)
+                    self._report_failure_for_triage("interaction_setup", card, correlation_id, exc=exc)
                     destination = self._play_destination(card)
                     self.state = self.state.move_card(
                         card_id, "hand", destination, from_player_id=player_id, to_player_id=player_id
@@ -1469,6 +1599,7 @@ class Room:
                     reason,
                 )
                 self._set_card_mechanical_status(card_id, "fallback", correlation_id, reason)
+                self._report_failure_for_triage("sandbox_failure", card, correlation_id, exc=exc)
                 destination = self._play_destination(card)
                 self.state = self.state.move_card(
                     card_id,
@@ -1486,7 +1617,7 @@ class Room:
                 if not isinstance(current, dict) or current.get("mechanical_status") != "fallback":
                     self._set_card_mechanical_status(card_id, "applied", correlation_id)
                 await self._log_and_broadcast(self._describe_play(player_id, card, before))
-                await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id)
+                await self._emit_hooks(GameEvent.ON_PLAY, player_id, card_id=card_id, correlation_id=correlation_id)
                 game_ending = self._end_now() or win_condition_met(self.state)
 
         # The play's target for history purposes: whoever the player explicitly
@@ -1956,7 +2087,9 @@ class Room:
         self.state = completed
         self._set_card_mechanical_status(pending.card_id, "applied", pending.correlation_id)
         await self._log_and_broadcast(self._describe_play(pending.actor_id, pending.card, pending.before_scores))
-        await self._emit_hooks(GameEvent.ON_PLAY, pending.actor_id, card_id=pending.card_id)
+        await self._emit_hooks(
+            GameEvent.ON_PLAY, pending.actor_id, card_id=pending.card_id, correlation_id=pending.correlation_id
+        )
         await self._complete_interaction_play(
             pending,
             game_ending=self._end_now() or win_condition_met(self.state),

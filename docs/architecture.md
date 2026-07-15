@@ -508,13 +508,116 @@ agent a cloned state containing an ephemeral preview card, then dry-runs the
 returned plan through the real reducers and sandbox. `preview_result` includes
 the plan, mechanical status, sanitized reason, and correlation id. Invalid
 methods such as `state.draw` therefore fail before a card is created or played.
-Preview binds no persistent-write tools (`remember_decision` or `wish`).
+Preview binds no persistent-write tools (`remember_decision`).
 
 If no op, sandbox method, hook, or supported interaction can express a card,
-the `wish` tool appends bounded capability telemetry to configured JSONL.
+that capability gap is recorded out-of-band by the triage agent below, via
+`record_capability_wish` (`src/agent/tools/capability_wish.py`), which appends
+bounded capability telemetry to configured JSONL.
 `scripts/export_capability_wishes.py` exports it for offline human triage. The
 sink has a hard byte cap and failures are best-effort/non-throwing. The runtime
 never invokes `bd`, writes source, or attempts self-modification.
+
+### Failure-triggered triage agent
+
+Until this feature, the interpreting agent's only capability-gap signal was an
+in-loop `wish` tool call — invoked "if none can express the card" — and the
+persona all but never reached for it, so capability gaps went mostly
+unrecorded. That in-loop `wish` tool has since been removed from the
+interpreter entirely: on failure the interpreter now just returns a visible
+fallback, with no tool call of its own. The trigger has moved out of the
+interpreter: the Room now watches every point a play falls back to its
+mechanical no-op and reports it, independent of what (if anything) the agent
+decided to do.
+
+```mermaid
+flowchart TD
+    P[Card played] --> R{Interpret<br/>run_agent}
+    R -->|ok + plan| X[Execute plan]
+    R -->|verdict invalid| K1[invalid_verdict]
+    R -->|ok but empty plan| K2[no_op]
+    X -->|snippet raises / timeout| K3[sandbox_failure]
+    X -->|interaction setup fails| K4[interaction_setup]
+    X -->|hook snippet crashes| K5[hook_failure]
+    X -->|success| OK[status: applied]
+    K1 & K2 & K3 & K4 & K5 --> FB[CustomNote fallback<br/>turn continues, never blocks]
+    FB --> RF["Room._report_failure_for_triage(kind, card, ...)"]
+    RF -->|triage_agent_enabled<br/>+ dedupe per card,kind| SC["schedule_triage(CardFailure)"]
+    SC --> TS[TriageScheduler<br/>fire-and-forget, concurrency-capped]
+    TS --> RT["run_triage()"]
+    RT --> BR["build_triage_report() -> TriageReport<br/>(deterministic fallback if LLM down)"]
+    BR --> W["record_capability_wish()<br/>.devstate/capability_wishes.jsonl"]
+```
+
+`Room._report_failure_for_triage(kind, card, correlation_id, *, exc, verdict, comment)`
+(`board/rooms/room.py`) is the single funnel, called from the sites covering
+five failure kinds:
+
+- **`sandbox_failure`** — a generated snippet raised, timed out, or produced an
+  invalid plan at play time; caught by `_finish_play`'s generic except, which
+  logs `[snippet error]` and substitutes a `CustomNoteOp` fallback.
+- **`no_op`** — the interpretation returned `verdict="ok"` but an empty plan
+  (`_resolve_plan`'s fallback branch).
+- **`invalid_verdict`** — `verdict != "ok"` (the agent gave up, or a repair
+  attempt still failed) (`_resolve_plan`).
+- **`hook_failure`** — a persistent hook's snippet crashed. Errors are drained
+  from the engine via `engine.hooks.collect_hook_errors`, which the Room reads
+  around `_emit_hooks`; the `on_validate_play` path (`_check_play_veto`)
+  reports the same way.
+- **`interaction_setup`** — an interaction barrier failed to start safely.
+
+`_report_failure_for_triage` builds a `CardFailure` and hands it to
+`agent.triage.schedule_triage`, which — only when
+`Settings.triage_agent_enabled` — schedules the triage on a process-global
+`TriageScheduler`: a loop-bound semaphore sized to
+`triage_agent_max_concurrency`, tracked in a task set. Scheduling returns
+immediately; the play and turn advance on the fallback already computed
+regardless of how (or whether) the triage completes. `board/app.py`'s lifespan
+drains the scheduler on shutdown (`TRIAGE_DRAIN_TIMEOUT_SECONDS`, 5s) so
+in-flight reports get a chance to finish rather than being silently abandoned.
+
+The payload carries what a human reviewer needs to triage the gap: the card's
+title/description, the failure kind, the agent's verdict/comment (when there
+was one), a sanitized exception, the mechanical fallback note, a game-state
+summary (`_summarize_state`), recent public history (`public_history` +
+`draw_totals`), and the interpretation's `RunMetrics` — token and tool-call
+counts captured by attaching `evals.instrumentation.UsageCallback` to the
+`run_agent` call. That callback is attached only when the triage agent is
+enabled (the default); disabling triage makes the play path pay nothing for it.
+Metrics are stashed per-card in `Room._last_run_metrics` and popped once a
+failure report consumes them.
+
+`build_triage_report` (`src/agent/triage.py`) is a structured-output
+LLM call returning a `TriageReport` — diagnosis, root-cause bucket, what the
+card wanted, the missing capability, a recommendation, severity, and
+confidence. If the LLM/gateway call fails, it degrades to a deterministic
+report built from the payload alone. `run_triage` maps the report
+into the same four fields `record_capability_wish` writes
+(card title, description, a
+`[kind] ... — recommendation: ...` "what I wanted" string, and the missing
+capability), landing in the one `.devstate/capability_wishes.jsonl`
+sink with no beads/DB dependency. Reports are deduplicated per `(card_id,
+kind)` per room session (`Room._reported_failures`, gated by
+`triage_agent_dedupe`) so a card that keeps hitting the same failure mode is
+reported once.
+
+Everything is config-gated and on by default (`Settings` in `config.py`, env
+vars in `.env.example`):
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `triage_agent_enabled` | `True` | Master gate. Set `false` to make `_report_failure_for_triage` return immediately and skip attaching `UsageCallback` — the play path is then byte-identical to before this feature. |
+| `triage_agent_max_concurrency` | `2` | Concurrent triage LLM calls in flight (across all rooms). |
+| `triage_agent_model` | `""` (blank) | Model for triage; blank inherits the interpreter's `llm_chat_model`. Override to triage on a different/cheaper model. |
+| `triage_agent_timeout_seconds` | `30.0` | Per-report time budget. |
+| `triage_agent_dedupe` | `True` | One report per `(card_id, kind)` per room session. |
+
+RunMetrics are captured in-process regardless of LangSmith. When
+`Settings.langsmith_tracing` is also on, the interpretation's `run_agent` call
+additionally carries LangSmith metadata (`card_id`, `correlation_id`, a
+`run_name`), and the failure payload carries `{project, correlation_id}` so a
+human triaging a capability wish can jump straight to the trace (see
+`docs/deploy/langsmith-setup.md`).
 
 ---
 

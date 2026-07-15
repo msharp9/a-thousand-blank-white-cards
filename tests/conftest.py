@@ -55,6 +55,10 @@ def _hermetic_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     before and after so a value set in one test never bleeds into the next.
     """
     monkeypatch.setitem(Settings.model_config, "env_file", None)
+    # Triage ships on by default, but it fires background LLM calls on any card
+    # failure/no-op; keep it off unless a test opts in, so unrelated tests stay
+    # hermetic (no network, no wish-file writes).
+    monkeypatch.setenv("TRIAGE_AGENT_ENABLED", "false")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

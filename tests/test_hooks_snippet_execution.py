@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 
 from engine.events import GameEvent, HookContext
-from engine.hooks import HookRegistry, RegisteredHook, cache_snippet, fire_hooks, make_snippet_handler
+from engine.hooks import (
+    HookRegistry,
+    RegisteredHook,
+    cache_snippet,
+    collect_hook_errors,
+    fire_hooks,
+    make_snippet_handler,
+)
 from models.cards import Card
 from models.game_state import GameState, Player
 
@@ -92,6 +99,30 @@ def test_hook_failure_logs_and_continues() -> None:
     ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
     new_state = fire_hooks(state, GameEvent.ON_TURN_START, ctx, registry=reg)
     assert new_state.get_player("p1").score == 0
+    assert any("hook error" in entry for entry in new_state.log)
+
+
+def test_collect_hook_errors_captures_failure() -> None:
+    handler = make_snippet_handler("card-bad", BAD_SNIPPET)
+    state = _state_with_card("card-bad")
+    ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
+
+    with collect_hook_errors() as errors:
+        new_state = handler(state, ctx)
+
+    assert len(errors) == 1
+    assert errors[0].keys() == {"card_id", "error", "event"}
+    assert errors[0]["card_id"] == "card-bad"
+    assert any("hook error" in entry for entry in new_state.log)
+
+
+def test_hook_error_drain_absent_by_default() -> None:
+    handler = make_snippet_handler("card-bad", BAD_SNIPPET)
+    state = _state_with_card("card-bad")
+    ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
+
+    new_state = handler(state, ctx)
+
     assert any("hook error" in entry for entry in new_state.log)
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
+import agent.triage as triage_module
 from board.rooms.room import Room
 from models.effects import DrawCardsOp, EffectProgram
 from models.ws_messages import PlayMsg
@@ -178,6 +179,40 @@ def test_kept_hook_card_replays_deterministically_next_game() -> None:
     asyncio.run(room.handle_action("p1", PlayMsg(card_id="kept1")))
     assert room.state.hooks and room.state.hooks[0].event == "on_turn_start"
     assert room.state.get_player("p1").score == 1  # fired on p2's turn start
+
+
+BAD_HOOK_CODE = "def apply(state, ctx):\n    1 / 0\n"
+
+
+def test_crashing_hook_snippet_reports_hook_failure_to_triage_agent(monkeypatch) -> None:
+    from unittest.mock import MagicMock
+
+    from config import get_settings
+
+    monkeypatch.setenv("TRIAGE_AGENT_ENABLED", "true")
+    get_settings.cache_clear()
+    spy = MagicMock()
+    monkeypatch.setattr(triage_module, "schedule_triage", spy)
+
+    bad = {
+        "id": "badh",
+        "title": "Cursed Rule",
+        "description": "Crashes every turn.",
+        "canonical": {"ops": [{"op": "register_hook", "args": {"event": "on_turn_start", "code": BAD_HOOK_CODE}}]},
+    }
+    room = _room({"badh": bad}, {"p1": ["badh"]}, deck=["d1", "d2", "d3"])
+
+    # Playing registers the hook; the turn advance fires ON_TURN_START, whose
+    # snippet crashes — drained by _emit_hooks and reported as hook_failure.
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="badh")))
+
+    assert spy.called
+    payload = spy.call_args.args[0]
+    assert payload.kind == "hook_failure"
+    assert payload.card_id == "badh"
+    assert "division by zero" in (payload.exception or "")
+    # the game kept going: turn advanced to p2 despite the broken hook
+    assert room.state.active_player().id == "p2"
 
 
 def test_epilogue_upsert_carries_structured_canonical(monkeypatch) -> None:

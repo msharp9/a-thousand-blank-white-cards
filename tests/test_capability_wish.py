@@ -24,8 +24,8 @@ def test_wish_records_bounded_exportable_jsonl_without_issue_tracker(tmp_path) -
     assert "id" in stored and "created_at" in stored
 
 
-def test_default_tools_include_wish_telemetry() -> None:
-    assert "wish" in {tool.name for tool in get_default_tools()}
+def test_default_tools_exclude_wish_tool() -> None:
+    assert "wish" not in {tool.name for tool in get_default_tools()}
 
 
 def test_wish_store_cap_is_non_throwing(tmp_path) -> None:

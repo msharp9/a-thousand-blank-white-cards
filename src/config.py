@@ -82,11 +82,23 @@ class Settings(BaseSettings):
     # ":memory:" for an ephemeral in-process store.
     agent_memory_db: str = "agent_memory.db"
 
-    # Append-only capability telemetry emitted by the agent's ``wish`` tool.
+    # Append-only capability telemetry the failure-triage agent writes.
     # Keep it outside tracked source data; production can point this at a
     # persistent volume and export the JSONL for human triage.
     capability_wish_path: str = ".devstate/capability_wishes.jsonl"
     capability_wish_max_bytes: int = Field(default=1_048_576, ge=1024)
+
+    # --- Failure triage agent ---
+    # On by default: when a played card fails or no-ops it triages the failure
+    # (async, fire-and-forget) and records a capability wish. Set false to make
+    # the play path byte-identical to the pre-feature behavior.
+    triage_agent_enabled: bool = True
+    triage_agent_max_concurrency: int = Field(default=2, ge=1)
+    # Blank inherits the interpreter's model (llm_chat_model) — set the model in
+    # one place. Override only to triage on a different/cheaper model.
+    triage_agent_model: str = ""
+    triage_agent_timeout_seconds: float = 30.0
+    triage_agent_dedupe: bool = True
 
     # --- Sandbox ---
     snippet_execution_enabled: bool = True
