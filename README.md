@@ -1,6 +1,6 @@
 # 1000 Blank White Cards
 
-A digital, AI-supported implementation of the party game **1000 Blank White Cards**, where players draw, write, and play their own cards to invent the game as they go.
+A digital, AI-supported implementation of the party game **1000 Blank White Cards**, where players write their own cards to invent the game as they go. It's "Whose Line Is It Anyways?" meets poker night.
 
 "Everything's made up and the points don't matter."
 

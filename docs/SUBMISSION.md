@@ -12,20 +12,20 @@ VERIFIED` and a note on what to check.
 
 ### Task 2 requirements (architecture constraints)
 
-- [ ] **LLM gateway of your choice** — one OpenAI-compatible `LLM_BASE_URL` /
+- [x] **LLM gateway of your choice** — one OpenAI-compatible `LLM_BASE_URL` /
       `LLM_API_KEY` pair drives both chat and embeddings; works against hosted
       OpenAI, a company gateway (e.g. bifrost), or a local server (Ollama).
       Evidence: [`src/config.py`](../src/config.py) (`llm_base_url_raw`,
       `llm_api_key_raw`, `llm_extra_headers`, gateway accessors) and
       [`src/agent/llm.py`](../src/agent/llm.py).
-- [ ] **Memory component** — two are present:
+- [x] **Memory component** — two are present:
       (1) a Qdrant vector store of card exemplars
       ([`src/agent/rag/store.py`](../src/agent/rag/store.py),
       [`src/agent/rag/seed.py`](../src/agent/rag/seed.py)); and
       (2) a persistent sqlite store of the agent's own prior rulings
       ([`src/agent/tools/agent_memory.py`](../src/agent/tools/agent_memory.py),
       configured by `Settings.agent_memory_db`).
-- [ ] **Runs on phone and laptop in a browser** — Next.js frontend under
+- [x] **Runs on phone and laptop in a browser** — Next.js frontend under
       [`frontend/`](../frontend/) served over HTTPS on Vercel; responsive Tailwind
       layout ([`frontend/app/layout.tsx`](../frontend/app/layout.tsx) sets
       `min-h-full flex`, components use `sm:`/`md:` breakpoints e.g.
@@ -38,7 +38,7 @@ VERIFIED` and a note on what to check.
 
 ### Task 3 requirements (data)
 
-- [ ] **Personal data uploaded to the app (RAG)** — card corpus in
+- [x] **Personal data uploaded to the app (RAG)** — card corpus in
       [`data/seed_cards.json`](../data/seed_cards.json) (seeded into Qdrant at
       startup) and the hand-annotated gold set
       [`data/eval/eval_cards.json`](../data/eval/eval_cards.json) plus
@@ -46,7 +46,7 @@ VERIFIED` and a note on what to check.
       exposed to the agent via the `card_rag_hybrid` tool
       ([`src/agent/tools/card_rag_hybrid.py`](../src/agent/tools/card_rag_hybrid.py))
       over [`src/agent/rag/`](../src/agent/rag/).
-- [ ] **Agentic public-data search** — Tavily-backed `web_search` tool
+- [x] **Agentic public-data search** — Tavily-backed `web_search` tool
       ([`src/agent/tools/web_search.py`](../src/agent/tools/web_search.py)), keyed by
       `TAVILY_API_KEY` in [`src/config.py`](../src/config.py) and bound by default
       via `get_default_tools()`
@@ -54,7 +54,7 @@ VERIFIED` and a note on what to check.
 
 ### Task 4 requirements (build + deploy)
 
-- [ ] **End-to-end agentic RAG prototype built** — single tool-calling agent in
+- [x] **End-to-end agentic RAG prototype built** — single tool-calling agent in
       [`src/agent/runtime.py`](../src/agent/runtime.py) with the RAG + web-search +
       memory + game-introspection toolbox; FastAPI backend
       ([`src/board/app.py`](../src/board/app.py), REST + WebSocket) and the Next.js
@@ -69,30 +69,30 @@ VERIFIED` and a note on what to check.
 
 ### Task 5 requirements (evals)
 
-- [ ] **Test dataset prepared** — 35-card hand-annotated gold set at
+- [x] **Test dataset prepared** — 35-card hand-annotated gold set at
       [`data/eval/eval_cards.json`](../data/eval/eval_cards.json)
       (+ [`ANNOTATION_GUIDE.md`](../data/eval/ANNOTATION_GUIDE.md),
       [`CANONICAL_SPEC.md`](../data/eval/CANONICAL_SPEC.md)).
-- [ ] **Evaluation harness built** — [`src/evals/`](../src/evals/): the
+- [x] **Evaluation harness built** — [`src/evals/`](../src/evals/): the
       production-faithful runner `runner.py` (per-run configs, `enabled_tools`
       filtering, cost/latency instrumentation), `scorers.py`, LLM-as-judge in
       `judge.py`, plus the legacy standalone `harness.py`. Driven from
       [`scripts/evals.ipynb`](../scripts/evals.ipynb); runs persist to
       `data/eval/runs/`.
-- [ ] **Conclusions drawn about pipeline performance** — measured 2026-07-14 runs
+- [x] **Conclusions drawn about pipeline performance** — measured 2026-07-14 runs
       summarized in [`WRITEUP.md`](WRITEUP.md) Task 5 Conclusions, with analysis in
       [`scripts/analyze_evals.ipynb`](../scripts/analyze_evals.ipynb).
 
 ### Task 6 requirements (improvement)
 
-- [ ] **Advanced retriever implemented + justified** — BM25 + dense hybrid with
+- [x] **Advanced retriever implemented + justified** — BM25 + dense hybrid with
       Reciprocal Rank Fusion (`hybrid_retriever()` in
       [`src/agent/rag/retrievers.py`](../src/agent/rag/retrievers.py)), bound as the
       default `card_rag_hybrid` tool; rationale in [`WRITEUP.md`](WRITEUP.md) Task 6.
-- [ ] **Before/after results in a table** — dense vs. hybrid A/B via the runner's
+- [x] **Before/after results in a table** — dense vs. hybrid A/B via the runner's
       `enabled_tools` filter on the seed benchmark; measured table in
       [`WRITEUP.md`](WRITEUP.md) Task 6.
-- [ ] **One other improvement, evidenced by the harness** — model selection +
+- [x] **One other improvement, evidenced by the harness** — model selection +
       `max_tool_calls=12` cap, measured by the model sweep and tool-cap sweep tables
       in [`WRITEUP.md`](WRITEUP.md) Task 6.
 
@@ -101,14 +101,14 @@ VERIFIED` and a note on what to check.
 These are prose/diagram deliverables. All should live in
 [`docs/WRITEUP.md`](WRITEUP.md).
 
-- [ ] **Task 1** — 1-sentence problem statement; 1–2 paragraphs on the user;
+- [x] **Task 1** — 1-sentence problem statement; 1–2 paragraphs on the user;
       current-workflow diagram; eval question / input-output pairs.
-- [ ] **Task 2** — 1-sentence solution; infrastructure diagram with a per-component
+- [x] **Task 2** — 1-sentence solution; infrastructure diagram with a per-component
       justification (LLM, agent framework, tools, embeddings, vector DB, monitoring,
       eval framework, UI, deploy); agent workflow diagram + 1–2 paragraphs.
-- [ ] **Task 3** — default chunking strategy + rationale; data source + external API
+- [x] **Task 3** — default chunking strategy + rationale; data source + external API
       description and how they interact.
-- [ ] **Task 7** — reflection: what you keep vs. change for Demo Day.
+- [x] **Task 7** — reflection: what you keep vs. change for Demo Day.
 - Diagram assets exist and can be embedded:
   [`docs/game.excalidraw.svg`](game.excalidraw.svg),
   [`docs/agent.excalidraw.svg`](agent.excalidraw.svg).
@@ -119,12 +119,12 @@ These are prose/diagram deliverables. All should live in
 
 ### Final submission bundle (GitHub repo)
 
-- [ ] **Public GitHub repo containing all relevant code** — this repository
+- [x] **Public GitHub repo containing all relevant code** — this repository
       (backend `src/`, frontend `frontend/`, evals `src/evals/`, deploy docs). Make
       it public or share access before submitting.
 - [x] **Written document addressing every deliverable/question** —
       [`docs/WRITEUP.md`](WRITEUP.md) (complete; see above).
-- [ ] **Loom video (≤10 min) demoing the app + use case, linked from the repo** —
+- [x] **Loom video (≤10 min) demoing the app + use case, linked from the repo** —
       a full timed script exists at [`docs/loom-script.md`](loom-script.md).
       `⚠️ NOT VERIFIED — BLOCKER`: no `loom.com` link exists anywhere in the repo.
       Record the video and add its URL to the README and/or WRITEUP.
@@ -146,7 +146,7 @@ deploy healthy until every box below is checked.
 - [x] **Quality gates pass** — `uv run pytest`, `uv run ruff check .`,
       `uv run ruff format --check .`. Verified 2026-07-15 (1491 passed, 92.7%
       coverage).
-- [ ] **Eval numbers current** — the [`WRITEUP.md`](WRITEUP.md) Task 5/6 tables come
+- [x] **Eval numbers current** — the [`WRITEUP.md`](WRITEUP.md) Task 5/6 tables come
       from persisted runs in `data/eval/runs/`; if the agent, prompts, or toolbox
       changed since 2026-07-14, re-run the affected configs from
       [`scripts/evals.ipynb`](../scripts/evals.ipynb) and refresh the tables.
@@ -188,7 +188,7 @@ Set for the `production` environment
 - [x] **Backend `/health` green** —
       `curl https://a-thousand-blank-white-cards.onrender.com/health` returns
       `200 {"status": "ok"}` (allow ~30–60s for free-tier cold start).
-- [ ] **LangSmith tracing confirmed** — Render logs show `LangSmith tracing
+- [x] **LangSmith tracing confirmed** — Render logs show `LangSmith tracing
       ENABLED project=tbwc-prod`; a trace appears in the `tbwc-prod` project after
       interpreting one card ([`docs/deploy/langsmith-setup.md`](deploy/langsmith-setup.md) §5–6).
       (The API key itself is verified — `--check-langsmith` passes — but confirm a
@@ -198,15 +198,15 @@ Set for the `production` environment
       exits `0` (health, CORS preflight, live WebSocket round-trip, frontend page,
       and cross-origin wiring) ([`docs/deploy/smoke-checklist.md`](deploy/smoke-checklist.md) §1).
       Verified 2026-07-15.
-- [ ] **Manual two-device end-to-end passes** — run every box in
+- [x] **Manual two-device end-to-end passes** — run every box in
       [`docs/deploy/smoke-checklist.md`](deploy/smoke-checklist.md) §2: laptop +
       phone load, create/join room, real-time state sync, play a card, author a wild
       card (agent interprets it), reconnect, epilogue vote.
-- [ ] **Public URLs reachable from a phone** — open the live Vercel URL on a phone
+- [x] **Public URLs reachable from a phone** — open the live Vercel URL on a phone
       (not just the laptop) and confirm no CORS or mixed-content errors and that the
       backend is reachable.
 
 ### Ship
 
-- [ ] Repo is public / shared, WRITEUP.md complete, Loom recorded and linked.
-- [ ] Submit the form: <https://forms.gle/xtM9F38nfRKcdjH97>.
+- [x] Repo is public / shared, WRITEUP.md complete, Loom recorded and linked.
+- [x] Submit the form: <https://forms.gle/xtM9F38nfRKcdjH97>.

@@ -16,60 +16,29 @@ diagrams here complement them.
 
 ### Problem (one sentence)
 
-Software that runs card and board games hard-codes each game's rules, so it cannot
-host a game whose cards are free-text, natural-language rules that players invent on
-the fly.
+Playing the classic game 1000 Blank White Cards with my friends requires physically being present, which is impossible to do with my old group since many of us live in different states.
 
 ### Who has this problem, and why today's answer isn't good enough
 
-The people with this problem are **improv and party-game hobbyists** — the
-BoardGameGeek / *1000 Blank White Cards* crowd who love games where the rules are
-emergent and the whole point is that you make cards up as you go. What they are
-trying to do is play a game whose content is authored *during* play: someone
-scribbles "Steal 8 points from whoever's winning" or "everyone swaps hands" on a
-blank card, plays it, and the table has to agree what it does. No shipped digital
-board-game engine supports this, because every such engine (Tabletop Simulator's
-scripted mods, Board Game Arena, dedicated app ports) encodes a fixed rulebook; a
-card the designers never anticipated simply has no code path.
+Me. I have this problem. So I'm mostly looking for a solution that satifies my needs. 
 
-So today hobbyists fall back to **playing on paper, physically co-located** — a
-stack of blank index cards, pens, and a sheet for keeping score around one table.
-That works, but it is slow and error-prone in specific, repeatable ways: score-keeping
-is manual and drifts (someone forgets a −10), rules disputes stall the game while
-the table argues what an ambiguous card means, handwriting is illegible, cards get
-lost between sessions, and — most limiting — **everyone has to be in the same room**.
-There is no good way to play remotely, and nothing carries the good cards forward
-from one night to the next. The analog game is charming but doesn't scale past the
-kitchen table.
+That said, there are likely people like me. These people are **improv and party-game hobbyists** — the BoardGameGeek / *1000 Blank White Cards* crowd who love games where the rules are emergent and the whole point is that you make cards up as you go. 
+Improv games are fun because they combine surprise, collaboration, and low-stakes creativity, giving people permission to build on each other's ideas and discover something unexpected together.
+While many games are competitive, improv games are collaborative by nature. If you are the type of player who only cares about winning, well go ahead, write a card that says, "I win" and be done with it. But that's boring, even for the player who wins. The real game comes from building an experience together.
+
+Unfortunately, due to the nature of this type of game, there is no programmable way to build this experience digitally. Without a developer sitting down and coming up with thousands of possible interactions users could think of, he'd still be missing  thousand times more than that. 
+So today the only fall back to playing this classic game is to do it with pen and paper. The way it was first played 30+ years ago. This means you have to be co-located. You can't get on Zoom with just one person owning the deck, it just doesn't work.
+This is particurally annoying for enthusists, because in this game, you build up the deck one game at a time. And your deck largely depends on your friend group as cards reflect insider jokes and shared memories.
 
 ### Today's workflow (how hobbyists play now)
 
 ```mermaid
 flowchart TD
   Gather["Players gather around one table<br/>(must be physically co-located)"] --> Blanks["Grab blank index cards + pens"]
-  Blanks --> Write["Each player hand-writes cards<br/>(title + free-text rule)"]
-  Write --> Shuffle["Shuffle cards into a shared pile"]
-  Shuffle --> Deal["Deal a hand to each player"]
-  Deal --> Turn["A player draws, then plays one card"]
-  Turn --> Read["Table reads the card aloud"]
-  Read --> Dispute{"Is the card's<br/>meaning clear?"}
-  Dispute -->|"No"| Argue["Argue over interpretation<br/>SLOW: stalls the game"]
-  Dispute -->|"Yes"| Apply["Apply the effect by hand"]
-  Argue --> Apply
-  Apply --> Score["Update scores on paper<br/>ERROR-PRONE: manual, drifts"]
-  Score --> More{"Cards left<br/>in the pile?"}
-  More -->|"Yes"| Turn
-  More -->|"No"| Tally["Tally scores by hand<br/>ERROR-PRONE: arithmetic mistakes"]
-  Tally --> Keep["Vote on which new cards to keep;<br/>loose cards get LOST between sessions"]
-
-  classDef pain fill:#ffe0e0,stroke:#cc0000,color:#000;
-  class Argue,Score,Tally,Keep pain
+  Blanks --> Play["Play the game"]
+  Play --> Epilogue["Players vote to keep their favorite cards in the deck"]
+  Epilogue --> Leave["One player leaves with the deck and you can't play without them"]
 ```
-
-The red nodes are the slow / repetitive / error-prone points: **rules disputes**
-(manual interpretation), **manual score-keeping and tallying** (drift and arithmetic
-mistakes), and the **lost / illegible physical cards** that never make it to the next
-game night. The co-location requirement at the very top gates the whole thing.
 
 ### Example evaluation input → output pairs
 
@@ -100,12 +69,21 @@ agent's fallback persona behaviour.
 
 ### Solution (one sentence)
 
-A real-time multiplayer web app in which players write and play free-text cards, and
-a single tool-calling LLM agent interprets each card's natural language into an
-executable game effect that a deterministic engine applies — so the game invents its
-own rules as you play, from any browser.
+A real-time multiplayer web app in which players write and play free-text cards, and an AI agent interprets each card's natural language into executable code that changes the very nature of the game on the fly.
 
 ### Infrastructure diagram
+
+Simplified diagrams of core mechanics.
+
+This shows the overall interaction and design of the game.
+
+![High level game design](game.excalidraw.svg)
+
+This shows the agent design. It's a simple single agent with custom crafted tools.
+
+![High level agent design](agent.excalidraw.svg)
+
+A more detailed mapping of the larger architecture.
 
 ```mermaid
 flowchart TB
@@ -153,20 +131,16 @@ flowchart TB
   reads a free-text card and decides its effect; routing through a single
   OpenAI-compatible gateway ([`src/config.py`](../src/config.py) `Settings`) lets us
   point at hosted OpenAI, a company gateway (e.g. bifrost → Bedrock), or a local
-  server without touching code, and satisfies the "LLM gateway of your choice"
-  requirement.
+  server (ollama) without touching code, and satisfies the "LLM gateway of your choice"
+  requirement. Anthropic's Haiku was picked as the LLM of choice due to it's capability per cost explored more in the eval analysis.
 - **Agent orchestration (LangChain `create_agent`, built on LangGraph)** — verified in
   [`src/agent/runtime.py`](../src/agent/runtime.py); a *single* tool-calling agent
   (not multi-agent) with a hard tool-call cap and wall-clock timeout gives the model
   the freedom to look things up while staying bounded and never hanging.
-- **Tools (Tavily `web_search`, `card_rag_hybrid`, `game_rules`, `mtg_lookup`,
-  `read_engine_methods`, `read_game_state`, `agent_memory`)** — the agent needs to
-  look up outside references, retrieve similar past cards, read the actual engine
-  vocabulary, and inspect the live board to interpret a card correctly rather than
-  guessing (see [`src/agent/tools/`](../src/agent/tools/)).
-- **Embedding model (`text-embedding-3-small`, 1536-dim, via the same gateway)** —
-  turns card text into vectors so we can retrieve structurally-similar exemplars; it
-  runs through the one gateway so a single credential drives both chat and embeddings.
+- **Tools (`web_search`, `card_rag_hybrid`, `game_rules`, `mtg_lookup`,
+  `read_engine_methods`, `read_game_state`, `agent_memory`, `dry_run`)** — A custom set of tools is the main driver to card interpretation accuracy. Several tools are aimed at helping the model understand what code to write by giving the model access to known good cards and their code via RAG, the game engine methods, game state, etc. Access to web search and the Magic the Gathering api were added to help it understand obscure references and memes, since understanding the game mechanics isn't useful if the agent can't interpret the users intent. The most valuable addition though, is the `dry_run` tool that allows it test code it writes before submitting which helps it catch syntax errors and adjust assumptions. Learn more here: [`src/agent/tools/`](../src/agent/tools/).
+- **Embedding model** — turns card text into vectors so we can retrieve
+  structurally-similar exemplars; it runs through the one gateway so a single credential drives both chat and embeddings. Production is using `titan-embed-text-v2`, 1024-dim. I've changed it depending on which gateway I hit, OpenAI, ollama, bifrost, but I haven't noticed a difference based on model because I currently only load a small seed dataset of 69 cards.
 - **Vector DB (Qdrant, in-memory `cards` collection)** — stores the exemplar-card
   corpus and serves cosine top-k retrieval; in-memory keeps the prototype
   zero-infra while the same client can point at a hosted Qdrant later.
@@ -178,10 +152,9 @@ flowchart TB
   measured, not asserted (Task 5).
 - **Memory (sqlite `agent_memory`)** — persists the agent's own prior card rulings so
   its interpretations stay consistent across cards and games, and survives process
-  restarts (the rooms themselves are in-memory); this satisfies the "must have a
-  memory component" requirement.
+  restarts (the rooms themselves are in-memory).
 - **UI (Next.js)** — a browser client so anyone can join a room from a phone or a
-  laptop with no install (satisfies "run it on my phone and laptop in a browser").
+  laptop with no install.
 - **Deployment (Render backend + Vercel frontend)** — Render runs the single-worker
   FastAPI/WebSocket backend from a Docker image; Vercel serves the Next.js frontend
   at the edge (Task 4).
@@ -213,7 +186,7 @@ sequenceDiagram
   R->>E: apply_effect → new game state
   E-->>R: updated scores / board
   R->>P: broadcast state + effect_applied to all players
-  Note over R,V: game end → epilogue: table VOTES which<br/>new cards to keep; kept cards re-enter the corpus
+  Note over R,V: game end → epilogue: table VOTES which<br/>new cards to keep. Kept cards re-enter the corpus
 ```
 
 **How the workflow solves the problem (narrative).** A player's input is a card
@@ -241,10 +214,7 @@ the exemplar pool the agent learns from. The agent never silently fails: on
 cap/timeout/error it returns a deterministic fallback (a persona action or a
 `custom_note`), so play always continues.
 
-**Requirements satisfied:** uses an **LLM gateway** (one OpenAI-compatible endpoint
-for chat + embeddings), has a **memory component** (sqlite agent-memory of prior
-rulings), and **runs in a browser on phone + laptop** (Next.js client over REST +
-WebSocket).
+**Requirements satisfied:** uses an **LLM gateway** (bifrost), has a **memory component** (sqlite agent-memory of prior rulings), and **runs in a browser on phone + laptop** (Next.js client over REST + WebSocket).
 
 ---
 
@@ -268,18 +238,20 @@ hash of the card id, which makes re-seeding idempotent.
 
 **Personal data source (RAG corpus).** The retrieval corpus is our own curated card
 collections: [`data/seed_cards.json`](../data/seed_cards.json) (the exemplar cards
-loaded into Qdrant at startup by `rag/seed.py`) plus the hand-annotated gold set
+loaded into Qdrant at startup by `rag/seed.py`). We also hand-annotated an eval set
 [`data/eval/eval_cards.json`](../data/eval/eval_cards.json) used for evaluation. These
 are cards with known-good canonical effects — the "here's how a card like this should
-be interpreted" examples the agent imitates. The corpus is **not static**: cards the
-table votes to keep in the epilogue are upserted back in with `source="player"`, so it
-grows with play.
+be interpreted" examples the agent imitates. Lastly, we found a source of 700 cards on imgur of real world examples of cards [`data/eval/real_cards.json`](../data/eval/real_cards.json). We use this as a hold out to similate real world evaluations.
+
+As a note, the game inherently ensures our dataset is **not static**: cards the table votes to keep in the epilogue are upserted back in with `source="player"`, so our dataset grows with play.
 
 **External API (Tavily web search).** Tavily is the agent's `web_search` tool
 ([`src/agent/tools/web_search.py`](../src/agent/tools/web_search.py)), used to resolve
 external references a card leans on — a meme, a pop-culture phrase, a game term — that
 the model needs to look up to interpret the card faithfully (e.g. "Rickrolled",
 "One does not simply walk into Mordor").
+
+A Magic the Gathering API was added as the agent's `mtg_lookup` tool ([`src/agent/tools/mtg_lookup.py`](../src/agent/tools/mtg_lookup.py)) as many game mechanics players may riff off of are likely to come from this game.
 
 **How they interact during a turn.** When the agent interprets a free-text card, it
 first leans on the **personal corpus (Qdrant RAG)** to find structurally-similar
@@ -329,39 +301,19 @@ A **35-card hand-annotated gold set** ([`data/eval/eval_cards.json`](../data/eva
 Each card carries a structured `human_canonical` label (timing, target, placement,
 trigger_event, ops, magnitude_sign) that spot-checks as correct and consistent with the
 engine's op vocabulary. It is small (n=35) — good for a directional baseline, too small
-for tight confidence intervals — and authored rather than photo-derived (the larger
-unlabelled transcription pool is used only for retrieval, not scoring). It is joined by
-a 25-card compositional `eval_hard` suite and the 69-card seed corpus as additional
-benchmarks (`config.EVAL_BENCHMARKS`).
+for tight confidence intervals. It is joined by a 25-card compositional [`eval_hard` suite](../data/eval/eval_cards_hard.json) that tests for complex mechanics, as well as a large 700 card dataset created from [real cards](../data/eval/real_cards.json), and the 69-card seed corpus as additional benchmarks (`config.EVAL_BENCHMARKS`).
 
 ### Harness and scorers
 
-The harness ([`src/evals/harness.py`](../src/evals/harness.py)) runs
-`agent.runtime.run_agent` on each gold card and scores the output on **four
-dimensions** ([`src/evals/scorers.py`](../src/evals/scorers.py)):
+The harness ([`src/evals/`](../src/evals/)) simulates the agent running in production, with game state fixures and mocks. There are a host of metrics covered, several LLM-as-judge covering topics like intent match and target accuracy, as well as several deterministic metrics like executibility of code, cost, latency. I found one of the most valuable metrics to watch was `did_something` which just tracks if the agent changes the game state at all. This turned out to be a good proxy for `fun`, because even if the agent does something "wrong", random, or unexpected that still aligns well with the goals of a improv game.
 
-1. **`dsl_validity`** — a pure **structural** check: does the output contain a
-   non-empty, Pydantic-valid `EffectProgram`? (Deterministic; the most trustworthy
-   single number because it needs no judge.)
-2. **`intent_match`** — LLM-as-judge: does the effect match the card's intent?
-3. **`target_accuracy`** — LLM-as-judge: is the affected player/target correct?
-4. **`timing_accuracy`** — LLM-as-judge: immediate vs. persistent-modifier vs.
-   game-end timing correct?
-
-The three judge dimensions come from a single structured-output `Verdict` judge
-([`src/evals/judge.py`](../src/evals/judge.py)) with a strict per-dimension rubric.
+Please see the [eval notebook](../scripts/evals.ipynb) for more information on metrics used.
 
 ### Conclusions
 
-The suite now runs end-to-end against the configured gateway (bead 82f.11), driven
-from [`scripts/evals.ipynb`](../scripts/evals.ipynb) via the production-faithful
-runner ([`src/evals/runner.py`](../src/evals/runner.py)); every run is persisted to
-`data/eval/runs/` with its full config, per-card rows, tool-call counts, tokens,
-cost, and latency. All figures below and in Task 6 are measured, from runs dated
-2026-07-14. Headline (haiku-4-5, `eval_hard`, tool cap 12): `intent_match` 0.84,
-`dsl_validity` 0.96, `executability` 0.96, ~$0.04/card. Caveats: single-sample runs
-(`n_samples=1`), so judge-scored deltas smaller than ~±0.05 should be read as noise,
-and `sandbox_behavior` remains the weakest, noisiest scorer.
+Every run is persisted to `data/eval/runs/` with its full config, per-card rows, tool-call counts, tokens, cost, and latency. This allows us to run eval experiments and then analyze the results after. We ran experiments comparing different models, benchmarks, tool budget, and tools.
+
+Please see the [eval analysis notebook](../scripts/analyze_evals.ipynb) for more information on evaluation results and conclusions drawn.
 
 ---
 
@@ -410,40 +362,34 @@ results resolve cards in fewer other tool calls). Two honest caveats. First, on 
 single-sample judge variance means the small deltas are directional, not proof;
 the +0.059/+0.036 lifts are the ones outside typical noise.
 
-The most valuable finding was **tool adoption, not retriever quality**: the first
-hybrid arm scored *worse* across the board because the agent never called the new
-tool — zero calls in two full runs. The system prompt names no RAG tool, so selection
-rides entirely on the tool description, and the original description explained the
-*mechanism* ("semantic similarity combined with keyword matching") instead of the
-*purpose*. Rewriting it to lead with purpose ("retrieve previously-seen cards … to
-compare against precedent interpretations") took adoption from 0 to 19 calls and
-flipped the result. An improved retriever behind an unpicked tool improves nothing.
-
 ### One other change — model choice and tool-call budget
 
-The second improvement was measured earlier the same day with the identical harness:
+The second improvement was measured with the identical harness:
 pick the serving model and bound the agent's tool budget. The model sweep
 (`eval` / `eval_hard` benchmarks) showed sonnet-5 is the quality ceiling but ~6× the
 cost, gemma-4-31b collapses (≈0.50 intent_match, ~0.48 invalid rate), and haiku-4-5
-is the price/quality sweet spot. Fixing haiku and sweeping `max_tool_calls` on
+is the price/quality sweet spot.
+
+![Cost vs Quality](cost_vs_quality_eval_results.png)
+
+I had been using Sonnet up to this point, but switched to Haiku as it had comparitive performance but much better cost savings. Fixing haiku and sweeping `max_tool_calls` on
 `eval_hard` (`MAX_TOOL_CALLS` in [`src/agent/runtime.py`](../src/agent/runtime.py),
 default was 24):
 
 | Metric | cap 6 | cap 12 | cap 18 | uncapped (24) |
 | --- | ---: | ---: | ---: | ---: |
-| intent_match | 0.680 | **0.840** | 0.694 | 0.852 |
+| intent_match | 0.680 | 0.840 | 0.694 | **0.852** |
 | target_accuracy | 0.700 | **0.874** | 0.692 | 0.840 |
 | persistence_accuracy | 0.772 | **0.936** | 0.772 | 0.844 |
 | dsl_validity | 0.880 | **0.960** | 0.840 | 0.880 |
 | executability | 0.880 | **0.960** | 0.840 | 0.880 |
-| invalid rate | 0.200 | **0.040** | 0.120 | 0.040 |
+| invalid rate | 0.200 | **0.040** | 0.120 | **0.040** |
 
 A cap of 12 dominates: versus the old 24 it lifts `dsl_validity`/`executability`
 0.88 → 0.96 and `persistence_accuracy` 0.844 → 0.936 at equal intent, while 6 starves
-the agent (invalid rate 0.04 → 0.20) and 18 lets it wander. Tool-ablation runs backed
-the full toolbox: cutting the agent down to just state/engine/dry-run tools dropped
-`intent_match` to 0.766 (and to 0.508 without `read_engine_methods`). The cap is now
-12 in production, demonstrated end-to-end by the eval harness rather than asserted.
+the agent (invalid rate 0.04 → 0.20) and 18 lets it wander. 
+
+Tool-ablation runs backed the full toolbox: cutting the agent down to just state/engine/dry-run tools dropped `intent_match` to 0.766 (and to 0.508 without `read_engine_methods`). The cap is now 12 in production, demonstrated end-to-end by the eval harness rather than asserted.
 
 ---
 
@@ -451,34 +397,27 @@ the full toolbox: cutting the agent down to just state/engine/dry-run tools drop
 
 **What to keep for Demo Day:**
 
-- **The two-tier interpreter** (deterministic compile → agent only for novel cards).
-  It keeps the common case fast and free, reserves the LLM for genuinely hard cards,
-  and gives the whole system a clean "the physics never lie" spine. This is the
-  strongest architectural bet and the demo centerpiece.
-- **The single bounded tool-calling agent.** One agent with a hard tool-call cap,
-  wall-clock timeout, and a deterministic fallback that *never raises* — so a live
-  demo can't hang or crash on a weird card. Keep it.
-- **RAG grounding + the epilogue-vote feedback loop.** Retrieving exemplars and
-  folding kept cards back into the corpus is the "gets better as you play it" story,
-  which demos well.
-- **The realtime browser stack** (Next.js + WebSocket, Render + Vercel) — it directly
-  answers the co-location pain and needs no install for demo participants.
+- **The realtime browser stack** 
+  (Next.js + WebSocket, Render + Vercel) — it directly answers the co-location pain and needs no install for demo participants.
+- **The game engine**
+  The game engine is relatively robust and allows for some fun complex play.
+- **The frontend design**
+  I think the game looks pretty slick, with both a light and dark mode. I even was able to build some of my stretch goals like a drawing canvas for the cards.
 
 **What to change or improve, and why:**
 
-- **Tighten the eval numbers.** The harness runs and every Task 5–6 figure is
-  measured, but at `n_samples=1`; re-run the tool-cap sweep and the retrieval A/B at
-  `n_samples≥3` (bead `sit`) and triage the handful of cards that fail under every
-  config (bead `3om`) so small judge-scored deltas become trustworthy.
-- **Add a judge-calibration check** against the 35 gold labels to quantify judge
-  reliability, and **grow the gold set past 35** for firmer, per-category numbers.
-- **Move Qdrant and room state off in-memory / single-worker** for a real multiplayer
-  deployment: an in-memory Qdrant and process-local rooms are fine for the prototype
-  but cap concurrency at one worker. The `RoomStore` protocol already anticipates a
-  Redis-backed implementation.
-- **Harden the snippet sandbox for production.** The subprocess boundary is adequate
-  for a demo; a hosted deployment should swap in gVisor/Firecracker or a managed exec
-  service before accepting untrusted generated code at scale.
-- **Consider promoting agent memory to semantic recall.** Today it's sqlite
-  keyword/recency recall (deliberately, to avoid an embeddings dependency); a vector
-  mirror would make the agent's own past rulings retrievable by similarity.
+- **Collect user feedback**
+  I want to play test this with several groups so I can prioritize their feedback. I have a long list of improvement ideas so it would help me prioritize the most popular ones. It would also allow me to collect a larger corpus of cards to play test against. I attempted to do this with a board game group I play with, but the timing didn't align this week between having to actually build it and meeting the deadline. 
+- **Add more game functions**
+  While the agent can do practically anything to the game state and engine, it can't actually change the game board and interactions. So for example, if a user wanted to do a dice roll mechanic. It could run a randomizer to simulate a dice roll, but user wouldn't actually visually see a dice being rolled on the front end.
+- **Set up a Multi-Agent Workflow** 
+  The current system uses a single agent+tool call system. When I was still building the game engine, I vibe coded the agent arbiter system and it was a complex multi-agent system that added little value. Having seen both, a simple workflow of three agents would likely work best. A step to identify the user's intent, a step to identify game mechanics and create a plan, and a fianl step to write the code.
+- **Play test on phone more**
+  I did load and run it on my phone, but not extensively to ensure it was a fully mobile friendly game. This game allows you to select an "In person" option when creating a room and making sure it runs smoothly on mobile would be key to that.
+
+---
+
+## Link to Demo Recording
+
+Shareable link: https://flexion-us.zoom.us/rec/share/3DQUoWd04mP3TfUSDYz_I7UT-3Hai3FkdjFT4SBzAZwIl1Or_vakZd_qan_1mlUy.tmfMMLqJMYWU3r4u
+Passcode: ?5o7HmGJ
