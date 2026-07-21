@@ -16,7 +16,7 @@ def _load(filename: str) -> list[dict]:
 
 class TestGoldCards:
     def test_count(self) -> None:
-        assert len(_load("seed_cards_gold.json")) == 29
+        assert len(_load("seed_cards_gold.json")) == 59
 
     def test_all_parse_as_gold(self) -> None:
         for d in _load("seed_cards_gold.json"):
