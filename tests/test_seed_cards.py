@@ -59,8 +59,11 @@ class TestFillerCards:
 
 
 class TestCombinedFile:
-    def test_count(self) -> None:
-        assert len(_load("seed_cards.json")) == 69
+    def test_count_matches_sources(self) -> None:
+        expected = sum(
+            len(_load(name)) for name in ("seed_cards_gold.json", "seed_cards_fillers.json", "seed_cards_simple.json")
+        )
+        assert len(_load("seed_cards.json")) == expected
 
     def test_all_parse(self) -> None:
         for d in _load("seed_cards.json"):

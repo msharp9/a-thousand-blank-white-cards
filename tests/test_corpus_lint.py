@@ -106,9 +106,10 @@ def test_every_gold_canonical_compiles_and_dry_runs_end_to_end(card: dict) -> No
     assert report["emitted_ops"], card["title"]
 
 
-def test_combined_seed_is_generated_from_gold_and_fillers() -> None:
+def test_combined_seed_is_generated_from_gold_fillers_and_simple() -> None:
     gold = json.loads((DATA_DIR / "seed_cards_gold.json").read_text())
     fillers = json.loads((DATA_DIR / "seed_cards_fillers.json").read_text())
+    simple = json.loads((DATA_DIR / "seed_cards_simple.json").read_text())
     combined = json.loads((DATA_DIR / "seed_cards.json").read_text())
 
-    assert combined == gold + fillers
+    assert combined == gold + fillers + simple

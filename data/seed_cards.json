@@ -1935,5 +1935,714 @@
       ],
       "sandbox": "def apply(state, ctx):\n    state.note('If this is the last card played in the game, whoever played it wins regardless of points. If it is not, nothing happens.')"
     }
+  },
+  {
+    "id": "seed-simple-000",
+    "title": "Gain 5 Points",
+    "description": "You feel great about yourself. Gain 5 points immediately.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-001",
+    "title": "Gain 10 Points",
+    "description": "A windfall! Gain 10 points and try not to gloat.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 10,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 10)"
+    }
+  },
+  {
+    "id": "seed-simple-002",
+    "title": "Gain 2 Points",
+    "description": "A modest reward. Gain 2 points. Every little bit helps.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 2,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 2)"
+    }
+  },
+  {
+    "id": "seed-simple-003",
+    "title": "Gain 7 Points",
+    "description": "Lucky number seven. Gain 7 points immediately.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 7,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 7)"
+    }
+  },
+  {
+    "id": "seed-simple-004",
+    "title": "Jackpot",
+    "description": "The stars align. Gain 15 points in one glorious moment.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 15,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 15)"
+    }
+  },
+  {
+    "id": "seed-simple-005",
+    "title": "Lose 3 Points",
+    "description": "Oops. Lose 3 points. It happens to the best of us.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": -3,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 3)"
+    }
+  },
+  {
+    "id": "seed-simple-006",
+    "title": "Lose 5 Points",
+    "description": "A costly mistake. Lose 5 points and learn nothing.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 5,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-007",
+    "title": "Costly Blunder",
+    "description": "That did not go as planned. Lose 8 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 8,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 8)"
+    }
+  },
+  {
+    "id": "seed-simple-008",
+    "title": "Give 5 Points to Any Player",
+    "description": "Pick another player. They gain 5 points. Bask in their gratitude.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "player"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.add_points(chosen, 5)"
+    }
+  },
+  {
+    "id": "seed-simple-009",
+    "title": "Give 3 Points to Any Player",
+    "description": "Choose a player and hand them 3 points. Generosity has its rewards.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 3,
+            "target": "player"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.add_points(chosen, 3)"
+    }
+  },
+  {
+    "id": "seed-simple-010",
+    "title": "Steal 3 Points",
+    "description": "Take 3 points from any player of your choice. They had too many anyway.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 3,
+            "from": "player",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 3)"
+    }
+  },
+  {
+    "id": "seed-simple-011",
+    "title": "Steal 5 Points",
+    "description": "Snatch 5 points from a player of your choosing. Finders keepers.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 5,
+            "from": "player",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-012",
+    "title": "Rob the Leader",
+    "description": "Whoever is winning has it coming. Steal 5 points from the player with the most points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 5,
+            "from": "player_with_most_points",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-013",
+    "title": "Great Heist",
+    "description": "Pull off the big score. Steal 8 points from the player with the most points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 8,
+            "from": "player_with_most_points",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 8)"
+    }
+  },
+  {
+    "id": "seed-simple-014",
+    "title": "Tax the Rich",
+    "description": "The player with the most points loses 4 points. Fair is fair.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 4,
+            "target": "player_with_most_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('player_with_most_points', 4)"
+    }
+  },
+  {
+    "id": "seed-simple-015",
+    "title": "Cut Down the Leader",
+    "description": "Tall poppy syndrome. The player with the most points loses 6 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 6,
+            "target": "player_with_most_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('player_with_most_points', 6)"
+    }
+  },
+  {
+    "id": "seed-simple-016",
+    "title": "Charity for the Underdog",
+    "description": "The player with the fewest points gains 5 points. Everybody deserves a chance.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "player_with_least_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('player_with_least_points', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-017",
+    "title": "Boost the Trailer",
+    "description": "The player with the fewest points gains 3 points. Onward and upward.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 3,
+            "target": "player_with_least_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('player_with_least_points', 3)"
+    }
+  },
+  {
+    "id": "seed-simple-018",
+    "title": "Everyone Else Loses 2",
+    "description": "Misery loves company. Every other player loses 2 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 2,
+            "target": "all_others"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('all_others', 2)"
+    }
+  },
+  {
+    "id": "seed-simple-019",
+    "title": "Everyone Else Loses 4",
+    "description": "A bad day for everyone but you. Every other player loses 4 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 4,
+            "target": "all_others"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('all_others', 4)"
+    }
+  },
+  {
+    "id": "seed-simple-020",
+    "title": "Everyone Else Gains 1",
+    "description": "You are feeling charitable. Every other player gains 1 point.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 1,
+            "target": "all_others"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('all_others', 1)"
+    }
+  },
+  {
+    "id": "seed-simple-021",
+    "title": "Everybody Gains 2",
+    "description": "A rising tide lifts all boats. Every player, including you, gains 2 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 2,
+            "target": "all"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('all', 2)"
+    }
+  },
+  {
+    "id": "seed-simple-022",
+    "title": "Everybody Loses 3",
+    "description": "Universal setback. Every player, including you, loses 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 3,
+            "target": "all"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('all', 3)"
+    }
+  },
+  {
+    "id": "seed-simple-023",
+    "title": "Back to Zero",
+    "description": "A fresh start, whether you like it or not. Set your points to 0.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "set_points",
+          "args": {
+            "amount": 0,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.set_points('self', 0)"
+    }
+  },
+  {
+    "id": "seed-simple-024",
+    "title": "Nice Round Number",
+    "description": "Tidy up your score. Set your points to exactly 10.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "set_points",
+          "args": {
+            "amount": 10,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.set_points('self', 10)"
+    }
+  },
+  {
+    "id": "seed-simple-025",
+    "title": "Humble the Champion",
+    "description": "Knock the leader down a peg. Set the player with the most points to 0.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "set_points",
+          "args": {
+            "amount": 0,
+            "target": "player_with_most_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.set_points('player_with_most_points', 0)"
+    }
+  },
+  {
+    "id": "seed-simple-026",
+    "title": "Modest Gift",
+    "description": "Hand a chosen player a single point. It's the thought that counts.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 1,
+            "target": "player"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.add_points(chosen, 1)"
+    }
+  },
+  {
+    "id": "seed-simple-027",
+    "title": "Petty Theft",
+    "description": "Swipe 2 points from any player. Small crimes add up.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 2,
+            "from": "player",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 2)"
+    }
+  },
+  {
+    "id": "seed-simple-028",
+    "title": "Worth 10 Points If You Keep It",
+    "description": "Keep this card in your hand until the game ends. If you still hold it, gain 10 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 10,
+            "target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 10)"
+    }
+  },
+  {
+    "id": "seed-simple-029",
+    "title": "Worth 5 Points If Still In Hand",
+    "description": "A slow burn. If this card is still in your hand when the game ends, gain 5 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-030",
+    "title": "Generous Dealer",
+    "description": "House rule: everyone now draws 2 cards at the start of their turn. Keep this card in the center as a reminder.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "change_draw_count",
+          "args": {
+            "amount": 2
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(2)"
+    }
+  },
+  {
+    "id": "seed-simple-031",
+    "title": "Echo Chamber",
+    "description": "While this card sits in the center, every score change echoes: the player who caused it gains 1 bonus point.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": "on_score_change",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_score_change",
+            "scope": "center",
+            "code": "def apply(state, ctx):\n    actor = ctx.get(\"actor_id\")\n    if actor:\n        state.add_points(\"id:\" + actor, 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.register_hook(\"on_score_change\", scope=\"center\", code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor:\\n        state.add_points('id:' + actor, 1)\\n\")"
+    }
   }
 ]
