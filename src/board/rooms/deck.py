@@ -151,8 +151,10 @@ def venue_allowed(card_venue: str, mode: str) -> bool:
       * mode "online"    — allows venue in {"all", "online"}; drops "in_person".
       * mode "in_person" — allows venue in {"all", "in_person"}; drops "online".
 
-    An unknown/missing venue defaults to "all" (always allowed), so blanks and
-    filler cards (which carry no venue) are never filtered out.
+    An unknown/missing venue defaults to "all" (always allowed), so blank cards
+    are never filtered out. Filler cards now carry explicit venues: the physical
+    dares (dance, mime, high-five, write-your-name) are tagged "in_person" and
+    drop out of online games.
     """
     if mode == "both":
         return True

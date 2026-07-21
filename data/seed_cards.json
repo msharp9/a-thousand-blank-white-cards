@@ -1623,7 +1623,7 @@
     "canonical": {
       "target": "all",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1688,7 +1688,7 @@
     "canonical": {
       "target": "self",
       "placement": "player",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1746,7 +1746,7 @@
     "canonical": {
       "target": "all",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1767,7 +1767,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1816,7 +1816,7 @@
     "canonical": {
       "target": "all",
       "placement": "center",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -2064,7 +2064,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -2512,7 +2512,7 @@
     "canonical": {
       "target": "card",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
