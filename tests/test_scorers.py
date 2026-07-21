@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import pathlib
+
 import evals.scorers as scorers
 from evals.eval_core import EvalItem, ScorerContext
 from evals.judge import Verdict
@@ -145,6 +148,22 @@ class TestExecutability:
         assert score.score == 0.0
         assert "reason" in score.metadata
 
+    def test_chosen_card_target_runs(self) -> None:
+        output = {
+            "verdict": "needs_choice",
+            **_ops_plan({"op": "transfer_card", "card_target": "chosen_card", "to_target": "self"}),
+        }
+        assert executability.evaluate(_ctx(output)).score == 1.0
+
+    def test_real_choice_based_canonical_dry_runs(self) -> None:
+        from engine.compile import compile_card_plan
+
+        cards = json.loads((pathlib.Path(__file__).parent.parent / "data" / "seed_cards.json").read_text())
+        borrow = next(c for c in cards if c["id"] == "seed-filler-015")
+        plan = compile_card_plan({**borrow, "id": "gold", "origin": "seed"})
+        output = {"verdict": "needs_choice", "resolution_plan": plan.model_dump()}
+        assert executability.evaluate(_ctx(output)).score == 1.0
+
 
 class TestDidSomething:
     def test_real_effect_scores_one(self) -> None:
@@ -159,6 +178,10 @@ class TestDidSomething:
         score = did_something.evaluate(_ctx(output))
         assert score.score == 0.0
         assert "no-op" in score.metadata["reason"]
+
+    def test_chooser_target_with_needs_choice_scores_one(self) -> None:
+        output = {"verdict": "needs_choice", **_ops_plan({"op": "add_points", "target": "chooser", "amount": 5})}
+        assert did_something.evaluate(_ctx(output)).score == 1.0
 
     def test_shares_one_dry_run_with_executability(self, monkeypatch) -> None:
         calls: list[int] = []
