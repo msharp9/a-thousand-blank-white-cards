@@ -170,14 +170,27 @@ def _dry_run_output(output: dict[str, Any]) -> dict[str, Any]:
         return cached
 
     from agent.tools.dry_run_effect import dry_run_resolution_plan
-    from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, build_eval_state
+    from evals.game_fixtures import (
+        EVAL_ACTOR_ID,
+        EVAL_CARD_ID,
+        EVAL_CHOSEN_CARD_ID,
+        EVAL_CHOSEN_PLAYER_ID,
+        build_eval_state,
+    )
 
     plan = _resolution_plan_from_output(output)
     if plan is None or not plan.steps:
         report: dict[str, Any] = {"ok": False, "error": "no executable plan", "emitted_ops": []}
     else:
         try:
-            report = dry_run_resolution_plan(build_eval_state(), plan, EVAL_ACTOR_ID, EVAL_CARD_ID)
+            report = dry_run_resolution_plan(
+                build_eval_state(),
+                plan,
+                EVAL_ACTOR_ID,
+                EVAL_CARD_ID,
+                chosen_player_id=EVAL_CHOSEN_PLAYER_ID,
+                chosen_card_id=EVAL_CHOSEN_CARD_ID,
+            )
         except Exception as exc:  # noqa: BLE001 — dry_run is defensive, but stay belt-and-suspenders
             report = {"ok": False, "error": str(exc), "emitted_ops": []}
 

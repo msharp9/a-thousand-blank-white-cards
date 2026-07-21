@@ -13,6 +13,10 @@ Two deliberate choices make this exercise the full production path:
 * The actor (``EVAL_ACTOR_ID``) is NOT the author (``EVAL_CREATOR_ID``), so the
   persona branch that distinguishes "played my own card" from "played someone
   else's" (do_nothing vs punish_author) is actually reachable.
+* A deterministic choice context (``EVAL_CHOSEN_PLAYER_ID`` / ``EVAL_CHOSEN_CARD_ID``)
+  mirrors the production ``prompt_choice`` flow so plans that resolve ``chooser`` /
+  ``chosen_card`` targets are executable — without it the reducers raise and every
+  choice-based card looks broken.
 """
 
 from __future__ import annotations
@@ -24,6 +28,8 @@ from models.game_state import GameState, Player
 EVAL_ACTOR_ID = "p1"
 EVAL_CREATOR_ID = "p2"  # author ≠ actor, so persona branching is exercised
 EVAL_CARD_ID = "eval-played-card"
+EVAL_CHOSEN_PLAYER_ID = "p2"  # a player other than the actor, for chooser/target_player
+EVAL_CHOSEN_CARD_ID = "hand-c"  # a real card in another player's hand, for chosen_card
 
 
 def build_eval_state(title: str = "Eval Card", description: str = "", alt_text: str | None = None) -> GameState:
