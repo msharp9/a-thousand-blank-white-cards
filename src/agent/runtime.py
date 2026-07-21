@@ -194,31 +194,72 @@ def _extract_final_text(result: dict[str, Any]) -> str:
     return ""
 
 
+_CONTRACT_KEYS = ("verdict", "plan", "resolution_plan", "program", "snippet")
+
+
+def _is_contract_shaped(payload: Any) -> bool:
+    """True for a result object, False for an inner op/step dict.
+
+    A result carries at least one contract field (or a top-level ``steps`` list,
+    i.e. a bare plan). An op (``{"op": ...}``) or step (``{"kind": "ops", ...}``)
+    dict has none of these, so it can't masquerade as a result.
+    """
+    if not isinstance(payload, dict):
+        return False
+    if any(key in payload for key in _CONTRACT_KEYS):
+        return True
+    return isinstance(payload.get("steps"), list)
+
+
+def _normalise_contract_payload(payload: Any) -> Any:
+    """Coerce a loosely-shaped result dict toward the ``InterpretResult`` schema.
+
+    Accepts a plan emitted under the scorer-facing ``resolution_plan`` key or as
+    a bare plan object, and treats a payload that carries an effect but no
+    explicit verdict as a success (rather than the ``invalid`` field default).
+    """
+    if not isinstance(payload, dict):
+        return payload
+    payload = dict(payload)
+    if "plan" not in payload:
+        if isinstance(payload.get("resolution_plan"), dict):
+            payload["plan"] = payload.pop("resolution_plan")
+        elif isinstance(payload.get("steps"), list):
+            payload["plan"] = {"steps": payload.pop("steps")}
+    if "verdict" not in payload and any(payload.get(key) for key in ("plan", "program", "snippet")):
+        payload["verdict"] = "ok"
+    return payload
+
+
 def _extract_json_object(text: str) -> Any:
     """Parse the first contract-shaped JSON object in ``text``, tolerating prose and fences.
 
     Models sometimes wrap the contract JSON in commentary or a ```json fence;
     scanning forward with ``raw_decode`` recovers the object wherever it starts
-    and ignores anything after it. Embedded candidates must carry the contract's
-    ``verdict`` key so an inner op object (e.g. ``{\"op\": \"add_points\", ...}``)
-    can't masquerade as a result. Raises ``json.JSONDecodeError`` when no
-    suitable object exists.
+    and ignores anything after it. Embedded candidates must be contract-shaped
+    (see :func:`_is_contract_shaped`) so an inner op object can't masquerade as a
+    result. Raises ``json.JSONDecodeError`` when no suitable object exists.
     """
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
     except json.JSONDecodeError:
-        decoder = json.JSONDecoder()
-        idx = text.find("{")
-        while idx != -1:
-            try:
-                payload, _ = decoder.raw_decode(text, idx)
-            except json.JSONDecodeError:
-                pass
-            else:
-                if isinstance(payload, dict) and "verdict" in payload:
-                    return payload
-            idx = text.find("{", idx + 1)
-        raise
+        pass
+    else:
+        if _is_contract_shaped(parsed):
+            return parsed
+
+    decoder = json.JSONDecoder()
+    idx = text.find("{")
+    while idx != -1:
+        try:
+            payload, _ = decoder.raw_decode(text, idx)
+        except json.JSONDecodeError:
+            pass
+        else:
+            if _is_contract_shaped(payload):
+                return payload
+        idx = text.find("{", idx + 1)
+    raise json.JSONDecodeError("no contract-shaped object", text, 0)
 
 
 def _parse_result(result: dict[str, Any]) -> InterpretResult:
@@ -248,7 +289,7 @@ def _parse_result(result: dict[str, Any]) -> InterpretResult:
             logger.warning("agent final message was not valid JSON; using it as a comment")
             return InterpretResult(verdict="invalid", comment=text[:280], persona_action="do_nothing", agent_error=True)
         try:
-            return InterpretResult.model_validate(payload)
+            return InterpretResult.model_validate(_normalise_contract_payload(payload))
         except Exception:  # noqa: BLE001 — schema mismatch degrades gracefully
             logger.warning("agent final message JSON did not match InterpretResult")
 

@@ -480,6 +480,39 @@ def test_run_agent_ignores_embedded_non_contract_objects():
     assert "add_points" in result.comment
 
 
+_STEPS_JSON = '{"steps": [{"kind": "ops", "ops": [{"op": "add_points", "target": "self", "amount": 5}]}]}'
+
+
+def test_run_agent_recovers_plan_without_verdict_key():
+    fake = ToolAwareFake(messages=iter([AIMessage(content=f'{{"plan": {_STEPS_JSON}}}')]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "ok"
+    assert result.agent_error is False
+    assert result.to_plan().model_dump()["steps"][0]["ops"][0]["op"] == "add_points"
+
+
+def test_run_agent_maps_resolution_plan_key():
+    payload = f'{{"resolution_plan": {_STEPS_JSON}, "comment": "via scorer key"}}'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "ok"
+    assert result.to_plan().model_dump()["steps"][0]["ops"][0]["op"] == "add_points"
+
+
+def test_run_agent_recovers_bare_plan_steps():
+    fake = ToolAwareFake(messages=iter([AIMessage(content=_STEPS_JSON)]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "ok"
+    assert result.to_plan().model_dump()["steps"][0]["ops"][0]["op"] == "add_points"
+
+
+def test_run_agent_preserves_explicit_verdict_alongside_plan():
+    payload = f'{{"verdict": "needs_choice", "plan": {_STEPS_JSON}}}'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "needs_choice"
+
+
 def test_langsmith_tracing_off_by_default(monkeypatch):
     """When tracing is disabled, run_agent must force the env flag to 'false'."""
     import os
