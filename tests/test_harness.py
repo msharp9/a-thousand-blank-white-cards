@@ -68,6 +68,54 @@ def test_normalise_preserves_complete_mixed_resolution_plan() -> None:
     assert "state.add_points" in out["resolution_plan"]["steps"][1]["code"]
 
 
+class TestRecoverPlanFromComment:
+    _PLAN_JSON = '{"steps": [{"kind": "ops", "ops": [{"op": "add_points", "target": "self", "amount": 5}]}]}'
+
+    def _out(self, comment: str, verdict: str = "invalid") -> dict:
+        return normalise_agent_output(InterpretResult(verdict=verdict, comment=comment, agent_error=True))
+
+    def test_recovers_bare_plan_object(self) -> None:
+        out = self._out(f'{{"plan": {self._PLAN_JSON}}}')
+        assert out["resolution_plan"]["steps"][0]["ops"][0]["op"] == "add_points"
+        assert out["plan_recovered_from_comment"] is True
+        assert out["verdict"] == "ok"
+        assert out["raw_verdict"] == "invalid"
+
+    def test_recovers_from_fenced_block_with_prose(self) -> None:
+        comment = f'Here is my answer:\n```json\n{{"resolution_plan": {self._PLAN_JSON}}}\n```\nHope that helps!'
+        out = self._out(comment)
+        assert out["resolution_plan"]["steps"][0]["ops"][0]["op"] == "add_points"
+        assert out["plan_recovered_from_comment"] is True
+
+    def test_recovers_bare_steps_shape(self) -> None:
+        out = self._out(self._PLAN_JSON)
+        assert out["resolution_plan"]["steps"][0]["ops"][0]["op"] == "add_points"
+
+    def test_truncated_json_recovers_nothing(self) -> None:
+        out = self._out('{"plan": {"steps": [{"kind": "ops", "ops": [{"op": "add_poi')
+        assert "resolution_plan" not in out
+        assert "plan_recovered_from_comment" not in out
+        assert out["verdict"] == "invalid"
+
+    def test_plain_prose_is_untouched(self) -> None:
+        out = self._out("This card does nothing interesting.")
+        assert "resolution_plan" not in out
+        assert out["verdict"] == "invalid"
+
+    def test_real_plan_wins_over_comment_json(self) -> None:
+        prog = EffectProgram(ops=[AddPointsOp(target="self", amount=1)])
+        result = InterpretResult(program=prog, verdict="ok", comment=f'{{"plan": {self._PLAN_JSON}}}')
+        out = normalise_agent_output(result)
+        assert out["resolution_plan"]["steps"][0]["ops"][0]["amount"] == 1
+        assert "plan_recovered_from_comment" not in out
+
+    def test_verdict_preserved_when_not_invalid(self) -> None:
+        out = self._out(f'{{"plan": {self._PLAN_JSON}}}', verdict="needs_choice")
+        assert out["plan_recovered_from_comment"] is True
+        assert out["verdict"] == "needs_choice"
+        assert "raw_verdict" not in out
+
+
 def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
     data = [
         {
