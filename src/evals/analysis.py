@@ -40,6 +40,7 @@ FAILURE_BUCKETS = [
     "wrong_target",  # judge: hits the wrong player(s)/placement
     "wrong_persistence",  # judge: one-shot vs ongoing / trigger wrong
     "wrong_magnitude",  # judge: helps/hurts in the wrong direction
+    "wrong_amount",  # judge: right direction, wrong numeric amount
 ]
 
 _JUDGE_BUCKETS = {
@@ -47,6 +48,7 @@ _JUDGE_BUCKETS = {
     "wrong_target": "target_accuracy",
     "wrong_persistence": "persistence_accuracy",
     "wrong_magnitude": "magnitude_sign",
+    "wrong_amount": "magnitude_value",
 }
 
 
@@ -176,8 +178,8 @@ def runs_frame(payloads: list[dict[str, Any]]) -> Any:
 def rows_frame(payloads: list[dict[str, Any]]) -> Any:
     """One row per (run, card, sample): scores, costs, tool usage, failure buckets.
 
-    ``judge_reason`` carries the judge's free-text critique (shared across its
-    four metrics), ``mech_reason`` the first deterministic scorer complaint —
+    ``judge_reason`` carries the judge's free-text critique (shared across the
+    judge metrics), ``mech_reason`` the first deterministic scorer complaint —
     together they are the raw material for failure-pattern aggregation.
     """
     import pandas as pd

@@ -422,6 +422,7 @@ def _fake_summary(label: str, **overrides) -> dict:
         "target_accuracy": 0.7,
         "persistence_accuracy": 0.6,
         "magnitude_sign": 0.9,
+        "magnitude_value": 0.85,
         "sandbox_behavior": 0.5,
         "executability": 0.85,
         "did_something": 0.9,

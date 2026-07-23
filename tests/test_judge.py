@@ -16,6 +16,7 @@ def _verdict() -> Verdict:
         target_placement_correct=1.0,
         trigger_event_correct=1.0,
         magnitude_sign_correct=1.0,
+        magnitude_value_correct=1.0,
         overall=0.95,
         reason="Correct immediate point gain.",
     )
@@ -33,12 +34,18 @@ def test_verdict_score_range_rejected() -> None:
             target_placement_correct=1.0,
             trigger_event_correct=1.0,
             magnitude_sign_correct=1.0,
+            magnitude_value_correct=1.0,
             overall=1.0,
             reason="Bad.",
         )
 
 
-def test_verdict_has_all_seven_fields() -> None:
+def test_verdict_magnitude_value_range_rejected() -> None:
+    with pytest.raises(Exception):
+        Verdict.model_validate(_verdict().model_dump() | {"magnitude_value_correct": 1.5})
+
+
+def test_verdict_has_all_eight_fields() -> None:
     fields = set(Verdict.model_fields.keys())
     assert fields == {
         "intent_match",
@@ -46,6 +53,7 @@ def test_verdict_has_all_seven_fields() -> None:
         "target_placement_correct",
         "trigger_event_correct",
         "magnitude_sign_correct",
+        "magnitude_value_correct",
         "overall",
         "reason",
     }

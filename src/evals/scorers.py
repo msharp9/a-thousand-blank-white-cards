@@ -7,7 +7,7 @@ Each scorer conforms to ScorerFunction: scorer(context: ScorerContext) -> Score.
   context.expected = human_canonical dict
 
 Two per-run caches keyed on the output dict's identity collapse repeated work
-within one row: the four judge scorers share a single LLM Verdict, and the two
+within one row: the judge scorers share a single LLM Verdict, and the two
 execution scorers share a single dry-run. id() keys are only safe while the
 output objects stay alive, so runners call :func:`reset_run_caches` before each
 run — otherwise a recycled id from a previous run could serve stale results.
@@ -48,7 +48,7 @@ def _effect_summary(output: dict[str, Any]) -> str:
 
 
 def _run_judge(context: ScorerContext) -> Verdict:
-    """One judge LLM call per (card, output); the four judge scorers share it."""
+    """One judge LLM call per (card, output); the judge scorers share it."""
     output = context.output or {}
     key = id(output)
     cached = _VERDICT_CACHE.get(key)
@@ -111,6 +111,18 @@ magnitude_sign = create_scorer(
     name="magnitude_sign",
     description="LLM judge: is the magnitude sign (positive/negative/neutral) correct?",
     scorer=_magnitude_sign_scorer,
+)
+
+
+def _magnitude_value_scorer(context: ScorerContext) -> Score:
+    verdict = _run_judge(context)
+    return Score(score=verdict.magnitude_value_correct, metadata={"reason": verdict.reason})
+
+
+magnitude_value = create_scorer(
+    name="magnitude_value",
+    description="LLM judge: is the numeric amount of the effect correct? (N/A scores 1.0)",
+    scorer=_magnitude_value_scorer,
 )
 
 
@@ -328,6 +340,6 @@ sandbox_behavior = create_scorer(
 
 # Split by cost: JUDGE_SCORERS make LLM calls (one shared call per card);
 # DETERMINISTIC_SCORERS are free and offline.
-JUDGE_SCORERS = [intent_match_judge, target_accuracy, persistence_accuracy, magnitude_sign]
+JUDGE_SCORERS = [intent_match_judge, target_accuracy, persistence_accuracy, magnitude_sign, magnitude_value]
 DETERMINISTIC_SCORERS = [dsl_validity, sandbox_behavior, executability, did_something]
 ALL_SCORERS = [*JUDGE_SCORERS, *DETERMINISTIC_SCORERS]

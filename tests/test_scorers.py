@@ -17,6 +17,7 @@ from evals.scorers import (
     executability,
     intent_match_judge,
     magnitude_sign,
+    magnitude_value,
     persistence_accuracy,
     reset_run_caches,
     sandbox_behavior,
@@ -34,7 +35,7 @@ def _ops_plan(*ops: dict) -> dict:
 
 
 def test_all_scorers_count() -> None:
-    assert len(ALL_SCORERS) == 8
+    assert len(ALL_SCORERS) == 9
     assert set(ALL_SCORERS) == set(JUDGE_SCORERS) | set(DETERMINISTIC_SCORERS)
     for scorer in (
         sandbox_behavior,
@@ -42,6 +43,7 @@ def test_all_scorers_count() -> None:
         target_accuracy,
         persistence_accuracy,
         magnitude_sign,
+        magnitude_value,
         executability,
         did_something,
     ):
@@ -49,7 +51,7 @@ def test_all_scorers_count() -> None:
 
 
 class TestJudgeScorers:
-    """The four judge scorers share ONE LLM call per output and map distinct Verdict fields."""
+    """The judge scorers share ONE LLM call per output and map distinct Verdict fields."""
 
     def _install_counting_judge(self, monkeypatch) -> list[int]:
         calls: list[int] = []
@@ -63,6 +65,7 @@ class TestJudgeScorers:
                     target_placement_correct=0.7,
                     trigger_event_correct=1.0,
                     magnitude_sign_correct=0.6,
+                    magnitude_value_correct=0.5,
                     overall=0.75,
                     reason="stubbed",
                 )
@@ -71,7 +74,7 @@ class TestJudgeScorers:
         reset_run_caches()
         return calls
 
-    def test_one_llm_call_shared_across_all_four_scorers(self, monkeypatch) -> None:
+    def test_one_llm_call_shared_across_all_judge_scorers(self, monkeypatch) -> None:
         calls = self._install_counting_judge(monkeypatch)
         ctx = _ctx(_ops_plan({"op": "add_points", "target": "self", "amount": 5}))
 
@@ -79,6 +82,7 @@ class TestJudgeScorers:
         assert target_accuracy.evaluate(ctx).score == 0.7
         assert persistence_accuracy.evaluate(ctx).score == 0.8
         assert magnitude_sign.evaluate(ctx).score == 0.6
+        assert magnitude_value.evaluate(ctx).score == 0.5
         assert len(calls) == 1
 
     def test_reset_run_caches_forces_a_fresh_judgement(self, monkeypatch) -> None:
