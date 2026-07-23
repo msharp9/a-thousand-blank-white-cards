@@ -1009,6 +1009,16 @@ class Room:
             "mechanical_reason": reason,
             "correlation_id": correlation_id,
         }
+        if status == "fallback":
+            creator_id = card.get("creator_id")
+            if creator_id and any(p.id == creator_id for p in self.state.players):
+                self.state = append_history_event(
+                    self.state,
+                    "card_fallback",
+                    actor_id=creator_id,
+                    target_player_ids=[creator_id],
+                    card_id=card_id,
+                )
         self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: updated}})
         self._notify_change()
 

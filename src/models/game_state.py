@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field, model_validator
 
-HistoryKind = Literal["draw", "play", "score_change", "rule_change", "interaction", "game_end"]
+HistoryKind = Literal["draw", "play", "score_change", "rule_change", "interaction", "game_end", "card_fallback"]
 
 
 class WinCondition(BaseModel):
