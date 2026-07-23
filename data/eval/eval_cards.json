@@ -213,7 +213,8 @@
         {
           "op": "steal_points",
           "args": {
-            "target": "player",
+            "from_target": "player",
+            "to_target": "self",
             "amount": 8
           }
         }
@@ -741,7 +742,8 @@
         {
           "op": "steal_points",
           "args": {
-            "target": "player",
+            "from_target": "player",
+            "to_target": "self",
             "amount": 15
           }
         }
@@ -1139,7 +1141,8 @@
         {
           "op": "steal_points",
           "args": {
-            "target": "player",
+            "from_target": "player",
+            "to_target": "self",
             "amount": 5
           }
         },
@@ -1193,7 +1196,8 @@
         {
           "op": "steal_points",
           "args": {
-            "target": "player",
+            "from_target": "player",
+            "to_target": "self",
             "amount": 2
           }
         },
