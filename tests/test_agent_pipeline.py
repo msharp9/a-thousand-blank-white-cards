@@ -452,7 +452,11 @@ def test_trivial_complexity_shrinks_downstream_caps(monkeypatch):
     result = run_pipeline("Gain 1 point", "desc")
 
     assert result.verdict == "ok"
-    assert seen == [("CardIntent", 6), ("MechanicsPlan", 2), ("InterpretResult", 4)]
+    assert seen == [
+        ("CardIntent", pipeline.INTENT_MAX_STEPS),
+        ("MechanicsPlan", pipeline.TRIVIAL_PLANNER_MAX_STEPS),
+        ("InterpretResult", pipeline.TRIVIAL_CODER_MAX_STEPS),
+    ]
 
 
 def test_zero_timeout_degrades_to_fallback_without_model_calls():

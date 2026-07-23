@@ -60,9 +60,12 @@ PLANNER_MAX_STEPS: int = 8
 CODER_MAX_STEPS: int = 10
 
 # A trivial-complexity intent shrinks the downstream caps: one obvious effect
-# needs neither eight planning steps nor ten coding ones.
-TRIVIAL_PLANNER_MAX_STEPS: int = 2
-TRIVIAL_CODER_MAX_STEPS: int = 4
+# needs neither eight planning steps nor ten coding ones. Caps are LangGraph
+# super-steps (a tool round-trip costs ~2), so anything below 4 starves a stage
+# of even one tool call — the first smoke A/B showed 2/4 forcing garbage
+# final answers out of otherwise-correct stages.
+TRIVIAL_PLANNER_MAX_STEPS: int = 4
+TRIVIAL_CODER_MAX_STEPS: int = 6
 
 _STAGE_TIMEOUTS: dict[str, float] = {
     "intent": INTENT_TIMEOUT_SECONDS,
