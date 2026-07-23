@@ -2,8 +2,9 @@
 
 The interpretation agent needs to react to what is actually happening on the
 board: who is winning, whose turn it is, and — crucially — WHO authored the card
-it is being asked to interpret (so the ``punish_author`` vs ``do_nothing``
-persona branch is decidable). Unlike the context-free tools in this package, this
+it is being asked to interpret (authorship decides who receives the consolation
+boon when a card fizzles, and whether the rare abusive-card ``punish_author``
+branch applies). Unlike the context-free tools in this package, this
 one cannot be a module-level singleton: it must close over the specific game
 snapshot for the current interpretation.
 
@@ -88,7 +89,8 @@ def _summarize_state(
     and an ACTOR marker (via ``actor_id``). Also surfaces turn order, deck
     size, phase, win condition, center/house-rule cards, and the names of any
     spectators (watchers, listed separately from the players), plus an
-    actor-vs-author line so the ``punish_author`` persona branch is decidable.
+    actor-vs-author line so authorship-driven persona decisions (consolation-boon
+    recipient, the rare abusive-card ``punish_author`` branch) are decidable.
     """
     if state is None:
         return "Game state: (not provided)."
@@ -114,13 +116,15 @@ def _summarize_state(
     if author_id is not None and actor_id is not None:
         if author_id == actor_id:
             lines.append(
-                "The ACTOR authored this card themselves (actor == author): "
-                "'punish_author' is on the table for a dumb/undecipherable card."
+                "The ACTOR authored this card themselves (actor == author): if the card "
+                "fizzles, the engine's consolation boon goes to them, and 'punish_author' "
+                "exists ONLY for a genuinely abusive card — never a sincere-but-clumsy one."
             )
         else:
             lines.append(
-                f"The card's author (creator_id={author_id}) is NOT the actor: do NOT "
-                "punish the actor for someone else's card ('do_nothing' if undecipherable)."
+                f"The card's author (creator_id={author_id}) is NOT the actor: if the card "
+                "fizzles, the consolation boon goes to its author, and 'do_nothing' is the "
+                "branch for an undecipherable card — never punish the actor for someone else's card."
             )
     elif actor_id is not None:
         lines.append("The card's author is unknown; authorship cannot be confirmed.")
@@ -208,7 +212,8 @@ def make_read_game_state_tool(
         actor_id: The id of the player who played the card being interpreted.
         creator_id: The card's author id, passed explicitly because the card may
             not yet be registered in ``state.cards``. Enables the actor-vs-author
-            comparison the ``punish_author`` persona needs.
+            comparison that decides who receives the consolation boon and whether
+            the rare abusive-card ``punish_author`` branch applies.
         card_id: Optional id of the card being interpreted; when ``creator_id`` is
             not supplied, authorship is looked up from ``state.cards[card_id]``.
 
