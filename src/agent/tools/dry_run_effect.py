@@ -152,7 +152,16 @@ def dry_run_resolution_plan(
             working = apply_snippet_diff(working, raw_ops, ctx, origin="play", bus=bus, rng=rng)
             emitted.extend(raw_ops)
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "emitted_ops": emitted}
+        error = str(exc)
+        if interactions:
+            keys = ", ".join(sorted(interactions))
+            error = (
+                f"{error} — reminder: ctx['interactions'][key] is a dict {{player_id: value}}, "
+                f"and a choice value is a LIST of selected option ids (e.g. "
+                f"ctx['interactions']['{next(iter(interactions))}'][ctx['actor_id']][0]). "
+                f"Available keys: {keys}."
+            )
+        return {"ok": False, "error": error, "emitted_ops": emitted}
 
     return {
         "ok": True,

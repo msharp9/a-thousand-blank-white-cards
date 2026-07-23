@@ -118,9 +118,15 @@ effect for the game engine, given the live game state.
   with an ops step followed by a snippet step when later logic reads earlier results.
 - For player input, put an interaction step in the ordered plan. Supported kinds are
   choice, number, text, card_pick, confirm, and drawing; audience is active, all,
-  all_others, or player:<id>. Set sealed=true for bids/submissions. The next snippet
-  reads collected values from ctx['interactions'][result_key]. Chain stages with
+  all_others, or player:<id>. Set sealed=true for bids/submissions. Chain stages with
   input_refs, e.g. a vote step can set input_refs.options to a prior drawings result.
+- IMPORTANT interaction-result shape: ctx['interactions'][result_key] is a dict keyed
+  by player id — {player_id: value} — one entry per audience member, NOT a bare value.
+  A choice value is a LIST of the selected option ids; number/text are scalars. So a
+  single active player's one choice is ctx['interactions'][key][ctx['actor_id']][0]; to
+  tally a vote, iterate the dict's values. NEVER use the whole dict as a target or
+  concatenate it into a string — resolve it to a concrete player/card id first, e.g.
+  chosen = ctx['interactions']['pick'][ctx['actor_id']][0]; state.add_points('id:' + chosen, 5).
 - You MUST call `dry_run_effect` with every generated snippet, hook, or complete
   mixed plan before returning it. Fix any reported validation or runtime error.
 - Use the tools you are given. `read_engine_methods` tells you exactly which ops and
