@@ -188,6 +188,26 @@ def test_happy_path_merges_coder_effect_with_intent_voice():
     assert "Compose a single add_points op." in fake.system_prompts[2]
 
 
+def test_happy_path_threads_intent_placement_and_venue():
+    payload = dict(INTENT_PAYLOAD, venue="in_person", placement="center")
+    fake = ToolAwareFake(messages=_messages(json.dumps(payload), PLAN_JSON, CODER_JSON))
+
+    result = run_pipeline("High five", "Give everyone a high five.", model=fake)
+
+    assert result.verdict == "ok"
+    assert result.placement == "center"
+    assert result.venue == "in_person"
+
+
+def test_legacy_intent_payload_defaults_placement_to_discard():
+    fake = ToolAwareFake(messages=_messages(INTENT_JSON, PLAN_JSON, CODER_JSON))
+
+    result = run_pipeline("Gain 5 points", "You gain 5 points.", model=fake)
+
+    assert result.placement == "discard"
+    assert result.venue == "all"
+
+
 # ---------------------------------------------------------------------------
 # Stage failures degrade, never raise
 # ---------------------------------------------------------------------------
@@ -351,6 +371,17 @@ def test_coder_garbage_falls_back_but_keeps_intent_voice():
     assert result.agent_error is True
     assert result.comment == "Wow, +5 points. Groundbreaking."
     assert result.persona_action == "none"
+
+
+def test_coder_failure_still_threads_placement_and_venue():
+    payload = dict(INTENT_PAYLOAD, venue="in_person", placement="player")
+    fake = CountingFake(messages=_messages(json.dumps(payload), PLAN_JSON, "no json from the coder"))
+
+    result = run_pipeline("Card", "desc", model=fake)
+
+    assert result.verdict == "invalid"
+    assert result.placement == "player"
+    assert result.venue == "in_person"
 
 
 # ---------------------------------------------------------------------------

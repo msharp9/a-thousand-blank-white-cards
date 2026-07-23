@@ -494,7 +494,8 @@ def _finalize_node(state: PipelineState) -> dict[str, Any]:
     The coder's JSON has no ``comment`` key — the persona spoke once, in the
     intent stage, and its ``comment``/``persona_action`` are carried onto every
     result that has an intent behind it, including total coder failures (a real
-    remark beats the canned fallback lines).
+    remark beats the canned fallback lines). The intent's ``placement``/``venue``
+    ride along the same way, so the room can zone the played card.
     """
     intent = state.get("intent")
     if intent is None:
@@ -505,14 +506,15 @@ def _finalize_node(state: PipelineState) -> dict[str, Any]:
             )
         }
 
+    voice = {
+        "comment": intent.comment,
+        "persona_action": intent.persona_action,
+        "placement": intent.placement,
+        "venue": intent.venue,
+    }
+
     if intent.ambiguity == "undecipherable" and intent.persona_action == "do_nothing":
-        return {
-            "result": InterpretResult(
-                verdict="invalid",
-                comment=intent.comment,
-                persona_action=intent.persona_action,
-            )
-        }
+        return {"result": InterpretResult(verdict="invalid", **voice)}
 
     plan = state.get("plan")
     if plan is not None and not plan.feasible:
@@ -523,8 +525,7 @@ def _finalize_node(state: PipelineState) -> dict[str, Any]:
             "result": InterpretResult(
                 program=EffectProgram(ops=[CustomNoteOp(note=note)]),
                 verdict="invalid",
-                comment=intent.comment,
-                persona_action=intent.persona_action,
+                **voice,
             )
         }
 
@@ -535,9 +536,9 @@ def _finalize_node(state: PipelineState) -> dict[str, Any]:
             note="Interpretation error: no effect applied.",
             persona_action=intent.persona_action,
         )
-        return {"result": fallback}
+        return {"result": fallback.model_copy(update={"placement": intent.placement, "venue": intent.venue})}
 
-    return {"result": draft.model_copy(update={"comment": intent.comment, "persona_action": intent.persona_action})}
+    return {"result": draft.model_copy(update=voice)}
 
 
 def build_interpret_graph():

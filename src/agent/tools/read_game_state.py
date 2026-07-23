@@ -86,8 +86,8 @@ def _summarize_state(
     """Render a concise text summary of the board. Never raises.
 
     Surfaces, for each player: name, score, hand size, active-player marker,
-    and an ACTOR marker (via ``actor_id``). Also surfaces turn order, deck
-    size, phase, win condition, center/house-rule cards, and the names of any
+    and an ACTOR marker (via ``actor_id``). Also surfaces game mode, turn order,
+    deck size, phase, win condition, center/house-rule cards, and the names of any
     spectators (watchers, listed separately from the players), plus an
     actor-vs-author line so authorship-driven persona decisions (consolation-boon
     recipient, the rare abusive-card ``punish_author`` branch) are decidable.
@@ -129,7 +129,10 @@ def _summarize_state(
     elif actor_id is not None:
         lines.append("The card's author is unknown; authorship cannot be confirmed.")
 
-    # ── phase / turn / deck ──
+    # ── mode / phase / turn / deck ──
+    mode = get("mode")
+    if mode:
+        lines.append(f"Game mode: {mode}.")
     phase = get("phase")
     if phase:
         lines.append(f"Phase: {phase}.")

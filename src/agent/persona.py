@@ -259,6 +259,9 @@ def describe_state(state: Any | None, actor_id: str | None) -> str:
         return getattr(state, key, default)
 
     lines: list[str] = []
+    mode = _get("mode")
+    if mode:
+        lines.append(f"Game mode: {mode}.")
     phase = _get("phase")
     if phase:
         lines.append(f"Phase: {phase}.")

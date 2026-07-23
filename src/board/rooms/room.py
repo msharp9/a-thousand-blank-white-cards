@@ -1325,12 +1325,23 @@ class Room:
         records the trigger (so the room recognises it) and its code runs when
         the card is played into a reaction window. Cards with neither
         contribute nothing (fall back to the LLM next time).
+
+        The agent's ``placement``/``venue`` (pipeline results; None on legacy
+        single-agent results) are recorded so ``_play_destination`` can zone the
+        card. No ``timing`` key is written: placement "player" must not carry
+        timing "immediate" or ``_play_destination`` demotes it to discard.
         """
         plan = result.to_plan()
         canonical: dict = {}
         snippet = getattr(result, "snippet", None)
         if snippet is not None and getattr(snippet, "trigger", None) == str(GameEvent.ON_REACTION):
             canonical["trigger"] = str(GameEvent.ON_REACTION)
+        placement = getattr(result, "placement", None)
+        if placement is not None:
+            canonical["placement"] = placement
+        venue = getattr(result, "venue", None)
+        if venue is not None:
+            canonical["venue"] = venue
         if not plan.steps:
             return {"canonical": canonical} if canonical else {}
         canonical["steps"] = [step.model_dump() for step in plan.steps]
@@ -1518,6 +1529,9 @@ class Room:
                 },
             )
             return
+        # Resolution may have merged a fresh canonical (placement/venue) onto
+        # the persisted card; the zone move downstream must see it.
+        card = persisted
         chosen_player_id = getattr(msg, "chosen_player_id", None)
         chosen_card_id = getattr(msg, "chosen_card_id", None)
         valid_player_ids = {p.id for p in self.state.players}

@@ -58,6 +58,22 @@ intent — do NOT design mechanics, pick engine ops, or write code; later stages
   * ambiguity: "clear", "ambiguous", or "undecipherable".
   * complexity: "trivial" for a single obvious effect, "standard" for most cards,
     "complex" for multi-step / interactive / persistent mechanics.
+  * venue: does the card demand physical presence — touching, speaking aloud,
+    physical objects, gestures? Then "in_person". A purely digital-expressible
+    effect is "all"; "online" only when the card makes sense solely online.
+    In an in-person game a physical action simply happens at the table: a
+    custom_note describing the action plus any mechanical parts is the right
+    effect. When venue is "in_person" AND the game mode is online, MOCK the
+    player in your comment for playing a physical card over the internet —
+    witty and deserved — and STILL choose a plausible substitute effect through
+    the normal branches (chaos_monkey etc.): the mockery is IN ADDITION to
+    chosen effects, never instead of them.
+  * placement: where the played card lives afterwards. "center" for a
+    persistent global rule — it sits visibly on the board as a reminder and can
+    be targeted/destroyed later to remove the effect. "player" for a persistent
+    single-player boon/curse/modifier — it sits in front of that player.
+    "discard" for one-shot effects. Cohere with persistence: "persistent"
+    usually implies center or player.
 """
 
 INTENT_OUTPUT_CONTRACT = f"""{OUTPUT_CONTRACT_PREAMBLE}
@@ -69,6 +85,8 @@ INTENT_OUTPUT_CONTRACT = f"""{OUTPUT_CONTRACT_PREAMBLE}
     "resolved_references": ["each reference resolved to plain mechanics", ...],
     "ambiguity":           "clear" | "ambiguous" | "undecipherable",
     "complexity":          "trivial" | "standard" | "complex",
+    "venue":               "all" | "in_person" | "online",
+    "placement":           "discard" | "center" | "player",
 {PERSONA_OUTPUT_KEYS}
   }}
 """

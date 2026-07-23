@@ -21,6 +21,9 @@ def test_interpret_result_defaults():
     assert r.verdict == "invalid"
     assert r.comment == ""
     assert r.persona_action == "none"
+    # Legacy channel: None means the room keeps its default placement behavior.
+    assert r.placement is None
+    assert r.venue is None
 
 
 def test_snippet_effect_import_and_fields():
@@ -61,6 +64,9 @@ def test_card_intent_minimal_payload():
     assert intent.ambiguity == "clear"
     assert intent.complexity == "standard"
     assert intent.persona_action == "none"
+    # Old payloads without venue/placement keep parsing via these defaults.
+    assert intent.venue == "all"
+    assert intent.placement == "discard"
 
 
 def test_card_intent_round_trip():
@@ -74,10 +80,21 @@ def test_card_intent_round_trip():
         complexity="complex",
         comment="a bold move",
         persona_action="chaos_monkey",
+        venue="in_person",
+        placement="player",
     )
     dumped = intent.model_dump()
     restored = CardIntent.model_validate(dumped)
     assert restored == intent
+    assert restored.venue == "in_person"
+    assert restored.placement == "player"
+
+
+def test_interpret_result_round_trips_placement_and_venue():
+    r = InterpretResult(verdict="ok", placement="center", venue="in_person")
+    restored = InterpretResult.model_validate(r.model_dump())
+    assert restored.placement == "center"
+    assert restored.venue == "in_person"
 
 
 def test_mechanics_plan_minimal_payload():

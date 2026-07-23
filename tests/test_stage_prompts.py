@@ -49,6 +49,23 @@ def test_intent_prompt_contains_persona_and_intent_contract():
     assert "Alice" in prompt
 
 
+def test_intent_prompt_carries_venue_and_placement_guidance():
+    prompt = build_intent_prompt("T", "D", state=dict(STATE, mode="online"), actor_id="p1")
+    # The output contract lists both keys.
+    assert '"venue"' in prompt
+    assert '"placement"' in prompt
+    # venue guidance: physical-presence test plus the online-game mockery rule.
+    assert "physical presence" in prompt
+    assert "MOCK the" in prompt
+    assert "IN ADDITION to" in prompt
+    # placement guidance: the three zones and the persistence coherence rule.
+    assert "persistent global rule" in prompt
+    assert "boon/curse" in prompt
+    assert "one-shot" in prompt
+    # The state summary tells the agent which venue it is judging against.
+    assert "Game mode: online." in prompt
+
+
 def test_intent_prompt_excludes_sandbox_rules():
     prompt = build_intent_prompt("T", "D")
     assert SANDBOX_RULES not in prompt
