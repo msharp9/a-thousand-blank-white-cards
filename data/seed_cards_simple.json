@@ -285,7 +285,7 @@
         }
       ],
       "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 5)"
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 5)"
     }
   },
   {
@@ -308,7 +308,7 @@
         }
       ],
       "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 8)"
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 8)"
     }
   },
   {

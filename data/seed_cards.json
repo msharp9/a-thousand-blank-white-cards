@@ -424,16 +424,16 @@
       "trigger": "on_game_end",
       "ops": [
         {
-          "op": "add_points",
+          "op": "register_hook",
           "args": {
-            "amount": 10,
-            "target": "self",
-            "condition": "still_in_hand"
+            "event": "on_game_end",
+            "scope": "player",
+            "code": "def apply(state, ctx):\n    state.add_points('self', 10)\n"
           }
         }
       ],
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 10)"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 10)\\n\")"
     }
   },
   {
@@ -741,7 +741,7 @@
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.scramble_order()\n    state.steal_points(chosen, 'self', 4)"
+      "sandbox": "def apply(state, ctx):\n    state.scramble_order()\n    state.steal_points('player_with_most_points', 'self', 4)"
     }
   },
   {
@@ -2537,7 +2537,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'legacy_owner', state.actor_id)\n    state.note('This card is now named after its first player; whenever it is played again, they gain 1 point.')"
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'legacy_card', True)\n    state.note('This card is now named after its first player; whenever it is played again, they gain 1 point.')"
     }
   },
   {
@@ -2962,7 +2962,7 @@
         }
       ],
       "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 5)"
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 5)"
     }
   },
   {
@@ -2985,7 +2985,7 @@
         }
       ],
       "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 8)"
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 8)"
     }
   },
   {

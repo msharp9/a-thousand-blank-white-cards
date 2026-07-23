@@ -150,6 +150,10 @@ def _canonicalise_op(entry: dict[str, Any]) -> dict[str, Any]:
         entry = {k: v for k, v in entry.items() if k not in ("winner", "winners")}
         if winners:
             entry["winners"] = sorted(dict.fromkeys(winners))
+    # subtract_points(t, n) is exactly add_points(t, -n); fold to one form so a
+    # faithful reading in either encoding compares equal.
+    if entry.get("op") == "subtract_points" and isinstance(entry.get("amount"), int):
+        entry = {**entry, "op": "add_points", "amount": -entry["amount"]}
     return {key: value for key, value in entry.items() if not _is_empty(value)}
 
 

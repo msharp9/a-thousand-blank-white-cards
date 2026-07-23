@@ -949,7 +949,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'legacy_owner', state.actor_id)\n    state.note('This card is now named after its first player; whenever it is played again, they gain 1 point.')"
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'legacy_card', True)\n    state.note('This card is now named after its first player; whenever it is played again, they gain 1 point.')"
     }
   },
   {

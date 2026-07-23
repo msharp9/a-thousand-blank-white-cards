@@ -36,6 +36,13 @@ def test_keeps_zero_amount() -> None:
     assert normed == ['{"amount": 0, "op": "change_draw_count"}']
 
 
+def test_subtract_points_equals_negative_add() -> None:
+    assert _eq(
+        [{"op": "subtract_points", "target": "self", "amount": 3}],
+        [{"op": "add_points", "target": "self", "amount": -3}],
+    )
+
+
 def test_choice_alias_resolves_to_chosen_player() -> None:
     assert _eq(
         [{"op": "add_points", "target": "chooser", "amount": 3}],
