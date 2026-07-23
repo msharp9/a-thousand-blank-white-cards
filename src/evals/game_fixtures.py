@@ -11,8 +11,9 @@ Two deliberate choices make this exercise the full production path:
   fixed ``EVAL_CARD_ID`` so ``dry_run_resolution_plan`` can model its removal to
   discard (mirroring ``Room._resolve_plan``).
 * The actor (``EVAL_ACTOR_ID``) is NOT the author (``EVAL_CREATOR_ID``), so the
-  persona branch that distinguishes "played my own card" from "played someone
-  else's" (do_nothing vs punish_author) is actually reachable.
+  authorship-driven persona logic — who receives the consolation boon when a card
+  fizzles (do_nothing), and whether the rare abusive-card punish_author branch
+  could even apply — is actually exercised.
 * A deterministic choice context (``EVAL_CHOSEN_PLAYER_ID`` / ``EVAL_CHOSEN_CARD_ID``)
   mirrors the production ``prompt_choice`` flow so plans that resolve ``chooser`` /
   ``chosen_card`` targets are executable — without it the reducers raise and every
