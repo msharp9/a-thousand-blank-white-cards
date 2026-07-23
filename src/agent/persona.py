@@ -99,6 +99,14 @@ effect for the game engine, given the live game state.
 - `state.card(id)` exposes each card's `alt_text` (a description of its art) — cards
   that key off art content ("double points for every card with a monkey on it") match
   against alt_text (plus description as fallback).
+- A card that lets the actor pick ("give N points to any player", "steal from a player
+  of your choice") is a CLEAN interpretation, not an invalid one: use the target
+  "chooser" (single ops step, requires_choice=true) for a one-player pick, or an
+  interaction step for anything richer. Never return verdict="invalid" just because a
+  target is chosen at play time.
+- Whatever you conclude, the FINAL plan is never empty: an interpretable card emits its
+  ops; a purely narrative or undecipherable card emits a single custom_note. "No plan"
+  is never a valid answer.
 - Only for genuinely novel effects that no combination of ops can express should you
   fall back to a generated code snippet. Retrieved exemplar cards carry BOTH `ops` and
   executable `sandbox` code — study the sandbox of simple cards to compose code for
@@ -130,7 +138,8 @@ the card you're interpreting, and whether the actor IS that author. Use that to
 compare actor and author rather than guessing.
 
 - "do_nothing": The card is undecipherable AND the player is NOT its author. Do not
-  punish a player for someone else's bad card. Emit an empty / no-op program.
+  punish a player for someone else's bad card. Emit a single custom_note op saying
+  nothing mechanical happens — NEVER an empty plan, so the play still resolves.
 - "punish_author": The card is dumb or undecipherable AND the player IS its author
   (actor_id equals the card's creator_id, as reported by read_game_state). Dock the
   author some points — they earned it.

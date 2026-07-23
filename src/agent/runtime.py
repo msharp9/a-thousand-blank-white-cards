@@ -262,6 +262,21 @@ def _extract_json_object(text: str) -> Any:
     raise json.JSONDecodeError("no contract-shaped object", text, 0)
 
 
+def _with_note_if_effectless(result: InterpretResult) -> InterpretResult:
+    """Guarantee an executable plan.
+
+    A valid interpretation that produces no mechanical effect (a no-op/narrative
+    card, or a persona ``do_nothing``) should still emit a ``custom_note`` — that
+    is how such cards are canonically annotated, and it keeps the play resolvable
+    rather than an empty plan that reads downstream as "the agent produced
+    nothing". Verdict, comment, and persona are left intact.
+    """
+    if result.to_plan().steps:
+        return result
+    note = (result.comment or "").strip() or "This card has no mechanical effect."
+    return result.model_copy(update={"program": EffectProgram(ops=[CustomNoteOp(note=note[:280])])})
+
+
 def _parse_result(result: dict[str, Any]) -> InterpretResult:
     """Parse the agent's output into an InterpretResult.
 
@@ -270,14 +285,15 @@ def _parse_result(result: dict[str, Any]) -> InterpretResult:
       2. The last AIMessage parsed as a JSON object matching the contract.
 
     On any parse failure this returns a bounded fallback rather than raising, so
-    the caller always gets a well-formed InterpretResult.
+    the caller always gets a well-formed InterpretResult — and never an empty
+    plan (see :func:`_with_note_if_effectless`).
     """
     structured = result.get("structured_response")
     if isinstance(structured, InterpretResult):
-        return structured
+        return _with_note_if_effectless(structured)
     if isinstance(structured, dict):
         try:
-            return InterpretResult.model_validate(structured)
+            return _with_note_if_effectless(InterpretResult.model_validate(structured))
         except Exception:  # noqa: BLE001 — malformed structured output degrades gracefully
             logger.warning("agent structured_response failed validation; falling back")
 
@@ -287,9 +303,12 @@ def _parse_result(result: dict[str, Any]) -> InterpretResult:
             payload = _extract_json_object(text)
         except json.JSONDecodeError:
             logger.warning("agent final message was not valid JSON; using it as a comment")
-            return InterpretResult(verdict="invalid", comment=text[:280], persona_action="do_nothing", agent_error=True)
+            fallback = InterpretResult(
+                verdict="invalid", comment=text[:280], persona_action="do_nothing", agent_error=True
+            )
+            return _with_note_if_effectless(fallback)
         try:
-            return InterpretResult.model_validate(_normalise_contract_payload(payload))
+            return _with_note_if_effectless(InterpretResult.model_validate(_normalise_contract_payload(payload)))
         except Exception:  # noqa: BLE001 — schema mismatch degrades gracefully
             logger.warning("agent final message JSON did not match InterpretResult")
 
