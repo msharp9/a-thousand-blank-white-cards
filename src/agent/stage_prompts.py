@@ -36,17 +36,7 @@ from agent.persona import (
     describe_state,
 )
 
-_STRUGGLING_AUTHOR_NOTE_FALLBACK = (
-    "HELP MODE: this card's author has already had {n} card(s) fail to work. They are "
-    "almost certainly still learning how to phrase cards, not trolling you. TRY HARDER: "
-    "re-read the card assuming best intent, prefer chaos_monkey (a generous, plausible "
-    'reading) over giving up, and only return "invalid" if you truly cannot construct '
-    "any effect. Stay witty - but aim the wit at the cosmos, not at this player."
-)
-
-# The canonical copy lands in persona via a parallel bead; fall back to an
-# equivalent local block until it exists.
-STRUGGLING_AUTHOR_NOTE: str = getattr(persona, "STRUGGLING_AUTHOR_NOTE", _STRUGGLING_AUTHOR_NOTE_FALLBACK)
+STRUGGLING_AUTHOR_NOTE = persona.STRUGGLING_AUTHOR_NOTE
 
 INTENT_JOB = """\
 Your JOB in this stage is to determine what the player WANTS this card to do. Capture

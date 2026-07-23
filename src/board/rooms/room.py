@@ -49,11 +49,22 @@ from engine.apply import apply_effect
 from engine.compile import compile_card_plan
 from engine.events import EventBus, GameEvent, HookContext
 from engine.hooks import build_registry, collect_hook_errors
-from engine.history import append_history_event, record_draw, record_game_end
+from engine.history import append_history_event, fallback_counts, record_draw, record_game_end
 from engine.loop import advance_turn
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.card import MAX_ROOM_ART_BYTES
-from models.effects import CustomNoteOp, EffectProgram, InteractionStep, OpsStep, ResolutionPlan, SnippetStep
+from models.effects import (
+    AddPointsOp,
+    CustomNoteOp,
+    DrawCardsOp,
+    EffectProgram,
+    InteractionStep,
+    Op,
+    OpsStep,
+    ResolutionPlan,
+    SetPointsOp,
+    SnippetStep,
+)
 from models.game_state import EndCondition, EpilogueCardOutcome, EpilogueResultSummary, GameState, Player, Spectator
 from models.interactions import (
     CardPickInteraction,
@@ -1022,6 +1033,53 @@ class Room:
         self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: updated}})
         self._notify_change()
 
+    def _consolation_ops(self, card, card_id: str) -> list[Op]:
+        """Ops for a card that couldn't be made to work: a visible note plus a
+        consolation boon to the AUTHOR "for trying" (authored cards only, author
+        still seated, consolation_point_enabled on).
+
+        The boon escalates with the author's card_fallback history count —
+        every call site records the current failure (via
+        _set_card_mechanical_status) BEFORE building these ops, so the count
+        read here already includes it. Below struggling_author_threshold (or
+        with escalation disabled, threshold == 0) it's a flat
+        consolation_points award; at or past the threshold it rotates through
+        +2 points, draw 3 cards, and a one-shot score double.
+        """
+        from config import get_settings
+
+        title = self._card_title(card)
+        bare = [CustomNoteOp(note=f"Played {title} (no mechanical effect)")]
+        settings = get_settings()
+        if not settings.consolation_point_enabled:
+            return bare
+        creator_id = card.get("creator_id") if isinstance(card, dict) else getattr(card, "creator_id", None)
+        if not creator_id:
+            return bare
+        author = next((p for p in self.state.players if p.id == creator_id), None)
+        if author is None:
+            return bare
+        n = fallback_counts(self.state).get(creator_id, 0)
+        threshold = settings.struggling_author_threshold
+        boon: Op
+        if threshold <= 0 or n < threshold:
+            amount = settings.consolation_points
+            boon = AddPointsOp(target=f"id:{creator_id}", amount=amount)
+            boon_text = f"+{amount} point{'' if amount == 1 else 's'}"
+        else:
+            rung = (n - threshold) % 3
+            if rung == 1:
+                boon = DrawCardsOp(target=f"id:{creator_id}", amount=3)
+                boon_text = "3 cards"
+            elif rung == 2 and author.score > 0:
+                boon = SetPointsOp(target=f"id:{creator_id}", amount=author.score * 2)
+                boon_text = "score doubled"
+            else:
+                boon = AddPointsOp(target=f"id:{creator_id}", amount=2)
+                boon_text = "+2 points"
+        note = CustomNoteOp(note=f"Played {title} (no mechanical effect - {boon_text} to {author.name} for trying)")
+        return [note, boon]
+
     def _report_failure_for_triage(
         self,
         kind: str,
@@ -1208,7 +1266,9 @@ class Room:
                 "comment": result.comment,
                 "mechanical_status": "pending" if result.verdict == "ok" else "fallback",
                 "mechanical_reason": (
-                    None if result.verdict == "ok" else "The arbiter could not produce an executable effect."
+                    None
+                    if result.verdict == "ok"
+                    else "The arbiter couldn't build this one - the author gets a consolation boon for trying."
                 ),
                 "correlation_id": correlation_id,
             }
@@ -1233,7 +1293,7 @@ class Room:
             card_id,
             "fallback",
             correlation_id,
-            "The arbiter could not produce an executable effect.",
+            "The arbiter couldn't build this one - the author gets a consolation boon for trying.",
         )
         self._report_failure_for_triage(
             "no_op" if result.verdict == "ok" else "invalid_verdict",
@@ -1242,8 +1302,7 @@ class Room:
             verdict=result.verdict,
             comment=result.comment,
         )
-        note = title or "Card"
-        return ResolutionPlan(steps=[OpsStep(ops=[CustomNoteOp(note=f"Played {note} (no mechanical effect)")])])
+        return ResolutionPlan(steps=[OpsStep(ops=self._consolation_ops(card, card_id))])
 
     def _canonicalize_interpretation(self, result) -> dict:
         """Build the structured ``canonical`` payload for an interpreted card.
@@ -1544,7 +1603,6 @@ class Room:
         the rest of the play (PlanPaused must never fall into the generic
         fallback).
         """
-        title = self._card_title(card)
         game_ending = False
         before = {p.id: p.score for p in self.state.players}
         deck_count_before = len(self.state.deck)
@@ -1591,9 +1649,7 @@ class Room:
                     self.state = self.state.move_card(
                         card_id, "hand", destination, from_player_id=player_id, to_player_id=player_id
                     )
-                    fallback = EffectProgram(
-                        ops=[CustomNoteOp(note=f"Played {title or 'Card'} (no mechanical effect)")]
-                    )
+                    fallback = EffectProgram(ops=self._consolation_ops(card, card_id))
                     self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
                     await self._log_and_broadcast(self._describe_play(player_id, card, before))
                 else:
@@ -1619,7 +1675,7 @@ class Room:
                     from_player_id=player_id,
                     to_player_id=player_id,
                 )
-                fallback = EffectProgram(ops=[CustomNoteOp(note=f"Played {title or 'Card'} (no mechanical effect)")])
+                fallback = EffectProgram(ops=self._consolation_ops(card, card_id))
                 self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
                 await self._log_and_broadcast(self._describe_play(player_id, card, before))
             else:
@@ -2105,7 +2161,7 @@ class Room:
         ctx = HookContext(event=GameEvent.ON_PLAY, actor_id=pending.actor_id, card_id=pending.card_id)
         self.state = apply_effect(
             self.state,
-            EffectProgram(ops=[CustomNoteOp(note=f"Played {self._card_title(pending.card)} (no mechanical effect)")]),
+            EffectProgram(ops=self._consolation_ops(pending.card, pending.card_id)),
             ctx,
             bus=self._hook_bus(),
         )
@@ -2595,7 +2651,7 @@ class Room:
             plan = result.to_plan()
             if result.verdict != "ok" or not plan.steps:
                 status = "fallback"
-                reason = "The arbiter could not produce an executable effect."
+                reason = "The arbiter couldn't build this one."
                 report = None
             else:
                 choice_player = next((candidate for candidate in sorted(player_ids) if candidate != actor_id), actor_id)
