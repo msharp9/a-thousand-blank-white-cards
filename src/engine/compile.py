@@ -44,6 +44,7 @@ from models.effects import (
     OpsStep,
     Op,
     ReverseOrderOp,
+    RollDieOp,
     ScrambleOrderOp,
     SetCardAttributeOp,
     SetConditionOp,
@@ -162,6 +163,14 @@ def _compile_op(name: str, args: dict) -> Op | None:
         return DrawCardsOp(
             target=_map_target(args.get("target", "self"), default="self", op_name=name),
             amount=int(args.get("amount", 1)),
+        )
+    if name == "roll_die":
+        return RollDieOp(
+            sides=int(args.get("sides", 6)),
+            count=int(args.get("count", 1)),
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
+            outcome=args.get("outcome", "none"),
+            result=args.get("result"),
         )
     if name == "set_win_condition":
         if "kind" not in args or args["kind"] is None:

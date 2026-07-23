@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CardSnapshot,
   ClientMsg,
+  DiceRollMsg,
   GameStateSnapshot,
   InteractionProgressMsg,
   InteractionRequestMsg,
@@ -83,11 +84,18 @@ export interface GameSocketState {
   // driven by gameState.pending_play (the reconnect-safe source of truth).
   // Cleared automatically after a few seconds or when a new window opens.
   reactionResult: ReactionResultMsg | null;
+  // The most recent dice roll push, kept briefly so the dice overlay can play
+  // its animation. Cleared automatically after a few seconds; a newer roll
+  // replaces it (and restarts the countdown).
+  diceRoll: DiceRollMsg | null;
   send: (msg: ClientMsg) => void;
 }
 
 // How long the reaction outcome flash ("Countered!") stays up.
 const REACTION_RESULT_MS = 4000;
+
+// How long the dice roll overlay stays up (animation + read time).
+const DICE_ROLL_MS = 5000;
 
 export function useGameSocket(code: string, name: string): GameSocketState {
   const wsRef = useRef<WebSocket | null>(null);
@@ -112,6 +120,8 @@ export function useGameSocket(code: string, name: string): GameSocketState {
   const reactionResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const [diceRoll, setDiceRoll] = useState<DiceRollMsg | null>(null);
+  const diceRollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Pending auto-dismiss timer for the current transient error, so a newer
   // error resets the countdown instead of being cut short by an older one.
@@ -269,6 +279,16 @@ export function useGameSocket(code: string, name: string): GameSocketState {
               setReactionResult(null);
             }, REACTION_RESULT_MS);
             break;
+          case "dice_roll":
+            setDiceRoll(msg);
+            if (diceRollTimeoutRef.current) {
+              clearTimeout(diceRollTimeoutRef.current);
+            }
+            diceRollTimeoutRef.current = setTimeout(() => {
+              diceRollTimeoutRef.current = null;
+              setDiceRoll(null);
+            }, DICE_ROLL_MS);
+            break;
           case "epilogue":
             setEpilogueCards(msg.cards);
             break;
@@ -342,6 +362,10 @@ export function useGameSocket(code: string, name: string): GameSocketState {
         clearTimeout(reactionResultTimeoutRef.current);
         reactionResultTimeoutRef.current = null;
       }
+      if (diceRollTimeoutRef.current) {
+        clearTimeout(diceRollTimeoutRef.current);
+        diceRollTimeoutRef.current = null;
+      }
       wsRef.current?.close();
     };
   }, [code, name, clearTransientError]);
@@ -361,6 +385,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     interactionRequest,
     interactionProgress,
     reactionResult,
+    diceRoll,
     send,
   };
 }

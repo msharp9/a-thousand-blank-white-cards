@@ -15,6 +15,7 @@ from models.effects import (
     EndGameOp,
     ExtraTurnOp,
     ReverseOrderOp,
+    RollDieOp,
     ScrambleOrderOp,
     CreateCardOp,
     SetCardAttributeOp,
@@ -218,6 +219,103 @@ class TestDrawCards:
         assert "d1" in new.get_player("p1").hand
         assert "d2" in new.get_player("p1").hand
         assert new.deck == ["d3"]
+
+
+class TestRollDie:
+    def _dice_events(self, state):
+        return [e for e in state.history_events if e.kind == "dice_roll"]
+
+    def test_injected_rng_is_deterministic(self):
+        import random
+
+        seed_rng = random.Random(42)
+        expected = [seed_rng.randint(1, 6) for _ in range(2)]
+        op = RollDieOp(sides=6, count=2, outcome="add_points")
+        first = apply_op(make_state(), op, make_ctx("p1"), rng=random.Random(42))
+        second = apply_op(make_state(), op, make_ctx("p1"), rng=random.Random(42))
+        assert self._dice_events(first)[0].data["values"] == expected
+        assert first.get_player("p1").score == 10 + sum(expected)
+        assert self._dice_events(first)[0].data == self._dice_events(second)[0].data
+
+    def test_pre_resolved_result_replays_without_rng(self):
+        new = apply_op(
+            make_state(),
+            RollDieOp(sides=6, count=2, outcome="add_points", result=[3, 5]),
+            make_ctx("p1"),
+        )
+        assert new.get_player("p1").score == 18  # 10 + 8
+        event = self._dice_events(new)[0]
+        assert event.data == {"sides": 6, "values": [3, 5], "total": 8}
+        assert "Alice rolled 2d6: 3 + 5 = 8" in new.log
+
+    def test_result_value_out_of_bounds_rejected(self):
+        with pytest.raises(ValueError):
+            RollDieOp(sides=6, count=1, result=[7])
+        with pytest.raises(ValueError):
+            RollDieOp(sides=6, count=1, result=[0])
+
+    def test_result_length_must_match_count(self):
+        with pytest.raises(ValueError):
+            RollDieOp(sides=6, count=2, result=[3])
+
+    def test_sides_and_count_bounds(self):
+        with pytest.raises(ValueError):
+            RollDieOp(sides=1)
+        with pytest.raises(ValueError):
+            RollDieOp(sides=1001)
+        with pytest.raises(ValueError):
+            RollDieOp(count=0)
+        with pytest.raises(ValueError):
+            RollDieOp(count=11)
+
+    def test_outcome_subtract_points(self):
+        new = apply_op(
+            make_state(),
+            RollDieOp(outcome="subtract_points", target="id:p2", result=[4]),
+            make_ctx("p1"),
+        )
+        assert new.get_player("p2").score == 1  # 5 - 4
+        assert new.get_player("p1").score == 10
+
+    def test_outcome_draw_cards(self):
+        new = apply_op(
+            make_state(deck=["d1", "d2", "d3"]),
+            RollDieOp(outcome="draw_cards", result=[2]),
+            make_ctx("p1"),
+        )
+        assert new.get_player("p1").hand == ["c1", "c2", "d1", "d2"]
+        assert new.deck == ["d3"]
+
+    def test_outcome_none_is_a_bare_roll(self):
+        base = make_state()
+        new = apply_op(base, RollDieOp(result=[4]), make_ctx("p1"))
+        assert [p.score for p in new.players] == [p.score for p in base.players]
+        assert [len(p.hand) for p in new.players] == [len(p.hand) for p in base.players]
+        event = self._dice_events(new)[0]
+        assert event.target_player_ids == []
+        assert "Alice rolled 1d6: 4" in new.log
+
+    def test_history_event_shape(self):
+        new = apply_op(
+            make_state(),
+            RollDieOp(sides=20, count=2, outcome="add_points", target="all_others", result=[7, 11]),
+            make_ctx("p1", chosen=None),
+            rng=None,
+        )
+        event = self._dice_events(new)[0]
+        assert event.kind == "dice_roll"
+        assert event.actor_id == "p1"
+        assert set(event.target_player_ids) == {"p2", "p3"}
+        assert event.amount == 18
+        assert event.data == {"sides": 20, "values": [7, 11], "total": 18}
+
+    def test_points_outcome_also_records_score_change(self):
+        new = apply_op(make_state(), RollDieOp(outcome="add_points", result=[5]), make_ctx("p1"))
+        kinds = [e.kind for e in new.history_events]
+        assert kinds.index("dice_roll") < kinds.index("score_change")
+        score_event = next(e for e in new.history_events if e.kind == "score_change")
+        assert score_event.amount == 5
+        assert score_event.target_player_ids == ["p1"]
 
 
 def make_card_ctx(actor_id="p1", card_id=None, chosen_card_id=None) -> HookContext:

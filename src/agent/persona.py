@@ -62,8 +62,9 @@ OP_CATALOG_GUIDE = """\
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, destroy_card, transfer_card, set_win_condition, set_rule, set_condition, set_card_attribute,
-  create_card, custom_note, end_game) into an EffectProgram.
+  draw_cards, roll_die, destroy_card, transfer_card, set_win_condition, set_rule,
+  set_condition, set_card_attribute, create_card, custom_note, end_game) into an
+  EffectProgram.
   * set_rule writes game rules as data (paths: draw, play, end_condition.type,
     win_condition.kind, extra.<anything>) — rule-changing cards ("draws are now 2", "game
     ends when someone empties their hand") compose set_rule ops, not snippets.
@@ -80,6 +81,12 @@ OP_CATALOG_GUIDE = """\
     simultaneously — followed by a snippet that destroys each picked card. To discard
     MORE than one per player ("everyone discards 2 cards") set the card_pick's
     max_picks=N: each player's collected value is then a LIST of card ids to iterate.
+  * roll_die rolls REAL dice in the engine: count dice (1-10) of sides sides (2-1000,
+    default 1d6); the roll TOTAL feeds outcome "add_points" / "subtract_points" /
+    "draw_cards" applied to target. "Roll a d6 and gain that many points" =
+    roll_die sides=6 outcome="add_points". A coin flip is roll_die sides=2. Use
+    outcome "none" for a bare roll (shown to everyone and recorded in history for
+    later steps to read). NEVER pick the number yourself — the engine rolls.
   * create_card mints new cards (with their own ops!) into the deck or a hand — a card
     can add Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
     the copies to its target player (default "self"); route to a SPECIFIC player with

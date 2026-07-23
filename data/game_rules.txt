@@ -21,14 +21,15 @@ NOT YET SUPPORTED: a mid-game deck shuffle, a shuffle of the discard pile back i
 == Discarding ==
 "Discard a card" of the player's choosing = destroy the chosen card (a pick prompt); "discard your hand" destroys every card in that hand.
 Discarding N cards uses a card-pick interaction with N picks; if a player must discard more cards than they hold, they simply discard their whole hand — no error, no refusal.
-NOT YET SUPPORTED: discarding a card at random (no in-game randomness primitive). Fallback: let the target player choose which card to discard, or pick one yourself at interpretation time, and note the substitution in your comment.
+NOT YET SUPPORTED: discarding a card at random in a single op (the roll_die primitive rolls numbers, not card picks). Fallback: let the target player choose which card to discard — or roll a bare die (roll_die outcome none) and discard the card at that position in a later snippet step — and note the substitution in your comment.
 
 == Discard pile ==
 The discard pile is public; a specific named card can be moved from the discard pile into a player's hand.
 NOT YET SUPPORTED: drawing blindly from the top of the discard pile, or moving a discard-pile card directly into play or into the center. Fallback: move the specific card to a hand instead.
 
 == Randomness and dice ==
-NOT YET SUPPORTED: dice rolls, coin flips, or any random choice inside card effects (no randomness primitive, and snippets cannot import random). For a one-shot roll ("roll a d6, gain that many points"), pick the number yourself at interpretation time or ask the player for a number with an interaction — and say which you did in your comment. Persistent random effects (a hook that rolls every turn) cannot be expressed yet; apply the closest deterministic reading.
+Dice rolls ARE supported: the roll_die op rolls 1-10 dice of any size from 2 to 1000 sides inside the engine, and its total can add points, subtract points, or draw that many cards for a target ("roll a d6, gain that many points" = roll_die with outcome add_points). A coin flip is a 2-sided die (say which side means what in your comment). A bare roll (outcome none) is also valid — the roll is shown to everyone and recorded in history.
+NOT YET SUPPORTED: feeding a roll into any OTHER effect (e.g. "roll a die, skip that many turns"), a random choice among players or cards, or persistent random effects (a hook that rolls every turn — snippets cannot import random). Fallback: the closest supported outcome or a deterministic reading, noted in your comment.
 
 == Conditions and statuses ==
 Any free-form status can be put on a player (poisoned, confused, cursed, polite...) with any value, and removed later; other cards can target "players that have" a given status.

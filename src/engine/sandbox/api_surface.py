@@ -8,6 +8,7 @@ it through the engine's own reducers.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Any
 
@@ -221,6 +222,43 @@ class SandboxGame:
         """Have player `target` draw `amount` cards from the deck."""
         self._require_nonneg_int(amount)
         self._ops.append({"op": "draw_cards", "target": target, "amount": amount})
+
+    def roll_die(
+        self,
+        sides: int = 6,
+        count: int = 1,
+        target: str = "self",
+        outcome: str = "none",
+        result: list[int] | None = None,
+    ) -> int:
+        """Roll `count` dice (1-10) of `sides` sides (2-1000); returns the TOTAL.
+
+        The roll happens HERE, immediately, and the recorded op carries the
+        rolled values in `result` — so revalidation replays this exact roll
+        instead of re-rolling. `outcome` feeds the total into "add_points",
+        "subtract_points" or "draw_cards" for `target`; "none" is a bare roll
+        whose returned total your code can branch on. Passing `result`
+        forces the values (replay).
+        """
+        if not isinstance(sides, int) or isinstance(sides, bool) or not 2 <= sides <= 1000:
+            raise ValueError(f"sides must be an int in 2..1000, got {sides!r}")
+        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 10:
+            raise ValueError(f"count must be an int in 1..10, got {count!r}")
+        if outcome not in ("add_points", "subtract_points", "draw_cards", "none"):
+            raise ValueError(f"outcome must be add_points/subtract_points/draw_cards/none, got {outcome!r}")
+        if result is not None:
+            if len(result) != count:
+                raise ValueError(f"result has {len(result)} values but count={count}")
+            for value in result:
+                if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= sides:
+                    raise ValueError(f"result value {value!r} outside 1..{sides}")
+            values = list(result)
+        else:
+            values = [random.randint(1, sides) for _ in range(count)]
+        self._ops.append(
+            {"op": "roll_die", "sides": sides, "count": count, "target": target, "outcome": outcome, "result": values}
+        )
+        return sum(values)
 
     def destroy_card(self, card_id: str | None = None, card_target: str | None = None) -> None:
         """Destroy cards by CardTarget address ('this', 'all_in_play', 'id:…', 'attr:k=v')."""

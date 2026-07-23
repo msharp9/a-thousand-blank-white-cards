@@ -315,3 +315,34 @@ class TestCounterPlay:
         g = self._game()
         with pytest.raises(ValueError):
             g.counter_play("obliterate")
+
+
+class TestRollDie:
+    def test_roll_records_pre_resolved_op(self):
+        g = make_game()
+        total = g.roll_die(sides=6, count=2, outcome="add_points")
+        (op,) = g.ops()
+        assert op["op"] == "roll_die"
+        assert (op["sides"], op["count"], op["target"], op["outcome"]) == (6, 2, "self", "add_points")
+        assert len(op["result"]) == 2
+        assert all(1 <= v <= 6 for v in op["result"])
+        assert total == sum(op["result"])
+
+    def test_forced_result_is_recorded_verbatim(self):
+        g = make_game()
+        assert g.roll_die(sides=6, count=2, result=[3, 5]) == 8
+        assert g.ops()[0]["result"] == [3, 5]
+
+    def test_rejects_bad_arguments(self):
+        g = make_game()
+        with pytest.raises(ValueError):
+            g.roll_die(sides=1)
+        with pytest.raises(ValueError):
+            g.roll_die(count=0)
+        with pytest.raises(ValueError):
+            g.roll_die(outcome="explode")
+        with pytest.raises(ValueError):
+            g.roll_die(sides=6, count=1, result=[7])
+        with pytest.raises(ValueError):
+            g.roll_die(sides=6, count=2, result=[3])
+        assert g.ops() == []

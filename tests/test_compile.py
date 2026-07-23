@@ -15,6 +15,7 @@ from models.effects import (
     EndGameOp,
     ExtraTurnOp,
     ReverseOrderOp,
+    RollDieOp,
     SetPointsOp,
     SetWinConditionOp,
     SkipTurnOp,
@@ -101,6 +102,41 @@ def test_draw_cards_default_amount() -> None:
 def test_draw_cards_explicit_amount() -> None:
     prog = compile_card(_card([{"op": "draw_cards", "args": {"amount": 2}}]))
     assert prog.ops[0].amount == 2
+
+
+def test_roll_die_defaults() -> None:
+    prog = compile_card(_card([{"op": "roll_die", "args": {}}]))
+    op = prog.ops[0]
+    assert isinstance(op, RollDieOp)
+    assert (op.sides, op.count, op.target, op.outcome, op.result) == (6, 1, "self", "none", None)
+
+
+def test_roll_die_full_args() -> None:
+    prog = compile_card(
+        _card(
+            [
+                {
+                    "op": "roll_die",
+                    "args": {"sides": 20, "count": 2, "target": "opponent", "outcome": "add_points"},
+                }
+            ]
+        )
+    )
+    op = prog.ops[0]
+    assert isinstance(op, RollDieOp)
+    assert (op.sides, op.count, op.outcome) == (20, 2, "add_points")
+    assert op.target == "chooser"  # authoring alias mapped
+    assert prog.requires_choice is True
+
+
+def test_roll_die_pre_resolved_result() -> None:
+    prog = compile_card(_card([{"op": "roll_die", "args": {"count": 2, "result": [3, 5]}}]))
+    assert prog.ops[0].result == [3, 5]
+
+
+def test_roll_die_malformed_args_skipped() -> None:
+    prog = compile_card(_card([{"op": "roll_die", "args": {"sides": 1}}]))
+    assert prog is None  # invalid sides -> op skipped -> empty program
 
 
 def test_set_win_condition() -> None:

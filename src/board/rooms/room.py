@@ -1635,6 +1635,7 @@ class Room:
         game_ending = False
         before = {p.id: p.score for p in self.state.players}
         deck_count_before = len(self.state.deck)
+        history_seq_before = self._history_seq()
         if negated or steal_to is not None:
             if steal_to is not None:
                 self.state = self.state.move_card(
@@ -1660,6 +1661,7 @@ class Room:
                         correlation_id=correlation_id,
                         before_scores=before,
                         deck_count_before=deck_count_before,
+                        history_seq_before=history_seq_before,
                         zone_owner=player_id,
                     )
                 except Exception as exc:
@@ -1729,6 +1731,7 @@ class Room:
             game_ending=game_ending,
             deck_count_before=deck_count_before,
             target_player_ids=history_target,
+            history_seq_before=history_seq_before,
         )
 
     async def _after_play_effects(
@@ -1740,6 +1743,7 @@ class Room:
         deck_count_before: int,
         target_player_ids: list[str] | None = None,
         extra_history_event: dict | None = None,
+        history_seq_before: int | None = None,
     ) -> None:
         """The single post-play accounting tail, shared by direct plays
         (_finish_play) and resumed interaction plays (_complete_interaction_play):
@@ -1750,7 +1754,12 @@ class Room:
         aimed at, when known — e.g. a card played to a chosen player, or
         an interaction's resolved audience. Defaults to empty (no known
         target) rather than the actor, since actor_id already covers that.
+
+        ``history_seq_before`` is the last history sequence before this play's
+        plan executed: every dice_roll event recorded past it gets one
+        immediacy push here (None skips the push — e.g. a pre-baseline caller).
         """
+        await self._push_dice_rolls(history_seq_before)
         self.state = append_history_event(
             self.state,
             "play",
@@ -1776,6 +1785,34 @@ class Room:
             await self._broadcast_state()
         else:
             await self._advance_turn()
+
+    def _history_seq(self) -> int:
+        """The last recorded history sequence (0 when history is empty)."""
+        return self.state.history_events[-1].sequence if self.state.history_events else 0
+
+    async def _push_dice_rolls(self, history_seq_before: int | None) -> None:
+        """Broadcast one dice_roll push per roll recorded after the baseline.
+
+        The history event is the reconnect-safe record (it rides every state
+        snapshot); this push is the immediacy signal that drives the client's
+        roll animation — the brewing/reaction_window split.
+        """
+        if history_seq_before is None:
+            return
+        for event in self.state.history_events:
+            if event.sequence <= history_seq_before or event.kind != "dice_roll":
+                continue
+            data = event.data or {}
+            await self.connections.broadcast(
+                {
+                    "type": "dice_roll",
+                    "actor_id": event.actor_id or "",
+                    "sides": data.get("sides", 0),
+                    "values": list(data.get("values", [])),
+                    "total": data.get("total", 0),
+                    "card_id": event.card_id,
+                }
+            )
 
     # ── generic interaction barriers ──
     @staticmethod
@@ -1848,6 +1885,7 @@ class Room:
         correlation_id: str,
         before_scores: dict[str, int],
         deck_count_before: int,
+        history_seq_before: int | None = None,
         zone_owner: str | None = None,
     ) -> None:
         request, refs = self._materialize_interaction(paused.step, ctx.interactions)
@@ -1876,6 +1914,7 @@ class Room:
             chosen_card_id=ctx.chosen_card_id,
             before_scores=before_scores,
             deck_count_before=deck_count_before,
+            history_seq_before=history_seq_before,
         )
         self._set_card_mechanical_status(ctx.card_id or "", "pending", correlation_id)
         self._schedule_interaction_timeout()
@@ -2141,6 +2180,7 @@ class Room:
                     correlation_id=pending.correlation_id,
                     before_scores=pending.before_scores,
                     deck_count_before=pending.deck_count_before,
+                    history_seq_before=pending.history_seq_before,
                 )
             except Exception as exc:
                 self._report_failure_for_triage("interaction_resolve", pending.card, pending.correlation_id, exc=exc)
@@ -2227,6 +2267,7 @@ class Room:
             game_ending=game_ending,
             deck_count_before=pending.deck_count_before,
             target_player_ids=target_player_ids,
+            history_seq_before=pending.history_seq_before,
             extra_history_event={
                 "kind": "interaction",
                 "actor_id": pending.actor_id,

@@ -280,6 +280,22 @@ class ReactionWindowMsg(BaseModel):
     deadline_epoch_ms: int
 
 
+class DiceRollMsg(BaseModel):
+    """Broadcast once per resolved roll_die so clients can animate the roll.
+
+    Immediacy push only — the matching "dice_roll" history event in the state
+    snapshot is the reconnect-safe record (same split as reaction_window vs
+    ``pending_play``). Privacy-safe: sides/values/total, never hand contents.
+    """
+
+    type: Literal["dice_roll"] = "dice_roll"
+    actor_id: str
+    sides: int
+    values: list[int]
+    total: int
+    card_id: str | None = None
+
+
 class ReactionResultMsg(BaseModel):
     """Broadcast when a reaction window closes, however it closed."""
 
@@ -302,6 +318,7 @@ ServerMsg = Union[
     EpilogueMsg,
     ErrorMsg,
     BrewingMsg,
+    DiceRollMsg,
     ReactionWindowMsg,
     ReactionResultMsg,
 ]

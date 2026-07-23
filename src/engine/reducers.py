@@ -11,7 +11,7 @@ import random
 from collections.abc import Callable
 
 from engine.events import HookContext
-from engine.history import record_op_history
+from engine.history import append_history_event, record_op_history
 from models.effects import (
     AddPointsOp,
     CardTarget,
@@ -23,6 +23,7 @@ from models.effects import (
     ExtraTurnOp,
     Op,
     ReverseOrderOp,
+    RollDieOp,
     ScrambleOrderOp,
     CreateCardOp,
     RegisterHookOp,
@@ -230,6 +231,47 @@ def _reduce_draw_cards(state: GameState, op: DrawCardsOp, ctx: HookContext) -> G
         player = new_players[idx]
         new_players[idx] = player.model_copy(update={"hand": [*player.hand, *drawn]})
     return state.model_copy(update={"players": new_players, "deck": deck})
+
+
+def _reduce_roll_die(
+    state: GameState, op: RollDieOp, ctx: HookContext, *, rng: random.Random | None = None
+) -> GameState:
+    """Roll dice, record the roll, then apply the outcome with the total.
+
+    A pre-resolved ``op.result`` (sandbox/replay) is used verbatim instead of
+    rolling, so revalidation replays the same roll deterministically. The roll
+    is recorded FIRST (dice_roll history event + log line), then the outcome is
+    delegated through ``apply_op`` so its own history (score_change/draw) is
+    recorded exactly like a directly-authored op.
+    """
+    rng = rng or random.Random()
+    values = list(op.result) if op.result is not None else [rng.randint(1, op.sides) for _ in range(op.count)]
+    total = sum(values)
+    try:
+        actor_name = state.get_player(ctx.actor_id).name
+    except KeyError:
+        actor_name = ctx.actor_id
+    rolled = " + ".join(str(v) for v in values)
+    line = f"{actor_name} rolled {op.count}d{op.sides}: {rolled}"
+    if op.count > 1:
+        line += f" = {total}"
+    targets = _resolve_targets(op.target, ctx, state) if op.outcome != "none" else []
+    state = append_history_event(
+        state,
+        "dice_roll",
+        actor_id=ctx.actor_id,
+        target_player_ids=targets,
+        card_id=ctx.card_id,
+        amount=total,
+        data={"sides": op.sides, "values": values, "total": total},
+    ).with_log(line)
+    if op.outcome == "add_points":
+        state = apply_op(state, AddPointsOp(target=op.target, amount=total), ctx)
+    elif op.outcome == "subtract_points":
+        state = apply_op(state, SubtractPointsOp(target=op.target, amount=total), ctx)
+    elif op.outcome == "draw_cards":
+        state = apply_op(state, DrawCardsOp(target=op.target, amount=total), ctx)
+    return state
 
 
 def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) -> GameState:
@@ -513,14 +555,17 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
 def apply_op(state: GameState, op: Op, ctx: HookContext, *, rng: random.Random | None = None) -> GameState:
     """Dispatch a single op to its reducer, returning a new GameState.
 
-    ``rng`` is only consumed by ``scramble_order`` and ``create_card``
-    (dependency-injectable for deterministic tests); every other op ignores it.
+    ``rng`` is only consumed by ``scramble_order``, ``create_card`` and
+    ``roll_die`` (dependency-injectable for deterministic tests); every other
+    op ignores it.
     """
     before = state
     if op.op == "scramble_order":
         state = _reduce_scramble_order(state, op, ctx, rng=rng)
     elif op.op == "create_card":
         state = _reduce_create_card(state, op, ctx, rng=rng)
+    elif op.op == "roll_die":
+        state = _reduce_roll_die(state, op, ctx, rng=rng)
     else:
         state = _REDUCERS[op.op](state, op, ctx)
 

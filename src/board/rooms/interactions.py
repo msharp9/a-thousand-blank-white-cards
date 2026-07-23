@@ -37,3 +37,8 @@ class PendingResolution(BaseModel):
     chosen_card_id: str | None = None
     before_scores: dict[str, int]
     deck_count_before: int
+    # Last history sequence before the play's plan started executing — the
+    # baseline for the dice_roll immediacy push. None (e.g. a pending persisted
+    # before this field existed) skips the push; the history event still rides
+    # the state snapshot.
+    history_seq_before: int | None = None

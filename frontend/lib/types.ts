@@ -205,7 +205,14 @@ export type SpectatorSnapshot = {
 
 // Mirrors models.game_state.HistoryKind.
 export type HistoryEventKind =
-  "draw" | "play" | "score_change" | "rule_change" | "interaction" | "game_end";
+  | "draw"
+  | "play"
+  | "score_change"
+  | "rule_change"
+  | "interaction"
+  | "game_end"
+  | "card_fallback"
+  | "dice_roll";
 
 // One privacy-safe, append-only fact about completed game mechanics. Mirrors
 // models.game_state.HistoryEvent. The "Everything Played" history modal reads
@@ -222,6 +229,9 @@ export type HistoryEventSnapshot = {
   rule_path?: string | null;
   // Turn number the event occurred on (GameState.turn_number at record time).
   turn?: number | null;
+  // Kind-specific structured detail; "dice_roll" carries
+  // {sides, values, total}. Privacy-safe like every other field.
+  data?: Record<string, unknown> | null;
 };
 
 // One card's epilogue vote outcome (id+title only — enough to render a list).
@@ -412,6 +422,17 @@ export type ReactionWindowMsg = {
   actor_id: string;
   deadline_epoch_ms: number;
 };
+// One resolved roll_die: the immediacy push that drives the dice animation.
+// The matching "dice_roll" history event in the state snapshot is the
+// reconnect-safe record. Mirrors models.ws_messages.DiceRollMsg.
+export type DiceRollMsg = {
+  type: "dice_roll";
+  actor_id: string;
+  sides: number;
+  values: number[];
+  total: number;
+  card_id?: string | null;
+};
 // The window closed. "resolved" = timeout or all passed (the original play
 // resolved normally); the other outcomes name the reactor and their card.
 export type ReactionResultMsg = {
@@ -431,6 +452,7 @@ export type ServerMsg =
   | EpilogueMsg
   | ErrorMsg
   | BrewingMsg
+  | DiceRollMsg
   | InteractionRequestMsg
   | InteractionProgressMsg
   | ReactionWindowMsg
