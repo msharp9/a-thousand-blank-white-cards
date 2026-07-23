@@ -88,6 +88,12 @@ STAGE_TOOL_NAMES: dict[str, tuple[str, ...]] = {
 }
 _PERSISTENT_TOOL_NAMES = frozenset({"recall_decisions", "remember_decision"})
 
+_STAGE_MODEL_SETTINGS: dict[str, str] = {
+    "intent": "intent_agent_model",
+    "planner": "planner_agent_model",
+    "coder": "coder_agent_model",
+}
+
 
 class PipelineState(TypedDict, total=False):
     """The LangGraph state threaded through the interpretation pipeline.
@@ -153,6 +159,22 @@ def _node_budget(state: PipelineState, stage: str) -> tuple[float, int]:
 def _forced_timeout(state: PipelineState) -> float:
     budgets = state.get("budgets") or {}
     return float(budgets.get("forced_call_timeout", runtime.FORCED_FINAL_CALL_TIMEOUT_SECONDS))
+
+
+def _stage_model(state: PipelineState, stage: str) -> Any | None:
+    """The chat model one stage runs on.
+
+    A caller-passed ``model`` is authoritative for ALL stages (tests inject
+    fakes that way). Otherwise a non-empty per-stage Settings override
+    (``intent_agent_model`` / ``planner_agent_model`` / ``coder_agent_model``)
+    builds that stage's model via :func:`agent.llm.get_chat_model`; blank
+    returns None so :func:`run_stage` falls back to the shared default.
+    """
+    model = state.get("model")
+    if model is not None:
+        return model
+    name = getattr(get_settings(), _STAGE_MODEL_SETTINGS[stage])
+    return get_chat_model(model_name=name) if name else None
 
 
 def _tool_builders(state: PipelineState) -> dict[str, Callable[[], Any]]:
@@ -322,7 +344,7 @@ def _intent_node(state: PipelineState) -> dict[str, Any]:
             prompt,
             runtime._initial_user_content(title, art),
             tools,
-            state.get("model"),
+            _stage_model(state, "intent"),
             CardIntent,
             timeout=budget,
             max_steps=max_steps,
@@ -369,7 +391,7 @@ def _planner_node(state: PipelineState) -> dict[str, Any]:
         prompt,
         f"Design the mechanics plan for the card titled {state.get('title', '')!r} and produce the JSON result.",
         _stage_tools("planner", state),
-        state.get("model"),
+        _stage_model(state, "planner"),
         MechanicsPlan,
         timeout=budget,
         max_steps=max_steps,
@@ -402,7 +424,7 @@ def _coder_node(state: PipelineState) -> dict[str, Any]:
         prompt,
         f"Implement the planned effect for the card titled {state.get('title', '')!r} and produce the JSON result.",
         _stage_tools("coder", state),
-        state.get("model"),
+        _stage_model(state, "coder"),
         InterpretResult,
         timeout=budget,
         max_steps=max_steps,
@@ -432,8 +454,8 @@ def _validate_repair_node(state: PipelineState) -> dict[str, Any]:
         )
         if error is None:
             return {"draft": draft}
-        model = state.get("model")
-        chat_model = model if model is not None else get_chat_model()
+        stage_model = _stage_model(state, "coder")
+        chat_model = stage_model if stage_model is not None else get_chat_model()
         validated = stage_runner._validate_or_repair_effect(
             draft,
             chat_model,
@@ -561,7 +583,9 @@ def run_pipeline(
     smaller of its stage default and the time left before the deadline, so a
     slow early stage shrinks — and can zero out — the later ones. An explicit
     ``tools`` list is authoritative and bound to ALL THREE stages unchanged
-    (see :func:`_stage_tools`).
+    (see :func:`_stage_tools`). An explicit ``model`` is likewise authoritative
+    for all three stages; with ``model=None`` each stage honours its own
+    ``Settings.<stage>_agent_model`` override (see :func:`_stage_model`).
 
     Returns a well-formed :class:`InterpretResult` on every branch; on total
     failure (including anything escaping the graph) a bounded fallback with

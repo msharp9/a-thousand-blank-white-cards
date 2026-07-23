@@ -381,6 +381,13 @@ def run_agent(
 ) -> InterpretResult:
     """Interpret one card into an :class:`InterpretResult`. Never hangs, never raises.
 
+    Dispatch: when ``Settings.interpret_pipeline_enabled`` is True this delegates
+    to :func:`agent.pipeline.run_pipeline` (the three-stage intent -> planner ->
+    coder pipeline), forwarding every argument unchanged; otherwise it runs the
+    legacy single tool-calling agent (:func:`_run_single_agent`). Callers that
+    must pin one path regardless of the flag call ``run_pipeline`` /
+    ``_run_single_agent`` directly (see ``evals.runner``).
+
     Args:
         title, description: The played card's text.
         state: Live game state (GameState or dict snapshot) threaded into the prompt.
@@ -421,6 +428,67 @@ def run_agent(
         only if that forced call also fails (or model-construction / any other
         exception occurs) is a deterministic bounded fallback with
         ``verdict="invalid"`` returned.
+    """
+    if get_settings().interpret_pipeline_enabled:
+        # Lazy import: pipeline imports runtime helpers, so importing it at
+        # module top would create an import cycle.
+        from agent import pipeline
+
+        return pipeline.run_pipeline(
+            title,
+            description,
+            state,
+            actor_id,
+            creator_id=creator_id,
+            card_id=card_id,
+            card_art=card_art,
+            tools=tools,
+            model=model,
+            timeout=timeout,
+            max_tool_calls=max_tool_calls,
+            forced_call_timeout=forced_call_timeout,
+            allow_persistent_tools=allow_persistent_tools,
+            config=config,
+        )
+    return _run_single_agent(
+        title,
+        description,
+        state,
+        actor_id,
+        creator_id=creator_id,
+        card_id=card_id,
+        card_art=card_art,
+        tools=tools,
+        model=model,
+        timeout=timeout,
+        max_tool_calls=max_tool_calls,
+        forced_call_timeout=forced_call_timeout,
+        allow_persistent_tools=allow_persistent_tools,
+        config=config,
+    )
+
+
+def _run_single_agent(
+    title: str,
+    description: str,
+    state: Any | None = None,
+    actor_id: str | None = None,
+    *,
+    creator_id: str | None = None,
+    card_id: str | None = None,
+    card_art: str | None = None,
+    tools: list[Any] | None = None,
+    model: Any | None = None,
+    timeout: float | None = None,
+    max_tool_calls: int | None = None,
+    forced_call_timeout: float | None = None,
+    allow_persistent_tools: bool = True,
+    config: dict[str, Any] | None = None,
+) -> InterpretResult:
+    """The legacy single tool-calling agent — :func:`run_agent`'s flag-off body.
+
+    Same parameters and guarantees as :func:`run_agent` (see its docstring);
+    this path never consults ``interpret_pipeline_enabled``.
     """
     timeout = AGENT_TIMEOUT_SECONDS if timeout is None else timeout
     recursion_limit = MAX_TOOL_CALLS if max_tool_calls is None else max_tool_calls
@@ -503,7 +571,7 @@ def run_agent(
             # errors get this retry — anything else falls through to the
             # bounded fallback rather than doubling the play-freeze duration.
             logger.warning("agent invoke rejected card art; retrying text-only", exc_info=True)
-            return run_agent(
+            return _run_single_agent(
                 title,
                 description,
                 state,
