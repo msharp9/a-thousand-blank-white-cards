@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from engine.events import GameEvent, HookContext
+from engine.hooks import build_registry, fire_hooks
 from engine.reducers import _resolve_card_targets, _resolve_targets, apply_op
 from models.effects import (
     AddPointsOp,
@@ -27,7 +28,7 @@ from models.effects import (
     SubtractPointsOp,
     TransferCardOp,
 )
-from models.game_state import GameState, Player
+from models.game_state import GameState, HookSpec, Player
 
 
 def make_state(players=None, deck=None, turn_order=None, draw_count=1) -> GameState:
@@ -322,6 +323,56 @@ class TestDestroyCard:
         state = make_state()
         new = apply_op(state, DestroyCardOp(), make_card_ctx("p1"))
         assert any("destroy_card no-op" in entry for entry in new.log)
+
+    HOOK_SNIPPET = "def apply(state, ctx):\n    state.add_points('self', 10)\n"
+
+    def _hook(self, source: str, serial: int = 0) -> HookSpec:
+        return HookSpec(
+            id=f"hook-{source}-{serial}",
+            source_card_id=source,
+            event=str(GameEvent.ON_TURN_START),
+            scope="center",
+            code=self.HOOK_SNIPPET,
+        )
+
+    def test_destroying_center_card_unregisters_its_hook_and_it_stops_firing(self):
+        state = GameState(
+            room_code="TEST",
+            players=[Player(id="p1", name="Alice", score=0)],
+            house_rules=["hr1"],
+            hooks=[self._hook("hr1")],
+        )
+        ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
+        fired = fire_hooks(state, GameEvent.ON_TURN_START, ctx, registry=build_registry(state))
+        assert fired.get_player("p1").score == 10  # hook is live before destroy
+
+        new = apply_op(state, DestroyCardOp(card_id="hr1"), make_card_ctx("p1"))
+        assert new.house_rules == []
+        assert "hr1" in new.discard
+        assert new.hooks == []
+        after = fire_hooks(new, GameEvent.ON_TURN_START, ctx, registry=build_registry(new))
+        assert after.get_player("p1").score == 0
+
+    def test_destroying_hand_card_without_hooks_leaves_hooks_untouched(self):
+        state = make_state().model_copy(update={"hooks": [self._hook("other-card")]})
+        new = apply_op(state, DestroyCardOp(card_id="c1"), make_ctx("p1"))
+        assert "c1" not in new.get_player("p1").hand
+        assert "c1" in new.discard
+        assert new.hooks == state.hooks
+
+    def test_multi_card_destroy_unregisters_all_matching_hooks(self):
+        players = [
+            Player(id="p1", name="Alice", in_play=["ip1"]),
+            Player(id="p2", name="Bob", in_play=["ip2"]),
+        ]
+        state = GameState(
+            room_code="TEST",
+            players=players,
+            hooks=[self._hook("ip1"), self._hook("ip2"), self._hook("unrelated")],
+        )
+        new = apply_op(state, DestroyCardOp(card_target="all_in_play"), make_card_ctx("p1"))
+        assert set(new.discard) == {"ip1", "ip2"}
+        assert [h.source_card_id for h in new.hooks] == ["unrelated"]
 
 
 class TestTransferCard:

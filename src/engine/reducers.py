@@ -242,7 +242,9 @@ def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) 
 
     Each resolved id is scrubbed from every player's ``hand`` and ``in_play``
     zones and from the shared ``center`` zone (house_rules), then appended to the
-    discard pile (once, no duplicates).
+    discard pile (once, no duplicates). Persistent hooks registered by a
+    destroyed card are unregistered too — destroying a board card removes its
+    ongoing effect, not just the card.
     """
     if op.card_target is not None:
         card_ids = _resolve_card_targets(op.card_target, ctx, state)
@@ -276,7 +278,13 @@ def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) 
     for cid in card_ids:
         if cid not in discard:
             discard.append(cid)
-    return state.model_copy(update={"players": new_players, "house_rules": house_rules, "discard": discard})
+    hooks = [h for h in state.hooks if h.source_card_id not in targets]
+    new_state = state.model_copy(
+        update={"players": new_players, "house_rules": house_rules, "discard": discard, "hooks": hooks}
+    )
+    for source in dict.fromkeys(h.source_card_id for h in state.hooks if h.source_card_id in targets):
+        new_state = new_state.with_log(f"[hook] unregistered {source} (card destroyed)")
+    return new_state
 
 
 def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext) -> GameState:
