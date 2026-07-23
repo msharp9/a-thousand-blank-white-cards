@@ -15,9 +15,9 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
 
 from agent.contract import InterpretResult
-from agent.persona import PERSONA_ACTIONS, build_system_prompt
+from agent.persona import PERSONA_ACTIONS, STRUGGLING_AUTHOR_NOTE, build_system_prompt
 from agent.runtime import _forced_final_result, build_agent, run_agent
-from models.game_state import GameState, Player
+from models.game_state import GameState, HistoryEvent, Player
 
 
 class ToolAwareFake(GenericFakeChatModel):
@@ -145,6 +145,21 @@ def test_build_system_prompt_renders_state():
     assert "the current player" in prompt
 
 
+def test_build_system_prompt_struggling_author_adds_help_mode():
+    prompt = build_system_prompt("T", "D", struggling_author=True, author_fallbacks=2)
+    assert "HELP MODE" in prompt
+    assert "2 card(s)" in prompt
+
+
+def test_build_system_prompt_default_omits_help_mode():
+    prompt = build_system_prompt("T", "D")
+    assert "HELP MODE" not in prompt
+
+
+def test_struggling_author_note_has_no_phrasing_tips():
+    assert "try wording" not in STRUGGLING_AUTHOR_NOTE.lower()
+
+
 # ---------------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------------
@@ -203,6 +218,40 @@ def test_failed_repair_returns_invalid_effectless_result() -> None:
     assert result.plan is None
     assert result.program is None
     assert result.snippet is None
+
+
+def test_run_agent_struggling_author_reaches_system_prompt():
+    """A creator with 2 prior card_fallback events crosses the default threshold
+    (2), so the system prompt handed to the model must contain HELP MODE."""
+    recorded_prompts: list[str] = []
+
+    class PromptCapturingFake(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ANN003
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001, ANN003
+            system = next((m for m in messages if getattr(m, "type", None) == "system"), None)
+            recorded_prompts.append(getattr(system, "content", ""))
+            payload = '{"verdict": "ok", "comment": "Fine.", "persona_action": "none"}'
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content=payload))])
+
+    state = GameState(
+        room_code="TEST",
+        players=[Player(id="p1", name="Alice"), Player(id="p2", name="Bob")],
+        phase="playing",
+        history_events=[
+            HistoryEvent(sequence=1, kind="card_fallback", target_player_ids=["p2"]),
+            HistoryEvent(sequence=2, kind="card_fallback", target_player_ids=["p2"]),
+        ],
+    )
+    fake = PromptCapturingFake(messages=iter([]))
+
+    result = run_agent("Card", "desc", state=state, actor_id="p1", creator_id="p2", model=fake)
+
+    assert result.verdict == "ok"
+    assert recorded_prompts
+    assert "HELP MODE" in recorded_prompts[0]
+    assert "2 card(s)" in recorded_prompts[0]
 
 
 # ---------------------------------------------------------------------------
