@@ -424,16 +424,16 @@
       "trigger": "on_game_end",
       "ops": [
         {
-          "op": "add_points",
+          "op": "register_hook",
           "args": {
-            "amount": 10,
-            "target": "self",
-            "condition": "still_in_hand"
+            "event": "on_game_end",
+            "scope": "player",
+            "code": "def apply(state, ctx):\n    state.add_points('self', 10)\n"
           }
         }
       ],
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 10)"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 10)\\n\")"
     }
   },
   {
@@ -741,7 +741,7 @@
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.scramble_order()\n    state.steal_points(chosen, 'self', 4)"
+      "sandbox": "def apply(state, ctx):\n    state.scramble_order()\n    state.steal_points('player_with_most_points', 'self', 4)"
     }
   },
   {
@@ -2096,13 +2096,20 @@
       "trigger": null,
       "ops": [
         {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.referendum_passed",
+            "value": true
+          }
+        },
+        {
           "op": "custom_note",
           "args": {
-            "note": "Propose any rule change. All players vote; on a majority it becomes a house rule for the rest of the game. This card stays in the center as the reminder."
+            "note": "A proposed rule passed by majority vote — it is now a house rule for the rest of the game."
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Propose any rule change. All players vote; on a majority it becomes a house rule for the rest of the game.')"
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.referendum_passed', True)\n    state.note('A proposed rule passed by majority vote and is now a house rule.')"
     }
   },
   {
@@ -2530,7 +2537,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'legacy_owner', state.actor_id)\n    state.note('This card is now named after its first player; whenever it is played again, they gain 1 point.')"
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'legacy_card', True)\n    state.note('This card is now named after its first player; whenever it is played again, they gain 1 point.')"
     }
   },
   {
@@ -2630,34 +2637,43 @@
       "trigger": null,
       "ops": [
         {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        },
+        {
           "op": "custom_note",
           "args": {
-            "note": "Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first."
+            "note": "Draw one card at random and play it immediately, without looking first."
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first.')"
+      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 1)\n    state.note('Draw one card at random and play it immediately, without looking first.')"
     }
   },
   {
     "id": "seed-filler-039",
     "title": "The Epilogue",
-    "description": "If this is the last card played in the game, whoever played it wins regardless of points. If it isn't, nothing happens.",
+    "description": "Keep this card. If you are still holding it when the game ends, you gain a decisive 100-point bonus — enough to steal the win.",
     "alt_text": null,
     "canonical": {
       "target": "self",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
-      "trigger": null,
+      "trigger": "on_game_end",
       "ops": [
         {
-          "op": "custom_note",
+          "op": "register_hook",
           "args": {
-            "note": "If this is the last card played in the game, whoever played it wins regardless of points. If it is not, nothing happens."
+            "event": "on_game_end",
+            "scope": "player",
+            "code": "def apply(state, ctx):\n    state.add_points('self', 100)\n"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('If this is the last card played in the game, whoever played it wins regardless of points. If it is not, nothing happens.')"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 100)\\n\")"
     }
   },
   {
@@ -2946,7 +2962,7 @@
         }
       ],
       "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 5)"
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 5)"
     }
   },
   {
@@ -2969,7 +2985,7 @@
         }
       ],
       "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 8)"
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 8)"
     }
   },
   {

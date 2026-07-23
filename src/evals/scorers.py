@@ -261,6 +261,14 @@ def _generated_effect_forms(output: dict[str, Any]) -> tuple[list[str], list[dic
     return codes, ops
 
 
+def _plan_has_interaction(output: dict[str, Any]) -> bool:
+    """True when the generated plan contains a play-time interaction step."""
+    plan = output.get("resolution_plan")
+    if not isinstance(plan, dict):
+        return False
+    return any(isinstance(step, dict) and step.get("kind") == "interaction" for step in plan.get("steps") or [])
+
+
 def _sandbox_behavior_scorer(context: ScorerContext) -> Score:
     """Behavioral similarity: execute the EXPECTED sandbox and the GENERATED
     effect against canned fixtures and compare the op diffs (multiset Jaccard).
@@ -272,6 +280,17 @@ def _sandbox_behavior_scorer(context: ScorerContext) -> Score:
     expected_code = (context.expected or {}).get("sandbox")
     if not expected_code:
         return Score(score=1.0, metadata={"skipped": "no expected sandbox (steps-based or unannotated)"})
+
+    # A plan with an interaction step resolves its player/card choice at play
+    # time, independently of how the fixed canonical resolves it (via
+    # ctx.chosen_player_id). The two cannot be behaviorally aligned, so a
+    # comparison here would be a false 0. Abstain — executability and the judge
+    # scorers still grade these cards.
+    if _plan_has_interaction(context.output or {}):
+        return Score(
+            score=1.0, metadata={"skipped": "interaction/choice plan — free choice not comparable to a fixed canonical"}
+        )
+
     from config import get_settings
 
     if not get_settings().snippet_execution_enabled:
@@ -287,11 +306,11 @@ def _sandbox_behavior_scorer(context: ScorerContext) -> Score:
     similarities: list[float] = []
     for state_dict, ctx_dict in fixture_states():
         try:
-            expected_diff = normalise_ops(execute_snippet(expected_code, state_dict, ctx_dict), ctx_dict)
+            expected_diff = normalise_ops(execute_snippet(expected_code, state_dict, ctx_dict), ctx_dict, state_dict)
             generated_raw: list[dict[str, Any]] = list(plain_ops)
             for code in codes:
                 generated_raw.extend(execute_snippet(code, state_dict, ctx_dict))
-            generated_diff = normalise_ops(generated_raw, ctx_dict)
+            generated_diff = normalise_ops(generated_raw, ctx_dict, state_dict)
         except SnippetExecutionError as exc:
             return Score(score=0.0, metadata={"reason": f"execution failed: {exc}"})
         except Exception as exc:  # noqa: BLE001

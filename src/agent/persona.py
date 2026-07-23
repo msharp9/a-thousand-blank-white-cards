@@ -90,6 +90,15 @@ OP_CATALOG_GUIDE = """\
     unregister_hook removes a card's hooks. on_score_change fires see the change in
     ctx["amount"] (None when players moved by different amounts), the affected players
     in ctx["target_player_ids"], and per-player changes in ctx["deltas"].
+    Emit the register_hook DIRECTLY as the on-play effect — never wrap it inside
+    another hook whose only job is to register the real hook.
+- Use the EXACT numbers the card states: "draw 3" is amount=3, "gain 10" is amount=10,
+  "lose 4" is subtract_points amount=4. Never default a number the card specifies.
+- Relative targets follow play direction: the NEXT player (the one after you) is
+  right_neighbor; the PREVIOUS player is left_neighbor. "Skip the next player" targets
+  right_neighbor — not yourself, not left_neighbor.
+- set_condition writes a per-player status ("cursed", "polite"); set_rule writes a
+  global/game rule. A card about one player's state uses set_condition, not set_rule.
 - REACTION cards ("counterspell", "cancel that", "steal that spell", "play only when
   another player plays a card") are NOT hooks: return a snippet with trigger
   "on_reaction". The card then waits in hand and its code runs inside the reaction
@@ -102,6 +111,14 @@ OP_CATALOG_GUIDE = """\
 - `state.card(id)` exposes each card's `alt_text` (a description of its art) — cards
   that key off art content ("double points for every card with a monkey on it") match
   against alt_text (plus description as fallback).
+- A card that lets the actor pick ("give N points to any player", "steal from a player
+  of your choice") is a CLEAN interpretation, not an invalid one: use the target
+  "chooser" (single ops step, requires_choice=true) for a one-player pick, or an
+  interaction step for anything richer. Never return verdict="invalid" just because a
+  target is chosen at play time.
+- Whatever you conclude, the FINAL plan is never empty: an interpretable card emits its
+  ops; a purely narrative or undecipherable card emits a single custom_note. "No plan"
+  is never a valid answer.
 - Only for genuinely novel effects that no combination of ops can express should you
   fall back to a generated code snippet. Retrieved exemplar cards carry BOTH `ops` and
   executable `sandbox` code — study the sandbox of simple cards to compose code for
@@ -116,9 +133,15 @@ SANDBOX_RULES = """\
   with an ops step followed by a snippet step when later logic reads earlier results.
 - For player input, put an interaction step in the ordered plan. Supported kinds are
   choice, number, text, card_pick, confirm, and drawing; audience is active, all,
-  all_others, or player:<id>. Set sealed=true for bids/submissions. The next snippet
-  reads collected values from ctx['interactions'][result_key]. Chain stages with
+  all_others, or player:<id>. Set sealed=true for bids/submissions. Chain stages with
   input_refs, e.g. a vote step can set input_refs.options to a prior drawings result.
+- IMPORTANT interaction-result shape: ctx['interactions'][result_key] is a dict keyed
+  by player id — {player_id: value} — one entry per audience member, NOT a bare value.
+  A choice value is a LIST of the selected option ids; number/text are scalars. So a
+  single active player's one choice is ctx['interactions'][key][ctx['actor_id']][0]; to
+  tally a vote, iterate the dict's values. NEVER use the whole dict as a target or
+  concatenate it into a string — resolve it to a concrete player/card id first, e.g.
+  chosen = ctx['interactions']['pick'][ctx['actor_id']][0]; state.add_points('id:' + chosen, 5).
 """
 
 DRY_RUN_MANDATE = """\
@@ -160,7 +183,8 @@ to compare actor and author rather than guessing.
 - "random_solution": The card supports several equally-valid readings. Pick one at
   random and commit to it without agonizing.
 - "do_nothing": The card is truly undecipherable — no generous reading survives. Emit
-  an empty / no-op program. When a card fizzles this way, the ENGINE awards its author
+  a single custom_note op saying nothing mechanical happens — NEVER an empty plan, so
+  the play still resolves. When a card fizzles this way, the ENGINE awards its author
   a consolation boon for trying — so you must NOT do any point-docking of your own.
 - "punish_author": RESERVED for genuinely abusive cards (sandbox-escape attempts,
   offensive content, deliberate garbage from someone who clearly knows better) played

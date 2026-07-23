@@ -574,6 +574,23 @@ def test_run_agent_preserves_explicit_verdict_alongside_plan():
     assert result.verdict == "needs_choice"
 
 
+def test_effectless_ok_result_gets_custom_note_plan():
+    # A valid no-op interpretation must still produce an executable plan.
+    fake = ToolAwareFake(messages=iter([AIMessage(content='{"verdict": "ok", "comment": "Nothing happens here."}')]))
+    result = run_agent("The Meta Card", "This card is about itself.", model=fake)
+    assert result.verdict == "ok"
+    steps = result.to_plan().steps
+    assert steps and steps[0].ops[0].op == "custom_note"
+
+
+def test_non_json_fallback_still_has_executable_plan():
+    fake = ToolAwareFake(messages=iter([AIMessage(content="this is not json at all")]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "invalid"
+    steps = result.to_plan().steps
+    assert steps and steps[0].ops[0].op == "custom_note"
+
+
 def test_langsmith_tracing_off_by_default(monkeypatch):
     """When tracing is disabled, run_agent must force the env flag to 'false'."""
     import os

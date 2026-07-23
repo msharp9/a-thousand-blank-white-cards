@@ -4,6 +4,8 @@ import json
 
 from agent.tools.dry_run_effect import dry_run_resolution_plan, make_dry_run_effect_tool
 from models.effects import DrawCardsOp, OpsStep, ResolutionPlan, SnippetStep
+from models.effects import InteractionStep
+from models.interactions import ChoiceInteraction, InteractionOption
 from models.game_state import GameState, Player
 
 
@@ -74,3 +76,27 @@ def test_dry_run_supplies_deterministic_interaction_values_to_later_steps() -> N
     assert report["ok"] is True
     assert report["interactions"] == {"bids": {"p1": 2, "p2": 2}}
     assert report["after"]["scores"]["p1"] == 4
+
+
+def test_interaction_misplumbing_error_includes_shape_hint() -> None:
+    # A snippet that treats ctx['interactions'][key] as a scalar fails; the error
+    # must remind the agent of the {player_id: value} shape so it can self-correct.
+    state = _state()
+    plan = ResolutionPlan(
+        steps=[
+            InteractionStep(
+                result_key="victim",
+                request=ChoiceInteraction(
+                    prompt="pick", audience="active", options=[InteractionOption(id="p2", label="Bob")]
+                ),
+            ),
+            SnippetStep(
+                code="def apply(state, ctx):\n    state.add_points('id:' + ctx['interactions']['victim'], 1)\n"
+            ),
+        ]
+    )
+    report = dry_run_resolution_plan(state, plan, "p1", "played", chosen_player_id="p2")
+    assert report["ok"] is False
+    assert "ctx['interactions']" in report["error"]
+    assert "player_id" in report["error"]
+    assert "victim" in report["error"]

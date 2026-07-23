@@ -350,10 +350,41 @@ def _aggregate(run: EvalRunResult) -> dict[str, Any]:
         vals = [r.scores[name] for r in rows if name in r.scores]
         summary[name] = fmean(vals) if vals else None
 
+    summary["sandbox_interaction_skipped"] = sum(
+        1 for r in rows if "interaction" in (r.score_meta.get("sandbox_behavior", {}) or {}).get("skipped", "")
+    )
+    _add_ceilings(run, summary)
+
     # Consistency: only meaningful when a card is sampled more than once.
     if run.config.n_samples > 1:
         summary["consistency"] = _consistency(run)
     return summary
+
+
+def _add_ceilings(run: EvalRunResult, summary: dict[str, Any]) -> None:
+    """Annotate the summary with each deterministic metric's achievable ceiling.
+
+    executability/did_something are capped by card nature (a no-op card can't
+    "do something"), so the raw mean is misleading without its ceiling. Computed
+    from the actually-run cards' own canonicals; best-effort — a benchmark whose
+    labels aren't executable canonicals simply gets no ceiling fields.
+    """
+    from evals.ceilings import benchmark_ceilings
+
+    try:
+        by_id = {str(card.get("id")): card for card in load_cards(run.config.benchmark)}
+    except Exception:  # noqa: BLE001 — ceilings are advisory; never break a run's summary
+        return
+    run_cards = [by_id[cid] for cid in {r.card_id for r in run.rows} if cid in by_id]
+    ceilings = benchmark_ceilings(run_cards)
+    if not ceilings:
+        return
+    summary.update(ceilings)
+    for metric in ("executability", "did_something"):
+        ceiling = ceilings.get(f"{metric}_ceiling")
+        actual = summary.get(metric)
+        if ceiling and actual is not None:
+            summary[f"{metric}_pct_of_ceiling"] = actual / ceiling
 
 
 def _consistency(run: EvalRunResult) -> dict[str, float]:
