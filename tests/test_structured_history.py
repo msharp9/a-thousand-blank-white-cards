@@ -10,7 +10,7 @@ from board.rooms.room import Room
 from board.rooms.store import FileRoomStore
 from engine.apply import apply_effect
 from engine.events import GameEvent, HookContext
-from engine.history import append_history_event, draw_totals
+from engine.history import append_history_event, draw_totals, fallback_counts, public_history
 from engine.sandbox.revalidate import apply_snippet_diff
 from engine.sandbox.runner import execute_snippet
 from models.effects import AddPointsOp, ChangeDrawCountOp, DrawCardsOp, EffectProgram
@@ -226,6 +226,68 @@ def test_most_cards_drawn_snippet_sets_all_tied_winner_overrides() -> None:
     resolved = apply_snippet_diff(state, raw_ops, _ctx())
 
     assert resolved.winner_override == ["p1", "p2"]
+
+
+def test_card_fallback_recorded_only_for_fallback_status() -> None:
+    room = Room("HISTORY")
+    room.add_player("p1", "Alice")
+    room.add_player("p2", "Bob")
+    room.state = room.state.model_copy(update={"cards": {"c1": {"id": "c1", "title": "Weird", "creator_id": "p2"}}})
+
+    room._set_card_mechanical_status("c1", "rejected", "corr-1", "bad")
+    room._set_card_mechanical_status("c1", "countered", "corr-2", "stolen")
+    assert [event.kind for event in room.state.history_events] == []
+
+    room._set_card_mechanical_status("c1", "fallback", "corr-3", "no-op")
+
+    fallbacks = [event for event in room.state.history_events if event.kind == "card_fallback"]
+    assert len(fallbacks) == 1
+    assert fallbacks[0].actor_id == "p2"
+    assert fallbacks[0].target_player_ids == ["p2"]
+    assert fallbacks[0].card_id == "c1"
+
+
+def test_card_fallback_skips_cards_without_creator_or_departed_author() -> None:
+    room = Room("HISTORY")
+    room.add_player("p1", "Alice")
+    room.state = room.state.model_copy(
+        update={
+            "cards": {
+                "no-creator": {"id": "no-creator", "title": "Blank"},
+                "departed": {"id": "departed", "title": "Ghost", "creator_id": "p-gone"},
+            }
+        }
+    )
+
+    room._set_card_mechanical_status("no-creator", "fallback", "corr-1")
+    room._set_card_mechanical_status("departed", "fallback", "corr-2")
+
+    assert [event for event in room.state.history_events if event.kind == "card_fallback"] == []
+
+
+def test_fallback_counts_sums_across_players_and_events() -> None:
+    state = _state()
+    for player_id in ("p1", "p1", "p2"):
+        state = append_history_event(
+            state,
+            "card_fallback",
+            actor_id=player_id,
+            target_player_ids=[player_id],
+            card_id="c1",
+        )
+
+    assert fallback_counts(state) == {"p1": 2, "p2": 1}
+
+
+def test_public_history_filters_by_card_fallback_kind() -> None:
+    state = append_history_event(_state(), "draw", actor_id="p1", target_player_ids=["p1"], amount=1)
+    state = append_history_event(state, "card_fallback", actor_id="p2", target_player_ids=["p2"], card_id="c1")
+
+    events = public_history(state, kind="card_fallback")
+
+    assert len(events) == 1
+    assert events[0]["kind"] == "card_fallback"
+    assert events[0]["target_player_ids"] == ["p2"]
 
 
 def test_history_persists_through_file_store_without_duplication(tmp_path) -> None:
