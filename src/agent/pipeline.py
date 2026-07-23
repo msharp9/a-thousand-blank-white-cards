@@ -479,7 +479,7 @@ def _finalize_node(state: PipelineState) -> dict[str, Any]:
 
     plan = state.get("plan")
     if plan is not None and not plan.feasible:
-        note = f"Cannot implement this card's effect: {intent.summary or state.get('title', '')}"
+        note = f"Cannot implement this card's effect: {_working_intent(state).summary or state.get('title', '')}"
         if plan.infeasible_reason:
             note += f" (reason: {plan.infeasible_reason})"
         return {
@@ -578,7 +578,10 @@ def run_pipeline(
 
     author_fallbacks = 0
     if state is not None and creator_id:
-        author_fallbacks = fallback_counts(state).get(creator_id, 0)
+        try:
+            author_fallbacks = fallback_counts(state).get(creator_id, 0)
+        except Exception:  # noqa: BLE001 — dict snapshots lack .players; help mode is best-effort
+            author_fallbacks = 0
     threshold = settings.struggling_author_threshold
     struggling_author = bool(threshold) and author_fallbacks >= threshold
 

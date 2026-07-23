@@ -548,11 +548,13 @@ def test_graph_topology_and_conditional_routing():
     assert {"intent", "planner", "coder", "validate_repair", "finalize"} <= set(drawable.nodes)
 
     edges = {(e.source, e.target): bool(e.conditional) for e in drawable.edges}
-    assert edges[("__start__", "intent")] is False
-    assert edges[("intent", "planner")] is True
-    assert edges[("intent", "finalize")] is True
-    assert edges[("planner", "coder")] is True
-    assert edges[("planner", "finalize")] is True
-    assert edges[("coder", "validate_repair")] is False
-    assert edges[("validate_repair", "finalize")] is False
-    assert edges[("finalize", "__end__")] is False
+    assert edges == {
+        ("__start__", "intent"): False,
+        ("intent", "planner"): True,
+        ("intent", "finalize"): True,
+        ("planner", "coder"): True,
+        ("planner", "finalize"): True,
+        ("coder", "validate_repair"): False,
+        ("validate_repair", "finalize"): False,
+        ("finalize", "__end__"): False,
+    }
