@@ -213,7 +213,8 @@
         {
           "op": "steal_points",
           "args": {
-            "target": "player",
+            "from_target": "player",
+            "to_target": "self",
             "amount": 8
           }
         }
@@ -741,7 +742,8 @@
         {
           "op": "steal_points",
           "args": {
-            "target": "player",
+            "from_target": "player",
+            "to_target": "self",
             "amount": 15
           }
         }
@@ -1125,6 +1127,92 @@
       ],
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    if ctx.get(\"pending_card_id\"):\n        state.counter_play(\"steal_hand\")"
+    }
+  },
+  {
+    "id": "eval-042",
+    "title": "Unstoppable",
+    "description": "This card has split second and trample",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "from_target": "player",
+            "to_target": "self",
+            "amount": 5
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "uncounterable",
+            "value": true
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 5)\n    state.set_card_attribute('this', 'uncounterable', True)"
+    }
+  },
+  {
+    "id": "eval-043",
+    "title": "Happy Points!",
+    "description": "Everyone gets happy points!",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "all",
+            "amount": 3
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('all', 3)"
+    }
+  },
+  {
+    "id": "eval-044",
+    "title": "Grab And Go",
+    "description": "steal 2 points and also draw",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "from_target": "player",
+            "to_target": "self",
+            "amount": 2
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 2)\n    state.draw_cards('self', 1)"
     }
   }
 ]
