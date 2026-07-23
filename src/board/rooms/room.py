@@ -1033,6 +1033,25 @@ class Room:
         self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: updated}})
         self._notify_change()
 
+    def _consolation_author(self, card):
+        """The seated author a consolation boon would go to, or None when the
+        fallback stays a bare note (seed card, departed author, or
+        consolation_point_enabled off). Single gate shared by _consolation_ops
+        and _uninterpretable_reason so the promise and the award can't drift."""
+        from config import get_settings
+
+        if not get_settings().consolation_point_enabled:
+            return None
+        creator_id = card.get("creator_id") if isinstance(card, dict) else getattr(card, "creator_id", None)
+        if not creator_id:
+            return None
+        return next((p for p in self.state.players if p.id == creator_id), None)
+
+    def _uninterpretable_reason(self, card) -> str:
+        if self._consolation_author(card) is None:
+            return "The arbiter couldn't build this one."
+        return "The arbiter couldn't build this one - the author gets a consolation boon for trying."
+
     def _consolation_ops(self, card, card_id: str) -> list[Op]:
         """Ops for a card that couldn't be made to work: a visible note plus a
         consolation boon to the AUTHOR "for trying" (authored cards only, author
@@ -1051,14 +1070,10 @@ class Room:
         title = self._card_title(card)
         bare = [CustomNoteOp(note=f"Played {title} (no mechanical effect)")]
         settings = get_settings()
-        if not settings.consolation_point_enabled:
-            return bare
-        creator_id = card.get("creator_id") if isinstance(card, dict) else getattr(card, "creator_id", None)
-        if not creator_id:
-            return bare
-        author = next((p for p in self.state.players if p.id == creator_id), None)
+        author = self._consolation_author(card)
         if author is None:
             return bare
+        creator_id = author.id
         n = fallback_counts(self.state).get(creator_id, 0)
         threshold = settings.struggling_author_threshold
         boon: Op
@@ -1265,11 +1280,7 @@ class Room:
                 "verdict": result.verdict,
                 "comment": result.comment,
                 "mechanical_status": "pending" if result.verdict == "ok" else "fallback",
-                "mechanical_reason": (
-                    None
-                    if result.verdict == "ok"
-                    else "The arbiter couldn't build this one - the author gets a consolation boon for trying."
-                ),
+                "mechanical_reason": (None if result.verdict == "ok" else self._uninterpretable_reason(card)),
                 "correlation_id": correlation_id,
             }
         )
@@ -1293,7 +1304,7 @@ class Room:
             card_id,
             "fallback",
             correlation_id,
-            "The arbiter couldn't build this one - the author gets a consolation boon for trying.",
+            self._uninterpretable_reason(card),
         )
         self._report_failure_for_triage(
             "no_op" if result.verdict == "ok" else "invalid_verdict",
@@ -1652,6 +1663,7 @@ class Room:
                     fallback = EffectProgram(ops=self._consolation_ops(card, card_id))
                     self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
                     await self._log_and_broadcast(self._describe_play(player_id, card, before))
+                    game_ending = self._end_now() or win_condition_met(self.state)
                 else:
                     return
             except Exception as exc:
@@ -1678,6 +1690,7 @@ class Room:
                 fallback = EffectProgram(ops=self._consolation_ops(card, card_id))
                 self.state = apply_effect(self.state, fallback, ctx, bus=self._hook_bus())
                 await self._log_and_broadcast(self._describe_play(player_id, card, before))
+                game_ending = self._end_now() or win_condition_met(self.state)
             else:
                 current = self.state.cards.get(card_id)
                 if not isinstance(current, dict) or current.get("mechanical_status") != "fallback":
@@ -2168,7 +2181,10 @@ class Room:
         await self._log_and_broadcast(
             notice or self._describe_play(pending.actor_id, pending.card, pending.before_scores)
         )
-        await self._complete_interaction_play(pending, game_ending=False)
+        await self._complete_interaction_play(
+            pending,
+            game_ending=self._end_now() or win_condition_met(self.state),
+        )
 
     async def _commit_pending_resolution(self, pending: PendingResolution, completed: GameState) -> None:
         self.state = completed

@@ -124,6 +124,29 @@ def test_ladder_double_of_nonpositive_score_falls_back_to_points() -> None:
     assert _ops_after_failures(4)[1] == AddPointsOp(target="id:p1", amount=2)
 
 
+def test_second_consecutive_failure_counts_itself() -> None:
+    # End-to-end ordering pin: each call site records the current failure
+    # (_set_card_mechanical_status) BEFORE building _consolation_ops, so the
+    # author's second failed card sees a fallback count of 2 and lands on the
+    # escalated +2 rung (default threshold 2) instead of repeating the flat +1.
+    card_a = {"id": "f1", "title": "Flop One", "description": "???", "creator_id": "p1"}
+    card_b = {"id": "f2", "title": "Flop Two", "description": "???", "creator_id": "p1"}
+    room = _room_with_card(card_a, hand_owner="p1")
+    room.state = room.state.model_copy(
+        update={
+            "cards": {**room.state.cards, "f2": card_b},
+            "players": [
+                p.model_copy(update={"hand": [*p.hand, "f2"]}) if p.id == "p2" else p for p in room.state.players
+            ],
+        }
+    )
+    _play_to_fallback(room, "f1", actor="p1")
+    assert room.state.get_player("p1").score == 1
+    _play_to_fallback(room, "f2", actor="p2")
+    assert room.state.get_player("p1").score == 3
+    assert any("+2 points" in line for line in room.state.log)
+
+
 def test_preview_failure_awards_nothing() -> None:
     card = {"id": "seed", "title": "Filler", "description": "???"}
     room = _room_with_card(card)
