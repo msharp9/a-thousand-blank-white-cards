@@ -290,6 +290,58 @@ def test_double_repair_failure_strips_effect_but_keeps_intent_comment():
     assert result.persona_action == "none"
 
 
+def test_failing_draft_validates_each_candidate_exactly_once(monkeypatch):
+    from agent import stage_runner
+
+    real = stage_runner._effect_validation_error
+    seen: list[str | None] = []
+
+    def counting(result, state, actor_id, card_id):  # noqa: ANN001
+        error = real(result, state, actor_id, card_id)
+        seen.append(error)
+        return error
+
+    monkeypatch.setattr(stage_runner, "_effect_validation_error", counting)
+    fake = RepairCountingFake(messages=_messages(INTENT_JSON, PLAN_JSON, BAD_SNIPPET_JSON, REPAIRED_SNIPPET_JSON))
+
+    result = run_pipeline("Draw", "Draw two cards.", model=fake)
+
+    assert fake.repair_calls == 1
+    assert result.verdict == "ok"
+    # One validation for the failing draft, one for the repaired candidate —
+    # never a duplicate pre-check before the repair machinery.
+    assert len(seen) == 2
+    assert seen[0] is not None
+    assert seen[1] is None
+
+
+def test_expired_deadline_skips_repair_and_strips_effect():
+    intent = CardIntent.model_validate(INTENT_PAYLOAD)
+    draft = InterpretResult.model_validate(json.loads(BAD_SNIPPET_JSON))
+    fake = RepairCountingFake(messages=_messages(REPAIRED_SNIPPET_JSON))
+
+    out = build_interpret_graph().invoke(
+        {
+            "title": "Draw",
+            "description": "Draw two cards.",
+            "model": fake,
+            "intent": intent,
+            "draft": draft,
+            "coder_prompt": "coder prompt",
+            "deadline": time.monotonic() - 1.0,
+            "stage_errors": [],
+        }
+    )
+
+    result = out["result"]
+    assert fake.repair_calls == 0
+    assert result.verdict == "invalid"
+    assert result.snippet is None
+    assert result.program is None
+    assert result.comment == "Wow, +5 points. Groundbreaking."
+    assert any("validate_repair" in err for err in out["stage_errors"])
+
+
 def test_coder_garbage_falls_back_but_keeps_intent_voice():
     fake = CountingFake(messages=_messages(INTENT_JSON, PLAN_JSON, "no json from the coder"))
 
@@ -512,6 +564,16 @@ def test_run_pipeline_never_raises_even_when_graph_explodes(monkeypatch):
     assert isinstance(result, InterpretResult)
     assert result.verdict == "invalid"
     assert result.agent_error is True
+
+
+def test_dict_snapshot_state_with_creator_id_does_not_raise():
+    state = {"phase": "playing", "players": [{"id": "p1", "name": "Alice", "score": 0}]}
+    fake = ToolAwareFake(messages=_messages(INTENT_JSON, PLAN_JSON, CODER_JSON))
+
+    result = run_pipeline("Gain 5 points", "You gain 5 points.", state, "p1", creator_id="p1", model=fake, tools=[])
+
+    assert result.verdict == "ok"
+    assert result.agent_error is False
 
 
 def test_intent_image_rejection_retries_text_only(monkeypatch):

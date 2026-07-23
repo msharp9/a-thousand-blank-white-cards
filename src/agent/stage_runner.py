@@ -301,8 +301,18 @@ def _validate_or_repair_effect(
     card_id: str | None,
     timeout: float,
     parse: Callable[[dict[str, Any]], M | None],
+    *,
+    precomputed_error: str | None = None,
 ) -> M:
-    error = _effect_validation_error(result, state, actor_id, card_id)
+    """Validate ``result``'s effect; on failure make ONE repair call, then strip.
+
+    ``precomputed_error`` lets a caller that already ran
+    :func:`_effect_validation_error` skip the duplicate validation/dry-run pass
+    (None means validate here); a repaired candidate is always re-validated.
+    """
+    error = precomputed_error
+    if error is None:
+        error = _effect_validation_error(result, state, actor_id, card_id)
     if error is None:
         return result
     logger.warning("agent effect failed validation: %s", error)

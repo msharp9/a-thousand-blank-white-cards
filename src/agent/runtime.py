@@ -502,7 +502,10 @@ def _run_single_agent(
 
     author_fallbacks = 0
     if state is not None and creator_id:
-        author_fallbacks = fallback_counts(state).get(creator_id, 0)
+        try:
+            author_fallbacks = fallback_counts(state).get(creator_id, 0)
+        except Exception:  # noqa: BLE001 — dict snapshots lack .players; help mode is best-effort
+            author_fallbacks = 0
     threshold = settings.struggling_author_threshold
     struggling_author = bool(threshold) and author_fallbacks >= threshold
 
