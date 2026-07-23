@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from evals import analysis
+from evals import analysis, scorers
 
 
 def _row(card_id, scores, verdict="ok", output=None, score_meta=None, **extra):
@@ -48,6 +48,15 @@ def test_quality_score_is_mean_of_quality_metrics():
     assert analysis.quality_score({}) is None
 
 
+def test_metric_lists_mirror_registered_scorers():
+    """Every registered scorer feeds the dashboards: ALL_METRICS must equal the
+    scorer names, and the quality composite excludes only dsl_validity."""
+    scorer_names = {s.name for s in scorers.ALL_SCORERS}
+    assert set(analysis.ALL_METRICS) == scorer_names
+    assert set(analysis.QUALITY_METRICS) == scorer_names - {"dsl_validity"}
+    assert len(analysis.ALL_METRICS) == len(scorer_names)
+
+
 def test_failure_buckets_clean_row_is_empty():
     assert analysis.failure_buckets(_row("c1", PERFECT)) == []
 
@@ -66,9 +75,15 @@ def test_failure_buckets_no_plan_suppresses_judge_noise():
 
 
 def test_failure_buckets_judge_and_ordering():
-    scores = {**PERFECT, "target_accuracy": 0.0, "magnitude_sign": 0.0}
+    scores = {**PERFECT, "target_accuracy": 0.0, "magnitude_sign": 0.0, "magnitude_value": 0.0}
     row = _row("c3", scores, output={"agent_error": True})
-    assert analysis.failure_buckets(row) == ["agent_error", "wrong_target", "wrong_magnitude"]
+    assert analysis.failure_buckets(row) == ["agent_error", "wrong_target", "wrong_magnitude", "wrong_amount"]
+
+
+def test_failure_buckets_wrong_amount_alone():
+    # Right direction, wrong number: only magnitude_value fails.
+    row = _row("c3b", {**PERFECT, "magnitude_value": 0.0})
+    assert analysis.failure_buckets(row) == ["wrong_amount"]
 
 
 def test_failure_buckets_mechanical_reasons():

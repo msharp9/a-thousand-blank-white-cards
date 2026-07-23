@@ -44,6 +44,14 @@ class Verdict(BaseModel):
     magnitude_sign_correct: Annotated[
         float, Field(ge=0.0, le=1.0, description="Is the magnitude sign (positive/negative/neutral) correct?")
     ]
+    magnitude_value_correct: Annotated[
+        float,
+        Field(
+            ge=0.0,
+            le=1.0,
+            description="Is the numeric amount of the effect correct? 1.0 if N/A (no numeric amount).",
+        ),
+    ]
     overall: Annotated[float, Field(ge=0.0, le=1.0, description="Overall faithfulness (0=wrong, 1=perfect).")]
     reason: str = Field(description="1-2 sentences explaining the overall score.")
 
@@ -64,10 +72,14 @@ Score each dimension independently from 0.0 to 1.0:
 - target_placement_correct: Is the target correct? (self=card player, player=chosen player, all=everyone).
 - trigger_event_correct: Is the trigger event correct? If the card has NO trigger, this should be 1.0 (N/A).
 - magnitude_sign_correct: Is the sign of the effect correct? (positive=gaining, negative=losing, neutral=no change).
+- magnitude_value_correct: Is the numeric amount of the effect correct? (points gained/lost, cards drawn/discarded).
+  If the card has NO numeric amount, this should be 1.0 (N/A).
 - overall: Holistic judgment of interpretation faithfulness.
 
 Be strict. "all players" interpreted as "self" scores 0 for target_placement_correct.
 A persistent card interpreted as one-shot scores 0 for persistence_correct.
+"Gain 5 points" interpreted as gaining 1 point scores 0 for magnitude_value_correct
+(even though magnitude_sign_correct is 1.0 — the direction is right, the amount is wrong).
 """
 
 

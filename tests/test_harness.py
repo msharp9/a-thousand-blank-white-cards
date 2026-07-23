@@ -143,6 +143,7 @@ def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
             target_placement_correct=1.0,
             trigger_event_correct=1.0,
             magnitude_sign_correct=1.0,
+            magnitude_value_correct=1.0,
             overall=1.0,
             reason="ok",
         )
@@ -151,3 +152,5 @@ def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
     summary = report.summary()
     assert summary["cases"] == 1
     assert summary["dsl_validity"] == 1.0
+    assert summary["magnitude_sign"] == 1.0
+    assert summary["magnitude_value"] == 1.0
