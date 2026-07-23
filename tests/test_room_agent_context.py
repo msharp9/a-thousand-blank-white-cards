@@ -83,8 +83,9 @@ def test_invalid_verdict_falls_back_to_custom_note_no_silent_noop() -> None:
     with patch("agent.runtime.run_agent", return_value=invalid):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c3")))
 
-    # No score change, but the play resolved with a log line (never silent).
-    assert room.state.get_player("p1").score == 0
+    # The play resolved with a log line (never silent) and the author's
+    # consolation point.
+    assert room.state.get_player("p1").score == 1
     assert "c3" in room.state.discard
     assert any("no mechanical effect" in line for line in room.state.log)
 
