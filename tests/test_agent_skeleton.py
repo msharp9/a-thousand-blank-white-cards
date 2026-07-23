@@ -145,6 +145,16 @@ def test_build_system_prompt_renders_state():
     assert "the current player" in prompt
 
 
+def test_describe_state_surfaces_game_mode():
+    from agent.persona import describe_state
+
+    gs = GameState(room_code="ABCD", mode="online", players=[Player(id="p1", name="Alice")], phase="playing")
+    assert "Game mode: online." in describe_state(gs, "p1")
+    assert "Game mode: in_person." in describe_state({"mode": "in_person", "phase": "playing"}, None)
+    # A snapshot without a mode omits the line rather than raising.
+    assert "Game mode" not in describe_state({"phase": "playing"}, None)
+
+
 def test_build_system_prompt_struggling_author_adds_help_mode():
     prompt = build_system_prompt("T", "D", struggling_author=True, author_fallbacks=2)
     assert "HELP MODE" in prompt
@@ -252,6 +262,18 @@ def test_run_agent_struggling_author_reaches_system_prompt():
     assert recorded_prompts
     assert "HELP MODE" in recorded_prompts[0]
     assert "2 card(s)" in recorded_prompts[0]
+
+
+def test_run_agent_dict_snapshot_with_creator_id_does_not_raise():
+    """The struggling-author fallback count is best-effort: a dict game-state
+    snapshot (which lacks ``.players``) must not break the never-raise contract."""
+    state = {"phase": "playing", "players": [{"id": "p1", "name": "Alice", "score": 0}]}
+    payload = '{"verdict": "ok", "comment": "Fine.", "persona_action": "none"}'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+
+    result = run_agent("Card", "desc", state=state, actor_id="p1", creator_id="p1", model=fake, tools=[])
+
+    assert result.verdict == "ok"
 
 
 # ---------------------------------------------------------------------------

@@ -77,7 +77,7 @@ top-level `config` / `logging_config` modules. Run the backend with
 | **`config`** (`src/config.py`) | Single source of truth for all settings: the one OpenAI-compatible LLM gateway (`llm_base_url` / `llm_api_key` / `llm_extra_headers`, driving BOTH chat and embeddings), embedding dimensions, the `vision_enabled` flag (attach card art to the arbiter's model input), Qdrant, LangSmith, CORS, sandbox flag, and the `dev_mode` flag (gates room persistence + `/dev` endpoints). Cached `get_settings()` singleton. | `config.py` (`Settings`, `get_settings`, `warn_if_no_llm_credentials`) |
 | **`models`** | Pure data models, no game logic. `GameState`/`Player`/`WinCondition`; the runtime `ResolutionPlan`/step and `Op` discriminated unions + `EffectProgram` + `Target`/`CardTarget` + `map_authoring_target`; card authoring models; the client/server WebSocket envelopes. | `game_state.py`, `effects.py`, `card.py`, `cards.py`, `ws_messages.py` |
 | **`engine`** | The game "physics": pure reducers over `GameState`, the turn loop, scoring/win-condition, card compilation, the event bus + persistent hooks, and the untrusted-snippet execution sandbox. Never calls the LLM. | `facade.py` (`GameEngine`), `reducers.py` (`apply_op`), `apply.py` (`apply_effect`), `compile.py` (`compile_card`), `loop.py` (`advance_turn`, `draw_step`), `scoring.py`, `events.py`, `hooks.py`, `epilogue.py` (`tally_votes`), `sandbox/` |
-| **`agent`** | The single tool-calling interpretation agent: the persona system prompt, the interpretation result contract, the LLM factory, the RAG pipeline, and the bound toolbox. Reaches down into `engine`/`models` but never up into `board`. | `runtime.py` (`build_agent`, `run_agent`), `contract.py` (`InterpretResult`), `persona.py`, `llm.py` (`get_chat_model`), `rag/` (`embeddings`, `store`, `retrievers`, `seed`), `tools/` |
+| **`agent`** | Card interpretation: a legacy single tool-calling agent and a three-stage LangGraph pipeline (intent → planner → coder) behind `Settings.interpret_pipeline_enabled`, plus the persona/stage prompts, the result contract, the LLM factory, the RAG pipeline, and the bound toolbox. Reaches down into `engine`/`models` but never up into `board`. | `runtime.py` (`run_agent` dispatcher, `build_agent`), `pipeline.py` (`run_pipeline`, `build_interpret_graph`), `stage_runner.py` (`run_stage`), `stage_prompts.py`, `contract.py` (`InterpretResult`, `CardIntent`, `MechanicsPlan`), `persona.py`, `llm.py` (`get_chat_model`), `rag/`, `tools/` |
 | **`board`** | The server surface: FastAPI app factory + REST routes, the WebSocket endpoint, and the room state machine (turn enforcement, deck building, epilogue voting, connection registry). The only layer that orchestrates engine + agent together. | `app.py` (`create_app`), `ws.py` (`ws_handler`), `rooms/` (`room.py`, `manager.py`, `connections.py`, `deck.py`, `epilogue.py`, `store.py`) |
 | **`evals`** | Offline evaluation of the interpretation pipeline: the production-faithful benchmark runner (per-run config, `enabled_tools` filtering, cost/latency instrumentation, persisted runs), an LLM-as-judge, scorers, and the legacy standalone harness. Not part of the serving path. | `runner.py`, `judge.py`, `scorers.py`, `harness.py`, `eval_core.py`, `store.py`, `analysis.py`, `viz.py`, `conclusions.py` |
 
@@ -683,6 +683,39 @@ flowchart LR
   Retrieved top-hit canonicals are emitted as complete JSON; executable code is
   never character-sliced. Lower-ranked canonicals are omitted whole when the
   response budget is exhausted.
+
+The **three-stage interpret pipeline** (`agent/pipeline.py`, behind
+`Settings.interpret_pipeline_enabled`, default off) splits interpretation into a
+LangGraph `StateGraph` whose nodes each run a bounded ReAct agent through the
+shared `stage_runner.run_stage` machinery:
+
+- **intent** (120s / 6 tool calls: `web_search`, `mtg_lookup`, `card_rag_hybrid`,
+  `game_rules`, `read_game_state`) figures out what the player *wants* — resolving
+  memes and MTG jargon (`mtg_lookup` carries a bundled `data/mtg_glossary.json`
+  so rules terms like "trample" resolve offline) — and owns the persona: its
+  `CardIntent` carries the `comment` and `persona_action` that survive onto the
+  final result even when later stages fail.
+- **planner** (180s / 8: `game_rules`, `read_engine_methods`, `read_game_state`,
+  `read_game_history`, `card_rag_hybrid`) turns the intent into a `MechanicsPlan`,
+  told explicitly to be creative: when no single op expresses a mechanic, plan
+  direct `SandboxGame` state manipulation rather than declaring it infeasible.
+- **coder** (240s / 10: `dry_run_effect`, `read_engine_methods`,
+  `read_game_state`) writes the ops/snippet effect; a `validate_repair` node then
+  runs the same sandbox-validate → dry-run → one-repair-call loop the legacy
+  agent uses.
+
+Conditional edges encode the degradations: a failed intent falls back to the
+bounded invalid result; an undecipherable `do_nothing` intent skips straight to
+finalize; a failed planner hands the coder a stub plan ("design it yourself");
+an infeasible plan finalizes as a visible `CustomNoteOp` naming the missing
+capability (feeding the triage/capability-wish flow); `punish_author` intents
+are rewritten into a real point-docking effect. A pipeline-wide monotonic
+deadline (defaulting to `AGENT_TIMEOUT_SECONDS`) clamps every node's budget, and
+`run_pipeline` mirrors `run_agent`'s never-raise contract and parameter surface,
+so `Room._resolve_plan`, previews, and the eval runner (`EvalConfig.pipeline`)
+switch paths without code changes. Per-stage models are configurable
+(`intent_agent_model` / `planner_agent_model` / `coder_agent_model`, empty =
+the shared chat model).
 
 The eval harness normalizes and judges complete `ResolutionPlan` values before
 legacy program/snippet mirrors. Its structural scorer validates snippet and hook

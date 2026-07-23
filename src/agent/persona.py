@@ -57,10 +57,7 @@ is aimed at fate, the board, and overpowered cards — never at a player who is 
 Assume every card was written in good faith.
 """
 
-INTERPRETER_JOB = """\
-Your JOB is to interpret the single card that was just played into an executable
-effect for the game engine, given the live game state.
-
+OP_CATALOG_GUIDE = """\
 - Translate EXACTLY what the card says. Do not balance, nerf, buff, or censor it.
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
@@ -126,6 +123,9 @@ effect for the game engine, given the live game state.
   fall back to a generated code snippet. Retrieved exemplar cards carry BOTH `ops` and
   executable `sandbox` code — study the sandbox of simple cards to compose code for
   complex ones.
+"""
+
+SANDBOX_RULES = """\
 - Sandbox code calls the exact op-named methods documented by `read_engine_methods`.
   It receives SandboxGame, not GameEngine: `state.draw_cards('self', 2)` is valid;
   `state.draw(...)` is not. Sandbox writes are deferred, so a read after a write in
@@ -142,14 +142,32 @@ effect for the game engine, given the live game state.
   tally a vote, iterate the dict's values. NEVER use the whole dict as a target or
   concatenate it into a string — resolve it to a concrete player/card id first, e.g.
   chosen = ctx['interactions']['pick'][ctx['actor_id']][0]; state.add_points('id:' + chosen, 5).
+"""
+
+DRY_RUN_MANDATE = """\
 - You MUST call `dry_run_effect` with every generated snippet, hook, or complete
   mixed plan before returning it. Fix any reported validation or runtime error.
+"""
+
+TOOL_GUIDANCE = """\
 - Use the tools you are given. `read_engine_methods` tells you exactly which ops and
   targets you can express (and the snippet escape hatch); `read_game_state` shows the
   live board and who authored this card; `read_game_history` queries exact public
   mechanics and draw totals. Never infer mechanics by parsing the prose game log.
   Call tools sparingly and stop as soon as you have enough to decide.
 """
+
+INTERPRETER_JOB = (
+    """\
+Your JOB is to interpret the single card that was just played into an executable
+effect for the game engine, given the live game state.
+
+"""
+    + OP_CATALOG_GUIDE
+    + SANDBOX_RULES
+    + DRY_RUN_MANDATE
+    + TOOL_GUIDANCE
+)
 
 PERSONA_DECISION_LOGIC = """\
 Some cards cannot be cleanly interpreted. When that happens, pick a persona_action.
@@ -204,22 +222,27 @@ the drawing and the text conflict, the text wins; when the text is vague, let th
 drawing steer your interpretation. Feel free to critique the artwork in your comment.
 """
 
-OUTPUT_CONTRACT = """\
+OUTPUT_CONTRACT_PREAMBLE = """\
 Produce your FINAL answer as a single JSON object (no prose, no markdown fences) with
 these keys:
+"""
 
-  {
+EFFECT_OUTPUT_KEYS = """\
     "plan":           an ordered ResolutionPlan {"steps": [{"kind":"ops","ops":[...]}, {"kind":"interaction","result_key":"bids","request":{"kind":"number","prompt":"Bid","audience":"all","sealed":true}}, {"kind":"snippet","code":"...","explanation":"..."}]} or null,
     "program":        an EffectProgram object {"ops": [...], "requires_choice": bool} or null,
     "snippet":        a snippet object {"code": "...", "explanation": "...", "trigger": null | "on_play" | "on_turn_start" | "on_turn_end" | "on_draw_step" | "on_score_change" | "on_game_end" | "on_validate_play" | "on_reaction", "scope": "center" | "player"} or null (trigger null = run once now; a GameEvent trigger = persistent hook; "on_reaction" = a reaction card that runs when played into a reaction window),
-    "verdict":        "ok" | "invalid" | "needs_choice",
-    "comment":        a short funny string (ALWAYS present),
-    "persona_action": "none" | "do_nothing" | "punish_author" | "chaos_monkey" | "random_solution"
-  }
+    "verdict":        "ok" | "invalid" | "needs_choice"\
 """
 
+PERSONA_OUTPUT_KEYS = """\
+    "comment":        a short funny string (ALWAYS present),
+    "persona_action": "none" | "do_nothing" | "punish_author" | "chaos_monkey" | "random_solution"\
+"""
 
-def _describe_state(state: Any | None, actor_id: str | None) -> str:
+OUTPUT_CONTRACT = f"{OUTPUT_CONTRACT_PREAMBLE}\n  {{\n{EFFECT_OUTPUT_KEYS},\n{PERSONA_OUTPUT_KEYS}\n  }}\n"
+
+
+def describe_state(state: Any | None, actor_id: str | None) -> str:
     """Render a compact, prompt-friendly summary of the live game state.
 
     Accepts a :class:`~models.game_state.GameState`, a plain dict snapshot, or None.
@@ -236,6 +259,9 @@ def _describe_state(state: Any | None, actor_id: str | None) -> str:
         return getattr(state, key, default)
 
     lines: list[str] = []
+    mode = _get("mode")
+    if mode:
+        lines.append(f"Game mode: {mode}.")
     phase = _get("phase")
     if phase:
         lines.append(f"Phase: {phase}.")
@@ -258,6 +284,26 @@ def _describe_state(state: Any | None, actor_id: str | None) -> str:
     if not lines:
         return "Game state: (empty)."
     return "\n".join(["Live game state:", *lines])
+
+
+_describe_state = describe_state
+
+
+def authorship_note(actor_id: str | None, creator_id: str | None) -> str:
+    """The AUTHORSHIP prompt block, or "" when either id is unknown.
+
+    Authorship decides who receives the consolation boon when a card fizzles and
+    whether the rare abusive-card ``punish_author`` branch could apply.
+    """
+    if actor_id is None or creator_id is None:
+        return ""
+    is_author = actor_id == creator_id
+    return (
+        f"\nAUTHORSHIP: the player (actor_id={actor_id!r}) "
+        f"{'IS' if is_author else 'is NOT'} the author of this card "
+        f"(creator_id={creator_id!r}). Authorship decides who receives the consolation "
+        "boon and whether the rare abusive-card punish_author branch applies.\n"
+    )
 
 
 def build_system_prompt(
@@ -285,16 +331,6 @@ def build_system_prompt(
     ``author_fallbacks``) — the threshold decision that sets this flag lives in
     agent.runtime, not here, so this module stays config-free.
     """
-    author_note = ""
-    if actor_id is not None and creator_id is not None:
-        is_author = actor_id == creator_id
-        author_note = (
-            f"\nAUTHORSHIP: the player (actor_id={actor_id!r}) "
-            f"{'IS' if is_author else 'is NOT'} the author of this card "
-            f"(creator_id={creator_id!r}). Authorship decides who receives the consolation "
-            "boon and whether the rare abusive-card punish_author branch applies.\n"
-        )
-
     return "\n".join(
         [
             PERSONA_PREAMBLE,
@@ -310,8 +346,8 @@ def build_system_prompt(
             f"Title: {title}",
             f"Description: {description}",
             *([CARD_ART_NOTE] if has_art else []),
-            author_note,
+            authorship_note(actor_id, creator_id),
             *([STRUGGLING_AUTHOR_NOTE.format(n=author_fallbacks)] if struggling_author else []),
-            _describe_state(state, actor_id),
+            describe_state(state, actor_id),
         ]
     )
