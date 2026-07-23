@@ -306,11 +306,11 @@ def _sandbox_behavior_scorer(context: ScorerContext) -> Score:
     similarities: list[float] = []
     for state_dict, ctx_dict in fixture_states():
         try:
-            expected_diff = normalise_ops(execute_snippet(expected_code, state_dict, ctx_dict), ctx_dict)
+            expected_diff = normalise_ops(execute_snippet(expected_code, state_dict, ctx_dict), ctx_dict, state_dict)
             generated_raw: list[dict[str, Any]] = list(plain_ops)
             for code in codes:
                 generated_raw.extend(execute_snippet(code, state_dict, ctx_dict))
-            generated_diff = normalise_ops(generated_raw, ctx_dict)
+            generated_diff = normalise_ops(generated_raw, ctx_dict, state_dict)
         except SnippetExecutionError as exc:
             return Score(score=0.0, metadata={"reason": f"execution failed: {exc}"})
         except Exception as exc:  # noqa: BLE001
