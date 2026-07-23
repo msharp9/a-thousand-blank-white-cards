@@ -254,6 +254,18 @@ def test_run_agent_struggling_author_reaches_system_prompt():
     assert "2 card(s)" in recorded_prompts[0]
 
 
+def test_run_agent_dict_snapshot_with_creator_id_does_not_raise():
+    """The struggling-author fallback count is best-effort: a dict game-state
+    snapshot (which lacks ``.players``) must not break the never-raise contract."""
+    state = {"phase": "playing", "players": [{"id": "p1", "name": "Alice", "score": 0}]}
+    payload = '{"verdict": "ok", "comment": "Fine.", "persona_action": "none"}'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+
+    result = run_agent("Card", "desc", state=state, actor_id="p1", creator_id="p1", model=fake, tools=[])
+
+    assert result.verdict == "ok"
+
+
 # ---------------------------------------------------------------------------
 # Tool routing
 # ---------------------------------------------------------------------------

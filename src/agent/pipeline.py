@@ -447,6 +447,9 @@ def _validate_repair_node(state: PipelineState) -> dict[str, Any]:
     same machinery ``run_agent`` wires through its parse hook): a validation or
     dry-run failure triggers one tools-disabled repair call against the CODER's
     system prompt; a second failure strips the effect to ``verdict="invalid"``.
+    The failing draft is validated exactly once (the error is threaded through)
+    and the repair call is clamped to the pipeline deadline — with no time left
+    the effect is stripped without a repair attempt.
     """
     draft = state.get("draft")
     if draft is None:
@@ -457,6 +460,14 @@ def _validate_repair_node(state: PipelineState) -> dict[str, Any]:
         )
         if error is None:
             return {"draft": draft}
+        repair_timeout = _forced_timeout(state)
+        deadline = state.get("deadline")
+        if deadline is not None:
+            repair_timeout = min(repair_timeout, deadline - time.monotonic())
+        if repair_timeout <= 0:
+            logger.warning("pipeline deadline exhausted; stripping invalid effect without repair")
+            stripped = draft.model_copy(update={"plan": None, "program": None, "snippet": None, "verdict": "invalid"})
+            return {"draft": stripped, "stage_errors": ["validate_repair: pipeline deadline exhausted"]}
         stage_model = _stage_model(state, "coder")
         chat_model = stage_model if stage_model is not None else get_chat_model()
         validated = stage_runner._validate_or_repair_effect(
@@ -467,8 +478,9 @@ def _validate_repair_node(state: PipelineState) -> dict[str, Any]:
             state.get("game_state"),
             state.get("actor_id"),
             state.get("card_id"),
-            _forced_timeout(state),
+            repair_timeout,
             _parse_coder,
+            precomputed_error=error,
         )
     except Exception:  # noqa: BLE001 — validation must never escape; strip the effect instead
         logger.exception("effect validation/repair failed; stripping effect")
