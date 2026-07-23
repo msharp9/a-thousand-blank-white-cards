@@ -165,6 +165,13 @@ current board state. This is not optional — even a perfectly clear card gets a
 Keep it tight and funny. Never break character to explain the rules.
 """
 
+STRUGGLING_AUTHOR_NOTE = """\
+HELP MODE: this card's author has already had {n} card(s) fail to work. They are almost \
+certainly still learning how to phrase cards, not trolling you. TRY HARDER: re-read the card \
+assuming best intent, prefer chaos_monkey (a generous, plausible reading) over giving up, and \
+only return "invalid" if you truly cannot construct any effect. Stay witty - but aim the wit at \
+the cosmos, not at this player."""
+
 CARD_ART_NOTE = """\
 CARD ART: the player's hand-drawn art for this card is attached to your input as an
 image. Treat the drawing as part of the card: it can clarify ambiguous text, supply a
@@ -237,6 +244,8 @@ def build_system_prompt(
     creator_id: str | None = None,
     *,
     has_art: bool = False,
+    struggling_author: bool = False,
+    author_fallbacks: int = 0,
 ) -> str:
     """Assemble the full system prompt for one card interpretation.
 
@@ -248,6 +257,9 @@ def build_system_prompt(
     ``has_art`` adds :data:`CARD_ART_NOTE` — set it ONLY when the card's drawing is
     actually attached to the model input as an image (see agent.runtime); with the
     default False the prompt is unchanged.
+    ``struggling_author`` appends :data:`STRUGGLING_AUTHOR_NOTE` (filled in with
+    ``author_fallbacks``) — the threshold decision that sets this flag lives in
+    agent.runtime, not here, so this module stays config-free.
     """
     author_note = ""
     if actor_id is not None and creator_id is not None:
@@ -275,6 +287,7 @@ def build_system_prompt(
             f"Description: {description}",
             *([CARD_ART_NOTE] if has_art else []),
             author_note,
+            *([STRUGGLING_AUTHOR_NOTE.format(n=author_fallbacks)] if struggling_author else []),
             _describe_state(state, actor_id),
         ]
     )

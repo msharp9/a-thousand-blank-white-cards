@@ -40,6 +40,7 @@ from agent.contract import InterpretResult
 from agent.llm import get_chat_model
 from agent.persona import build_system_prompt
 from config import get_settings
+from engine.history import fallback_counts
 from models.effects import CustomNoteOp, EffectProgram, RegisterHookOp, SnippetStep
 
 logger = logging.getLogger(__name__)
@@ -585,8 +586,15 @@ def run_agent(
 
     _configure_langsmith()
 
-    if card_art is not None and not get_settings().vision_enabled:
+    settings = get_settings()
+    if card_art is not None and not settings.vision_enabled:
         card_art = None
+
+    author_fallbacks = 0
+    if state is not None and creator_id:
+        author_fallbacks = fallback_counts(state).get(creator_id, 0)
+    threshold = settings.struggling_author_threshold
+    struggling_author = bool(threshold) and author_fallbacks >= threshold
 
     system_prompt = build_system_prompt(
         title=title,
@@ -595,6 +603,8 @@ def run_agent(
         actor_id=actor_id,
         creator_id=creator_id,
         has_art=card_art is not None,
+        struggling_author=struggling_author,
+        author_fallbacks=author_fallbacks,
     )
 
     # An explicit tool list is authoritative — the caller already decided the
