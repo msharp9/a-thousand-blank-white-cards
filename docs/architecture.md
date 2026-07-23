@@ -692,10 +692,27 @@ chains, history-derived winners, and the Uno ladder.
 
 The **persona** (`agent/persona.py`) makes the agent a sardonic game master: it
 always emits an in-character `comment`, and when a card can't be cleanly
-interpreted it picks a `persona_action` — `do_nothing` (undecipherable, player
-is NOT the author), `punish_author` (undecipherable, player IS the author),
-`chaos_monkey` (well-meant but ambiguous), or `random_solution` (multiple valid
-readings). Kept cards from the epilogue vote are upserted back into the store
+interpreted it picks a `persona_action` — `chaos_monkey` (well-meant but
+ambiguous; the loudly-preferred branch: a generous plausible reading beats
+giving up), `random_solution` (multiple valid readings), `do_nothing`
+(genuinely undecipherable), or `punish_author` (reserved for clearly abusive
+cards — sandbox-escape attempts, offensive content — never a sincere-but-clumsy
+one). The snark aims at fate, the board, and overpowered cards, never at a
+struggling player: playtesting showed uninterpretable cards almost always come
+from learners, not griefers.
+
+The engine backs that stance mechanically. Every failed authored card records a
+`card_fallback` history event keyed to its author; instead of a bare no-op, the
+room awards the author a consolation boon "for trying" (`Room._consolation_ops`):
++1 point by default, escalating past `struggling_author_threshold` through a
+rotating ladder (+2 points → draw 3 cards → a one-shot score double). Once an
+author crosses the threshold, the interpretation prompt also gains a HELP MODE
+block (`persona.STRUGGLING_AUTHOR_NOTE`) telling the agent to re-read the card
+assuming best intent and try harder before returning `invalid` — deliberately
+without phrasing tips, which read as patronizing. Settings:
+`consolation_point_enabled`, `consolation_points`, `struggling_author_threshold`.
+
+Kept cards from the epilogue vote are upserted back into the store
 with `source="player"`, so the corpus grows across games.
 
 ---
