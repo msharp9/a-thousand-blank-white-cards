@@ -80,6 +80,8 @@ Target = Annotated[str, AfterValidator(_validate_target)]
 #                   hand") is a documented future extension — it would pair a
 #                   CardTarget with a companion player Target rather than
 #                   overloading this literal.
+#   "all_in_center" — every card in the shared center zone
+#                   (state.center_cards(), i.e. the house-rules area).
 # Open, validated prefix forms (mirroring the player Target grammar):
 #   "id:<card_id>"   — one specific card (missing id resolves to nothing)
 #   "attr:<k>=<v>"   — every card whose attributes bag has key k stringifying to v
@@ -89,6 +91,7 @@ _VALID_CARD_TARGETS: frozenset[str] = frozenset(
         "chosen_card",
         "all_in_play",
         "all_in_hand",
+        "all_in_center",
     }
 )
 

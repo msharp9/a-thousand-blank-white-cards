@@ -263,6 +263,15 @@ class TestResolveCardTargets:
         ctx = make_card_ctx("p1")
         assert _resolve_card_targets("all_in_hand", ctx, self._state_with_zones()) == ["h1", "h2"]
 
+    def test_all_in_center_is_center_zone(self):
+        ctx = make_card_ctx("p1")
+        assert _resolve_card_targets("all_in_center", ctx, self._state_with_zones()) == ["center1"]
+
+    def test_all_in_center_empty_center_resolves_empty(self):
+        ctx = make_card_ctx("p1")
+        state = self._state_with_zones().model_copy(update={"house_rules": []})
+        assert _resolve_card_targets("all_in_center", ctx, state) == []
+
     def test_unknown_card_target_raises(self):
         ctx = make_card_ctx("p1")
         with pytest.raises(ValueError):
@@ -359,6 +368,14 @@ class TestDestroyCard:
         assert "c1" not in new.get_player("p1").hand
         assert "c1" in new.discard
         assert new.hooks == state.hooks
+
+    def test_card_target_all_in_center_clears_center_zone(self):
+        players = [Player(id="p1", name="Alice", hand=["h1"])]
+        state = GameState(room_code="TEST", players=players, house_rules=["hr1", "hr2"])
+        new = apply_op(state, DestroyCardOp(card_target="all_in_center"), make_card_ctx("p1"))
+        assert new.house_rules == []
+        assert set(new.discard) == {"hr1", "hr2"}
+        assert new.get_player("p1").hand == ["h1"]
 
     def test_multi_card_destroy_unregisters_all_matching_hooks(self):
         players = [
@@ -477,6 +494,104 @@ class TestSetRule:
         new = apply_op(state, ChangeDrawCountOp(amount=2), make_ctx("p1"))
         assert new.rules.draw == 2
         assert new.draw_count == 2
+
+
+class TestRuleBindings:
+    """set_rule from a known source card links the rule to the card; destroying
+    the card reverts the rule with per-path stack semantics."""
+
+    def _center_state(self, *card_ids: str) -> GameState:
+        return GameState(
+            room_code="TEST",
+            players=[Player(id="p1", name="Alice")],
+            house_rules=list(card_ids),
+        )
+
+    def _set_rule(self, state: GameState, card_id: str, path: str, value) -> GameState:
+        return apply_op(state, SetRuleOp(path=path, value=value), make_card_ctx("p1", card_id=card_id))
+
+    def test_set_rule_with_source_card_records_binding(self):
+        state = self._set_rule(self._center_state("hr1"), "hr1", "draw", 3)
+        assert len(state.rule_bindings) == 1
+        binding = state.rule_bindings[0]
+        assert binding.source_card_id == "hr1"
+        assert binding.path == "draw"
+        assert binding.previous_value == 1
+
+    def test_set_rule_without_source_card_records_no_binding(self):
+        state = apply_op(make_state(), SetRuleOp(path="draw", value=3), make_ctx("p1"))
+        assert state.rule_bindings == []
+        assert state.rules.draw == 3
+
+    def test_destroying_rule_card_reverts_its_rule(self):
+        state = self._set_rule(self._center_state("hr1"), "hr1", "draw", 3)
+        new = apply_op(state, DestroyCardOp(card_id="hr1"), make_card_ctx("p1"))
+        assert new.house_rules == []
+        assert new.rules.draw == 1
+        assert new.rule_bindings == []
+        assert any("reverted draw" in entry for entry in new.log)
+
+    def test_destroying_unbound_card_leaves_rule_and_bindings(self):
+        state = self._set_rule(self._center_state("hr1", "hr2"), "hr1", "draw", 3)
+        new = apply_op(state, DestroyCardOp(card_id="hr2"), make_card_ctx("p1"))
+        assert new.rules.draw == 3
+        assert len(new.rule_bindings) == 1
+
+    def test_two_cards_same_rule_destroy_newest_then_oldest(self):
+        state = self._center_state("hr1", "hr2")
+        state = self._set_rule(state, "hr1", "draw", 2)
+        state = self._set_rule(state, "hr2", "draw", 3)
+        assert state.rules.draw == 3
+
+        after_newest = apply_op(state, DestroyCardOp(card_id="hr2"), make_card_ctx("p1"))
+        assert after_newest.rules.draw == 2  # reverts to hr1's rule
+
+        after_both = apply_op(after_newest, DestroyCardOp(card_id="hr1"), make_card_ctx("p1"))
+        assert after_both.rules.draw == 1  # back to the default
+        assert after_both.rule_bindings == []
+
+    def test_two_cards_same_rule_destroy_oldest_then_newest(self):
+        state = self._center_state("hr1", "hr2")
+        state = self._set_rule(state, "hr1", "draw", 2)
+        state = self._set_rule(state, "hr2", "draw", 3)
+
+        after_oldest = apply_op(state, DestroyCardOp(card_id="hr1"), make_card_ctx("p1"))
+        assert after_oldest.rules.draw == 3  # hr2's rule is still the newest write
+
+        after_both = apply_op(after_oldest, DestroyCardOp(card_id="hr2"), make_card_ctx("p1"))
+        assert after_both.rules.draw == 1  # skips destroyed hr1's value, back to default
+        assert after_both.rule_bindings == []
+
+    def test_nested_rule_path_reverts(self):
+        state = self._set_rule(self._center_state("hr1"), "hr1", "win_condition.kind", "lowest_points")
+        assert state.rules.win_condition.kind == "lowest_points"
+        new = apply_op(state, DestroyCardOp(card_id="hr1"), make_card_ctx("p1"))
+        assert new.rules.win_condition.kind == "highest_points"
+
+    def test_bindings_survive_snapshot_round_trip(self):
+        state = self._set_rule(self._center_state("hr1"), "hr1", "draw", 3)
+        restored = GameState.model_validate(state.model_dump())
+        assert [b.source_card_id for b in restored.rule_bindings] == ["hr1"]
+        new = apply_op(restored, DestroyCardOp(card_id="hr1"), make_card_ctx("p1"))
+        assert new.rules.draw == 1
+
+    def test_bulk_all_in_center_destroy_reverts_rules(self):
+        state = self._center_state("hr1", "hr2")
+        state = self._set_rule(state, "hr1", "draw", 2)
+        state = self._set_rule(state, "hr2", "extra.color_match", True)
+        new = apply_op(state, DestroyCardOp(card_target="all_in_center"), make_card_ctx("p1"))
+        assert new.house_rules == []
+        assert new.rules.draw == 1
+        assert new.rules.extra.get("color_match") is None
+        assert new.rule_bindings == []
+
+    def test_bulk_destroy_of_stacked_same_rule_reverts_past_both(self):
+        state = self._center_state("hr1", "hr2")
+        state = self._set_rule(state, "hr1", "draw", 2)
+        state = self._set_rule(state, "hr2", "draw", 3)
+        new = apply_op(state, DestroyCardOp(card_target="all_in_center"), make_card_ctx("p1"))
+        assert new.rules.draw == 1
+        assert new.rule_bindings == []
 
 
 class TestOpenTargets:

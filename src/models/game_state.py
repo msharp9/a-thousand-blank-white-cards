@@ -111,6 +111,24 @@ class HookSpec(BaseModel):
     code: str  # sandbox-validated snippet: def apply(state, ctx)
 
 
+class RuleBinding(BaseModel):
+    """One card's recorded ``set_rule`` write: which rule path it set and the
+    value that path held just before.
+
+    Bindings are STATE (they ride ``model_dump`` into snapshots) and form a
+    per-path stack in list order (oldest first). Destroying a card releases its
+    bindings: if the destroyed binding was the most recent write for its path,
+    the rule reverts to ``previous_value``; otherwise the binding above it
+    inherits ``previous_value`` and the live value is untouched (see
+    ``engine.reducers._release_rule_bindings``). ``set_rule`` without a source
+    card (house-rule flows, no ctx.card_id) records no binding.
+    """
+
+    source_card_id: str
+    path: str
+    previous_value: Any = None
+
+
 class HistoryEvent(BaseModel):
     """One privacy-safe, append-only fact about completed game mechanics."""
 
@@ -211,6 +229,10 @@ class GameState(BaseModel):
 
     # Persistent hooks registered by card plays, in registration order.
     hooks: list[HookSpec] = Field(default_factory=list)
+
+    # set_rule writes attributed to a source card, oldest first — per-path
+    # stacks consumed when the card is destroyed (see RuleBinding).
+    rule_bindings: list[RuleBinding] = Field(default_factory=list)
 
     # Machine-readable history for game logic and reconnects. Unlike ``log``,
     # events never contain private hand contents or generated prose.

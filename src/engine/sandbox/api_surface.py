@@ -223,8 +223,8 @@ class SandboxGame:
         self._ops.append({"op": "draw_cards", "target": target, "amount": amount})
 
     def destroy_card(self, card_id: str | None = None, card_target: str | None = None) -> None:
-        """Destroy cards by CardTarget address ('this', 'all_in_play', 'id:…', 'attr:k=v')."""
-        legacy_targets = {"all_in_hand", "all_in_play", "chosen_card", "this"}
+        """Destroy cards by CardTarget address ('this', 'all_in_play', 'all_in_center', 'id:…', 'attr:k=v')."""
+        legacy_targets = {"all_in_hand", "all_in_play", "all_in_center", "chosen_card", "this"}
         if (
             card_target is None
             and card_id is not None

@@ -51,6 +51,7 @@ NOT YET SUPPORTED: creating cards directly into the discard pile or the center.
 Cards can install persistent hooks that fire on game events: on_play, on_turn_start, on_turn_end, on_draw_step, on_score_change, on_game_end, on_validate_play.
 Cards can rewrite game rules as data: how many cards are drawn or played per turn, what condition ends the game, what condition decides the winner, plus free-form rule entries under extra.
 "New phase" cards (an attack phase, a discard phase, a hand limit) are expressed as hooks on turn start/turn end plus rule data — cards cannot add literal new phases or invent new hook events.
+A center/house-rule card can be destroyed like any other card, and destroying it removes its ongoing effect: its hooks are unregistered and any rule it rewrote reverts to the previous value (the most recent surviving rewrite, or the default). "Destroy every card in the center" is a single effect that clears the whole center zone.
 
 == Winning and ending ==
 A card can end the game immediately and can declare a specific player the winner ("you win the game" is a clean, valid effect).

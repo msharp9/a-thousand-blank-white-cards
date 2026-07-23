@@ -40,7 +40,7 @@ from models.effects import (
 )
 from pydantic import ValidationError as PydanticValidationError
 
-from models.game_state import EndCondition, GameState, HookSpec, Rules, WinCondition
+from models.game_state import EndCondition, GameState, HookSpec, RuleBinding, Rules, WinCondition
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +105,8 @@ def _resolve_card_targets(card_target: CardTarget, ctx: HookContext, state: Game
     - ``"all_in_play"`` -> every card in every player's in-play zone.
     - ``"all_in_hand"`` -> the ACTOR's own hand (first-cut decision). Whose-hand
                            composition is a documented future extension.
+    - ``"all_in_center"`` -> every card in the shared center zone
+                           (``state.center_cards()``).
     """
     if card_target.startswith("id:"):
         cid = card_target[3:]
@@ -128,6 +130,8 @@ def _resolve_card_targets(card_target: CardTarget, ctx: HookContext, state: Game
             return state.cards_in_play()
         case "all_in_hand":
             return list(state.get_player(ctx.actor_id).hand)
+        case "all_in_center":
+            return state.center_cards()
         case _:
             raise ValueError(f"Unknown card target: {card_target!r}")
 
@@ -243,7 +247,8 @@ def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) 
     Each resolved id is scrubbed from every player's ``hand`` and ``in_play``
     zones and from the shared ``center`` zone (house_rules), then appended to the
     discard pile (once, no duplicates). Persistent hooks registered by a
-    destroyed card are unregistered too — destroying a board card removes its
+    destroyed card are unregistered too, and rules it set via set_rule revert
+    (see ``_release_rule_bindings``) — destroying a board card removes its
     ongoing effect, not just the card.
     """
     if op.card_target is not None:
@@ -284,7 +289,7 @@ def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) 
     )
     for source in dict.fromkeys(h.source_card_id for h in state.hooks if h.source_card_id in targets):
         new_state = new_state.with_log(f"[hook] unregistered {source} (card destroyed)")
-    return new_state
+    return _release_rule_bindings(new_state, targets)
 
 
 def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext) -> GameState:
@@ -450,11 +455,21 @@ _SCALAR_RULE_PATHS = frozenset({"draw", "play", "skip_predicate"})
 _NESTED_RULE_HEADS = frozenset({"end_condition", "win_condition", "cannot_play"})
 
 
-def _reduce_set_rule(state: GameState, op: SetRuleOp, ctx: HookContext) -> GameState:
-    """Write one rule path. Unknown paths / invalid values raise ValueError so
-    callers surface them the same way as unresolvable targets."""
-    rules = state.rules.model_dump()
-    path, value = op.path, op.value
+def _read_rule_path(rules: dict, path: str) -> object:
+    """Return the current value at a set_rule path in a dumped Rules dict."""
+    if "." in path:
+        head, key = path.split(".", 1)
+        sub = rules.get(head)
+        return sub.get(key) if isinstance(sub, dict) else None
+    return rules.get(path)
+
+
+def _write_rule_path(rules: dict, path: str, value: object) -> None:
+    """Write one set_rule path into a dumped Rules dict (in place).
+
+    Raises ValueError on unknown paths so callers surface them the same way as
+    unresolvable targets.
+    """
     if path in _SCALAR_RULE_PATHS or path in _NESTED_RULE_HEADS:
         rules[path] = value
     elif path.startswith("extra."):
@@ -466,11 +481,59 @@ def _reduce_set_rule(state: GameState, op: SetRuleOp, ctx: HookContext) -> GameS
         rules[head] = sub
     else:
         raise ValueError(f"set_rule: unknown rule path {path!r}")
+
+
+def _reduce_set_rule(state: GameState, op: SetRuleOp, ctx: HookContext) -> GameState:
+    """Write one rule path. Unknown paths / invalid values raise ValueError.
+
+    When the write comes from a known source card (ctx.card_id), a RuleBinding
+    recording the path's previous value is appended so destroying that card can
+    revert the rule (see ``_release_rule_bindings``). Source-less writes
+    (house-rule flows) record nothing and behave as before.
+    """
+    rules = state.rules.model_dump()
+    previous = _read_rule_path(rules, op.path)
+    _write_rule_path(rules, op.path, op.value)
     try:
         new_rules = Rules.model_validate(rules)
     except PydanticValidationError as exc:
-        raise ValueError(f"set_rule: invalid value for {path!r}: {exc}") from exc
-    return state.model_copy(update={"rules": new_rules})
+        raise ValueError(f"set_rule: invalid value for {op.path!r}: {exc}") from exc
+    update: dict = {"rules": new_rules}
+    if ctx.card_id is not None:
+        binding = RuleBinding(source_card_id=ctx.card_id, path=op.path, previous_value=previous)
+        update["rule_bindings"] = [*state.rule_bindings, binding]
+    return state.model_copy(update=update)
+
+
+def _release_rule_bindings(state: GameState, destroyed: set[str]) -> GameState:
+    """Drop destroyed cards' rule bindings, reverting rules where needed.
+
+    Bindings for one path form a stack (list order). Removing the most recent
+    binding for a path reverts the rule to its recorded previous value; removing
+    a buried binding splices it out — the binding above inherits its
+    previous_value and the live rule value is untouched.
+    """
+    if not any(b.source_card_id in destroyed for b in state.rule_bindings):
+        return state
+    remaining: list[RuleBinding] = []
+    carried: dict[str, object] = {}
+    for binding in state.rule_bindings:
+        if binding.source_card_id in destroyed:
+            carried.setdefault(binding.path, binding.previous_value)
+        elif binding.path in carried:
+            remaining.append(binding.model_copy(update={"previous_value": carried.pop(binding.path)}))
+        else:
+            remaining.append(binding)
+    new_state = state.model_copy(update={"rule_bindings": remaining})
+    if carried:
+        # Still-carried paths lost their topmost binding: revert the live rule.
+        rules = state.rules.model_dump()
+        for path, value in carried.items():
+            _write_rule_path(rules, path, value)
+        new_state = new_state.model_copy(update={"rules": Rules.model_validate(rules)})
+        for path in carried:
+            new_state = new_state.with_log(f"[rule] reverted {path} (card destroyed)")
+    return new_state
 
 
 def _reduce_counter_play(state: GameState, op: Op, ctx: HookContext) -> GameState:
