@@ -102,6 +102,21 @@ class InterpretResult(BaseModel):
             "unparseable final message), not a genuine judgment of the card."
         ),
     )
+    placement: str | None = Field(
+        default=None,
+        description=(
+            "Where the played card lives afterwards ('discard', 'center', or 'player'), "
+            "copied from the intent stage. None = legacy single-agent result: the room "
+            "keeps its default placement behavior."
+        ),
+    )
+    venue: str | None = Field(
+        default=None,
+        description=(
+            "Where the card's action can physically happen ('all', 'in_person', or "
+            "'online'), copied from the intent stage. None = legacy single-agent result."
+        ),
+    )
 
     def to_plan(self) -> ResolutionPlan:
         if self.plan is not None:
@@ -148,6 +163,24 @@ class CardIntent(BaseModel):
     persistence: Literal["immediate", "persistent", "reaction", "validation"] = Field(
         default="immediate",
         description="When the effect takes hold: a one-shot now, a standing hook, a counterspell-style reaction, or a play-validation rule.",
+    )
+    venue: Literal["all", "in_person", "online"] = Field(
+        default="all",
+        description=(
+            "Where the card's action can physically happen: 'in_person' when it demands "
+            "physical presence (touching, speaking aloud, physical objects, gestures); "
+            "'all' when it is purely digital-expressible; 'online' when it only makes "
+            "sense in an online game."
+        ),
+    )
+    placement: Literal["discard", "center", "player"] = Field(
+        default="discard",
+        description=(
+            "Where the played card lives afterwards: 'discard' for one-shot effects; "
+            "'center' for a persistent global rule (sits visibly on the board, can be "
+            "destroyed later to remove the effect); 'player' for a persistent boon/curse "
+            "that sits in front of one player."
+        ),
     )
     resolved_references: list[str] = Field(
         default_factory=list,

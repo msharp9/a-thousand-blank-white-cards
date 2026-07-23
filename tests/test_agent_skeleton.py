@@ -145,6 +145,16 @@ def test_build_system_prompt_renders_state():
     assert "the current player" in prompt
 
 
+def test_describe_state_surfaces_game_mode():
+    from agent.persona import describe_state
+
+    gs = GameState(room_code="ABCD", mode="online", players=[Player(id="p1", name="Alice")], phase="playing")
+    assert "Game mode: online." in describe_state(gs, "p1")
+    assert "Game mode: in_person." in describe_state({"mode": "in_person", "phase": "playing"}, None)
+    # A snapshot without a mode omits the line rather than raising.
+    assert "Game mode" not in describe_state({"phase": "playing"}, None)
+
+
 def test_build_system_prompt_struggling_author_adds_help_mode():
     prompt = build_system_prompt("T", "D", struggling_author=True, author_fallbacks=2)
     assert "HELP MODE" in prompt
