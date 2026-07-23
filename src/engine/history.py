@@ -161,9 +161,27 @@ def draw_totals(state: GameState) -> dict[str, int]:
     return totals
 
 
+def fallback_counts(state: GameState) -> dict[str, int]:
+    """Per-player count of the player's own authored cards that fell back.
+
+    Keyed by the card AUTHOR (``event.target_player_ids``, stamped with the
+    creator id by the room when a card's status becomes ``"fallback"``), not
+    by whoever played the card.
+    """
+    totals = {player.id: 0 for player in state.players}
+    for event in state.history_events:
+        if event.kind != "card_fallback":
+            continue
+        for player_id in event.target_player_ids:
+            if player_id in totals:
+                totals[player_id] += 1
+    return totals
+
+
 __all__ = [
     "append_history_event",
     "draw_totals",
+    "fallback_counts",
     "public_history",
     "record_draw",
     "record_game_end",

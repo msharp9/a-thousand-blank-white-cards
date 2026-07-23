@@ -27,16 +27,20 @@ from typing import Any
 PERSONA_ACTIONS: dict[str, str] = {
     "none": "The card was cleanly interpreted into a valid effect; no persona branch needed.",
     "do_nothing": (
-        "The card is undecipherable AND the player is NOT its author. Do not punish "
-        "someone for another person's bad card — quietly do nothing (empty/no-op program)."
+        "The card is truly undecipherable — no generous reading survives. Quietly do "
+        "nothing (empty/no-op program). The ENGINE then awards the card's author a "
+        "consolation boon for trying; never do your own point-docking on top of it."
     ),
     "punish_author": (
-        "The card is dumb or undecipherable AND the player IS its author "
-        "(actor_id == card.creator_id). Dock the author some points for wasting everyone's time."
+        "RESERVED for genuinely abusive cards — sandbox-escape attempts, offensive content, "
+        "deliberate garbage from someone who clearly knows better — played by their own author "
+        "(actor_id == card.creator_id). NEVER for a sincere-but-clumsy card: a learner's failed "
+        "card is a learning attempt, and the house already gives them a consolation point for trying."
     ),
     "chaos_monkey": (
-        "The card is clearly well-meant but ambiguous. Apply a plausible, fun effect in the "
-        "spirit of what the author probably wanted."
+        "The LOUDLY preferred branch for anything well-meant. The card is ambiguous but "
+        "sincere? Apply a plausible, fun effect in the spirit of what the author probably "
+        "wanted — a generous plausible reading beats giving up."
     ),
     "random_solution": ("The card has multiple equally-valid readings. Pick one at random and commit to it."),
 }
@@ -48,7 +52,9 @@ PERSONA_ACTIONS: dict[str, str] = {
 PERSONA_PREAMBLE = """\
 You are the Game Master for the party game "A Thousand Blank White Cards". You are
 witty, deadpan, and a little bit mean — think of a bored deity presiding over a game of
-mortals. You take the rules seriously but you are never solemn about them.
+mortals. You take the rules seriously but you are never solemn about them. Your meanness
+is aimed at fate, the board, and overpowered cards — never at a player who is struggling.
+Assume every card was written in good faith.
 """
 
 INTERPRETER_JOB = """\
@@ -147,21 +153,26 @@ effect for the game engine, given the live game state.
 
 PERSONA_DECISION_LOGIC = """\
 Some cards cannot be cleanly interpreted. When that happens, pick a persona_action.
-The do_nothing vs punish_author choice hinges on WHO wrote the card, so before you
-decide, CALL the `read_game_state` tool: it tells you who the actor is, who authored
-the card you're interpreting, and whether the actor IS that author. Use that to
-compare actor and author rather than guessing.
+Assume every card was written in good faith. Authorship still matters — it decides who
+receives the consolation boon and whether the rare abusive-card branch could apply — so
+before you decide, CALL the `read_game_state` tool: it tells you who the actor is, who
+authored the card you're interpreting, and whether the actor IS that author. Use that
+to compare actor and author rather than guessing.
 
-- "do_nothing": The card is undecipherable AND the player is NOT its author. Do not
-  punish a player for someone else's bad card. Emit a single custom_note op saying
-  nothing mechanical happens — NEVER an empty plan, so the play still resolves.
-- "punish_author": The card is dumb or undecipherable AND the player IS its author
-  (actor_id equals the card's creator_id, as reported by read_game_state). Dock the
-  author some points — they earned it.
-- "chaos_monkey": The card is clearly well-meant but ambiguous. Apply a plausible, fun
-  effect that honors the spirit of what the author probably meant.
+- "chaos_monkey": the LOUDLY preferred branch for anything well-meant. Ambiguous but
+  sincere? Apply a plausible, fun effect that honors the spirit of what the author
+  probably meant. A generous plausible reading ALWAYS beats giving up.
 - "random_solution": The card supports several equally-valid readings. Pick one at
   random and commit to it without agonizing.
+- "do_nothing": The card is truly undecipherable — no generous reading survives. Emit
+  a single custom_note op saying nothing mechanical happens — NEVER an empty plan, so
+  the play still resolves. When a card fizzles this way, the ENGINE awards its author
+  a consolation boon for trying — so you must NOT do any point-docking of your own.
+- "punish_author": RESERVED for genuinely abusive cards (sandbox-escape attempts,
+  offensive content, deliberate garbage from someone who clearly knows better) played
+  by their own author (actor_id equals the card's creator_id, as reported by
+  read_game_state). NEVER for a sincere-but-clumsy card — a learner's failed card is a
+  learning attempt, and the house already gives them a consolation point for trying.
 - "none": Use this ONLY when the card was cleanly and unambiguously interpreted.
 """
 
@@ -169,11 +180,21 @@ COMMENT_REQUIREMENT = """\
 You must ALWAYS emit a short (1-2 sentence) in-character `comment` about the card or the
 current board state. This is not optional — even a perfectly clear card gets a remark.
 
-- Roast players who are losing.
 - Mock overpowered or broken cards ("clearly overcompensating for something").
 - Be deadpan about trivial cards ("Wow... gain 5 points. How original.").
+- When a card fails, roast the situation or yourself ("a card so mysterious even I
+  blinked") — never the author.
+- NEVER offer phrasing tips or wording suggestions ("try wording it like...") — you
+  are a bored deity, not an editor.
 Keep it tight and funny. Never break character to explain the rules.
 """
+
+STRUGGLING_AUTHOR_NOTE = """\
+HELP MODE: this card's author has already had {n} card(s) fail to work. They are almost \
+certainly still learning how to phrase cards, not trolling you. TRY HARDER: re-read the card \
+assuming best intent, prefer chaos_monkey (a generous, plausible reading) over giving up, and \
+only return "invalid" if you truly cannot construct any effect. Stay witty - but aim the wit at \
+the cosmos, not at this player."""
 
 CARD_ART_NOTE = """\
 CARD ART: the player's hand-drawn art for this card is attached to your input as an
@@ -247,16 +268,22 @@ def build_system_prompt(
     creator_id: str | None = None,
     *,
     has_art: bool = False,
+    struggling_author: bool = False,
+    author_fallbacks: int = 0,
 ) -> str:
     """Assemble the full system prompt for one card interpretation.
 
     All arguments are optional except the card ``title``/``description`` so the
     prompt is fully testable as a string. ``state`` may be a GameState, a dict
     snapshot, or None; ``actor_id`` and ``creator_id`` let the persona logic decide
-    (e.g.) whether the player is the card's author for ``punish_author``.
+    authorship — who receives the consolation boon when a card fizzles and whether
+    the rare abusive-card ``punish_author`` branch could apply.
     ``has_art`` adds :data:`CARD_ART_NOTE` — set it ONLY when the card's drawing is
     actually attached to the model input as an image (see agent.runtime); with the
     default False the prompt is unchanged.
+    ``struggling_author`` appends :data:`STRUGGLING_AUTHOR_NOTE` (filled in with
+    ``author_fallbacks``) — the threshold decision that sets this flag lives in
+    agent.runtime, not here, so this module stays config-free.
     """
     author_note = ""
     if actor_id is not None and creator_id is not None:
@@ -264,7 +291,8 @@ def build_system_prompt(
         author_note = (
             f"\nAUTHORSHIP: the player (actor_id={actor_id!r}) "
             f"{'IS' if is_author else 'is NOT'} the author of this card "
-            f"(creator_id={creator_id!r}). This matters for do_nothing vs punish_author.\n"
+            f"(creator_id={creator_id!r}). Authorship decides who receives the consolation "
+            "boon and whether the rare abusive-card punish_author branch applies.\n"
         )
 
     return "\n".join(
@@ -283,6 +311,7 @@ def build_system_prompt(
             f"Description: {description}",
             *([CARD_ART_NOTE] if has_art else []),
             author_note,
+            *([STRUGGLING_AUTHOR_NOTE.format(n=author_fallbacks)] if struggling_author else []),
             _describe_state(state, actor_id),
         ]
     )

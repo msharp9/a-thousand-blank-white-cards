@@ -40,6 +40,7 @@ from agent.contract import InterpretResult
 from agent.llm import get_chat_model
 from agent.persona import build_system_prompt
 from config import get_settings
+from engine.history import fallback_counts
 from models.effects import CustomNoteOp, EffectProgram, RegisterHookOp, SnippetStep
 
 logger = logging.getLogger(__name__)
@@ -313,7 +314,7 @@ def _parse_result(result: dict[str, Any]) -> InterpretResult:
             logger.warning("agent final message JSON did not match InterpretResult")
 
     return _fallback_result(
-        comment="I stared at that card and it stared back. Nothing happens.",
+        comment="A card so mysterious even I blinked. Nothing happens.",
         note="Uninterpretable card: no effect applied.",
     )
 
@@ -562,7 +563,8 @@ def run_agent(
         state: Live game state (GameState or dict snapshot) threaded into the prompt.
             Never mutated; never sourced from the board layer here.
         actor_id: The id of the player who played the card.
-        creator_id: The card's author id (drives do_nothing vs punish_author).
+        creator_id: The card's author id (decides who receives the consolation boon
+            and whether the rare abusive-card punish_author branch applies).
         card_id: The played card id, used to model its removal during effect dry-runs.
         card_art: The card's hand-drawn PNG data-URL (Room.card_art), passed as a
             side-channel — art never rides GameState. Attached to the model input
@@ -603,8 +605,15 @@ def run_agent(
 
     _configure_langsmith()
 
-    if card_art is not None and not get_settings().vision_enabled:
+    settings = get_settings()
+    if card_art is not None and not settings.vision_enabled:
         card_art = None
+
+    author_fallbacks = 0
+    if state is not None and creator_id:
+        author_fallbacks = fallback_counts(state).get(creator_id, 0)
+    threshold = settings.struggling_author_threshold
+    struggling_author = bool(threshold) and author_fallbacks >= threshold
 
     system_prompt = build_system_prompt(
         title=title,
@@ -613,6 +622,8 @@ def run_agent(
         actor_id=actor_id,
         creator_id=creator_id,
         has_art=card_art is not None,
+        struggling_author=struggling_author,
+        author_fallbacks=author_fallbacks,
     )
 
     # An explicit tool list is authoritative — the caller already decided the
@@ -636,7 +647,7 @@ def run_agent(
     except Exception:  # noqa: BLE001 — model/agent construction must never escape
         logger.exception("agent construction failed; returning bounded fallback")
         return _fallback_result(
-            comment="My brain isn't booting today. Consider yourself lucky.",
+            comment="My brain isn't booting today. That one's on me, not your card.",
             note="Agent unavailable: no effect applied.",
         )
 
@@ -683,7 +694,7 @@ def run_agent(
                     forced_call_timeout,
                 )
             return _fallback_result(
-                comment="Figuring out your card took so long I lost interest. Nothing happens.",
+                comment="Your card sent me on a journey I wasn't prepared for. Nothing happens.",
                 note="Interpretation timed out: no effect applied.",
             )
         except GraphRecursionError:
@@ -701,7 +712,7 @@ def run_agent(
                     forced_call_timeout,
                 )
             return _fallback_result(
-                comment="I went in circles trying to make sense of that. I give up.",
+                comment="I went in circles trying to honor that card. It defeated me fairly.",
                 note="Interpretation exceeded step budget: no effect applied.",
             )
         except Exception as exc:  # noqa: BLE001 — any agent-internal error degrades gracefully
@@ -728,7 +739,7 @@ def run_agent(
                 )
             logger.exception("agent invoke failed; returning bounded fallback")
             return _fallback_result(
-                comment="Something broke, and I'm choosing to blame that card.",
+                comment="Something broke on my end. Your card is legally innocent.",
                 note="Interpretation error: no effect applied.",
             )
     finally:

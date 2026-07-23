@@ -77,7 +77,7 @@ def test_failing_snippet_falls_back_without_leaking_error() -> None:
     with patch("agent.runtime.run_agent", return_value=agent_result):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c2")))
 
-    assert room.state.get_player("p1").score == 0
+    assert room.state.get_player("p1").score == 1
     assert room.state.get_player("p2").score == 0
     # The raw failure never reaches the shared player log...
     assert not any("[snippet error]" in line for line in room.state.log)
@@ -106,7 +106,7 @@ def test_snippet_execution_disabled_preserves_current_behavior() -> None:
                 asyncio.run(room.handle_action("p1", PlayMsg(card_id="c3")))
 
     spy.assert_not_called()
-    assert room.state.get_player("p1").score == 0
+    assert room.state.get_player("p1").score == 1
     assert any("no mechanical effect" in line for line in room.state.log)
     assert "c3" in room.state.discard
 
@@ -126,7 +126,7 @@ def test_choice_target_snippet_diff_falls_back_instead_of_crashing() -> None:
     with patch("agent.runtime.run_agent", return_value=agent_result):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c4")))
 
-    assert room.state.get_player("p1").score == score_before
+    assert room.state.get_player("p1").score == score_before + 1
     assert not any("[snippet error]" in line for line in room.state.log)
     assert room.state.cards["c4"]["mechanical_status"] == "fallback"
 
@@ -145,7 +145,7 @@ def test_non_ok_verdict_never_executes_snippet() -> None:
             asyncio.run(room.handle_action("p1", PlayMsg(card_id="c5")))
 
     exec_mock.assert_not_called()
-    assert room.state.get_player("p1").score == 0
+    assert room.state.get_player("p1").score == 1
 
 
 def test_failing_suffix_rolls_back_prefix_but_consumes_card() -> None:

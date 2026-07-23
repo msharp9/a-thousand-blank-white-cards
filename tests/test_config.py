@@ -104,6 +104,25 @@ def test_triage_agent_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
 
 
+def test_consolation_defaults() -> None:
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.consolation_point_enabled is True
+    assert s.consolation_points == 1
+    assert s.struggling_author_threshold == 2
+
+
+def test_consolation_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("CONSOLATION_POINT_ENABLED", "false")
+    monkeypatch.setenv("CONSOLATION_POINTS", "3")
+    monkeypatch.setenv("STRUGGLING_AUTHOR_THRESHOLD", "0")
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.consolation_point_enabled is False
+    assert s.consolation_points == 3
+    assert s.struggling_author_threshold == 0
+    get_settings.cache_clear()
+
+
 def test_dev_mode_defaults_false() -> None:
     get_settings.cache_clear()
     assert get_settings().dev_mode is False
