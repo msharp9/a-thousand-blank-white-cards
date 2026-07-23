@@ -128,3 +128,102 @@ class InterpretResult(BaseModel):
             else:
                 steps.append(SnippetStep(code=self.snippet.code, explanation=self.snippet.explanation))
         return ResolutionPlan(steps=steps)
+
+
+class CardIntent(BaseModel):
+    """Structured reading of what a card's text wants to do.
+
+    Produced by the interpret stage and consumed by the planning stage. Captures
+    the player's apparent intent in plain terms before any mechanical strategy
+    is chosen — ``comment`` (the arbiter's in-character remark) is OWNED here,
+    not by later stages.
+    """
+
+    summary: str = Field(description="1-2 sentences: what the player wants the card to do.")
+    effects: list[str] = Field(
+        default_factory=list,
+        description="Discrete intended effects, in order.",
+    )
+    targets: str = Field(default="", description="Who/what is affected, in plain terms.")
+    persistence: Literal["immediate", "persistent", "reaction", "validation"] = Field(
+        default="immediate",
+        description="When the effect takes hold: a one-shot now, a standing hook, a counterspell-style reaction, or a play-validation rule.",
+    )
+    resolved_references: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Named-game or pop-culture references resolved to plain mechanics, e.g. "
+            "'trample (MTG): excess damage carries over -> here: excess point loss "
+            "spills to next player'."
+        ),
+    )
+    ambiguity: Literal["clear", "ambiguous", "undecipherable"] = Field(
+        default="clear",
+        description="How well-defined the card's text is.",
+    )
+    complexity: Literal["trivial", "standard", "complex"] = Field(
+        default="standard",
+        description="Expected mechanical complexity of implementing this intent.",
+    )
+    comment: str = Field(
+        default="",
+        description="A short, in-character funny comment about the card / game state.",
+    )
+    persona_action: Literal["none", "do_nothing", "punish_author", "chaos_monkey", "random_solution"] = Field(
+        default="none",
+        description="The in-character branch chosen when a card can't be cleanly interpreted.",
+    )
+
+
+class PlanStep(BaseModel):
+    """One step of a :class:`MechanicsPlan`.
+
+    A prompt-shaped hint to the coder, not an executable instruction: ``kind``
+    only says which of the loosely-typed fields to read.
+    """
+
+    kind: Literal["ops", "snippet", "interaction"] = Field(
+        description="Which of the fields below carries this step's content."
+    )
+    description: str = Field(description="Plain-English description of what this step does.")
+    engine_ops: list[str] = Field(
+        default_factory=list,
+        description="Candidate op names/shapes for kind='ops', in prose (not a real op program).",
+    )
+    snippet_outline: str = Field(
+        default="",
+        description="Prose outline of the Python hook body to generate, for kind='snippet'.",
+    )
+    interaction: str = Field(
+        default="",
+        description="Prose description of the interaction/choice barrier needed, for kind='interaction'.",
+    )
+
+
+class MechanicsPlan(BaseModel):
+    """A prompt artifact bridging intent and code.
+
+    Produced by the planning stage from a :class:`CardIntent` and consumed only
+    by the coder stage. It is deliberately prose-heavy and loosely typed — a
+    scratchpad the coder reads, not a second effects DSL. Fields are permissive
+    with defaults so partial/malformed LLM output still parses.
+    """
+
+    strategy: str = Field(description="High-level approach in plain English.")
+    steps: list[PlanStep] = Field(default_factory=list, description="Ordered plan steps.")
+    trigger: str | None = Field(
+        default=None,
+        description="Mirrors SnippetEffect.trigger: None for immediate, else a GameEvent value.",
+    )
+    scope: Literal["player", "center"] = Field(
+        default="center",
+        description="Persistent hooks only: 'center' = table-wide house rule; 'player' = bound to the actor.",
+    )
+    feasible: bool = Field(
+        default=True,
+        description="Whether the planner judged this card implementable at all.",
+    )
+    infeasible_reason: str = Field(
+        default="",
+        description="Plain-English reason when feasible=False, else empty.",
+    )
