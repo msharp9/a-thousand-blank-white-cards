@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from evals import analysis
+from evals import analysis, scorers
 
 
 def _row(card_id, scores, verdict="ok", output=None, score_meta=None, **extra):
@@ -46,6 +46,15 @@ def test_quality_score_is_mean_of_quality_metrics():
     scores["dsl_validity"] = 0.0  # not a quality metric — must not drag the mean
     assert analysis.quality_score(scores) == 0.5
     assert analysis.quality_score({}) is None
+
+
+def test_metric_lists_mirror_registered_scorers():
+    """Every registered scorer feeds the dashboards: ALL_METRICS must equal the
+    scorer names, and the quality composite excludes only dsl_validity."""
+    scorer_names = {s.name for s in scorers.ALL_SCORERS}
+    assert set(analysis.ALL_METRICS) == scorer_names
+    assert set(analysis.QUALITY_METRICS) == scorer_names - {"dsl_validity"}
+    assert len(analysis.ALL_METRICS) == len(scorer_names)
 
 
 def test_failure_buckets_clean_row_is_empty():
