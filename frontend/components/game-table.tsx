@@ -82,6 +82,10 @@ function OpponentPanel({
     .map((id) => cards[id])
     .filter((c): c is CardSnapshot => Boolean(c));
 
+  // The server redacts other players' hands to a bare count; the face-down
+  // fan renders from that count (hand.length covers older servers).
+  const handCount = player.hand_count ?? player.hand.length;
+
   // Drop target for a targeted play: dropping a dragged hand card on this
   // seat plays it with chosen_player_id = this player (see PlayDndContext).
   const { setNodeRef, isOver } = useDroppable({
@@ -121,18 +125,15 @@ function OpponentPanel({
           {player.score}
         </span>
       </div>
-      {player.hand.length > 0 && (
-        <div
-          className="flex items-end"
-          title={`${player.hand.length} cards in hand`}
-        >
-          {player.hand.map((id, i) => (
+      {handCount > 0 && (
+        <div className="flex items-end" title={`${handCount} cards in hand`}>
+          {Array.from({ length: handCount }, (_, i) => (
             <SketchCard
-              key={id}
+              key={i}
               w={40}
               faceDown
               showTape={false}
-              rot={(i - (player.hand.length - 1) / 2) * 5}
+              rot={(i - (handCount - 1) / 2) * 5}
               className={cn(i > 0 && "-ml-[22px]")}
             />
           ))}

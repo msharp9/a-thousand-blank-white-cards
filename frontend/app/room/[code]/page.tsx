@@ -200,6 +200,13 @@ export default function RoomPage() {
     ? gameState.cards[gameState.discard[gameState.discard.length - 1] ?? ""]
     : undefined;
 
+  // Draw-pile size for the deck dock: the server redacts deck contents during
+  // play, so the count field is the source of truth (deck.length covers older
+  // servers that predate redaction).
+  const deckCount = gameState
+    ? (gameState.deck_count ?? gameState.deck.length)
+    : 0;
+
   // Open reaction window (a play suspended while others may counter it). The
   // snapshot's pending_play is the source of truth; each client derives its
   // own eligibility from the reaction cards in its hand.
@@ -457,7 +464,7 @@ export default function RoomPage() {
                 />
                 <div className="flex shrink-0 flex-col items-center justify-center gap-3.5 border-l-2 border-dashed border-white/30 bg-black/15 px-5 py-4">
                   <div className="text-center">
-                    {gameState.deck.length > 0 ? (
+                    {deckCount > 0 ? (
                       <div className="relative mx-auto h-32 w-[92px]">
                         <SketchCard
                           faceDown
@@ -486,7 +493,7 @@ export default function RoomPage() {
                       </div>
                     )}
                     <p className="mt-1.5 font-hand text-[15px] text-white">
-                      Deck · {gameState.deck.length}
+                      Deck · {deckCount}
                     </p>
                   </div>
                   <DiscardPile

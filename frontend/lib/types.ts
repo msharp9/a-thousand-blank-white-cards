@@ -150,7 +150,14 @@ export type PlayerSnapshot = {
   id: string;
   name: string;
   score: number;
+  // Card ids in this player's hand. The server redacts snapshots per viewer:
+  // only YOUR OWN entry carries real ids — every other player's hand arrives
+  // empty, with hand_count as the only public fact. Render opponents' fans
+  // from hand_count, never hand.length.
   hand: string[];
+  // Number of cards in this player's hand (present for every player, including
+  // redacted ones). Optional only for back-compat with older servers.
+  hand_count?: number;
   // Cards this player has played in front of them (visible to everyone on the
   // table). Resolve ids against GameStateSnapshot.cards to render them.
   in_play: string[];
@@ -248,7 +255,14 @@ export type GameStateSnapshot = {
   turn_order: string[];
   rules: RulesSnapshot;
   draw_count: number;
+  // Draw-pile card ids. Redacted server-side once the game starts (contents
+  // and order back scry/stacked-deck effects), so this is [] during play —
+  // read deck_count instead. During lobby/setup it still carries the public
+  // pre-made pool the authoring screen renders.
   deck: string[];
+  // Number of cards left in the draw pile (present in every phase). Optional
+  // only for back-compat with older servers.
+  deck_count?: number;
   discard: string[];
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
