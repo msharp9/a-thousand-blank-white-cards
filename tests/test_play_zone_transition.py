@@ -177,6 +177,19 @@ def test_live_interpreted_legacy_result_still_discards() -> None:
     assert "venue" not in canonical
 
 
+def test_failed_interpretation_never_persists_on_the_board() -> None:
+    # A verdict-invalid result has no ongoing rule to be reminded of: even when
+    # the intent chose "center", the card demotes to discard.
+    card = {"id": "c9", "title": "Broken Rule", "description": "??", "creator_id": "p1"}
+    room = _room_with_card(card)
+    result = InterpretResult(verdict="invalid", placement="center", venue="all")
+    _play_with_result(room, "c9", result)
+
+    assert "c9" in room.state.discard
+    assert "c9" not in room.state.center_cards()
+    assert room.state.cards["c9"]["canonical"]["placement"] == "discard"
+
+
 def test_rejected_play_keeps_card_in_hand() -> None:
     # A blank with no authored title/description is rejected early: the card must
     # stay in the hand (turn not consumed).

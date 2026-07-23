@@ -1338,6 +1338,10 @@ class Room:
             canonical["trigger"] = str(GameEvent.ON_REACTION)
         placement = getattr(result, "placement", None)
         if placement is not None:
+            # A failed interpretation has no ongoing rule to be reminded of, so
+            # only a verdict-ok card may persist on the board; failures discard.
+            if result.verdict != "ok" and placement in ("center", "player"):
+                placement = "discard"
             canonical["placement"] = placement
         venue = getattr(result, "venue", None)
         if venue is not None:
