@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     triage_agent_timeout_seconds: float = 30.0
     triage_agent_dedupe: bool = True
 
+    # --- Struggling-author consolation ---
+    # Award the card's author a consolation boon when their card can't work.
+    consolation_point_enabled: bool = True
+    consolation_points: int = Field(default=1, ge=0)
+    # After this many failed authored cards, escalate boons and tell the agent
+    # the author is struggling; 0 disables escalation.
+    struggling_author_threshold: int = Field(default=2, ge=0)
+
     # --- Sandbox ---
     snippet_execution_enabled: bool = True
 
