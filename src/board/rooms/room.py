@@ -94,6 +94,7 @@ from board.rooms.deck import (
     finalize_deck,
 )
 from board.rooms.epilogue import EpilogueManager
+from board.rooms.redaction import redact_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -2880,6 +2881,17 @@ class Room:
         )
         return snap
 
+    def snapshot_for(self, viewer_id: str | None) -> dict:
+        """:meth:`snapshot` redacted for one viewer (see board.rooms.redaction).
+
+        The viewer keeps their own hand; other hands become counts, and the
+        draw pile becomes a count once the game has started. ``None`` — or any
+        id that is not a seated player, i.e. a spectator — gets the
+        fully-hidden view. Every snapshot that leaves the server for a client
+        must go through here.
+        """
+        return redact_snapshot(self.snapshot(), viewer_id)
+
     async def _log_and_broadcast(self, log_entry: str) -> None:
         """Append ``log_entry`` to the persistent game log AND broadcast it live.
 
@@ -2912,4 +2924,5 @@ class Room:
         await self._log_and_broadcast(f"{AGENT_COMMENT_PREFIX}{comment}")
 
     async def _broadcast_state(self) -> None:
-        await self.connections.broadcast_state(self.snapshot())
+        snap = self.snapshot()
+        await self.connections.broadcast_state(lambda viewer_id: redact_snapshot(snap, viewer_id))

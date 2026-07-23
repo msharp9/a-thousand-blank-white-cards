@@ -263,16 +263,18 @@ def create_app() -> FastAPI:
 
     @application.get("/rooms/{code}/state", tags=["rooms"])
     async def get_room_state(code: str) -> dict:
-        """Debug/read-only snapshot of a room's full game state.
+        """Debug/read-only snapshot of a room's game state, spectator view.
 
         Returns the JSON-serialisable GameState snapshot (room_code, players,
-        phase, deck, cards, …). 404 if the room does not exist. Intended for
-        debugging and observability — it never mutates state.
+        phase, deck_count, cards, …). The endpoint is unauthenticated so it
+        serves the fully-redacted view — hand contents and deck order never
+        leave the server here. 404 if the room does not exist; never mutates
+        state.
         """
         room = room_manager.get(code)
         if room is None:
             raise HTTPException(status_code=404, detail=f"Room '{code}' not found")
-        return room.snapshot()
+        return room.snapshot_for(None)
 
     @application.get("/rooms/{code}/cards/{card_id}/art", tags=["rooms"])
     async def get_card_art(code: str, card_id: str) -> Response:
@@ -306,7 +308,8 @@ def create_app() -> FastAPI:
 
         Enters setup (if needed) and auto-authors each non-spectator's required
         cards so the play phase can be exercised instantly. Returns the resulting
-        state snapshot. Only active when ``dev_mode`` is set.
+        UNREDACTED state snapshot (dev tooling wants hands/deck; the endpoint
+        does not exist in production). Only active when ``dev_mode`` is set.
         """
         # 404 (not 403) when dev mode is off so the endpoint's very existence
         # stays hidden in production.

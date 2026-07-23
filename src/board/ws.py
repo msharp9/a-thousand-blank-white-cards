@@ -90,8 +90,8 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
     room.connections.connect(player_id, websocket)
     logger.info("player %s connected to room %s", player_id, code)
 
-    # Replay full state (covers reconnect).
-    await room.connections.broadcast_state(room.snapshot())
+    # Replay state (covers reconnect); each connection gets its own redacted view.
+    await room.connections.broadcast_state(room.snapshot_for)
     await room.replay_pending_interaction(player_id)
 
     try:

@@ -188,7 +188,7 @@ class TestConnectionManager:
         cm = ConnectionManager()
         ws = AsyncMock()
         cm.connect("p1", ws)
-        asyncio.run(cm.broadcast_state({"players": [], "phase": "lobby"}))
+        asyncio.run(cm.broadcast_state(lambda viewer_id: {"players": [], "phase": "lobby"}))
         expected = json.dumps({"type": "state", "state": {"players": [], "phase": "lobby"}})
         ws.send_text.assert_called_once_with(expected)
 

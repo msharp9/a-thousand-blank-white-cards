@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 
 from fastapi import WebSocket
 
@@ -69,6 +70,20 @@ class ConnectionManager:
         for pid, ws in dead:
             self.disconnect(pid, ws)
 
-    async def broadcast_state(self, state_snapshot: dict) -> None:
-        """Wrap a snapshot in the 'state' envelope and broadcast."""
-        await self.broadcast({"type": "state", "state": state_snapshot})
+    async def broadcast_state(self, build_state: Callable[[str], dict]) -> None:
+        """Send each connection its own 'state' envelope.
+
+        ``build_state`` maps a connected player_id to that viewer's (already
+        redacted) snapshot dict — state is per-viewer by construction, never a
+        shared payload, so hidden information (hands, deck order) cannot leak
+        to the wrong client.
+        """
+        dead: list[tuple[str, WebSocket]] = []
+        for pid, ws in list(self._connections.items()):
+            try:
+                await ws.send_text(json.dumps({"type": "state", "state": build_state(pid)}))
+            except Exception as exc:
+                logger.warning("state send to %s failed: %s", pid, exc)
+                dead.append((pid, ws))
+        for pid, ws in dead:
+            self.disconnect(pid, ws)
