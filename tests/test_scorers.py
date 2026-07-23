@@ -215,6 +215,32 @@ class TestSandboxBehavior:
         score = sandbox_behavior.evaluate(self._ctx({}, expected))
         assert score.score == 0.0
 
+    def test_skips_interaction_plans(self) -> None:
+        # A free play-time choice can't be aligned with the fixed canonical, so
+        # abstain (N/A) rather than score a false 0.
+        expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
+        output = {
+            "resolution_plan": {
+                "steps": [
+                    {
+                        "kind": "interaction",
+                        "result_key": "who",
+                        "request": {
+                            "kind": "choice",
+                            "prompt": "pick",
+                            "audience": "active",
+                            "options": [{"id": "a", "label": "A"}],
+                        },
+                        "input_refs": {},
+                    },
+                    {"kind": "snippet", "code": "def apply(state, ctx):\n    state.add_points('self', 5)"},
+                ]
+            }
+        }
+        score = sandbox_behavior.evaluate(self._ctx(output, expected))
+        assert score.score == 1.0
+        assert "interaction" in score.metadata["skipped"]
+
     def test_matching_ops_plan_scores_one(self) -> None:
         expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
         output = _ops_plan({"op": "add_points", "target": "self", "amount": 5})

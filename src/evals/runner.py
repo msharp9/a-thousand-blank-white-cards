@@ -339,6 +339,9 @@ def _aggregate(run: EvalRunResult) -> dict[str, Any]:
         vals = [r.scores[name] for r in rows if name in r.scores]
         summary[name] = fmean(vals) if vals else None
 
+    summary["sandbox_interaction_skipped"] = sum(
+        1 for r in rows if "interaction" in (r.score_meta.get("sandbox_behavior", {}) or {}).get("skipped", "")
+    )
     _add_ceilings(run, summary)
 
     # Consistency: only meaningful when a card is sampled more than once.

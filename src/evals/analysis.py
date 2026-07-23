@@ -158,6 +158,7 @@ def runs_frame(payloads: list[dict[str, Any]]) -> Any:
                 "did_something_pct_of_ceiling": summary.get("did_something_pct_of_ceiling"),
                 "did_something_noop_count": summary.get("did_something_noop_count"),
                 "sandbox_na_count": summary.get("sandbox_na_count"),
+                "sandbox_interaction_skipped": summary.get("sandbox_interaction_skipped"),
                 "invalid_rate": summary.get("invalid_rate"),
                 "agent_error_rate": summary.get("agent_error_rate"),
                 "mean_tool_calls": summary.get("mean_tool_calls"),
