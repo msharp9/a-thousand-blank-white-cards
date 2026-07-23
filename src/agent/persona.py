@@ -87,6 +87,15 @@ effect for the game engine, given the live game state.
     unregister_hook removes a card's hooks. on_score_change fires see the change in
     ctx["amount"] (None when players moved by different amounts), the affected players
     in ctx["target_player_ids"], and per-player changes in ctx["deltas"].
+    Emit the register_hook DIRECTLY as the on-play effect — never wrap it inside
+    another hook whose only job is to register the real hook.
+- Use the EXACT numbers the card states: "draw 3" is amount=3, "gain 10" is amount=10,
+  "lose 4" is subtract_points amount=4. Never default a number the card specifies.
+- Relative targets follow play direction: the NEXT player (the one after you) is
+  right_neighbor; the PREVIOUS player is left_neighbor. "Skip the next player" targets
+  right_neighbor — not yourself, not left_neighbor.
+- set_condition writes a per-player status ("cursed", "polite"); set_rule writes a
+  global/game rule. A card about one player's state uses set_condition, not set_rule.
 - REACTION cards ("counterspell", "cancel that", "steal that spell", "play only when
   another player plays a card") are NOT hooks: return a snippet with trigger
   "on_reaction". The card then waits in hand and its code runs inside the reaction
