@@ -538,6 +538,126 @@ def test_intent_image_rejection_retries_text_only(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Per-stage model selection (Settings overrides)
+# ---------------------------------------------------------------------------
+
+
+def test_stage_model_settings_build_per_stage_models(monkeypatch):
+    from config import get_settings
+
+    monkeypatch.setenv("INTENT_AGENT_MODEL", "intent-mini")
+    monkeypatch.setenv("PLANNER_AGENT_MODEL", "planner-mid")
+    monkeypatch.setenv("CODER_AGENT_MODEL", "coder-max")
+    get_settings.cache_clear()
+
+    scripts = {"intent-mini": INTENT_JSON, "planner-mid": PLAN_JSON, "coder-max": CODER_JSON}
+    built: list = []
+
+    def fake_get_chat_model(model_name=None, **kwargs):  # noqa: ANN001, ANN003
+        built.append(model_name)
+        return ToolAwareFake(messages=_messages(scripts[model_name]))
+
+    monkeypatch.setattr(pipeline, "get_chat_model", fake_get_chat_model)
+
+    result = run_pipeline("Gain 5 points", "You gain 5 points.")
+
+    assert built == ["intent-mini", "planner-mid", "coder-max"]
+    assert result.verdict == "ok"
+    assert result.comment == "Wow, +5 points. Groundbreaking."
+
+
+def test_explicit_model_wins_over_stage_model_settings(monkeypatch):
+    from config import get_settings
+
+    monkeypatch.setenv("INTENT_AGENT_MODEL", "intent-mini")
+    get_settings.cache_clear()
+
+    def boom(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("get_chat_model must not be called when model= is explicit")
+
+    monkeypatch.setattr(pipeline, "get_chat_model", boom)
+    fake = ToolAwareFake(messages=_messages(INTENT_JSON, PLAN_JSON, CODER_JSON))
+
+    result = run_pipeline("Gain 5 points", "You gain 5 points.", model=fake)
+
+    assert result.verdict == "ok"
+
+
+# ---------------------------------------------------------------------------
+# run_agent dispatch (interpret_pipeline_enabled flag)
+# ---------------------------------------------------------------------------
+
+
+def _sentinel_interpret(tag: str, seen: dict):
+    def _interpret(title, description, state=None, actor_id=None, **kwargs):  # noqa: ANN001, ANN003
+        seen["args"] = (title, description, state, actor_id)
+        seen["kwargs"] = kwargs
+        return InterpretResult(verdict="ok", comment=tag)
+
+    return _interpret
+
+
+def test_flag_off_run_agent_runs_the_single_agent(monkeypatch):
+    from agent import runtime
+    from config import get_settings
+
+    monkeypatch.delenv("INTERPRET_PIPELINE_ENABLED", raising=False)
+    get_settings.cache_clear()
+    seen: dict = {}
+    monkeypatch.setattr(runtime, "_run_single_agent", _sentinel_interpret("single", seen))
+
+    result = runtime.run_agent("T", "D", "STATE", "p1", creator_id="p2", card_id="c1", max_tool_calls=3)
+
+    assert result.comment == "single"
+    assert seen["args"] == ("T", "D", "STATE", "p1")
+    assert seen["kwargs"]["creator_id"] == "p2"
+    assert seen["kwargs"]["card_id"] == "c1"
+    assert seen["kwargs"]["max_tool_calls"] == 3
+
+
+def test_flag_on_run_agent_dispatches_to_pipeline_unchanged(monkeypatch):
+    from agent import runtime
+    from config import get_settings
+
+    monkeypatch.setenv("INTERPRET_PIPELINE_ENABLED", "true")
+    get_settings.cache_clear()
+    seen: dict = {}
+    monkeypatch.setattr(pipeline, "run_pipeline", _sentinel_interpret("pipeline", seen))
+
+    result = runtime.run_agent(
+        "T",
+        "D",
+        "STATE",
+        "p1",
+        creator_id="p2",
+        card_id="c1",
+        card_art="data:image/png;base64,AAAA",
+        tools=[],
+        model="M",
+        timeout=9.0,
+        max_tool_calls=3,
+        forced_call_timeout=1.0,
+        allow_persistent_tools=False,
+        config={"callbacks": []},
+    )
+
+    assert result.comment == "pipeline"
+    assert seen["args"] == ("T", "D", "STATE", "p1")
+    assert seen["kwargs"] == {
+        "creator_id": "p2",
+        "card_id": "c1",
+        "card_art": "data:image/png;base64,AAAA",
+        "tools": [],
+        "model": "M",
+        "timeout": 9.0,
+        "max_tool_calls": 3,
+        "forced_call_timeout": 1.0,
+        "allow_persistent_tools": False,
+        "config": {"callbacks": []},
+    }
+
+
+# ---------------------------------------------------------------------------
 # Graph topology
 # ---------------------------------------------------------------------------
 

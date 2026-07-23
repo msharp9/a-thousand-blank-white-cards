@@ -100,6 +100,17 @@ class Settings(BaseSettings):
     triage_agent_timeout_seconds: float = 30.0
     triage_agent_dedupe: bool = True
 
+    # --- Interpret pipeline ---
+    # Three-stage interpret pipeline (intent -> planner -> coder); False = the
+    # legacy single agent. Flip after an eval A/B shows parity or better.
+    interpret_pipeline_enabled: bool = False
+    # Per-stage chat models for the pipeline. Blank inherits the shared
+    # llm_chat_model (same convention as triage_agent_model) — override only to
+    # run a stage on a different/cheaper model.
+    intent_agent_model: str = ""
+    planner_agent_model: str = ""
+    coder_agent_model: str = ""
+
     # --- Struggling-author consolation ---
     # Award the card's author a consolation boon when their card can't work.
     consolation_point_enabled: bool = True

@@ -47,6 +47,11 @@ class EvalConfig:
     stochastic consistency. ``concurrency`` > 1 runs that many cards in parallel
     worker threads — each card is fully isolated (own state, callback, agent),
     matching how production rooms already invoke run_agent concurrently.
+    ``pipeline`` True calls :func:`agent.pipeline.run_pipeline` directly (the
+    three-stage interpret pipeline, regardless of the
+    ``interpret_pipeline_enabled`` setting); False (the default) keeps the
+    legacy ``run_agent`` call byte-identical — so one notebook can A/B the two
+    paths under the same knobs.
     """
 
     benchmark: str = "eval"
@@ -56,6 +61,7 @@ class EvalConfig:
     max_tool_calls: int | None = None
     timeout: float | None = None
     vision: bool = False
+    pipeline: bool = False
     n_samples: int = 1
     sample_size: int | None = None
     concurrency: int = 1
@@ -73,6 +79,7 @@ class EvalConfig:
             "max_tool_calls": self.max_tool_calls,
             "timeout": self.timeout,
             "vision": self.vision,
+            "pipeline": self.pipeline,
             "n_samples": self.n_samples,
             "sample_size": self.sample_size,
             "concurrency": self.concurrency,
@@ -175,9 +182,13 @@ def available_tool_names(allow_persistent_tools: bool = True) -> list[str]:
 # --------------------------------------------------------------------------- #
 def _run_one(config: EvalConfig, card: dict[str, Any], sample_index: int, scorers: list[Any]) -> CardResult:
     from agent.llm import get_chat_model
-    from agent.runtime import run_agent
     from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, EVAL_CREATOR_ID, build_eval_state
     from evals.harness import normalise_agent_output
+
+    if config.pipeline:
+        from agent.pipeline import run_pipeline as interpret
+    else:
+        from agent.runtime import run_agent as interpret
 
     title = str(card.get("title", ""))
     description = str(card.get("description", ""))
@@ -190,7 +201,7 @@ def _run_one(config: EvalConfig, card: dict[str, Any], sample_index: int, scorer
     trace_ctx = nullcontext() if config.tracing else tracing_context(enabled=False)
     with trace_ctx:
         t0 = perf_counter()
-        result = run_agent(
+        result = interpret(
             title,
             description,
             state,
