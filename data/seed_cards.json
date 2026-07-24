@@ -1588,6 +1588,121 @@
     }
   },
   {
+    "id": "seed-gold-059",
+    "title": "Show and Tell",
+    "description": "Hold your cards up for the class. Reveal your entire hand to every player.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "self",
+            "to": "all",
+            "persistent": false
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all')\n"
+    }
+  },
+  {
+    "id": "seed-gold-060",
+    "title": "Cards on the Table",
+    "description": "Choose a player. They play with their hand face up for the rest of the game.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "chooser",
+            "to": "all",
+            "persistent": true
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.reveal_hand('id:' + pid, to='all', persistent=True)\n"
+    }
+  },
+  {
+    "id": "seed-gold-061",
+    "title": "Sneak a Peek",
+    "description": "Choose a player and look at their hand. Only you get to see it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "chooser",
+            "to": "self",
+            "persistent": false
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.reveal_hand('id:' + pid, to='self')\n"
+    }
+  },
+  {
+    "id": "seed-gold-062",
+    "title": "Poker Face",
+    "description": "Your hand is your business again. Conceal your hand, ending any effect that was revealing it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "self",
+            "to": "all",
+            "mode": "conceal"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all', mode='conceal')\n"
+    }
+  },
+  {
+    "id": "seed-gold-063",
+    "title": "Group Therapy",
+    "description": "Everyone shows their hand to the table at once. Take a good look.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "all",
+            "to": "all",
+            "persistent": false
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('all', to='all')\n"
+    }
+  },
+  {
     "id": "seed-filler-000",
     "title": "Compliment Someone",
     "description": "Say something genuinely nice about another player right now. They gain 1 point if they believe you.",
