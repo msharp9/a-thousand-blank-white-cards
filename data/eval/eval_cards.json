@@ -1682,5 +1682,52 @@
         }
       ]
     }
+  },
+  {
+    "id": "eval-090",
+    "title": "Do-Over",
+    "description": "The most recently played card was a mistake — hand it straight back to whoever played it.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "last_played",
+            "to_target": "card_owner"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card('last_played', 'card_owner')"
+    }
+  },
+  {
+    "id": "eval-091",
+    "title": "Butterfingers",
+    "description": "Whoops — the last card played slips out of play and back into the hand of the player who played it.",
+    "alt_text": "a fumbled card slipping out of a clumsy player's grip",
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "last_played",
+            "to_zone": "hand",
+            "to_player": "card_owner"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(card_target='last_played', to_zone='hand', to_player='card_owner')"
+    }
   }
 ]

@@ -430,6 +430,57 @@ class TestResolveCardTargets:
         with pytest.raises(ValueError):
             _resolve_card_targets("not_a_real_card_target", ctx, self._state_with_zones())
 
+    def _state_with_plays(self, played_ids: list[str], registry: list[str] | None = None):
+        from engine.history import append_history_event
+
+        card_ids = registry if registry is not None else played_ids
+        state = GameState(
+            room_code="TEST",
+            players=[Player(id="p1", name="Alice"), Player(id="p2", name="Bob")],
+            cards={cid: {"id": cid, "title": cid} for cid in card_ids},
+            discard=list(card_ids),
+        )
+        for cid in played_ids:
+            state = append_history_event(state, "play", actor_id="p1", card_id=cid)
+        return state
+
+    def test_last_played_resolves_most_recent_play(self):
+        state = self._state_with_plays(["older", "newer"])
+        ctx = make_card_ctx("p1", card_id="acting")
+        assert _resolve_card_targets("last_played", ctx, state) == ["newer"]
+
+    def test_last_played_resolves_an_earlier_completed_play_of_the_same_card(self):
+        """A play is recorded only after its effects finish, so the acting
+        play is never in history during its own resolution. An EARLIER,
+        genuinely completed play of the same card (returned to hand, then
+        replayed) is a real prior play and must still resolve — it is not
+        filtered out just because its id matches ctx.card_id."""
+        state = self._state_with_plays(["acting"])
+        ctx = make_card_ctx("p1", card_id="acting")
+        assert _resolve_card_targets("last_played", ctx, state) == ["acting"]
+
+    def test_last_played_uses_the_most_recent_completed_play(self):
+        """With several plays recorded, the newest surviving one wins, even
+        when its id happens to equal the acting card's id."""
+        state = self._state_with_plays(["older", "acting"])
+        ctx = make_card_ctx("p1", card_id="acting")
+        assert _resolve_card_targets("last_played", ctx, state) == ["acting"]
+
+    def test_last_played_empty_history_resolves_empty(self):
+        state = self._state_with_plays([])
+        ctx = make_card_ctx("p1", card_id="acting")
+        assert _resolve_card_targets("last_played", ctx, state) == []
+
+    def test_last_played_skips_cards_no_longer_in_registry(self):
+        state = self._state_with_plays(["older", "gone"], registry=["older"])
+        ctx = make_card_ctx("p1", card_id="acting")
+        assert _resolve_card_targets("last_played", ctx, state) == ["older"]
+
+    def test_last_played_all_plays_gone_resolves_empty(self):
+        state = self._state_with_plays(["gone"], registry=[])
+        ctx = make_card_ctx("p1", card_id="acting")
+        assert _resolve_card_targets("last_played", ctx, state) == []
+
 
 class TestDestroyCard:
     def test_removes_from_hand(self):
@@ -572,6 +623,103 @@ class TestTransferCard:
                 TransferCardOp(card_target="this", to_target="all"),
                 make_card_ctx("p1", card_id="auction"),
             )
+
+
+class TestTransferCardOwner:
+    """to_target="card_owner" routes each card to its own owner (bead bf3)."""
+
+    def _state(self, *, cards=None, history_plays=(), **overrides) -> GameState:
+        from engine.history import append_history_event
+
+        players = overrides.pop(
+            "players",
+            [Player(id="p1", name="Alice"), Player(id="p2", name="Bob"), Player(id="p3", name="Ivy")],
+        )
+        state = GameState(room_code="TEST", players=players, cards=cards or {}, **overrides)
+        for actor_id, card_id in history_plays:
+            state = append_history_event(state, "play", actor_id=actor_id, card_id=card_id)
+        return state
+
+    def test_owner_is_current_player_zone_holder(self):
+        state = self._state(
+            cards={"mod": {"id": "mod", "title": "Modifier"}},
+            players=[Player(id="p1", name="Alice"), Player(id="p2", name="Bob", in_play=["mod"])],
+        )
+        new = apply_op(state, TransferCardOp(card_target="id:mod", to_target="card_owner"), make_card_ctx("p1"))
+        assert new.get_player("p2").in_play == []
+        assert new.get_player("p2").hand == ["mod"]
+
+    def test_owner_of_discarded_card_is_who_played_it_not_its_creator(self):
+        state = self._state(
+            cards={"prev": {"id": "prev", "title": "Previous", "creator_id": "p3"}},
+            discard=["prev"],
+            history_plays=[("p2", "prev")],
+        )
+        new = apply_op(state, TransferCardOp(card_target="last_played", to_target="card_owner"), make_card_ctx("p1"))
+        assert new.discard == []
+        assert new.get_player("p2").hand == ["prev"]
+        assert new.get_player("p3").hand == []
+
+    def test_owner_falls_back_to_creator_when_never_played(self):
+        state = self._state(
+            cards={"minted": {"id": "minted", "title": "Minted", "creator_id": "p3"}},
+            discard=["minted"],
+        )
+        new = apply_op(state, TransferCardOp(card_target="id:minted", to_target="card_owner"), make_card_ctx("p1"))
+        assert new.discard == []
+        assert new.get_player("p3").hand == ["minted"]
+
+    def test_no_resolvable_owner_is_logged_noop(self):
+        """A seed card's creator_id is a source label, not a player id."""
+        state = self._state(
+            cards={"seed": {"id": "seed", "title": "Seed", "creator_id": "seed_corpus"}},
+            discard=["seed"],
+        )
+        new = apply_op(state, TransferCardOp(card_target="id:seed", to_target="card_owner"), make_card_ctx("p1"))
+        assert new.discard == ["seed"]
+        assert all(p.hand == [] for p in new.players)
+        assert any("no resolvable owner for card 'seed'" in entry for entry in new.log)
+
+    def test_no_resolvable_owner_hidden_card_is_not_named(self):
+        """An ownerless card in a hidden zone (deck) is logged with a
+        placeholder, never its raw id: the shared log is not per-viewer
+        redacted, so naming a deck card leaks it to the whole table."""
+        state = self._state(
+            cards={"hidden1": {"id": "hidden1", "title": "Secret", "attributes": {"color": "red"}}},
+            deck=["hidden1"],
+        )
+        new = apply_op(state, TransferCardOp(card_target="attr:color=red", to_target="card_owner"), make_card_ctx("p1"))
+        assert new.deck == ["hidden1"]
+        assert any("no resolvable owner for a hidden card" in entry for entry in new.log)
+        assert not any("hidden1" in entry for entry in new.log)
+
+    def test_multiple_cards_route_to_their_own_owners(self):
+        state = self._state(
+            cards={"a": {"id": "a", "title": "A"}, "b": {"id": "b", "title": "B"}},
+            players=[
+                Player(id="p1", name="Alice", in_play=["a"]),
+                Player(id="p2", name="Bob", in_play=["b"]),
+            ],
+        )
+        new = apply_op(state, TransferCardOp(card_target="all_in_play", to_target="card_owner"), make_card_ctx("p1"))
+        assert new.get_player("p1").hand == ["a"]
+        assert new.get_player("p2").hand == ["b"]
+
+    def test_time_warp_composition_returns_last_played_to_owner(self):
+        """The bead-bf3 target composition: transfer_card(last_played, card_owner)
+        with the acting card already staged in discard (mid-resolution shape)."""
+        state = self._state(
+            cards={
+                "time-warp": {"id": "time-warp", "title": "Time Warp", "creator_id": "p1"},
+                "prev": {"id": "prev", "title": "Previous", "creator_id": "p3"},
+            },
+            discard=["prev", "time-warp"],
+            history_plays=[("p2", "prev")],
+        )
+        ctx = make_card_ctx("p1", card_id="time-warp")
+        new = apply_op(state, TransferCardOp(card_target="last_played", to_target="card_owner"), ctx)
+        assert new.get_player("p2").hand == ["prev"]
+        assert new.discard == ["time-warp"]
 
 
 class TestSetWinCondition:

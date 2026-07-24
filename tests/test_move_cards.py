@@ -304,6 +304,61 @@ class TestMoveCardsRetiresBoardEffects:
         assert len(new.hooks) == 1
 
 
+class TestMoveCardsCardOwner:
+    """to_player="card_owner" routes each moved card to its own owner (bead bf3)."""
+
+    def test_model_accepts_card_owner_destination(self):
+        op = MoveCardsOp(card_target="last_played", to_zone="hand", to_player="card_owner")
+        assert op.to_player == "card_owner"
+        assert not op_requires_choice(op)
+
+    def test_routes_last_played_to_the_player_who_played_it(self):
+        from engine.history import append_history_event
+
+        state = make_state(
+            cards={"prev": {"id": "prev", "title": "Prev", "creator_id": "p1"}},
+            discard=["prev"],
+        )
+        state = append_history_event(state, "play", actor_id="p2", card_id="prev")
+        new = apply_op(
+            state,
+            MoveCardsOp(card_target="last_played", to_zone="hand", to_player="card_owner"),
+            make_ctx("p1", card_id="acting"),
+        )
+        assert "prev" in new.get_player("p2").hand
+        assert "prev" not in new.discard
+
+    def test_ownerless_card_is_logged_noop(self):
+        state = make_state(
+            cards={"orphan": {"id": "orphan", "title": "Orphan", "creator_id": "seed_corpus"}},
+            discard=["orphan"],
+        )
+        new = apply_op(
+            state,
+            MoveCardsOp(card_target="id:orphan", to_zone="hand", to_player="card_owner"),
+            make_ctx("p1"),
+        )
+        assert "orphan" in new.discard
+        assert any("no resolvable owner for card 'orphan'" in entry for entry in new.log)
+
+    def test_ownerless_hidden_card_is_not_named_in_the_log(self):
+        """A hidden-zone (deck) card with no resolvable owner must not have its
+        raw id written to the shared, un-redacted log — that would leak the
+        existence/id of an otherwise-hidden card to every viewer."""
+        state = make_state(
+            players=[Player(id="p1", name="Alice"), Player(id="p2", name="Bob")],
+            cards={"hidden1": {"id": "hidden1", "title": "Secret", "attributes": {"color": "red"}}},
+            deck=["hidden1"],
+        )
+        new = apply_op(
+            state,
+            MoveCardsOp(card_target="attr:color=red", to_zone="hand", to_player="card_owner"),
+            make_ctx("p1"),
+        )
+        assert any("no resolvable owner for a hidden card" in entry for entry in new.log)
+        assert not any("hidden1" in entry for entry in new.log)
+
+
 class TestShuffleDeckReducer:
     def test_injected_rng_is_deterministic(self):
         first = apply_op(make_state(), ShuffleDeckOp(), make_ctx(), rng=random.Random(5))
