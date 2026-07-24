@@ -21,8 +21,10 @@ class PendingResolution(BaseModel):
     # and the only value old persisted rows carry). "hand_limit" is the
     # synthetic end-of-turn discard plan (rules.hand_limit): no card changes
     # zones, no play accounting, and completion resumes the turn advance —
-    # see Room._maybe_enforce_hand_limit / _finish_hand_limit.
-    purpose: Literal["play", "hand_limit"] = "play"
+    # see Room._maybe_enforce_hand_limit / _finish_hand_limit. "auto_play" is
+    # a play_on_draw auto-play: a real card resolution, but it never counts
+    # against the owner's play allowance and never advances the turn itself.
+    purpose: Literal["play", "hand_limit", "auto_play"] = "play"
     # Whose hand the card left. Equals actor_id except for a redirected
     # reaction, where the effect actor is the reactor but the card came from
     # the original player's hand — the failure path must discard from there.

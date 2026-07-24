@@ -78,7 +78,13 @@ OP_CATALOG_GUIDE = """\
   * set_condition writes free-form per-player statuses ("poisoned", "cursed"...); targets
     accept open forms 'id:<player_id>' and 'has:<condition_key>' besides the named set.
   * set_card_attribute tags cards with metadata (e.g. give every card a color); card
-    targets accept 'id:<card_id>' and 'attr:<key>=<value>'.
+    targets accept 'id:<card_id>' and 'attr:<key>=<value>'. The attribute play_on_draw
+    is special and ENFORCED by the engine: a card carrying it is played automatically
+    the moment it lands in a player's hand (drawn, dealt, or minted there), at no
+    action cost to its holder. "Play this card immediately when it is drawn" is that
+    ATTRIBUTE, not an event — there is NO on_drawn hook event and register_hook cannot
+    express it. Emit set_card_attribute(card_target="this", key="play_on_draw",
+    value=true) alongside the card's normal effect ops.
   * destroy_card is ALSO how you DISCARD (destroyed cards go to the discard pile — same
     thing here). "Discard a card from your hand" = destroy_card with card_target
     "chosen_card" (the actor is prompted to pick, requires_choice=true). "Discard your
@@ -106,6 +112,9 @@ OP_CATALOG_GUIDE = """\
     can add Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
     the copies to its target player (default "self"); route to a SPECIFIC player with
     destination="hand", target="id:<player_id>" (e.g. hand an auctioned card to the winner).
+    Minted cards run their ops deterministically when played; mint with
+    attributes={"play_on_draw": true} for cards that play themselves the moment they
+    are drawn.
   * register_hook installs a PERSISTENT sandboxed snippet that fires on a game event
     (on_play, on_turn_start, on_turn_end, on_draw_step, on_score_change, on_game_end) —
     use it for ongoing house rules ("whenever anyone scores, Bob draws a card");

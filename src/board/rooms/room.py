@@ -12,7 +12,10 @@ Turn model (auto-draw → play → end turn): drawing is AUTOMATIC. When a turn
 begins (``_start_turn``) the server draws ``rules.draw`` card(s) for the new
 active player — there is no client ``draw`` message. The player then ``play``s
 a card OR ``pass``es / ``end_turn``s to end without playing. Either ending
-advances the turn; the next player is auto-drawn to in the same way.
+advances the turn; the next player is auto-drawn to in the same way. Cards
+carrying the ``play_on_draw`` attribute never rest in a hand: choke-point scans
+after the auto-draw and after every play's accounting tail auto-play them for
+their holder at no action cost (see ``_process_play_on_draw``).
 
 End game: there are TWO distinct end paths with distinct timing.
 
@@ -64,6 +67,7 @@ from models.effects import (
     Op,
     OpsStep,
     ResolutionPlan,
+    SetCardAttributeOp,
     SetPointsOp,
     SnippetStep,
 )
@@ -128,6 +132,11 @@ REACTION_WINDOW_SECONDS = 15.0
 HAND_LIMIT_RESULT_KEY = "hand_limit_discards"
 HAND_LIMIT_TIMEOUT_SECONDS = 60
 
+# Recursion guard for play_on_draw auto-plays: the most cards a single turn's
+# chain may auto-play (a pod card drawing pod cards drawing pod cards…). Once
+# hit, further pod cards stay in hand until a later turn's scan.
+MAX_AUTO_PLAYS_PER_TURN = 3
+
 
 class PlanExecutionError(Exception):
     pass
@@ -168,6 +177,29 @@ class PendingPlay:
     claimed_by: str | None = None  # reactor currently answering a prompt_choice
     deadline: float = 0.0  # epoch seconds (time.time())
     timer: asyncio.Task | None = None
+    # False for a play_on_draw auto-play suspended behind the window: on
+    # commit it must not consume the owner's play allowance or advance the turn.
+    count_as_play: bool = True
+
+
+@dataclass
+class PendingAutoPlay:
+    """A play_on_draw auto-play waiting on its owner's prompt_choice answer.
+
+    Transient like ``PendingPlay`` (a Room attribute, never persisted): the
+    room does NOT freeze while it waits — the owner's follow-up ``play``
+    message for this card is routed to :meth:`Room._resume_auto_play` instead
+    of the normal play gates, and the card is excluded from further auto-play
+    scans while pending. ``chosen_*`` accumulate across follow-ups the same
+    way the normal two-prompt (player then card) flow does.
+    """
+
+    owner_id: str
+    card_id: str
+    plan: ResolutionPlan
+    correlation_id: str
+    chosen_player_id: str | None = None
+    chosen_card_id: str | None = None
 
 
 class Room:
@@ -241,6 +273,16 @@ class Room:
         # The play currently suspended behind an open reaction window, or None.
         # Transient by design — see PendingPlay.
         self._pending: PendingPlay | None = None
+        # play_on_draw bookkeeping (see _process_play_on_draw). The counter and
+        # deferred set reset every turn; the prompt survives turn boundaries so
+        # a slow owner can still answer.
+        self._auto_plays_this_turn: int = 0
+        self._auto_play_deferred: set[str] = set()
+        self._pending_auto_play: PendingAutoPlay | None = None
+        # Set when a counted play's turn decision (advance/end) had to be
+        # deferred because its auto-play chain suspended on a reaction window
+        # or interaction; the chain's completion runs the decision.
+        self._advance_after_auto_play: bool = False
 
     # ── player management ──
     def add_player(self, player_id: str, name: str) -> None:
@@ -413,6 +455,13 @@ class Room:
                 return
             await self._handle_pass(player_id)
         elif mtype == "play":
+            # A prompt_choice follow-up for a suspended play_on_draw auto-play
+            # is routed by (owner, card_id) — it bypasses the active-player and
+            # play-allowance gates because the auto-play costs no action.
+            pending_auto = self._pending_auto_play
+            if pending_auto is not None and player_id == pending_auto.owner_id and msg.card_id == pending_auto.card_id:
+                await self._resume_auto_play(player_id, msg)
+                return
             if not self._is_active_player(player_id):
                 await self.connections.send(player_id, {"type": "error", "message": "Not your turn"})
                 return
@@ -659,9 +708,13 @@ class Room:
         """
         self._has_drawn = False
         self._plays_this_turn = 0
+        self._auto_plays_this_turn = 0
+        self._auto_play_deferred.clear()
+        self._advance_after_auto_play = False
         self._last_run_metrics.clear()
         await self._emit_hooks(GameEvent.ON_TURN_START, player_id)
         await self._auto_draw(player_id)
+        await self._process_play_on_draw()
         await self._broadcast_state()
 
     async def _auto_draw(self, player_id: str) -> None:
@@ -1427,7 +1480,10 @@ class Room:
             and isinstance(self.state.cards.get(card_id), dict)
             and not self.state.cards[card_id].get("canonical")
         ):
-            merged_card = {**self.state.cards[card_id], **canonical, "verdict": result.verdict}
+            existing = self.state.cards[card_id]
+            merged_card = {**existing, **canonical, "verdict": result.verdict}
+            if "attributes" in canonical:
+                merged_card["attributes"] = {**(existing.get("attributes") or {}), **canonical["attributes"]}
             self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: merged_card}})
 
         plan = result.to_plan()
@@ -1460,6 +1516,12 @@ class Room:
         the card is played into a reaction window. Cards with neither
         contribute nothing (fall back to the LLM next time).
 
+        A plan that tags THIS card with the ``play_on_draw`` attribute
+        (set_card_attribute card_target="this") is likewise canonicalized: the
+        attribute is persisted onto the card immediately (under an
+        ``attributes`` key merged by the caller), so the card auto-plays on
+        future draws even if this play never executes (countered/failed).
+
         The agent's ``placement``/``venue`` (pipeline results; None on legacy
         single-agent results) are recorded so ``_play_destination`` can zone the
         card. No ``timing`` key is written: placement "player" must not carry
@@ -1489,7 +1551,13 @@ class Room:
             canonical["ops"] = ops
         if len(snippets) == 1 and isinstance(plan.steps[-1], SnippetStep):
             canonical["sandbox"] = snippets[0].code
-        return {"canonical": canonical}
+        merged: dict = {"canonical": canonical}
+        if any(
+            isinstance(op, SetCardAttributeOp) and op.card_target == "this" and op.key == "play_on_draw" and op.value
+            for op in plan.operations()
+        ):
+            merged["attributes"] = {"play_on_draw": True}
+        return merged
 
     async def _execute_plan(
         self,
@@ -1701,13 +1769,7 @@ class Room:
         chosen_card_id = getattr(msg, "chosen_card_id", None)
         valid_player_ids = {p.id for p in self.state.players}
         valid_card_ids = set(self.state.cards_in_play()) | set(self.state.get_player(player_id).hand)
-        ops = plan.operations()
-        needs_player_choice = any(
-            getattr(op, field, None) in ("chooser", "target_player")
-            for op in ops
-            for field in ("target", "from_target", "to_target", "to")
-        )
-        needs_card_choice = any(getattr(op, "card_target", None) == "chosen_card" for op in ops)
+        needs_player_choice, needs_card_choice = self._plan_choice_needs(plan)
 
         if needs_player_choice and chosen_player_id is None:
             await self.connections.send(
@@ -1780,6 +1842,7 @@ class Room:
         negated: bool = False,
         steal_to: str | None = None,
         redirect_to: str | None = None,
+        count_as_play: bool = True,
     ) -> None:
         """Commit a resolved play: zone move + effects + logs + turn accounting.
 
@@ -1791,7 +1854,9 @@ class Room:
         A countered/stolen play still consumes the actor's play allowance. A plan
         pausing on an interaction barrier routes to _pause_resolution, which owns
         the rest of the play (PlanPaused must never fall into the generic
-        fallback).
+        fallback). ``count_as_play=False`` marks a play_on_draw auto-play: same
+        commit semantics, but it never consumes the play allowance or advances
+        the turn (see _after_play_effects).
         """
         game_ending = False
         before = {p.id: p.score for p in self.state.players}
@@ -1822,6 +1887,7 @@ class Room:
                         before_scores=before,
                         deck_count_before=deck_count_before,
                         zone_owner=player_id,
+                        purpose="play" if count_as_play else "auto_play",
                     )
                 except Exception as exc:
                     reason = self._public_mechanical_reason(
@@ -1890,6 +1956,7 @@ class Room:
             game_ending=game_ending,
             deck_count_before=deck_count_before,
             target_player_ids=history_target,
+            count_as_play=count_as_play,
         )
 
     async def _after_play_effects(
@@ -1901,16 +1968,25 @@ class Room:
         deck_count_before: int,
         target_player_ids: list[str] | None = None,
         extra_history_event: dict | None = None,
+        count_as_play: bool = True,
     ) -> None:
         """The single post-play accounting tail, shared by direct plays
         (_finish_play) and resumed interaction plays (_complete_interaction_play):
-        history, deck-exhaustion latch, play allowance, broadcast, end/advance.
-        Runs exactly once per original play regardless of outcome.
+        history, deck-exhaustion latch, play allowance, play_on_draw scan,
+        broadcast, end/advance. Runs exactly once per original play regardless
+        of outcome.
 
         ``target_player_ids`` records who (beyond the actor) this play was
         aimed at, when known — e.g. a card played to a chosen player, or
         an interaction's resolved audience. Defaults to empty (no known
         target) rather than the actor, since actor_id already covers that.
+
+        ``count_as_play=False`` (a play_on_draw auto-play) skips the play
+        allowance AND the turn decision — the turn belongs to whoever was
+        already playing it. When a counted play's auto-play chain suspends
+        (reaction window / interaction barrier), the turn decision is deferred
+        via ``_advance_after_auto_play`` and the chain's completing tail runs
+        it here instead.
         """
         self.state = append_history_event(
             self.state,
@@ -1925,8 +2001,39 @@ class Room:
         if self.state.rules.end_condition.type == "deck_empty" and deck_count_before > 0 and not self.state.deck:
             self._deck_exhausted = True
 
-        self._plays_this_turn += 1
+        if count_as_play:
+            self._plays_this_turn += 1
+        if not game_ending:
+            # Mid-effect draws (draw_cards inside the plan) may have landed
+            # play_on_draw cards in hands — they resolve before the turn moves
+            # on. Skipped when this play already ends the game.
+            await self._process_play_on_draw()
+        if self.state.phase != "playing":
+            # A chained auto-play already ended the game (its own tail ran
+            # _end_game); nothing left to account for.
+            return
+        game_ending = game_ending or self._end_now() or win_condition_met(self.state)
         await self._broadcast_state()
+        if self._pending is not None or self._pending_resolution is not None:
+            # The scan suspended the room mid-chain. Defer this counted play's
+            # turn decision to the chain's completing (count_as_play=False)
+            # tail; an uncounted tail has nothing of its own to defer.
+            if count_as_play:
+                self._advance_after_auto_play = True
+            return
+        if not count_as_play:
+            if self._advance_after_auto_play:
+                self._advance_after_auto_play = False
+                await self._turn_decision(game_ending)
+            elif game_ending:
+                await self._end_game()
+            elif self.state.active_player().eliminated:
+                await self._advance_turn()
+            return
+        await self._turn_decision(game_ending)
+
+    async def _turn_decision(self, game_ending: bool) -> None:
+        """End/advance/continue after a counted play (the classic play tail)."""
         if game_ending:
             # end_game / a live win condition ends the game NOW, deck or no deck —
             # unlike deck exhaustion, which lets the drawer finish their turn.
@@ -1941,6 +2048,233 @@ class Room:
             await self._broadcast_state()
         else:
             await self._advance_turn()
+
+    # ── play_on_draw auto-plays ──
+    def _plan_choice_needs(self, plan: ResolutionPlan) -> tuple[bool, bool]:
+        """(needs_player_choice, needs_card_choice) for a resolved plan's ops —
+        the prompt_choice preconditions shared by direct, reaction, and
+        auto-play resolution."""
+        ops = plan.operations()
+        needs_player = any(
+            getattr(op, field_name, None) in ("chooser", "target_player")
+            for op in ops
+            for field_name in ("target", "from_target", "to_target", "to")
+        )
+        needs_card = any(getattr(op, "card_target", None) == "chosen_card" for op in ops)
+        return needs_player, needs_card
+
+    def _is_play_on_draw(self, card) -> bool:
+        """True when the card carries the ``play_on_draw`` attribute — it never
+        rests in a hand; the room plays it for its holder the moment it lands
+        there (drawn, dealt, minted, or given). An ATTRIBUTE, not a hook event."""
+        if not isinstance(card, dict):
+            return False
+        for bag_key in ("properties", "attributes"):
+            bag = card.get(bag_key)
+            if isinstance(bag, dict) and bag.get("play_on_draw"):
+                return True
+        return False
+
+    def _play_on_draw_candidates(self) -> list[tuple[str, str]]:
+        """(owner_id, card_id) pairs of unprocessed play_on_draw cards in hands.
+
+        Excludes cards deferred this turn (recursion cap / veto / turned out to
+        be a reaction), the card awaiting its owner's prompt_choice answer,
+        blanks (nothing to auto-author), and eliminated players."""
+        pending_prompt = self._pending_auto_play.card_id if self._pending_auto_play is not None else None
+        candidates: list[tuple[str, str]] = []
+        for player in self.state.players:
+            if player.eliminated:
+                continue
+            for cid in player.hand:
+                if cid in self._auto_play_deferred or cid == pending_prompt:
+                    continue
+                card = self.state.cards.get(cid)
+                if not self._is_play_on_draw(card):
+                    continue
+                if self._is_blank(card) or self._is_reaction_card(card):
+                    continue
+                candidates.append((player.id, cid))
+        return candidates
+
+    async def _process_play_on_draw(self) -> None:
+        """Auto-play every unprocessed play_on_draw card, newest state first.
+
+        The Room choke-point scan (called after the turn-start auto-draw and
+        from every play's accounting tail, so mid-effect draw_cards are
+        covered). Each auto-play runs the normal resolve/execute path as its
+        OWNER at no action cost. Stops when the room suspends (reaction
+        window / interaction barrier) — the suspension's completing tail
+        re-enters here — and hard-caps at MAX_AUTO_PLAYS_PER_TURN per turn,
+        deferring the rest to a later turn with a log line.
+        """
+        while self.state.phase == "playing" and self._pending is None and self._pending_resolution is None:
+            candidates = self._play_on_draw_candidates()
+            if not candidates:
+                return
+            if self._auto_plays_this_turn >= MAX_AUTO_PLAYS_PER_TURN:
+                for owner_id, card_id in candidates:
+                    self._auto_play_deferred.add(card_id)
+                    card = self.state.cards.get(card_id, {})
+                    await self._log_and_broadcast(
+                        f"{self._name(owner_id)}'s {self._card_title(card)} wants to play itself, but the "
+                        f"auto-play limit ({MAX_AUTO_PLAYS_PER_TURN} per turn) is reached — it stays in hand"
+                    )
+                return
+            owner_id, card_id = candidates[0]
+            self._auto_plays_this_turn += 1
+            await self._auto_play_card(owner_id, card_id)
+
+    async def _auto_play_card(self, owner_id: str, card_id: str) -> None:
+        """Play one play_on_draw card on its owner's behalf, at no action cost.
+
+        Mirrors _handle_play minus its gates and accounting: validation hooks
+        may still veto (the card then waits in hand until a later turn),
+        resolution prefers the compiled plan (create_card-minted cards carry
+        ops — no LLM round-trip) and falls back to brewing, a plan needing a
+        play-time choice prompts the OWNER (see PendingAutoPlay), and reaction
+        windows still open for the play.
+        """
+        card = self.state.cards.get(card_id)
+        if card is None:
+            self._auto_play_deferred.add(card_id)
+            return
+        await self._log_and_broadcast(
+            f"{self._name(owner_id)}'s {self._card_title(card)} plays itself the moment it arrives!"
+        )
+        veto = await self._check_play_veto(owner_id, card_id, card)
+        if veto is not None:
+            self._auto_play_deferred.add(card_id)
+            await self._log_and_broadcast(
+                f"[rule] {self._name(owner_id)}'s {self._card_title(card)} was rejected: {veto}"
+            )
+            return
+        correlation_id = str(uuid.uuid4())
+        self._set_card_mechanical_status(card_id, "pending", correlation_id)
+        previous_resolving = self._resolving_play
+        self._resolving_play = card_id
+        try:
+            plan = await self._resolve_plan(card_id, card, actor_id=owner_id, correlation_id=correlation_id)
+        finally:
+            self._resolving_play = previous_resolving
+        card = self.state.cards.get(card_id, card)
+        if self._is_reaction_card(card):
+            # Canonicalized as a reaction after all: it waits in hand for a
+            # reaction window like any other reaction card.
+            self._auto_play_deferred.add(card_id)
+            return
+        needs_player_choice, needs_card_choice = self._plan_choice_needs(plan)
+        if needs_player_choice or needs_card_choice:
+            self._pending_auto_play = PendingAutoPlay(
+                owner_id=owner_id, card_id=card_id, plan=plan, correlation_id=correlation_id
+            )
+            await self._send_auto_play_prompt()
+            return
+        await self._commit_auto_play(
+            owner_id, card_id, card, plan, correlation_id, chosen_player_id=None, chosen_card_id=None
+        )
+
+    async def _send_auto_play_prompt(self) -> None:
+        """prompt_choice the pending auto-play's owner for the next missing
+        choice (player axis first, then card — the normal two-prompt order)."""
+        pending = self._pending_auto_play
+        if pending is None:
+            return
+        card = self.state.cards.get(pending.card_id, {})
+        title = self._card_title(card)
+        needs_player_choice, needs_card_choice = self._plan_choice_needs(pending.plan)
+        if needs_player_choice and pending.chosen_player_id is None:
+            await self.connections.send(
+                pending.owner_id,
+                {
+                    "type": "prompt_choice",
+                    "card_id": pending.card_id,
+                    "prompt": f"Choose a target player for {title}",
+                    "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                },
+            )
+            return
+        if needs_card_choice and pending.chosen_card_id is None:
+            valid_card_ids = set(self.state.cards_in_play()) | set(self._from_hand_options(pending.owner_id))
+            await self.connections.send(
+                pending.owner_id,
+                {
+                    "type": "prompt_choice",
+                    "card_id": pending.card_id,
+                    "prompt": f"Choose a target card for {title}",
+                    "choices": [
+                        {"card_id": cid, "name": self._card_title(self.state.cards.get(cid, {}))}
+                        for cid in valid_card_ids
+                    ],
+                },
+            )
+
+    async def _resume_auto_play(self, player_id: str, msg) -> None:
+        """The owner's prompt_choice follow-up for a suspended auto-play
+        (routed from _dispatch by owner + card_id, bypassing the turn gates)."""
+        pending = self._pending_auto_play
+        if pending is None:
+            return
+        try:
+            hand = self.state.get_player(player_id).hand
+        except KeyError:
+            hand = []
+        card = self.state.cards.get(pending.card_id)
+        if card is None or pending.card_id not in hand:
+            self._pending_auto_play = None
+            await self.connections.send(player_id, {"type": "error", "message": "That card is no longer in your hand"})
+            return
+        chosen_player_id = getattr(msg, "chosen_player_id", None) or pending.chosen_player_id
+        chosen_card_id = getattr(msg, "chosen_card_id", None) or pending.chosen_card_id
+        if chosen_player_id is not None and chosen_player_id not in {p.id for p in self.state.players}:
+            await self.connections.send(
+                player_id, {"type": "error", "message": f"Invalid target player: {chosen_player_id}"}
+            )
+            return
+        valid_card_ids = set(self.state.cards_in_play()) | set(hand)
+        if chosen_card_id is not None and chosen_card_id not in valid_card_ids:
+            await self.connections.send(
+                player_id, {"type": "error", "message": f"Invalid target card: {chosen_card_id}"}
+            )
+            return
+        pending.chosen_player_id = chosen_player_id
+        pending.chosen_card_id = chosen_card_id
+        needs_player_choice, needs_card_choice = self._plan_choice_needs(pending.plan)
+        if (needs_player_choice and chosen_player_id is None) or (needs_card_choice and chosen_card_id is None):
+            await self._send_auto_play_prompt()
+            return
+        self._pending_auto_play = None
+        await self._commit_auto_play(
+            player_id,
+            pending.card_id,
+            card,
+            pending.plan,
+            pending.correlation_id,
+            chosen_player_id=chosen_player_id,
+            chosen_card_id=chosen_card_id,
+        )
+
+    async def _commit_auto_play(
+        self,
+        owner_id: str,
+        card_id: str,
+        card,
+        plan: ResolutionPlan,
+        correlation_id: str,
+        *,
+        chosen_player_id: str | None,
+        chosen_card_id: str | None,
+    ) -> None:
+        ctx = HookContext(
+            event=GameEvent.ON_PLAY,
+            actor_id=owner_id,
+            card_id=card_id,
+            chosen_player_id=chosen_player_id,
+            chosen_card_id=chosen_card_id,
+        )
+        if await self._maybe_open_reaction_window(owner_id, card_id, card, plan, ctx, count_as_play=False):
+            return
+        await self._finish_play(owner_id, card_id, card, plan, ctx, correlation_id=correlation_id, count_as_play=False)
 
     # ── generic interaction barriers ──
     @staticmethod
@@ -2414,11 +2748,12 @@ class Room:
                 "card_id": pending.card_id,
                 "source": pending.result_key,
             },
+            count_as_play=pending.purpose != "auto_play",
         )
 
     # ── reaction window ──
     async def _maybe_open_reaction_window(
-        self, player_id: str, card_id: str, card, plan: ResolutionPlan, ctx: HookContext
+        self, player_id: str, card_id: str, card, plan: ResolutionPlan, ctx: HookContext, *, count_as_play: bool = True
     ) -> bool:
         """Open a reaction window for this play if anyone can react.
 
@@ -2450,6 +2785,7 @@ class Room:
             chosen_card_id=ctx.chosen_card_id,
             eligible_ids=eligible,
             deadline=time.time() + REACTION_WINDOW_SECONDS,
+            count_as_play=count_as_play,
         )
         pending.timer = asyncio.create_task(self._reaction_timeout(window_id, REACTION_WINDOW_SECONDS))
         self._pending = pending
@@ -2530,6 +2866,7 @@ class Room:
                 ctx,
                 correlation_id=correlation_id,
                 negated=True,
+                count_as_play=pending.count_as_play,
             )
         elif outcome == "stolen":
             await self._log_and_broadcast(
@@ -2543,6 +2880,7 @@ class Room:
                 ctx,
                 correlation_id=correlation_id,
                 steal_to=reactor_id,
+                count_as_play=pending.count_as_play,
             )
         elif outcome == "redirected":
             await self._log_and_broadcast(f"{title} is redirected — it resolves for {self._name(reactor_id)}!")
@@ -2554,6 +2892,7 @@ class Room:
                 ctx,
                 correlation_id=correlation_id,
                 redirect_to=reactor_id,
+                count_as_play=pending.count_as_play,
             )
         else:
             await self._finish_play(
@@ -2563,6 +2902,7 @@ class Room:
                 pending.plan,
                 ctx,
                 correlation_id=correlation_id,
+                count_as_play=pending.count_as_play,
             )
 
     async def _handle_reaction_play(self, player_id: str, msg) -> None:
@@ -2618,12 +2958,7 @@ class Room:
             return
         chosen_player_id = getattr(msg, "chosen_player_id", None)
         chosen_card_id = getattr(msg, "chosen_card_id", None)
-        ops = plan.operations()
-        needs_player_choice = any(
-            getattr(op, field_name, None) in ("chooser", "target_player")
-            for op in ops
-            for field_name in ("target", "from_target", "to_target", "to")
-        )
+        needs_player_choice, _ = self._plan_choice_needs(plan)
         if needs_player_choice and chosen_player_id is None:
             # Same suspend/resume as a normal play: the follow-up play message
             # re-enters here carrying as_reaction + the choice.
