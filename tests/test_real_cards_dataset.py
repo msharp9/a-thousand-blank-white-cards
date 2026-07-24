@@ -308,8 +308,8 @@ def _has_interaction_steps(hc: dict) -> bool:
 class TestHardEvalCards:
     """The hard set is sandbox/steps-only by design: every ops slot is null."""
 
-    def test_exactly_25_cards(self) -> None:
-        assert len(_load(HARD)) == 25
+    def test_exactly_27_cards(self) -> None:
+        assert len(_load(HARD)) == 27
 
     def test_ids_and_titles_unique(self) -> None:
         cards = _load(HARD)
