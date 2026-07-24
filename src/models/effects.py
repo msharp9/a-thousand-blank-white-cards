@@ -309,13 +309,20 @@ class SetConditionOp(BaseModel):
     The generic writer behind card-invented statuses ("poisoned", "confused",
     …): reserved keys skip_next/extra_turn keep their loop semantics; any
     other key is free-form state the UI/agent/hooks can read. ``value=None``
-    removes the key.
+    removes the key (and any TTL it had).
+
+    ``duration_turns`` makes the status expire on its own: the TTL ticks down
+    at the start of each targeted player's turn and the condition is removed
+    when it reaches 0. Re-setting a key with a new duration restarts the
+    clock; re-setting it WITHOUT one clears any previous TTL, making the
+    condition persistent again.
     """
 
     op: Literal["set_condition"] = "set_condition"
     target: Target = "self"
     key: str
     value: Any = None
+    duration_turns: int | None = Field(default=None, ge=1)
 
 
 class SetCardAttributeOp(BaseModel):

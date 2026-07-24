@@ -277,9 +277,16 @@ class SandboxGame:
         """Write a rules path: draw, play, end_condition.type, win_condition.kind, extra.<key>…"""
         self._ops.append({"op": "set_rule", "path": str(path), "value": value})
 
-    def set_condition(self, target: str, key: str, value: Any = True) -> None:
-        """Set a free-form condition on targeted players (value=None removes it)."""
-        self._ops.append({"op": "set_condition", "target": target, "key": str(key), "value": value})
+    def set_condition(self, target: str, key: str, value: Any = True, duration_turns: int | None = None) -> None:
+        """Set a free-form condition on targeted players (value=None removes it).
+
+        ``duration_turns`` makes it expire: the TTL ticks down at each targeted
+        player's turn start and the condition is removed when it reaches 0.
+        """
+        op: dict[str, Any] = {"op": "set_condition", "target": target, "key": str(key), "value": value}
+        if duration_turns is not None:
+            op["duration_turns"] = int(duration_turns)
+        self._ops.append(op)
 
     def set_card_attribute(self, card_target: str, key: str, value: Any) -> None:
         """Tag targeted cards with open metadata (e.g. a color)."""

@@ -70,6 +70,10 @@ OP_CATALOG_GUIDE = """\
     ends when someone empties their hand") compose set_rule ops, not snippets.
   * set_condition writes free-form per-player statuses ("poisoned", "cursed"...); targets
     accept open forms 'id:<player_id>' and 'has:<condition_key>' besides the named set.
+    duration_turns=N makes the status expire on its own: it ticks down at the start of
+    each of that player's turns and is removed when it reaches 0 ("poisoned for 3 turns"
+    = duration_turns=3, no hook needed). Omit duration_turns for a status that lasts
+    until something removes it; re-setting a key with a new duration restarts the clock.
   * set_card_attribute tags cards with metadata (e.g. give every card a color); card
     targets accept 'id:<card_id>' and 'attr:<key>=<value>'.
   * destroy_card is ALSO how you DISCARD (destroyed cards go to the discard pile — same

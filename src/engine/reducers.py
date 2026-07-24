@@ -431,7 +431,7 @@ def _reduce_set_condition(state: GameState, op: SetConditionOp, ctx: HookContext
         if op.value is None:
             state = state.without_condition(pid, op.key)
         else:
-            state = state.with_condition(pid, op.key, op.value)
+            state = state.with_condition(pid, op.key, op.value, ttl=op.duration_turns)
     return state
 
 

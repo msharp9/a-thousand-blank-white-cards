@@ -74,6 +74,12 @@ class Player(BaseModel):
     # engine.loop.advance_turn; any other key is free-form status with no
     # engine-side meaning yet, surfaced as-is to the UI/agent via model_dump().
     conditions: dict[str, Any] = Field(default_factory=dict)
+    # Remaining lifetime (in this player's turn starts) for expiring
+    # conditions, keyed like ``conditions``. Kept OUT of the conditions bag so
+    # condition values stay shape-stable for "has:<key>" targets and hook
+    # snippets. Ticked by ``engine.loop.tick_condition_ttls``; a key here
+    # always has a live entry in ``conditions``.
+    condition_ttls: dict[str, int] = Field(default_factory=dict)
     # Hand visibility (reveal_hand op). STRUCTURAL fields, not conditions: the
     # snapshot redactor must consult them reliably, and the conditions bag is
     # free-form state any card can clobber. ``hand_public`` = the hand is
@@ -440,25 +446,39 @@ class GameState(BaseModel):
             }
         )
 
-    def with_condition(self, player_id: str, key: str, value: Any) -> "GameState":
+    def with_condition(self, player_id: str, key: str, value: Any, *, ttl: int | None = None) -> "GameState":
         """Return a copy with ``player_id``'s ``conditions[key]`` set to ``value``.
 
         Generic: ``key`` may be a reserved condition (``skip_next``,
-        ``extra_turn``) or any free-form status a card invents.
+        ``extra_turn``) or any free-form status a card invents. ``ttl`` (in
+        the owner's turn starts) is stored in ``condition_ttls``; writing
+        without a ttl clears any stale ttl for the key, so the condition
+        persists until removed.
         """
-        players = [
-            p.model_copy(update={"conditions": {**p.conditions, key: value}}) if p.id == player_id else p
-            for p in self.players
-        ]
+        players: list[Player] = []
+        for p in self.players:
+            if p.id != player_id:
+                players.append(p)
+                continue
+            ttls = {k: v for k, v in p.condition_ttls.items() if k != key}
+            if ttl is not None:
+                ttls[key] = ttl
+            players.append(p.model_copy(update={"conditions": {**p.conditions, key: value}, "condition_ttls": ttls}))
         return self.model_copy(update={"players": players})
 
     def without_condition(self, player_id: str, key: str) -> "GameState":
-        """Return a copy with ``player_id``'s ``conditions[key]`` removed.
+        """Return a copy with ``player_id``'s ``conditions[key]`` (and any TTL
+        for it) removed.
 
         A no-op (still returns a fresh copy) if the key is absent.
         """
         players = [
-            p.model_copy(update={"conditions": {k: v for k, v in p.conditions.items() if k != key}})
+            p.model_copy(
+                update={
+                    "conditions": {k: v for k, v in p.conditions.items() if k != key},
+                    "condition_ttls": {k: v for k, v in p.condition_ttls.items() if k != key},
+                }
+            )
             if p.id == player_id
             else p
             for p in self.players
