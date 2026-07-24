@@ -22,6 +22,7 @@ from models.effects import (
     CustomNoteOp,
     DestroyCardOp,
     DrawCardsOp,
+    EliminatePlayerOp,
     EndGameOp,
     ExtraTurnOp,
     Op,
@@ -417,6 +418,33 @@ def _reduce_reveal_hand(state: GameState, op: RevealHandOp, ctx: HookContext) ->
     )
 
 
+def _reduce_eliminate_player(state: GameState, op: EliminatePlayerOp, ctx: HookContext) -> GameState:
+    """Knock resolved players out: set ``Player.eliminated`` and discard the hand.
+
+    ``in_play`` is untouched — an eliminated player's table cards (and any
+    hooks/rules they registered) keep working. Targets resolve sequentially and
+    the guard holds per player: a target who would be the LAST non-eliminated
+    player survives as a logged no-op, so "eliminate everyone" leaves exactly
+    one player standing. Already-eliminated targets are skipped silently.
+    """
+    for pid in _resolve_targets(op.target, ctx, state):
+        player = state.get_player(pid)
+        if player.eliminated:
+            continue
+        if all(p.eliminated or p.id == pid for p in state.players):
+            state = state.with_log(f"[eliminate_player no-op] {player.name} is the last player standing")
+            continue
+        discard = list(state.discard)
+        for cid in player.hand:
+            if cid not in discard:
+                discard.append(cid)
+        players = [p.model_copy(update={"eliminated": True, "hand": []}) if p.id == pid else p for p in state.players]
+        state = state.model_copy(update={"players": players, "discard": discard}).with_log(
+            f"{player.name} has been eliminated"
+        )
+    return state
+
+
 def _reduce_set_win_condition(state: GameState, op: SetWinConditionOp, ctx: HookContext) -> GameState:
     wc = WinCondition(kind=op.kind, threshold=op.threshold)
     return state.model_copy(update={"rules": state.rules.model_copy(update={"win_condition": wc})})
@@ -658,6 +686,7 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
     "destroy_card": _reduce_destroy_card,
     "transfer_card": _reduce_transfer_card,
     "reveal_hand": _reduce_reveal_hand,
+    "eliminate_player": _reduce_eliminate_player,
     "set_win_condition": _reduce_set_win_condition,
     "custom_note": _reduce_custom_note,
     "counter_play": _reduce_counter_play,

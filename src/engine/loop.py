@@ -69,10 +69,17 @@ def draw_step(state: GameState, player_id: str, *, bus: EventBus | None = None) 
 # ---------------------------------------------------------------------------
 # Advance turn
 # ---------------------------------------------------------------------------
-def _next_in_order(order: list[str], player_id: str) -> str:
-    """Return the id following ``player_id`` in ``order``, wrapping around."""
+def _next_in_order(order: list[str], player_id: str, state: GameState) -> str:
+    """Return the first NON-ELIMINATED id after ``player_id`` in ``order``,
+    wrapping around. Falls back to ``player_id`` itself when nobody else
+    qualifies (a lone survivor keeps the turn; the all-eliminated case is
+    unreachable via the eliminate_player last-player guard)."""
     pos = order.index(player_id)
-    return order[(pos + 1) % len(order)]
+    for step in range(1, len(order) + 1):
+        candidate = order[(pos + step) % len(order)]
+        if not state.get_player(candidate).eliminated:
+            return candidate
+    return player_id
 
 
 def advance_turn(state: GameState) -> GameState:
@@ -80,9 +87,12 @@ def advance_turn(state: GameState) -> GameState:
 
     Honours (in order): extra-turn (stay put, consume the condition),
     stepping through ``state.effective_turn_order()``, skip-next (consumed off
-    the skipped player), and a registered skip predicate. Consumed conditions
-    are removed via ``GameState.without_condition``, which always returns a
-    fresh copy.
+    the skipped player), and a registered skip predicate. Eliminated players
+    are never landed on: stepping filters them out, and when the ACTIVE player
+    was eliminated mid-turn the step starts from their (stale) position and
+    moves straight to the next survivor — an eliminated player's extra_turn is
+    consumed but not honoured. Consumed conditions are removed via
+    ``GameState.without_condition``, which always returns a fresh copy.
 
     ``turn_number`` increments whenever this call lands on a new active
     player; an extra-turn early-return leaves it unchanged since the same
@@ -92,15 +102,17 @@ def advance_turn(state: GameState) -> GameState:
 
     # Extra turn: the current player goes again; turn_index unchanged.
     if current_player.conditions.get("extra_turn"):
-        return state.without_condition(current_player.id, "extra_turn")
+        state = state.without_condition(current_player.id, "extra_turn")
+        if not current_player.eliminated:
+            return state
 
     order = state.effective_turn_order()
-    next_id = _next_in_order(order, current_player.id)
+    next_id = _next_in_order(order, current_player.id, state)
     next_player = state.get_player(next_id)
 
     if next_player.conditions.get("skip_next"):
         state = state.without_condition(next_player.id, "skip_next")
-        next_id = _next_in_order(order, next_id)
+        next_id = _next_in_order(order, next_id, state)
         next_player = state.get_player(next_id)
 
     if state.skip_predicate is not None:
@@ -110,7 +122,7 @@ def advance_turn(state: GameState) -> GameState:
             if pred_fn(candidate, state):
                 if candidate.conditions.get("skip_next"):
                     state = state.without_condition(candidate.id, "skip_next")
-                next_id = _next_in_order(order, next_id)
+                next_id = _next_in_order(order, next_id, state)
                 next_player = state.get_player(next_id)
 
     next_idx = next(i for i, p in enumerate(state.players) if p.id == next_id)

@@ -107,12 +107,14 @@ def resolve_end_of_game(state: GameState, cards: dict | None = None) -> tuple[Ga
 def evaluate_win_condition(state: GameState) -> list[str]:
     """Return list of winner player ids given the current win_condition.
 
-    Returns [] if no winner yet. Multiple ids = a tie. Only considers
-    connected players — spectators live in the separate ``spectators``
-    collection, so ``state.players`` is already the participating set.
+    Returns [] if no winner yet. Multiple ids = a tie. Only considers ACTIVE
+    players — connected and not eliminated (an eliminated player can never
+    win; with "last_standing" the sole survivor wins). Spectators live in the
+    separate ``spectators`` collection, so ``state.players`` is already the
+    participating set.
     """
     wc = state.win_condition
-    active = [p for p in state.players if p.connected]
+    active = [p for p in state.players if p.connected and not p.eliminated]
     if not active:
         return []
 
@@ -164,13 +166,15 @@ def evaluate_end_condition(state: GameState) -> bool:
     Data-driven end-of-game check (docs/state-example.jsonc ``endCondition``).
     The Room decides TIMING: "deck_empty" defers to the drawer finishing their
     turn; every other type ends play immediately (see board.rooms.room).
+    "empty_hand" ignores eliminated players — elimination discards the hand,
+    which must not read as an Uno-style win.
     """
     ec = state.rules.end_condition
     match ec.type:
         case "deck_empty":
             return not state.deck
         case "empty_hand":
-            return any(not p.hand for p in state.players)
+            return any(not p.hand for p in state.players if not p.eliminated)
         case "points_reached":
             if ec.threshold is None:
                 return False

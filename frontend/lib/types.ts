@@ -162,6 +162,10 @@ export type PlayerSnapshot = {
   // table). Resolve ids against GameStateSnapshot.cards to render them.
   in_play: string[];
   connected: boolean;
+  // Knocked out of the game (eliminate_player op): takes no more turns and
+  // cannot win; their in-play cards stay on the table. Optional only for
+  // back-compat with older servers.
+  eliminated?: boolean;
   conditions: Record<string, unknown>;
   // Hand visibility (reveal_hand op). hand_public = this hand is played face
   // up: every viewer's snapshot carries its real ids (render it face-up with a

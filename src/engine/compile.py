@@ -36,6 +36,7 @@ from models.effects import (
     DestroyCardOp,
     DrawCardsOp,
     EffectProgram,
+    EliminatePlayerOp,
     EndGameOp,
     ExtraTurnOp,
     InteractionStep,
@@ -189,6 +190,9 @@ def _compile_op(name: str, args: dict) -> Op | None:
             persistent=bool(args.get("persistent", False)),
             mode=args.get("mode", "reveal"),
         )
+    if name == "eliminate_player":
+        # No safe self-default: an unstated target means "a player you pick".
+        return EliminatePlayerOp(target=_map_target(args.get("target", "chooser"), default="chooser", op_name=name))
     if name in _END_GAME_OP_NAMES:
         winner = args.get("winner")
         winners = args.get("winners") or []

@@ -57,7 +57,8 @@ A center/house-rule card can be destroyed like any other card, and destroying it
 A card can end the game immediately and can declare a specific player the winner ("you win the game" is a clean, valid effect).
 Win conditions can be changed: first to N points, empty hand, last player standing, highest points when the game ends.
 Wins based on owning particular cards are expressed with on_game_end effects on those cards (e.g. "worth 10 points if kept in hand").
-NOT YET SUPPORTED: eliminating a single player while the rest keep playing. Fallback: skip-forever statuses or a points penalty, noted in your comment.
+A player can be eliminated from the game while the rest keep playing (eliminate_player): their hand is discarded, they take no more turns and cannot win, but their in-play cards and any hooks/rules those installed stay in effect. The last player still standing can never be eliminated.
+"If all other players are out, you win" = eliminate_player plus the last-player-standing win condition; with that win condition the game ends the moment only one player remains un-eliminated.
 
 == Visibility ==
 Hands are private; in-play, center, and discard cards are public.

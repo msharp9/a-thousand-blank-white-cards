@@ -1800,6 +1800,10 @@ class Room:
             # end_game / a live win condition ends the game NOW, deck or no deck —
             # unlike deck exhaustion, which lets the drawer finish their turn.
             await self._end_game()
+        elif self.state.active_player().eliminated:
+            # The play eliminated the player whose turn it is — their turn cannot
+            # continue, so advance regardless of remaining play allowance.
+            await self._advance_turn()
         elif self._plays_this_turn < self.state.rules.play:
             # rules.play > 1: the turn continues until the play allowance is
             # spent (or the player passes).

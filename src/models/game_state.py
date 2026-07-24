@@ -69,6 +69,12 @@ class Player(BaseModel):
     # Cards played and persisting "in front of" this player (the in-play zone).
     in_play: list[str] = Field(default_factory=list)  # card ids
     connected: bool = True
+    # Knocked out of the game (eliminate_player op). STRUCTURAL like
+    # ``connected``, not a conditions key: the turn loop and win scoring must
+    # consult it reliably, and the conditions bag is free-form state any card
+    # can clobber. An eliminated player takes no turns and cannot win, but
+    # their in_play cards (and any hooks/rules those set) remain in effect.
+    eliminated: bool = False
     # Open-ended per-player status bag, e.g. {"skip_next": True, "poisoned": 2}.
     # "skip_next" and "extra_turn" are reserved keys consumed by
     # engine.loop.advance_turn; any other key is free-form status with no

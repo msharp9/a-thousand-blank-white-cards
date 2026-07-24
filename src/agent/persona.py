@@ -62,9 +62,9 @@ OP_CATALOG_GUIDE = """\
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, destroy_card, transfer_card, reveal_hand, set_win_condition, set_rule,
-  set_condition, set_card_attribute, create_card, custom_note, end_game) into an
-  EffectProgram.
+  draw_cards, destroy_card, transfer_card, reveal_hand, eliminate_player,
+  set_win_condition, set_rule, set_condition, set_card_attribute, create_card,
+  custom_note, end_game) into an EffectProgram.
   * set_rule writes game rules as data (paths: draw, play, end_condition.type,
     win_condition.kind, extra.<anything>) — rule-changing cards ("draws are now 2", "game
     ends when someone empties their hand") compose set_rule ops, not snippets.
@@ -89,6 +89,12 @@ OP_CATALOG_GUIDE = """\
     player on your left"); persistent=true keeps the hand visible — to="all" means the
     hand is played face-up — until a mode="conceal" reveal_hand hides it again. It never
     moves cards; it only changes who can SEE them.
+  * eliminate_player knocks the targeted player(s) OUT of the game while everyone else
+    plays on: their hand is discarded, they take no more turns and cannot win, but their
+    in-play cards (and any hooks/rules those set) stay in effect. The last player still
+    standing can never be eliminated. "You're out of the game" = eliminate_player; for
+    "last player standing wins" pair it with set_win_condition kind="last_standing" —
+    the game then ends the moment only one player remains.
   * create_card mints new cards (with their own ops!) into the deck or a hand — a card
     can add Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
     the copies to its target player (default "self"); route to a SPECIFIC player with
