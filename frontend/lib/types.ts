@@ -200,7 +200,20 @@ export type RulesSnapshot = {
   end_condition: EndConditionSnapshot;
   win_condition: WinConditionSnapshot;
   skip_predicate?: string | null;
+  hand_limit?: number | null;
+  // Per-turn time limit in seconds (null = no clock). The LIVE clock rides
+  // the snapshot's top-level turn_timer entry; this is just the rule.
+  turn_timer?: number | null;
   extra: Record<string, unknown>;
+};
+
+// The live pausable turn clock, when rules.turn_timer is set. The server
+// pauses it while the table waits on brewing/reactions/interactions;
+// deadline_epoch_ms is null while paused (the remainder is server-side only).
+export type TurnTimerSnapshot = {
+  deadline_epoch_ms: number | null;
+  paused: boolean;
+  player_id: string | null;
 };
 
 export type HookSnapshot = {
@@ -315,6 +328,9 @@ export type GameStateSnapshot = {
   // is just the immediacy signal. Clients compute their own eligibility from
   // their hand's canonical.trigger === "on_reaction".
   pending_play?: PendingPlaySnapshot | null;
+  // The live turn clock (null when no clock is armed). Reconnect-safe source
+  // of truth; the turn_timer push is the immediacy signal.
+  turn_timer?: TurnTimerSnapshot | null;
 };
 
 export type PendingPlaySnapshot = {
@@ -454,6 +470,15 @@ export type ReactionWindowMsg = {
   actor_id: string;
   deadline_epoch_ms: number;
 };
+// The pausable turn clock started, paused, resumed, or cleared. Clients
+// render the countdown from deadline_epoch_ms and re-sync on every push;
+// the snapshot's turn_timer entry is the reconnect-safe source of truth.
+export type TurnTimerMsg = {
+  type: "turn_timer";
+  deadline_epoch_ms: number | null;
+  paused: boolean;
+  player_id: string | null;
+};
 // The window closed. "resolved" = timeout or all passed (the original play
 // resolved normally); the other outcomes name the reactor and their card.
 export type ReactionResultMsg = {
@@ -477,4 +502,5 @@ export type ServerMsg =
   | InteractionProgressMsg
   | HandRevealedMsg
   | ReactionWindowMsg
-  | ReactionResultMsg;
+  | ReactionResultMsg
+  | TurnTimerMsg;

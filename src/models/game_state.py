@@ -60,6 +60,12 @@ class Rules(BaseModel):
     # active player picks cards to discard down to the limit (timeout discards
     # from the hand tail). None = no limit.
     hand_limit: int | None = Field(default=None, ge=0)
+    # Seconds the active player has to end their turn before the room ends it
+    # for them (pausable turn clock, ENFORCED by board.rooms.room.TurnTimer:
+    # the clock pauses while the room is suspended on brewing, a reaction
+    # window, or an interaction). Read once at turn start, so a mid-turn
+    # change applies from the next turn. None = no time limit.
+    turn_timer: int | None = Field(default=None, ge=1)
     # None or a registered predicate name (see engine.loop.register_skip_predicate).
     skip_predicate: str | None = None
     extra: dict[str, Any] = Field(default_factory=dict)

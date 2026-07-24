@@ -44,7 +44,7 @@ import random
 import re
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
@@ -138,6 +138,96 @@ HAND_LIMIT_TIMEOUT_SECONDS = 60
 MAX_AUTO_PLAYS_PER_TURN = 3
 
 
+class TurnTimer:
+    """Pausable countdown for the active player's turn (rules.turn_timer).
+
+    REMAINING-SECONDS accounting: the reaction/interaction timers are
+    absolute-deadline sleeps that can only be cancelled, so they cannot pause.
+    This one banks ``deadline - now`` on :meth:`pause` and re-arms with the
+    banked remainder on :meth:`resume`, so time the room spends suspended
+    (brewing an interpretation, a reaction window, an interaction) never
+    counts against the player. ``generation`` defeats stale-expiry races the
+    way ``window_id`` does for reaction windows: every (re)arm or disarm bumps
+    it, and the expiry callback re-checks its own generation under the room
+    lock before acting.
+    """
+
+    def __init__(self, on_expire: Callable[[int], Awaitable[None]]) -> None:
+        self._on_expire = on_expire
+        self.generation: int = 0
+        self.player_id: str | None = None
+        self._task: asyncio.Task | None = None
+        self._deadline: float | None = None  # epoch seconds while running
+        self._remaining: float | None = None  # banked seconds while paused
+
+    @property
+    def running(self) -> bool:
+        return self._deadline is not None
+
+    @property
+    def paused(self) -> bool:
+        return self._remaining is not None
+
+    @property
+    def deadline_epoch_ms(self) -> int | None:
+        return int(self._deadline * 1000) if self._deadline is not None else None
+
+    def start(self, seconds: float, player_id: str) -> None:
+        """Arm a fresh clock for ``player_id``, replacing any previous one."""
+        self.cancel()
+        self.player_id = player_id
+        self._arm(seconds)
+
+    def pause(self) -> bool:
+        """Bank the remaining time and stop the task. False when not running."""
+        if self._deadline is None:
+            return False
+        self._remaining = max(0.0, self._deadline - time.time())
+        self._disarm()
+        return True
+
+    def resume(self) -> bool:
+        """Re-arm with the banked remainder. False when not paused."""
+        if self._remaining is None:
+            return False
+        self._arm(self._remaining)
+        return True
+
+    def cancel(self) -> None:
+        self._disarm()
+        self._remaining = None
+        self.player_id = None
+
+    def finish(self) -> None:
+        """Expiry-handler cleanup: drop all clock state WITHOUT cancelling the
+        task (the handler runs inside it; cancelling would abort the forced
+        end-turn at its next await)."""
+        self.generation += 1
+        self._task = None
+        self._deadline = None
+        self._remaining = None
+
+    def _arm(self, seconds: float) -> None:
+        self.generation += 1
+        self._remaining = None
+        self._deadline = time.time() + seconds
+        self._task = asyncio.create_task(self._run(self.generation, seconds))
+
+    def _disarm(self) -> None:
+        self.generation += 1
+        if self._task is not None and self._task is not asyncio.current_task() and not self._task.done():
+            self._task.cancel()
+        self._task = None
+        self._deadline = None
+
+    async def _run(self, generation: int, delay: float) -> None:
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            return
+        await self._on_expire(generation)
+
+
 class PlanExecutionError(Exception):
     pass
 
@@ -211,10 +301,17 @@ class Room:
         mode: str = "both",
         *,
         simple: bool = True,
+        turn_timer: int | None = None,
         on_change: Callable[[Room], None] | None = None,
     ) -> None:
         self.code = code
         self.state: GameState = GameState(room_code=code, mode=mode)
+        # Host-chosen per-turn time limit (seconds). Stored as rules.turn_timer
+        # so it rides snapshots and set_rule can rewrite/lift it mid-game.
+        if turn_timer is not None:
+            self.state = self.state.model_copy(
+                update={"rules": self.state.rules.model_copy(update={"turn_timer": turn_timer})}
+            )
         # When this room was created; set once and never mutated. Restored from
         # disk by FileRoomStore for a persisted room (see store._room_from_dict).
         self.created_at: datetime = datetime.now(UTC)
@@ -265,6 +362,10 @@ class Room:
         self._last_run_metrics: dict[str, dict] = {}
         self._pending_resolution: PendingResolution | None = None
         self._interaction_timer: asyncio.Task | None = None
+        # The pausable per-turn clock (rules.turn_timer). Transient like the
+        # reaction/interaction timers: a restart re-arms a fresh full clock
+        # (see ensure_pending_timeout) rather than persisting the remainder.
+        self._turn_timer = TurnTimer(self._turn_timer_expired)
         # Card id of the play currently being interpreted/resolved (brewing),
         # or None. Set/cleared (try/finally) around the play branch in
         # _dispatch and checked BEFORE waiting on the lock in handle_action —
@@ -413,12 +514,16 @@ class Room:
             # (the stale-queue race the direct-play freeze closes). Reaction
             # messages are exempt from the freeze themselves (they carry
             # as_reaction and are gated by the window), so this only blocks
-            # non-reaction actions. Cleared unconditionally.
+            # non-reaction actions. Cleared unconditionally. The turn clock
+            # pauses for the brew's duration (and stays paused while the
+            # window itself remains open — _maybe_resume_turn_timer no-ops).
             self._resolving_play = msg.card_id
+            await self._pause_turn_timer()
             try:
                 await self._handle_reaction_play(player_id, msg)
             finally:
                 self._resolving_play = None
+                await self._maybe_resume_turn_timer()
             return
         if mtype == "pass_reaction":
             await self._handle_pass_reaction(player_id, msg)
@@ -469,11 +574,16 @@ class Room:
             # → veto → interpretation → execution → turn accounting); cleared
             # unconditionally so a crashing LLM call/plan can never leave the
             # room frozen. handle_action rejects against this flag pre-lock.
+            # The turn clock pauses for the same span — brewing must not cost
+            # the player time — and resumes only if the play left the turn
+            # running (a turn advance re-arms a fresh clock instead).
             self._resolving_play = msg.card_id
+            await self._pause_turn_timer()
             try:
                 await self._handle_play(player_id, msg)
             finally:
                 self._resolving_play = None
+                await self._maybe_resume_turn_timer()
         elif mtype == "create_card":
             await self._handle_create_card(player_id, msg)
         elif mtype == "preview_card":
@@ -712,6 +822,7 @@ class Room:
         self._auto_play_deferred.clear()
         self._advance_after_auto_play = False
         self._last_run_metrics.clear()
+        await self._arm_turn_timer(player_id)
         await self._emit_hooks(GameEvent.ON_TURN_START, player_id)
         await self._auto_draw(player_id)
         await self._process_play_on_draw()
@@ -801,6 +912,103 @@ class Room:
         """A met end condition that does NOT defer to the drawer-finishes-turn
         timing (everything except deck_empty ends play immediately)."""
         return self.state.rules.end_condition.type != "deck_empty" and evaluate_end_condition(self.state)
+
+    # ── turn timer (rules.turn_timer) ──
+    async def _arm_turn_timer(self, player_id: str) -> None:
+        """Arm (or clear) the pausable turn clock for the turn now starting.
+
+        ``rules.turn_timer`` is read once per turn here, so a mid-turn
+        ``set_rule`` applies from the next turn. Rooms that never had a clock
+        stay silent — the push only goes out when there is (or just was) one.
+        """
+        seconds = self.state.rules.turn_timer
+        if seconds:
+            self._turn_timer.start(seconds, player_id)
+            await self._broadcast_turn_timer()
+        elif self._turn_timer.running or self._turn_timer.paused:
+            self._turn_timer.cancel()
+            await self._broadcast_turn_timer()
+
+    def _turn_timer_snapshot(self) -> dict | None:
+        """Public turn-clock info for the snapshot and the turn_timer push, or
+        None when no clock is live. ``deadline_epoch_ms`` is null while paused
+        (the banked remainder is server-side only)."""
+        timer = self._turn_timer
+        if not timer.running and not timer.paused:
+            return None
+        return {
+            "deadline_epoch_ms": timer.deadline_epoch_ms,
+            "paused": timer.paused,
+            "player_id": timer.player_id,
+        }
+
+    async def _broadcast_turn_timer(self) -> None:
+        info = self._turn_timer_snapshot()
+        await self.connections.broadcast(
+            {
+                "type": "turn_timer",
+                "deadline_epoch_ms": info["deadline_epoch_ms"] if info else None,
+                "paused": info["paused"] if info else False,
+                "player_id": info["player_id"] if info else None,
+            }
+        )
+
+    async def _pause_turn_timer(self) -> None:
+        """Stop the turn clock while the room suspends (brewing, reaction
+        window, interaction barrier) — the wait must not cost the player."""
+        if self._turn_timer.pause():
+            await self._broadcast_turn_timer()
+
+    async def _maybe_resume_turn_timer(self) -> None:
+        """Re-arm the paused clock once NO suspension remains.
+
+        Called on every suspension's exit path and safe to over-call: it
+        no-ops when the clock isn't paused, another suspension is still live,
+        or a new turn already re-armed a fresh clock (start() clears the
+        banked remainder). A rule lifted while the clock was paused cancels
+        instead of resuming.
+        """
+        if not self._turn_timer.paused:
+            return
+        if self._resolving_play is not None or self._pending is not None or self._pending_resolution is not None:
+            return
+        if self.state.rules.turn_timer is None:
+            self._turn_timer.cancel()
+        else:
+            self._turn_timer.resume()
+        await self._broadcast_turn_timer()
+
+    async def _turn_timer_expired(self, generation: int) -> None:
+        """Force the end-turn path when the active player's clock runs out.
+
+        Same lock discipline as ``_reaction_timeout``: whoever wins the lock
+        acts, and a stale expiry sees a bumped generation and no-ops. The
+        remaining checks are belt-and-suspenders — any suspension pauses the
+        clock (bumping the generation) and any turn change re-arms it — so an
+        expiry can never end someone else's turn or fire into a suspended
+        room.
+        """
+        async with self._lock:
+            timer = self._turn_timer
+            if generation != timer.generation:
+                return
+            player_id = timer.player_id
+            timer.finish()
+            await self._broadcast_turn_timer()
+            if (
+                self.state.phase != "playing"
+                or not self.state.players
+                or player_id is None
+                or not self._is_active_player(player_id)
+                or self.state.rules.turn_timer is None
+                or self._resolving_play is not None
+                or self._pending is not None
+                or self._pending_resolution is not None
+            ):
+                return
+            await self._log_and_broadcast(f"{self._name(player_id)} ran out of time — the turn ends")
+            await self._advance_turn()
+            self._notify_change()
 
     # ── hand-limit enforcement (rules.hand_limit) ──
     async def _maybe_enforce_hand_limit(self) -> bool:
@@ -1078,6 +1286,9 @@ class Room:
            nothing to advance for, so we skip straight to ``ended``.
         """
         actor = self.state.active_player().id if self.state.players else ""
+        if self._turn_timer.running or self._turn_timer.paused:
+            self._turn_timer.cancel()
+            await self._broadcast_turn_timer()
         await self._emit_hooks(GameEvent.ON_GAME_END, actor)
         self.state, applications = resolve_end_of_game(self.state)
         for application in applications:
@@ -2153,10 +2364,12 @@ class Room:
         self._set_card_mechanical_status(card_id, "pending", correlation_id)
         previous_resolving = self._resolving_play
         self._resolving_play = card_id
+        await self._pause_turn_timer()
         try:
             plan = await self._resolve_plan(card_id, card, actor_id=owner_id, correlation_id=correlation_id)
         finally:
             self._resolving_play = previous_resolving
+            await self._maybe_resume_turn_timer()
         card = self.state.cards.get(card_id, card)
         if self._is_reaction_card(card):
             # Canonicalized as a reaction after all: it waits in hand for a
@@ -2380,6 +2593,7 @@ class Room:
         )
         self._set_card_mechanical_status(ctx.card_id or "", "pending", correlation_id)
         self._schedule_interaction_timeout()
+        await self._pause_turn_timer()
         for player_id in audience:
             await self._send_interaction_request(player_id)
         await self._broadcast_interaction_progress()
@@ -2460,9 +2674,25 @@ class Room:
         await self._send_interaction_request(player_id)
 
     def ensure_pending_timeout(self) -> None:
-        """Resume persisted interaction deadlines without waiting for reconnect."""
+        """Resume persisted timers without waiting for reconnect.
+
+        Interaction deadlines are re-scheduled from their persisted absolute
+        deadline; the turn clock is transient (its remainder is never
+        persisted), so a room restored mid-turn re-arms a FRESH full clock for
+        the active player — generous, never unfair.
+        """
         if self._pending_resolution is not None:
             self._schedule_interaction_timeout()
+        if (
+            self.state.phase == "playing"
+            and self.state.players
+            and self.state.rules.turn_timer
+            and not self._turn_timer.running
+            and not self._turn_timer.paused
+            and self._pending_resolution is None
+            and self._pending is None
+        ):
+            self._turn_timer.start(self.state.rules.turn_timer, self.state.active_player().id)
 
     def _schedule_interaction_timeout(self) -> None:
         pending = self._pending_resolution
@@ -2714,6 +2944,7 @@ class Room:
             pending,
             game_ending=self._end_now() or win_condition_met(self.state),
         )
+        await self._maybe_resume_turn_timer()
 
     async def _commit_pending_resolution(self, pending: PendingResolution, completed: GameState) -> None:
         self.state = completed
@@ -2729,6 +2960,7 @@ class Room:
             pending,
             game_ending=self._end_now() or win_condition_met(self.state),
         )
+        await self._maybe_resume_turn_timer()
 
     async def _complete_interaction_play(self, pending: PendingResolution, *, game_ending: bool) -> None:
         # The interaction's resolved audience (minus the actor) doubles as the
@@ -2789,6 +3021,7 @@ class Room:
         )
         pending.timer = asyncio.create_task(self._reaction_timeout(window_id, REACTION_WINDOW_SECONDS))
         self._pending = pending
+        await self._pause_turn_timer()
         await self.connections.broadcast(
             {
                 "type": "reaction_window",
@@ -2904,6 +3137,7 @@ class Room:
                 correlation_id=correlation_id,
                 count_as_play=pending.count_as_play,
             )
+        await self._maybe_resume_turn_timer()
 
     async def _handle_reaction_play(self, player_id: str, msg) -> None:
         """A non-active player plays a reaction card into the open window."""
@@ -3395,6 +3629,9 @@ class Room:
             if self._pending is not None
             else None
         )
+        # Live turn clock (reconnect-safe source of truth; the turn_timer push
+        # is the immediacy signal). Null when no clock is armed.
+        snap["turn_timer"] = self._turn_timer_snapshot()
         return snap
 
     def snapshot_for(self, viewer_id: str | None) -> dict:

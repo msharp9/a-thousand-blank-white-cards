@@ -50,7 +50,7 @@ NOT YET SUPPORTED: creating cards directly into the discard pile or the center.
 
 == Persistent rules and hooks ==
 Cards can install persistent hooks that fire on game events: on_play, on_turn_start, on_turn_end, on_draw_step, on_score_change, on_game_end, on_validate_play.
-Cards can rewrite game rules as data: how many cards are drawn or played per turn, a maximum hand size (hand_limit), what condition ends the game, what condition decides the winner, plus free-form rule entries under extra.
+Cards can rewrite game rules as data: how many cards are drawn or played per turn, a maximum hand size (hand_limit), a per-turn time limit (turn_timer, see Timers), what condition ends the game, what condition decides the winner, plus free-form rule entries under extra.
 A hand limit is ENFORCED: at the end of their turn an over-limit player is prompted to pick cards to discard down to the limit; if they don't answer in time, the excess is discarded from the back of their hand automatically. Setting hand_limit to null lifts it.
 "New phase" cards (an attack phase, a discard phase) are expressed as hooks on turn start/turn end plus rule data — cards cannot add literal new phases or invent new hook events. "Play this card immediately when it is drawn" is likewise NOT a hook — it is the play_on_draw card attribute (see Card attributes).
 A center/house-rule card can be destroyed like any other card, and destroying it removes its ongoing effect: its hooks are unregistered and any rule it rewrote reverts to the previous value (the most recent surviving rewrite, or the default). "Destroy every card in the center" is a single effect that clears the whole center zone.
@@ -68,7 +68,10 @@ Hands can be revealed with the reveal_hand op: one-shot to everyone or to chosen
 NOT YET SUPPORTED: revealing a single card, revealing other zones (deck, a specific card in the discard order), or per-card visibility. Fallback: reveal the whole hand, or a visible note.
 
 == Timers ==
-NOT YET SUPPORTED: turn timers or time limits on players. Fallback: a visible note; do not try to enforce time.
+The game can put every player on a per-turn clock: the turn_timer rule (seconds) ends the active player's turn automatically when their time runs out.
+The clock is fair — it pauses whenever the table is waiting on something that is not the player (a card being interpreted, a reaction window, an interaction prompt) and resumes with the time remaining.
+Setting turn_timer to null lifts the clock; a change takes effect from the next turn. The host can also set it when the room is created.
+NOT YET SUPPORTED: clocks on anything other than the whole turn (per-decision, per-card, or whole-game time limits). Fallback: a visible note; do not try to enforce those.
 
 == Choosing and targeting ==
 A card that lets its player choose a target ("give 3 points to any player", "steal a card from a player of your choice") is a CLEAN interpretation — the engine prompts for the choice; never call such a card invalid.

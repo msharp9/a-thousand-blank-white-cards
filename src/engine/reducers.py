@@ -565,7 +565,7 @@ def _reduce_unregister_hook(state: GameState, op: UnregisterHookOp, ctx: HookCon
     return state.model_copy(update={"hooks": remaining}).with_log(f"[hook] unregistered {op.source_card_id}")
 
 
-_SCALAR_RULE_PATHS = frozenset({"draw", "play", "skip_predicate", "hand_limit"})
+_SCALAR_RULE_PATHS = frozenset({"draw", "play", "skip_predicate", "hand_limit", "turn_timer"})
 _NESTED_RULE_HEADS = frozenset({"end_condition", "win_condition", "cannot_play"})
 
 

@@ -65,12 +65,19 @@ OP_CATALOG_GUIDE = """\
   draw_cards, destroy_card, transfer_card, reveal_hand, eliminate_player,
   set_win_condition, set_rule, set_condition, set_card_attribute, create_card,
   custom_note, end_game) into an EffectProgram.
-  * set_rule writes game rules as data (paths: draw, play, hand_limit,
+  * set_rule writes game rules as data (paths: draw, play, hand_limit, turn_timer,
     end_condition.type, win_condition.kind, extra.<anything>) — rule-changing cards
     ("draws are now 2", "game ends when someone empties their hand") compose set_rule
     ops, not snippets. hand_limit is ENFORCED by the engine: at the end of each turn
     an over-limit player picks cards to discard down to the limit (the hand tail is
     discarded for them on timeout); set_rule path "hand_limit" value null lifts it.
+    turn_timer is ENFORCED too: value <seconds> puts every player on a per-turn
+    clock — when the active player's time runs out their turn ends automatically.
+    The clock pauses whenever the table is waiting on something that is not the
+    player (a card being interpreted, a reaction window, an interaction prompt) and
+    resumes with the time remaining. Value null lifts it; a change takes effect
+    from the next turn. "Each player has 30 seconds per turn" = set_rule path
+    "turn_timer" value 30.
   * "New phase" cards (an attack phase, a discard phase) are NOT engine phases — there
     is no phase enum to extend. Express them as register_hook on on_turn_start /
     on_turn_end plus any bookkeeping as rule data under extra.<name> (or per-player

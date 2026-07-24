@@ -12,6 +12,7 @@ import type {
   PromptChoiceMsg,
   ReactionResultMsg,
   ServerMsg,
+  TurnTimerSnapshot,
 } from "./types";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
@@ -89,6 +90,10 @@ export interface GameSocketState {
   // reconnect — and dismissed via clearHandReveal.
   handReveal: HandRevealedMsg | null;
   clearHandReveal: () => void;
+  // The live pausable turn clock (rules.turn_timer), or null when no clock is
+  // armed. Re-synced from every turn_timer push AND every state snapshot, so
+  // it survives reconnects like the reaction window's deadline.
+  turnTimer: TurnTimerSnapshot | null;
   send: (msg: ClientMsg) => void;
 }
 
@@ -116,6 +121,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
   const [reactionResult, setReactionResult] =
     useState<ReactionResultMsg | null>(null);
   const [handReveal, setHandReveal] = useState<HandRevealedMsg | null>(null);
+  const [turnTimer, setTurnTimer] = useState<TurnTimerSnapshot | null>(null);
   const reactionResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -203,6 +209,9 @@ export function useGameSocket(code: string, name: string): GameSocketState {
               setInteractionRequest(null);
               setInteractionProgress(null);
             }
+            // Authoritative re-sync of the turn clock (covers reconnects that
+            // missed the live turn_timer pushes).
+            setTurnTimer(msg.state.turn_timer ?? null);
             // Hydrate the effect log from the authoritative state snapshot so a
             // refresh/reconnect restores full history. The backend keeps
             // state.log in sync with every effect_applied it broadcasts, so
@@ -260,6 +269,19 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             break;
           case "hand_revealed":
             setHandReveal(msg);
+            break;
+          case "turn_timer":
+            // A cleared clock pushes all-null fields; player_id is set for
+            // every live (running or paused) clock.
+            setTurnTimer(
+              msg.player_id
+                ? {
+                    deadline_epoch_ms: msg.deadline_epoch_ms,
+                    paused: msg.paused,
+                    player_id: msg.player_id,
+                  }
+                : null,
+            );
             break;
           case "reaction_window":
             // The window UI is driven by the state snapshot's pending_play
@@ -374,6 +396,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     reactionResult,
     handReveal,
     clearHandReveal,
+    turnTimer,
     send,
   };
 }

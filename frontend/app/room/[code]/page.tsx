@@ -30,6 +30,7 @@ import { PlayerAvatar } from "@/components/player-avatar";
 import { ResultsScreen } from "@/components/results-screen";
 import { SetupPhase } from "@/components/setup-phase";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
+import { TurnTimerChip } from "@/components/turn-timer";
 import { getCardArtUrl } from "@/lib/art";
 import { interactionResponseMessage } from "@/lib/interactions";
 import { playerColor } from "@/lib/players";
@@ -140,6 +141,7 @@ export default function RoomPage() {
     reactionResult,
     handReveal,
     clearHandReveal,
+    turnTimer,
     send,
   } = useGameSocket(nameSet ? code : "", name);
 
@@ -375,6 +377,7 @@ export default function RoomPage() {
             <span className="font-hand text-[17px] text-muted-foreground">
               Turn {gameState.turn_number}
             </span>
+            <TurnTimerChip timer={turnTimer} />
             <GameNavTabs gameState={gameState} roomCode={code} />
           </>
         )}
