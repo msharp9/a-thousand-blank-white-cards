@@ -486,10 +486,12 @@ def _write_rule_path(rules: dict, path: str, value: object) -> None:
 def _reduce_set_rule(state: GameState, op: SetRuleOp, ctx: HookContext) -> GameState:
     """Write one rule path. Unknown paths / invalid values raise ValueError.
 
-    When the write comes from a known source card (ctx.card_id), a RuleBinding
-    recording the path's previous value is appended so destroying that card can
-    revert the rule (see ``_release_rule_bindings``). Source-less writes
-    (house-rule flows) record nothing and behave as before.
+    When the write comes from a known source card, a RuleBinding recording the
+    path's previous value is appended so destroying that card can revert the
+    rule (see ``_release_rule_bindings``). Attribution prefers
+    ``ctx.source_card_id`` (set by hook dispatch to the firing hook's own card)
+    over ``ctx.card_id`` (the triggering play). Source-less writes (house-rule
+    flows) record nothing and behave as before.
     """
     rules = state.rules.model_dump()
     previous = _read_rule_path(rules, op.path)
@@ -499,8 +501,9 @@ def _reduce_set_rule(state: GameState, op: SetRuleOp, ctx: HookContext) -> GameS
     except PydanticValidationError as exc:
         raise ValueError(f"set_rule: invalid value for {op.path!r}: {exc}") from exc
     update: dict = {"rules": new_rules}
-    if ctx.card_id is not None:
-        binding = RuleBinding(source_card_id=ctx.card_id, path=op.path, previous_value=previous)
+    source = ctx.source_card_id or ctx.card_id
+    if source is not None:
+        binding = RuleBinding(source_card_id=source, path=op.path, previous_value=previous)
         update["rule_bindings"] = [*state.rule_bindings, binding]
     return state.model_copy(update=update)
 

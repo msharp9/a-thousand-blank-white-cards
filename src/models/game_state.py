@@ -121,7 +121,7 @@ class RuleBinding(BaseModel):
     the rule reverts to ``previous_value``; otherwise the binding above it
     inherits ``previous_value`` and the live value is untouched (see
     ``engine.reducers._release_rule_bindings``). ``set_rule`` without a source
-    card (house-rule flows, no ctx.card_id) records no binding.
+    card in ctx (house-rule flows) records no binding.
     """
 
     source_card_id: str

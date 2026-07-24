@@ -593,6 +593,39 @@ class TestRuleBindings:
         assert new.rules.draw == 1
         assert new.rule_bindings == []
 
+    SET_RULE_SNIPPET = "def apply(state, ctx):\n    state.set_rule('draw', 5)\n"
+
+    def _hook_state(self) -> GameState:
+        spec = HookSpec(
+            id="hook-hr1-0",
+            source_card_id="hr1",
+            event=str(GameEvent.ON_TURN_START),
+            scope="center",
+            code=self.SET_RULE_SNIPPET,
+        )
+        return self._center_state("hr1").model_copy(update={"hooks": [spec]})
+
+    def test_set_rule_fired_from_hook_binds_to_hook_source_card(self):
+        """A hook's set_rule must be attributed to the hook's own card even when
+        the triggering event carries no card_id (e.g. turn start), so destroying
+        the card still reverts the rule."""
+        state = self._hook_state()
+        ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1")
+        fired = fire_hooks(state, GameEvent.ON_TURN_START, ctx, registry=build_registry(state))
+        assert fired.rules.draw == 5
+        assert [b.source_card_id for b in fired.rule_bindings] == ["hr1"]
+
+        after = apply_op(fired, DestroyCardOp(card_id="hr1"), make_card_ctx("p1"))
+        assert after.rules.draw == 1
+        assert after.rule_bindings == []
+        assert after.hooks == []
+
+    def test_set_rule_fired_from_hook_ignores_triggering_cards_id(self):
+        state = self._hook_state()
+        ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id="p1", card_id="someone-elses-card")
+        fired = fire_hooks(state, GameEvent.ON_TURN_START, ctx, registry=build_registry(state))
+        assert [b.source_card_id for b in fired.rule_bindings] == ["hr1"]
+
 
 class TestOpenTargets:
     def test_id_target_resolves_to_that_player(self):

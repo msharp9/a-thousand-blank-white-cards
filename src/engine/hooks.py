@@ -94,6 +94,7 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
     cache_snippet(card_id, code)
 
     def _handler(state: Any, ctx: Any) -> Any:
+        import dataclasses
         import json
 
         from config import get_settings
@@ -117,7 +118,8 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
             ctx_dict["deltas"] = dict(deltas)
         try:
             raw_ops = execute_snippet(code, state_dict, ctx_dict)
-            return apply_snippet_diff(state, raw_ops, ctx, origin="hook")
+            apply_ctx = dataclasses.replace(ctx, source_card_id=card_id)
+            return apply_snippet_diff(state, raw_ops, apply_ctx, origin="hook")
         except (SnippetExecutionError, DiffValidationError) as exc:
             drain = _hook_error_drain.get()
             if drain is not None:

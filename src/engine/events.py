@@ -39,6 +39,7 @@ class HookContext:
     event: GameEvent
     actor_id: str  # player who triggered the event
     card_id: str | None = None  # card being played / destroyed
+    source_card_id: str | None = None  # card whose snippet emitted the ops being applied (attribution)
     chosen_player_id: str | None = None  # resolution of Target.chooser
     chosen_card_id: str | None = None  # resolution of CardTarget.chosen_card
     amount: int | None = None  # points delta, draw count, etc.
