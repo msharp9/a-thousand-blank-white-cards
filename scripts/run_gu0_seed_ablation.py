@@ -14,12 +14,25 @@ HAIKU = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 LEAN = frozenset({"dry_run_effect", "read_engine_methods", "read_game_state"})
 
 CONFIGS = [
-    EvalConfig(benchmark="seed", model_name=HAIKU, max_tool_calls=12, n_samples=3,
-               sample_size=69, concurrency=8,
-               label="gu0 - seed - maxtools=12 - FULL - n3"),
-    EvalConfig(benchmark="seed", model_name=HAIKU, max_tool_calls=12, n_samples=3,
-               sample_size=69, concurrency=8, enabled_tools=LEAN,
-               label="gu0 - seed - maxtools=12 - dry_run+engine_methods+game_state - n3"),
+    EvalConfig(
+        benchmark="seed",
+        model_name=HAIKU,
+        max_tool_calls=12,
+        n_samples=3,
+        sample_size=69,
+        concurrency=8,
+        label="gu0 - seed - maxtools=12 - FULL - n3",
+    ),
+    EvalConfig(
+        benchmark="seed",
+        model_name=HAIKU,
+        max_tool_calls=12,
+        n_samples=3,
+        sample_size=69,
+        concurrency=8,
+        enabled_tools=LEAN,
+        label="gu0 - seed - maxtools=12 - dry_run+engine_methods+game_state - n3",
+    ),
 ]
 
 for cfg in CONFIGS:
