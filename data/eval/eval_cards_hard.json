@@ -486,5 +486,50 @@
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    mine = state.roll_die(sides=20)\n    theirs = state.roll_die(sides=20)\n    if mine > theirs:\n        state.subtract_points(chosen, 6)\n        state.discard_random(chosen, 1)\n    elif theirs > mine:\n        state.subtract_points('self', 6)\n        state.discard_random('self', 1)\n    else:\n        state.note('Dice Duel: a tie -- both duelists walk away unscathed.')"
     }
+  },
+  {
+    "id": "hard-060",
+    "title": "Scout Ahead",
+    "description": "Send a scout up the trail: look at the top 2 cards of the deck and arrange them however you like, then draw a card.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "scout",
+          "request": {
+            "kind": "card_order",
+            "prompt": "Look at the top 2 cards of the deck. Reorder them or send either to the bottom.",
+            "count": 2
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    seq = ctx['interactions']['scout'][ctx['actor_id']]\n    for cid in seq['to_bottom']:\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='bottom')\n    for cid in reversed(seq['order']):\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='top')\n    state.draw_cards('self', 1)"
+        }
+      ]
+    }
+  },
+  {
+    "id": "hard-061",
+    "title": "Mulch Money",
+    "description": "Turn the deck into fertilizer: mill the top 3 cards of the deck into the discard pile and gain 1 point for each card actually milled.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    milled = min(3, state.deck_size)\n    if milled > 0:\n        state.move_cards(from_zone='deck', selector='top', count=milled, to_zone='discard')\n        state.add_points('self', milled)"
+    }
   }
 ]
