@@ -374,22 +374,51 @@ is the price/quality sweet spot.
 
 I had been using Sonnet up to this point, but switched to Haiku as it had comparitive performance but much better cost savings. Fixing haiku and sweeping `max_tool_calls` on
 `eval_hard` (`MAX_TOOL_CALLS` in [`src/agent/runtime.py`](../src/agent/runtime.py),
-default was 24):
+default was 24). The first pass ran each config once; at n=1 the per-metric run-to-run
+noise (`intent_match` stdev ≈ 0.12–0.16) swamped the cap deltas, so the sweep and the
+tool ablations were re-run at **n=3** (three samples per card, 34 cards → 102 cases per
+config) to separate signal from noise:
 
-| Metric | cap 6 | cap 12 | cap 18 | uncapped (24) |
+| Metric (n=3) | cap 6 | cap 12 | cap 18 | uncapped (24) |
 | --- | ---: | ---: | ---: | ---: |
-| intent_match | 0.680 | 0.840 | 0.694 | **0.852** |
-| target_accuracy | 0.700 | **0.874** | 0.692 | 0.840 |
-| persistence_accuracy | 0.772 | **0.936** | 0.772 | 0.844 |
-| dsl_validity | 0.880 | **0.960** | 0.840 | 0.880 |
-| executability | 0.880 | **0.960** | 0.840 | 0.880 |
-| invalid rate | 0.200 | **0.040** | 0.120 | **0.040** |
+| composite quality | 0.784 | 0.871 | 0.882 | **0.891** |
+| intent_match | 0.723 | 0.804 | 0.847 | **0.857** |
+| sandbox_behavior | 0.546 | 0.604 | **0.655** | 0.596 |
+| did_something | 0.857 | 0.976 | 0.988 | **1.000** |
+| executability | 0.912 | 0.990 | 0.990 | **1.000** |
+| invalid rate | 0.167 | 0.029 | 0.039 | **0.000** |
+| agent_error rate | 0.078 | 0.020 | 0.029 | **0.000** |
+| mean tool calls | 3.74 | 4.62 | 4.66 | 4.85 |
+| mean cost / card | $0.029 | **$0.049** | $0.050 | $0.053 |
 
-A cap of 12 dominates: versus the old 24 it lifts `dsl_validity`/`executability`
-0.88 → 0.96 and `persistence_accuracy` 0.844 → 0.936 at equal intent, while 6 starves
-the agent (invalid rate 0.04 → 0.20) and 18 lets it wander. 
+The n=3 picture is more honest than the n=1 one: **cap 6 clearly starves the agent**
+(composite 0.784, 16.7% invalid, 7.8% hard errors), but **12 → 18 → 24 is a shallow,
+mostly-monotone climb of ~0.02 composite** — smaller than the intent_match stdev band.
+The uncapped run edges the top raw scores, but only by spending more tool calls and
+tokens for a difference inside the noise, and `sandbox_behavior` actually peaks at 18,
+not 24. Production stays at **cap 12**: it clears the cliff at 6, sits within noise of
+the higher caps on every quality metric, and does so at roughly half the token budget of
+uncapped. The cap is enforced end-to-end and demonstrated by the harness rather than
+asserted.
 
-Tool-ablation runs backed the full toolbox: cutting the agent down to just state/engine/dry-run tools dropped `intent_match` to 0.766 (and to 0.508 without `read_engine_methods`). The cap is now 12 in production, demonstrated end-to-end by the eval harness rather than asserted.
+Tool ablations were re-run at n=3 too (haiku, `eval_hard`, cap 12):
+
+| Toolbox (n=3, cap 12) | composite | intent_match | sandbox_behavior | invalid rate |
+| --- | ---: | ---: | ---: | ---: |
+| full production toolbox | 0.871 | 0.804 | 0.604 | 0.029 |
+| dry_run + engine_methods + game_state | **0.911** | **0.901** | **0.614** | **0.020** |
+| dry_run + game_state (no engine_methods) | 0.770 | 0.674 | 0.440 | 0.137 |
+
+Two things hold up under n=3. First, `read_engine_methods` is load-bearing: removing it
+drops composite 0.871 → 0.770 and intent_match 0.804 → 0.674 while nearly 5×-ing the
+invalid rate — the earlier "≈ −0.2" read was real. Second, and more surprising, the
+**leanest useful box** (dry-run + engine introspection + state, dropping card-RAG,
+game-rules, and history) actually *beats* the full toolbox at n=3 (composite 0.911 vs
+0.871), suggesting the extra retrieval tools add more distraction than signal on
+`eval_hard` specifically — consistent with the earlier finding that card-RAG barely gets
+called on the hard set. That is logged as a follow-up rather than acted on here: the
+hard set under-exercises card-RAG, so this is not yet evidence to drop those tools from
+the seed/live toolbox.
 
 ---
 
