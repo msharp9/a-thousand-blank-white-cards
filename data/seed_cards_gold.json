@@ -2177,5 +2177,55 @@
         }
       ]
     }
+  },
+  {
+    "id": "seed-gold-110",
+    "title": "Boomerang",
+    "description": "Like a boomerang, this card comes right back: after it resolves, return it to its owner's hand instead of the discard pile.",
+    "alt_text": "a wooden boomerang curving back toward the hand that threw it",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "this",
+            "to_target": "card_owner"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card('this', 'card_owner')"
+    }
+  },
+  {
+    "id": "seed-gold-111",
+    "title": "Rewind",
+    "description": "Undo the last thing that happened: the last card played is removed from the game, and you draw a fresh card.",
+    "alt_text": "a cassette tape with its ribbon spooling backwards",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "destroy_card",
+          "args": {
+            "card_target": "last_played"
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.destroy_card(card_target='last_played')\n    state.draw_cards('self', 1)"
+    }
   }
 ]
