@@ -59,6 +59,11 @@ def test_destroy_card_op_accepts_card_target() -> None:
     assert op.card_id is None
 
 
+def test_destroy_card_op_accepts_all_in_center() -> None:
+    op = DestroyCardOp(card_target="all_in_center")
+    assert op.card_target == "all_in_center"
+
+
 def test_destroy_card_op_rejects_bad_card_target() -> None:
     with pytest.raises(ValidationError):
         DestroyCardOp(card_target="not_a_card_target")

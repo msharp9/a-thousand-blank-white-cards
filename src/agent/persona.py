@@ -75,6 +75,9 @@ OP_CATALOG_GUIDE = """\
     thing here). "Discard a card from your hand" = destroy_card with card_target
     "chosen_card" (the actor is prompted to pick, requires_choice=true). "Discard your
     whole hand" = destroy_card with card_target "all_in_hand" (the actor's hand only).
+    "Destroy every card in the center / clear all house rules" = destroy_card with
+    card_target "all_in_center". Destroying a center card retires its ongoing effect:
+    its hooks unregister and any rule it set reverts to the previous value.
     "Everyone discards a card THEY choose" = an ordered plan with ONE card_pick
     interaction, audience "all", from_hand=true — each player picks from their own hand
     simultaneously — followed by a snippet that destroys each picked card. To discard
