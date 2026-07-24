@@ -532,6 +532,11 @@ def _reduce_move_cards(
                 moves.append((cid, zone, owner))
 
     source_label = op.card_target if op.card_target is not None else op.from_zone
+    # An explicit id moving into a HIDDEN zone (deck/hand) must not be named in
+    # the shared log: a scry write-back that logged "id:X -> deck" would pin
+    # deck positions to ids the table can correlate with earlier public events.
+    if op.card_target is not None and op.card_target.startswith("id:") and op.to_zone in ("deck", "hand"):
+        source_label = "a chosen card"
     if not moves:
         return state.with_log(f"[move_cards no-op] no cards to move from {source_label!r}")
 

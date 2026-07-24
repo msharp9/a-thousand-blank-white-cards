@@ -29,6 +29,7 @@ _SAFE_BUILTINS = {
     "max": max,
     "min": min,
     "range": range,
+    "reversed": reversed,
     "round": round,
     "set": set,
     "sorted": sorted,

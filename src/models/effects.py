@@ -695,9 +695,12 @@ class ResolutionPlan(BaseModel):
                 isinstance(step.request, CardPickInteraction)
                 and not step.request.card_ids
                 and not step.request.from_hand
+                and step.request.from_deck_top is None
                 and "card_ids" not in step.input_refs
             ):
-                raise ValueError("card_pick interaction requires card_ids, from_hand, or a card_ids input_ref")
+                raise ValueError(
+                    "card_pick interaction requires card_ids, from_hand, from_deck_top, or a card_ids input_ref"
+                )
             available.add(step.result_key)
         if interaction_count > MAX_INTERACTION_STEPS:
             raise ValueError(f"resolution plan exceeds {MAX_INTERACTION_STEPS} interaction barriers")

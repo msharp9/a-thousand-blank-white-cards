@@ -53,6 +53,9 @@ def _visible_card_ids(snap: dict[str, Any], viewer_id: str | None) -> set[str]:
     visible.update(snap.get("house_rules", []))
     if snap.get("phase") in PUBLIC_DECK_PHASES:
         visible.update(snap.get("deck", []))
+    interaction_visibility = snap.get("interaction_card_visibility")
+    if interaction_visibility is not None and viewer_id in (interaction_visibility.get("viewer_ids") or []):
+        visible.update(interaction_visibility.get("card_ids", []))
     pending_play = snap.get("pending_play")
     if pending_play is not None:
         visible.add(pending_play.get("card_id"))
@@ -86,6 +89,10 @@ def redact_snapshot(snap: dict[str, Any], viewer_id: str | None) -> dict[str, An
       their content, so hidden entries must be dropped, not just de-listed.
     - ``discard``, ``exiled``, ``in_play`` and the center zone are public and
       untouched.
+    - ``interaction_card_visibility`` (set by ``Room.snapshot()`` while a
+      deck-top interaction — scry / draw-N-keep-1 — is pending) keeps the
+      offered cards' registry entries for exactly the interaction's audience,
+      then is stripped for every viewer.
 
     The input dict is never mutated; only the copied containers this function
     rewrites are duplicated.
@@ -109,4 +116,8 @@ def redact_snapshot(snap: dict[str, Any], viewer_id: str | None) -> dict[str, An
     if isinstance(cards, dict):
         visible = _visible_card_ids(snap, viewer_id)
         redacted["cards"] = {cid: card for cid, card in cards.items() if cid in visible}
+    # Consumed above (it grants the pending deck-top interaction's audience
+    # their offered cards); stripped for EVERY viewer because it names hidden
+    # deck ids and who is being shown them.
+    redacted.pop("interaction_card_visibility", None)
     return redacted

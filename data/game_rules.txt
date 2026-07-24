@@ -19,7 +19,8 @@ Drawing (or being forced to draw) more cards than the deck holds draws every rem
 Emptying the deck by an EFFECT rather than a draw (milling it away, exiling it, moving its last cards elsewhere) never ends the game mid-turn either: the player whose card emptied the deck finishes their turn, then the game ends — exactly the same timing as drawing the last card.
 Moving cards between zones without playing them IS supported (the move_cards op): milling the top N (or all) of the deck into the discard, removing cards or the whole deck from the game (exile), returning a card to the top, bottom, or a random position of the deck, and moving cards into or out of hands, in-play areas, and the center. Random picks are made by the engine — never pick the cards yourself — and moving a hidden card reveals nothing about it.
 A mid-game deck shuffle IS supported (the shuffle_deck op), including the classic reshuffle: shuffle the discard pile back into the deck (include_discard).
-NOT YET SUPPORTED: looking at or reordering specific cards on top of the deck (scry, peek). Fallback: apply the closest supported effect (e.g. a blind move or a shuffle) and say so in your comment.
+Scry IS supported: "look at the top N cards of the deck and put them back in any order (some on the bottom)" is a card_order interaction (source deck_top) — the faces are shown only to the scrying player, who returns the new order plus an optional to-the-bottom split; a follow-up snippet writes the order back with move_cards. "Look at the top N and keep one" (draw-N-keep-1) is a card_pick with from_deck_top: N — the pick goes to the player's hand and the leftovers to the deck bottom via the follow-up snippet.
+NOT YET SUPPORTED: addressing an arbitrary deck INDEX ("swap the 5th and 12th cards") or leaving a deck card face-up in place. Fallback: scry the top N, or a blind move/shuffle, and say so in your comment.
 
 == Discarding ==
 "Discard a card" of the player's choosing = destroy the chosen card (a pick prompt); "discard your hand" destroys every card in that hand.
@@ -66,7 +67,8 @@ NOT YET SUPPORTED: eliminating a single player while the rest keep playing. Fall
 == Visibility ==
 Hands are private; in-play, center, and discard cards are public.
 Hands can be revealed with the reveal_hand op: one-shot to everyone or to chosen players (persistent=false), or persistently — to="all" plays the hand face up — and concealed again with mode="conceal". Revealing changes only who can SEE the cards; it never moves them.
-NOT YET SUPPORTED: revealing a single card, revealing other zones (deck, a specific card in the discard order), or per-card visibility. Fallback: reveal the whole hand, or a visible note.
+Peeking at the TOP of the deck is supported privately via scry (a card_order or from_deck_top interaction, see "Drawing and the deck") — the faces go only to the peeking player.
+NOT YET SUPPORTED: revealing a single card, revealing the deck to the whole table, a specific card in the discard order, or per-card visibility. Fallback: reveal the whole hand, scry the deck top, or a visible note.
 
 == Timers ==
 NOT YET SUPPORTED: turn timers or time limits on players. Fallback: a visible note; do not try to enforce time.
