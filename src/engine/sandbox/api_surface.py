@@ -271,6 +271,63 @@ class SandboxGame:
             raise ValueError(f"count must be an int in 1..10, got {count!r}")
         self._ops.append({"op": "discard_random", "target": target, "count": count})
 
+    _ZONES = ("deck", "discard", "hand", "in_play", "center", "exile")
+
+    def move_cards(
+        self,
+        card_target: str | None = None,
+        from_zone: str | None = None,
+        selector: str = "top",
+        count: int = 1,
+        from_player: str | None = None,
+        to_zone: str = "discard",
+        to_position: str = "top",
+        to_player: str | None = None,
+    ) -> None:
+        """Move cards between zones (deck/discard/hand/in_play/center/exile) without playing them.
+
+        Give EITHER an explicit `card_target` OR a `from_zone` with
+        `selector` ("top"/"bottom"/"all"/"random") and `count` (1-50);
+        `from_player`/`to_player` are required exactly when the corresponding
+        zone is "hand" or "in_play". `to_position` applies only to a deck
+        destination: "top", "bottom", or "shuffle" (random positions). Random
+        picks happen in the ENGINE at apply time and nothing is returned —
+        your code can never learn which hidden card moved.
+        """
+        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 50:
+            raise ValueError(f"count must be an int in 1..50, got {count!r}")
+        if (card_target is None) == (from_zone is None):
+            raise ValueError("move_cards requires exactly one of card_target or from_zone")
+        if from_zone is not None and from_zone not in self._ZONES:
+            raise ValueError(f"from_zone must be one of {self._ZONES}, got {from_zone!r}")
+        if to_zone not in self._ZONES:
+            raise ValueError(f"to_zone must be one of {self._ZONES}, got {to_zone!r}")
+        if selector not in ("top", "bottom", "all", "random"):
+            raise ValueError(f"selector must be top/bottom/all/random, got {selector!r}")
+        if to_position not in ("top", "bottom", "shuffle"):
+            raise ValueError(f"to_position must be top/bottom/shuffle, got {to_position!r}")
+        if (from_zone in ("hand", "in_play")) != (from_player is not None):
+            raise ValueError("from_player is required exactly when from_zone is 'hand' or 'in_play'")
+        if (to_zone in ("hand", "in_play")) != (to_player is not None):
+            raise ValueError("to_player is required exactly when to_zone is 'hand' or 'in_play'")
+        self._ops.append(
+            {
+                "op": "move_cards",
+                "card_target": card_target,
+                "from_zone": from_zone,
+                "selector": selector,
+                "count": count,
+                "from_player": from_player,
+                "to_zone": to_zone,
+                "to_position": to_position,
+                "to_player": to_player,
+            }
+        )
+
+    def shuffle_deck(self, include_discard: bool = False) -> None:
+        """Shuffle the draw pile; include_discard=True reshuffles the discard pile into it."""
+        self._ops.append({"op": "shuffle_deck", "include_discard": bool(include_discard)})
+
     def destroy_card(self, card_id: str | None = None, card_target: str | None = None) -> None:
         """Destroy cards by CardTarget address ('this', 'all_in_play', 'all_in_center', 'id:…', 'attr:k=v')."""
         legacy_targets = {"all_in_hand", "all_in_play", "all_in_center", "chosen_card", "this"}
@@ -359,13 +416,14 @@ class SandboxGame:
     ) -> None:
         """Mint `count` copies of a new card (authoring ops compile when it is later played).
 
-        `destination` is "deck_shuffle" (default), "deck_top", or "hand". With
-        "hand" the copies go to the `target` player(s) — default "self" (the
-        actor); pass a player Target (e.g. "id:<player_id>") to hand cards to a
-        specific player. Passing a player Target as `destination` (e.g.
-        `destination="id:X"`) is treated as `destination="hand", target="X"`.
+        `destination` is "deck_shuffle" (default), "deck_top", "deck_bottom",
+        "hand", "discard", or "center". With "hand" the copies go to the
+        `target` player(s) — default "self" (the actor); pass a player Target
+        (e.g. "id:<player_id>") to hand cards to a specific player. Passing a
+        player Target as `destination` (e.g. `destination="id:X"`) is treated
+        as `destination="hand", target="X"`.
         """
-        _DESTINATIONS = {"deck_shuffle", "deck_top", "hand"}
+        _DESTINATIONS = {"deck_shuffle", "deck_top", "deck_bottom", "hand", "discard", "center"}
         if target is None and destination not in _DESTINATIONS:
             target, destination = destination, "hand"
         self._ops.append(

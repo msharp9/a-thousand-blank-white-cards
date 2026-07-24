@@ -23,7 +23,11 @@ End game: there are TWO distinct end paths with distinct timing.
   ``_deck_exhausted`` latches. That player finishes their turn normally; only
   once their turn ends (``_advance_turn``) does the game end (Per the rules:
   the player who draws the last card completes their turn, then the game
-  ends).
+  ends). The same deferred timing applies when a play's EFFECT (not a draw)
+  empties the deck — e.g. milling or exiling the remaining cards:
+  ``_after_play_effects`` latches ``_deck_exhausted`` when the deck went from
+  non-empty to empty across the play, so emptying the deck never ends the game
+  mid-turn.
 - Explicit end / live win condition: a card's ``end_game`` op sets
   ``rules.end_condition``, and ``set_win_condition`` can make
   ``evaluate_win_condition`` (via ``win_condition_met``) become true mid-play
@@ -73,6 +77,8 @@ from models.effects import (
 )
 from models.game_state import EndCondition, EpilogueCardOutcome, EpilogueResultSummary, GameState, Player, Spectator
 from models.interactions import (
+    CardOrderInteraction,
+    CardOrderResponse,
     CardPickInteraction,
     CardPickResponse,
     ChoiceInteraction,
@@ -2719,23 +2725,69 @@ class Room:
 
         A ``from_hand`` card_pick is personalised: each player is shown THEIR OWN
         hand as the selectable ``card_ids`` (see :func:`_validate_interaction_response`,
-        which mirrors this by validating against the responder's hand)."""
+        which mirrors this by validating against the responder's hand).
+
+        Deck-top interactions (``card_order``, ``from_deck_top`` card_pick) get
+        the actual top-N card ids AND their faces filled in here — and only
+        here. Deck contents are hidden information, so the faces ride this
+        targeted interaction_request (whose recipients are exactly the resolved
+        audience; see :meth:`_send_interaction_request`) and never the shared
+        snapshot; the audience's redacted snapshot keeps just those registry
+        entries while the interaction is pending (see board.rooms.redaction).
+        """
         descriptor = request.model_dump(mode="json")
         if isinstance(request, CardPickInteraction) and request.from_hand:
             descriptor["card_ids"] = list(self._from_hand_options(player_id))
+        deck_top_count = self._deck_top_count(request)
+        if deck_top_count is not None:
+            offered = self._deck_top_options(deck_top_count)
+            if isinstance(request, CardPickInteraction):
+                claimed = self._claimed_deck_top_picks(player_id)
+                offered = [cid for cid in offered if cid not in claimed]
+            descriptor["card_ids"] = list(offered)
+            cards = self._interaction_state().cards
+            descriptor["cards"] = {cid: cards[cid] for cid in offered if cid in cards}
         return descriptor
 
-    def _from_hand_options(self, player_id: str) -> list[str]:
-        """The hand a from_hand card_pick offers ``player_id``.
+    @staticmethod
+    def _deck_top_count(request: InteractionDescriptor) -> int | None:
+        """How many deck-top cards this interaction reveals to its audience (None if none)."""
+        if isinstance(request, CardOrderInteraction):
+            return request.count
+        if isinstance(request, CardPickInteraction):
+            return request.from_deck_top
+        return None
 
-        Reads the paused resolution's working_state when one is live (the played
-        card has already left the actor's hand there), so the actor is never
-        offered the card they are mid-play — falling back to committed state."""
-        source = self.state
+    def _interaction_state(self) -> GameState:
+        """The state interaction options are drawn from: the paused resolution's
+        working_state when one is live (the played card has already left the
+        actor's hand there), falling back to committed state."""
         if self._pending_resolution is not None:
-            source = self._pending_resolution.working_state
+            return self._pending_resolution.working_state
+        return self.state
+
+    def _deck_top_options(self, count: int) -> list[str]:
+        """The top ``count`` deck card ids a deck-top interaction offers (top first)."""
+        return list(self._interaction_state().deck[:count])
+
+    def _claimed_deck_top_picks(self, player_id: str | None) -> set[str]:
+        """Deck-top cards OTHER audience members already picked in the pending
+        interaction — unavailable to ``player_id`` (see
+        :meth:`_validate_interaction_response`)."""
+        pending = self._pending_resolution
+        if pending is None:
+            return set()
+        claimed: set[str] = set()
+        for pid, payload in pending.responses.items():
+            if pid != player_id and isinstance(payload, CardPickResponse):
+                claimed.update(payload.picks)
+        return claimed
+
+    def _from_hand_options(self, player_id: str) -> list[str]:
+        """The hand a from_hand card_pick offers ``player_id`` (working state
+        while paused, so the actor is never offered the card they are mid-play)."""
         try:
-            return list(source.get_player(player_id).hand)
+            return list(self._interaction_state().get_player(player_id).hand)
         except KeyError:
             return []
 
@@ -2831,11 +2883,19 @@ class Room:
                 raise ValueError("unknown choice")
             return option_ids
         if isinstance(request, CardPickInteraction) and isinstance(payload, CardPickResponse):
-            # from_hand picks are validated against the responder's own hand (the
-            # per-player option set _send_interaction_request presented), not the
-            # static card_ids (which is empty for a from_hand pick).
+            # from_hand / from_deck_top picks are validated against the option
+            # set _send_interaction_request presented (the responder's hand /
+            # the deck top), not the static card_ids (empty for those picks).
             if request.from_hand:
                 selectable = set(self._from_hand_options(player_id)) if player_id is not None else set()
+            elif request.from_deck_top is not None:
+                # The deck top is one SHARED resource (unlike from_hand's
+                # disjoint hands): with a multi-player audience, a card another
+                # responder already claimed cannot be claimed again.
+                claimed = self._claimed_deck_top_picks(player_id)
+                if set(payload.picks) & claimed:
+                    raise ValueError("card was already taken by another player")
+                selectable = set(self._deck_top_options(request.from_deck_top)) - claimed
             else:
                 selectable = set(request.card_ids)
             picks = payload.picks
@@ -2851,6 +2911,15 @@ class Room:
             if request.max_picks == 1:
                 return picks[0] if picks else None
             return picks
+        if isinstance(request, CardOrderInteraction) and isinstance(payload, CardOrderResponse):
+            # The response must be a full permutation of the offered top-N:
+            # every offered card accounted for exactly once (uniqueness across
+            # the split is model-enforced), and no foreign ids smuggled in.
+            offered = self._deck_top_options(request.count)
+            returned = [*payload.order, *payload.to_bottom]
+            if sorted(returned) != sorted(offered):
+                raise ValueError("card_order response must be a permutation of the offered cards")
+            return {"order": list(payload.order), "to_bottom": list(payload.to_bottom)}
         if isinstance(request, ConfirmInteraction) and isinstance(payload, ConfirmResponse):
             return payload.confirmed
         if isinstance(request, DrawingInteraction) and isinstance(payload, DrawingResponse):
@@ -2882,13 +2951,18 @@ class Room:
             await self.connections.send(player_id, {"type": "error", "message": str(exc)})
             return
         pending.responses[player_id] = msg.payload
-        await self._send_interaction_request(player_id)
+        if isinstance(pending.request, CardPickInteraction) and pending.request.from_deck_top is not None:
+            # A recorded deck-top pick shrinks everyone else's options; resend
+            # so no one is shown a card they can no longer claim.
+            for member in pending.resolved_audience:
+                await self._send_interaction_request(member)
+        else:
+            await self._send_interaction_request(player_id)
         await self._broadcast_interaction_progress()
         if len(pending.responses) >= len(pending.resolved_audience):
             await self._resume_pending_resolution(timed_out=False)
 
-    @staticmethod
-    def _default_interaction_value(request: InteractionDescriptor) -> object:
+    def _default_interaction_value(self, request: InteractionDescriptor) -> object:
         if isinstance(request, NumberInteraction):
             bounded = max(request.minimum, min(0, request.maximum))
             return (
@@ -2904,6 +2978,9 @@ class Room:
             # Mirror the pick shape: a single-pick request defaults to no card;
             # a multi-pick request defaults to the empty set.
             return None if request.max_picks == 1 else []
+        if isinstance(request, CardOrderInteraction):
+            # A silent scryer changes nothing: identity order, nothing bottomed.
+            return {"order": self._deck_top_options(request.count), "to_bottom": []}
         if isinstance(request, ConfirmInteraction):
             return False
         return []
@@ -3703,6 +3780,20 @@ class Room:
                 "progress": self._interaction_progress().model_dump(),
             }
             if pending is not None
+            else None
+        )
+        # Deck-top interactions (card_order / from_deck_top card_pick) entitle
+        # their audience — and no one else — to the offered cards' content
+        # while the pause lasts. redact_snapshot consumes (and always strips)
+        # this: it keeps the listed registry entries for listed viewers only,
+        # so a reconnecting scryer can still render the faces.
+        deck_top_count = self._deck_top_count(pending.request) if pending is not None else None
+        snap["interaction_card_visibility"] = (
+            {
+                "viewer_ids": list(pending.resolved_audience),
+                "card_ids": self._deck_top_options(deck_top_count),
+            }
+            if deck_top_count is not None
             else None
         )
         # Open reaction window, public info only (reconnect-safe source of

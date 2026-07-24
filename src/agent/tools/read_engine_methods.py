@@ -121,7 +121,8 @@ def _build_reference() -> str:
     parts.append(
         "ResolutionPlan may also pause at an interaction step: "
         "{'kind':'interaction','result_key':'bids','request':{'kind':'number','prompt':'Bid',"
-        "'audience':'all','sealed':true}}. Kinds: choice, number, text, card_pick, confirm, drawing. "
+        "'audience':'all','sealed':true}}. Kinds: choice, number, text, card_pick, card_order, "
+        "confirm, drawing. "
         "Audiences: active, all, all_others, player:<id>. Later snippets read "
         "ctx['interactions'][result_key]. Use input_refs {'options':{'result_key':'drawings','path':[]}} "
         "to turn prior submissions into options for a chained vote. "
@@ -131,7 +132,15 @@ def _build_reference() -> str:
         "{player_id: chosen_card_id} and calls state.destroy_card(card_id=...) on each. "
         "Set card_pick 'max_picks':N (and 'min_picks', default 1) to let each responder "
         "pick a SET of N cards ('discard 2 cards'); the collected value for that player "
-        "is then a LIST of card ids instead of a single id (iterate it in the snippet)."
+        "is then a LIST of card ids instead of a single id (iterate it in the snippet). "
+        "A card_pick with 'from_deck_top':N shows the audience the top N deck cards "
+        "('draw 3, keep 1'); a card_order request "
+        "{'kind':'card_order','source':'deck_top','count':N,'prompt':...} is a SCRY — "
+        "the player reorders those cards, and the collected value is "
+        "{'order': [...], 'to_bottom': [...]}. Both reveal the faces ONLY to the "
+        "audience; a follow-up snippet applies the result with state.move_cards "
+        "(picked card to hand / leftovers or 'to_bottom' ids to the deck bottom / "
+        "reversed(order) ids back to the top)."
     )
     return "\n".join(parts)
 

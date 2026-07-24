@@ -62,9 +62,10 @@ OP_CATALOG_GUIDE = """\
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, roll_die, discard_random, destroy_card, transfer_card, reveal_hand,
-  eliminate_player, set_win_condition, set_rule, set_condition, set_card_attribute,
-  create_card, custom_note, end_game) into an EffectProgram.
+  draw_cards, roll_die, discard_random, destroy_card, transfer_card, move_cards,
+  shuffle_deck, reveal_hand, eliminate_player, set_win_condition, set_rule,
+  set_condition, set_card_attribute, create_card, custom_note, end_game) into an
+  EffectProgram.
   * set_rule writes game rules as data (paths: draw, play, hand_limit, turn_timer,
     end_condition.type, win_condition.kind, extra.<anything>) — rule-changing cards
     ("draws are now 2", "game ends when someone empties their hand") compose set_rule
@@ -109,6 +110,23 @@ OP_CATALOG_GUIDE = """\
     simultaneously — followed by a snippet that destroys each picked card. To discard
     MORE than one per player ("everyone discards 2 cards") set the card_pick's
     max_picks=N: each player's collected value is then a LIST of card ids to iterate.
+  * move_cards moves cards between zones (deck, discard, hand, in_play, center, exile)
+    WITHOUT playing them. Source is EITHER an explicit card_target OR a from_zone with
+    selector "top"/"bottom"/"all"/"random" and count (1-50); from_player / to_player name
+    whose hand or in-play zone and are required exactly for those zones. Mill = from_zone
+    "deck", selector "top", to_zone "discard". Take the top discard into your hand =
+    from_zone "discard", to_zone "hand", to_player "self". Remove the whole deck from the
+    game = from_zone "deck", selector "all", to_zone "exile". Return a card to the bottom
+    of the deck = to_zone "deck", to_position "bottom" ("top" and "shuffle" also work).
+    The ENGINE picks random cards — never pick them yourself — and moving a hidden card
+    reveals nothing about it. Moving a card OFF the board (out of the center or an
+    in-play zone) retires its ongoing effect just like destroy_card: its hooks
+    unregister and any rule it set reverts. LOOKING at the top of the deck (scry, peek, draw-N-keep-1)
+    is NOT a bare move_cards: it needs a card_order or from_deck_top card_pick
+    interaction step (see the interaction rules) so the faces reach only the peeking
+    player.
+  * shuffle_deck shuffles the draw pile in place; include_discard=true is the classic
+    reshuffle ("shuffle the discard pile back into the deck").
   * reveal_hand shows a hand: target = whose hand, to = who may see it ("all", "chooser",
     "id:<player_id>", …). persistent=false is a one-shot peek ("show your hand to the
     player on your left"); persistent=true keeps the hand visible — to="all" means the
@@ -135,8 +153,9 @@ OP_CATALOG_GUIDE = """\
     standing can never be eliminated. "You're out of the game" = eliminate_player; for
     "last player standing wins" pair it with set_win_condition kind="last_standing" —
     the game then ends the moment only one player remains.
-  * create_card mints new cards (with their own ops!) into the deck or a hand — a card
-    can add Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
+  * create_card mints new cards (with their own ops!) into the deck ("deck_shuffle",
+    "deck_top", "deck_bottom"), a hand, the discard pile, or the center — a card can add
+    Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
     the copies to its target player (default "self"); route to a SPECIFIC player with
     destination="hand", target="id:<player_id>" (e.g. hand an auctioned card to the winner).
     Minted cards run their ops deterministically when played; mint with
@@ -191,9 +210,33 @@ SANDBOX_RULES = """\
   which resolves immediately and returns the roll total. Use an ordered ResolutionPlan
   with an ops step followed by a snippet step when later logic reads earlier results.
 - For player input, put an interaction step in the ordered plan. Supported kinds are
-  choice, number, text, card_pick, confirm, and drawing; audience is active, all,
-  all_others, or player:<id>. Set sealed=true for bids/submissions. Chain stages with
+  choice, number, text, card_pick, card_order, confirm, and drawing; audience is active,
+  all, all_others, or player:<id>. Set sealed=true for bids/submissions. Chain stages with
   input_refs, e.g. a vote step can set input_refs.options to a prior drawings result.
+- SCRY ("look at the top N cards of the deck and put them back in any order, optionally
+  some on the bottom") = a card_order interaction: {"kind":"card_order","source":"deck_top",
+  "count":N,"prompt":"..."} (audience "active", sealed by default). The engine shows the
+  actual top-N faces ONLY to that player. The collected value per player is
+  {"order":[card_ids back on top, first = next draw],"to_bottom":[card_ids]}. Write the
+  result back with a follow-up snippet:
+    seq = ctx['interactions'][result_key][ctx['actor_id']]
+    for cid in seq['to_bottom']:
+        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='bottom')
+    for cid in reversed(seq['order']):
+        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='top')
+- DRAW-N-KEEP-1 ("look at the top 3, keep one, bottom the rest") = a card_pick with
+  "from_deck_top": N (sibling of from_hand; no static card_ids needed) — the engine shows
+  that player the top-N faces to pick from. The follow-up snippet moves the pick to hand
+  and the leftovers (still the deck top) to the bottom:
+    picked = ctx['interactions'][result_key][ctx['actor_id']]
+    if picked:
+        state.move_cards(card_target='id:' + picked, to_zone='hand', to_player='id:' + ctx['actor_id'])
+        state.move_cards(from_zone='deck', selector='top', count=N-1, to_zone='deck', to_position='bottom')
+  (picked is None on timeout — guard it; skip the second move when N is 1.)
+  With a multi-player audience the offered top-N is ONE shared pool: picks are
+  first-come-first-served (the engine rejects a card another player already claimed),
+  so a late or timed-out player's value can be None — always guard it and iterate the
+  per-player dict when writing back.
 - IMPORTANT interaction-result shape: ctx['interactions'][result_key] is a dict keyed
   by player id — {player_id: value} — one entry per audience member, NOT a bare value.
   A choice value is a LIST of the selected option ids; number/text are scalars. So a

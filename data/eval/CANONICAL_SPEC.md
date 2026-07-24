@@ -147,12 +147,19 @@ input mid-resolution**. Each item is one of:
   sandbox code (never prose; never truncate or replace code with a summary).
 - `{"kind": "interaction", "result_key": "bids", "request": {...},
    "input_refs": {...}}` — a **barrier**: resolution pauses, the `request`
-  descriptor (`kind`: `choice` | `number` | `text` | `card_pick` | `confirm` |
-  `drawing`; `audience`: `active` | `all` | `all_others` | `player:<id>`;
+  descriptor (`kind`: `choice` | `number` | `text` | `card_pick` |
+  `card_order` | `confirm` | `drawing`; `audience`: `active` | `all` |
+  `all_others` | `player:<id>`;
   `sealed` for hidden bids; `timeout_seconds` 10–300) is sent to the audience,
   and collected responses land in `ctx["interactions"][result_key]`
   (player_id → validated value) for later steps. `input_refs` lets a step's
   options come from a prior result (e.g. vote on submitted drawings).
+  `card_pick` can source its options at send time: `from_hand: true` offers
+  each responder their own hand; `from_deck_top: <int 1-10>` offers the deck's
+  top N ("draw 3, keep 1" — see gold "Window Shopping"). `card_order` is scry:
+  the audience sees the top `count` cards and answers with a permutation split
+  into `order` (back on top, first entry topmost) and `to_bottom`; a snippet
+  step writes the arrangement back with `move_cards` (see gold "Crystal Ball").
 
 Bounds: ≤ 8 steps per plan, ≤ 4 interaction barriers, byte caps enforced by
 `models.effects.ResolutionPlan`. Exemplars: gold "Going Once, Going Twice"
@@ -170,6 +177,15 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
 - `draw_cards` — `{"target": <TARGET>, "amount": <int>}`
 - `roll_die` — `{"sides": <int 2-1000>, "count": <int 1-10>, "target": <TARGET>, "outcome": "add_points"|"subtract_points"|"draw_cards"|"none"}` — the engine rolls; the total feeds `outcome` for `target` (`none` = bare roll, shown and recorded in history)
 - `discard_random` — `{"target": <TARGET>, "count": <int 1-10>}` — the engine picks the cards at apply time
+- `move_cards` — move cards between zones (`"deck" | "discard" | "hand" | "in_play" | "center" | "exile"`)
+  without playing them (mill, exile/"remove from the game", tuck, fetch). Source is
+  EITHER `{"card_target": ...}` OR `{"from_zone": <zone>, "selector": "top"|"bottom"|"all"|"random", "count": <int 1-50>}`;
+  destination is `{"to_zone": <zone>, "to_position": "top"|"bottom"|"shuffle"}` (`to_position`
+  applies only to a deck destination). `from_player`/`to_player` (`<TARGET>`) are required
+  exactly when the corresponding zone is `hand`/`in_play`. Random picks use the engine's rng
+  at apply time — hidden cards stay hidden.
+- `shuffle_deck` — `{"include_discard": <bool>}` — shuffle the draw pile;
+  `true` is the classic reshuffle (discard pile folded in first, left empty)
 - `reverse_order` / `scramble_order` — `{}`
 - `change_draw_count` — `{"amount": <int>}` (new absolute draw count)
 - `destroy_card` — `{"card_target": "this" | "chosen_card" | "all_in_play" | ...}`
@@ -215,8 +231,8 @@ mutators — `add_points`, `subtract_points`, `set_points`, `skip_turn`,
 `extra_turn`, `set_draw_count`, `note`, `reverse_order`, `scramble_order`,
 `steal_points`, `draw_cards`, `roll_die` (rolls immediately and RETURNS the
 total, so code can branch on it), `discard_random` (engine picks at apply
-time; no return value), `destroy_card`, `transfer_card`,
-`set_win_condition`, `end_game`, `set_rule`, `set_condition`,
+time; no return value), `move_cards`, `shuffle_deck`, `destroy_card`,
+`transfer_card`, `set_win_condition`, `end_game`, `set_rule`, `set_condition`,
 `set_card_attribute`, `create_card`, `shuffle_into_deck`, `register_hook`,
 `unregister_hook`, plus context-gated `reject_play` (on_validate_play hooks)
 and `counter_play` (reactions). After an interaction barrier, a snippet step

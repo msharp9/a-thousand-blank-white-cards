@@ -141,7 +141,10 @@ Snippet code is the body of `def apply(state, ctx)` given as a Python string.
   add 'card_title' and 'card_attributes'; reaction code reads ctx['pending_card_id'],
   ctx['pending_actor_id'], ctx['pending_card_title'], and ctx['pending_ops'].
 - After an interaction barrier, ctx['interactions'][result_key] maps each responding
-  player_id to their validated value (a list of card ids when max_picks > 1).
+  player_id to their validated value (a list of card ids when max_picks > 1; for a
+  card_order scry, a dict {'order': [card_ids back on top, first = next draw],
+  'to_bottom': [card_ids]} whose write-back snippet loops move_cards to_zone='deck'
+  with to_position 'bottom' then 'top' over reversed(order)).
 """
 
 CODER_OUTPUT_CONTRACT = f"{OUTPUT_CONTRACT_PREAMBLE}\n  {{\n{EFFECT_OUTPUT_KEYS}\n  }}\n"

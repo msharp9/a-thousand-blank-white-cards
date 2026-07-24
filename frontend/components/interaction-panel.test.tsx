@@ -199,6 +199,71 @@ describe("InteractionPanel field renderers", () => {
   });
 });
 
+describe("card_order (scry) renderer", () => {
+  const scryRequest = () =>
+    request({
+      kind: "card_order",
+      source: "deck_top",
+      count: 3,
+      card_ids: ["d1", "d2", "d3"],
+      cards: {
+        d1: { id: "d1", title: "First", description: "" },
+        d2: { id: "d2", title: "Second", description: "" },
+        d3: { id: "d3", title: "Third", description: "" },
+      },
+    });
+
+  it("submits the untouched offer as the identity arrangement", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = panel(scryRequest());
+    await user.click(screen.getByRole("button", { name: "Submit order" }));
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "card_order",
+      order: ["d1", "d2", "d3"],
+      to_bottom: [],
+    });
+  });
+
+  it("submits a reorder with a to-bottom split", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = panel(scryRequest());
+    await user.click(screen.getByRole("button", { name: "Move Second up" }));
+    await user.click(
+      screen.getByRole("button", { name: "Send Third to the deck bottom" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Submit order" }));
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "card_order",
+      order: ["d2", "d1"],
+      to_bottom: ["d3"],
+    });
+  });
+
+  it("returns a bottomed card to the top stack", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = panel(scryRequest());
+    await user.click(
+      screen.getByRole("button", { name: "Send First to the deck bottom" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Return First to the top" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Submit order" }));
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "card_order",
+      order: ["d2", "d3", "d1"],
+      to_bottom: [],
+    });
+  });
+
+  it("degrades safely when no cards are offered", () => {
+    panel(request({ kind: "card_order", source: "deck_top", count: 3 }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "No cards are available to reorder",
+    );
+  });
+});
+
 describe("InteractionPanel lifecycle", () => {
   it("shows counts without sealed values while waiting", () => {
     panel(null);

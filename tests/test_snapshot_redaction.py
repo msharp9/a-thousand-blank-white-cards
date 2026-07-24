@@ -24,7 +24,7 @@ def _card(cid: str) -> dict:
 
 
 def _snapshot(phase: str = "playing") -> dict:
-    all_ids = ["a1", "a2", "b1", "b2", "b3", "d1", "d2", "d3", "d4", "x1", "hr1", "ip1"]
+    all_ids = ["a1", "a2", "b1", "b2", "b3", "d1", "d2", "d3", "d4", "x1", "e1", "hr1", "ip1"]
     return {
         "room_code": "ABCDEF",
         "phase": phase,
@@ -34,6 +34,7 @@ def _snapshot(phase: str = "playing") -> dict:
         ],
         "deck": ["d1", "d2", "d3", "d4"],
         "discard": ["x1"],
+        "exiled": ["e1"],
         "house_rules": ["hr1"],
         "cards": {cid: _card(cid) for cid in all_ids},
     }
@@ -73,13 +74,14 @@ def test_spectator_view_hides_every_hand() -> None:
 def test_public_zones_untouched() -> None:
     view = redact_snapshot(_snapshot(), "p2")
     assert view["discard"] == ["x1"]
+    assert view["exiled"] == ["e1"]
     assert view["house_rules"] == ["hr1"]
     assert view["players"][0]["in_play"] == ["ip1"]
 
 
 def test_cards_registry_drops_opponent_hand_and_deck_content() -> None:
     view = redact_snapshot(_snapshot(), "p1")
-    assert set(view["cards"]) == {"a1", "a2", "ip1", "x1", "hr1"}
+    assert set(view["cards"]) == {"a1", "a2", "ip1", "x1", "e1", "hr1"}
 
 
 def test_cards_registry_keeps_deck_content_during_lobby_and_setup() -> None:
@@ -92,7 +94,16 @@ def test_cards_registry_keeps_deck_content_during_lobby_and_setup() -> None:
 def test_cards_registry_spectator_sees_only_public_zones() -> None:
     for viewer in (None, "spec-1"):
         view = redact_snapshot(_snapshot(), viewer)
-        assert set(view["cards"]) == {"ip1", "x1", "hr1"}
+        assert set(view["cards"]) == {"ip1", "x1", "e1", "hr1"}
+
+
+def test_exile_zone_is_public_for_every_viewer() -> None:
+    # The exiled pile is public like discard: its id list rides untouched and
+    # its cards stay in the registry so any client can render the pile.
+    for viewer in ("p1", "p2", None, "spec-1"):
+        view = redact_snapshot(_snapshot(), viewer)
+        assert view["exiled"] == ["e1"]
+        assert "e1" in view["cards"]
 
 
 def test_cards_registry_keeps_revealed_content() -> None:

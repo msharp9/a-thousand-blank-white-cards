@@ -2025,5 +2025,157 @@
       ],
       "sandbox": "def apply(state, ctx):\n    state.set_rule('turn_timer', 30)\n"
     }
+  },
+  {
+    "id": "seed-gold-100",
+    "title": "Into the Void",
+    "description": "Choose any card in play or in a hand and remove it from the game entirely. It doesn't go to the discard pile — it's just gone.",
+    "alt_text": "a small card being pulled into a swirling black hole",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "to_zone": "exile"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, to_zone='exile')\n"
+    }
+  },
+  {
+    "id": "seed-gold-101",
+    "title": "Card Shredder",
+    "description": "Feed the deck to the shredder: move the top 3 cards of the deck straight to the discard pile without anyone looking at them.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "deck",
+            "selector": "top",
+            "count": 3,
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='deck', selector='top', count=3, to_zone='discard')\n"
+    }
+  },
+  {
+    "id": "seed-gold-102",
+    "title": "Recycling Program",
+    "description": "Shuffle the entire discard pile back into the deck. Waste not, want not.",
+    "alt_text": "a green recycling arrow made of playing cards",
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "shuffle_deck",
+          "args": {
+            "include_discard": true
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.shuffle_deck(include_discard=True)\n"
+    }
+  },
+  {
+    "id": "seed-gold-103",
+    "title": "Dumpster Diving",
+    "description": "Dig all the way down: take the card at the very bottom of the discard pile (the oldest one there) into your hand.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "discard",
+            "selector": "bottom",
+            "count": 1,
+            "to_zone": "hand",
+            "to_player": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='discard', selector='bottom', count=1, to_zone='hand', to_player='self')\n"
+    }
+  },
+  {
+    "id": "seed-gold-104",
+    "title": "Crystal Ball",
+    "description": "Scry 3: look at the top 3 cards of the deck. Put any of them on the bottom and the rest back on top in any order. What you saw is your secret.",
+    "alt_text": "a fortune teller's hands hovering over a glowing crystal ball",
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": null,
+      "sandbox": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "scry",
+          "request": {
+            "kind": "card_order",
+            "prompt": "Look at the top 3 cards of the deck. Reorder them or send some to the bottom.",
+            "count": 3
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    seq = ctx['interactions']['scry'][ctx['actor_id']]\n    for cid in seq['to_bottom']:\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='bottom')\n    for cid in reversed(seq['order']):\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='top')\n",
+          "explanation": "Write the scryer's secret arrangement back: bottomed cards first, then the kept cards re-stacked so the first entry ends up on top."
+        }
+      ]
+    }
+  },
+  {
+    "id": "seed-gold-105",
+    "title": "Window Shopping",
+    "description": "Look at the top 3 cards of the deck and take one into your hand. The two you passed on go to the bottom of the deck.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": null,
+      "sandbox": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "pick",
+          "request": {
+            "kind": "card_pick",
+            "prompt": "Pick one of the top 3 cards of the deck to keep.",
+            "from_deck_top": 3
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picked = ctx['interactions']['pick'][ctx['actor_id']]\n    if picked:\n        state.move_cards(card_target='id:' + picked, to_zone='hand', to_player='id:' + ctx['actor_id'])\n        state.move_cards(from_zone='deck', selector='top', count=2, to_zone='deck', to_position='bottom')\n",
+          "explanation": "Move the kept card to the actor's hand, then tuck the two unpicked offers (now the deck top) to the bottom."
+        }
+      ]
+    }
   }
 ]

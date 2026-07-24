@@ -1556,5 +1556,131 @@
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.set_rule('turn_timer', 20)"
     }
+  },
+  {
+    "id": "eval-080",
+    "title": "Witness Protection",
+    "description": "Choose any card in play or in a hand and remove it from the game forever. It gets a new identity and is never seen at this table again.",
+    "alt_text": "a playing card wearing sunglasses and a fake mustache",
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "to_zone": "exile"
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, to_zone='exile')"
+    }
+  },
+  {
+    "id": "eval-081",
+    "title": "Lawnmower",
+    "description": "Mow down the top 4 cards of the deck: they go straight to the discard pile, sight unseen.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "none",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "deck",
+            "selector": "top",
+            "count": 4,
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='deck', selector='top', count=4, to_zone='discard')"
+    }
+  },
+  {
+    "id": "eval-082",
+    "title": "Fresh Start",
+    "description": "Shuffle the whole discard pile back into the deck. Everything old is new again.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "none",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "shuffle_deck",
+          "args": {
+            "include_discard": true
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.shuffle_deck(include_discard=True)"
+    }
+  },
+  {
+    "id": "eval-083",
+    "title": "Trash Panda",
+    "description": "Rummage through the trash: take the top card of the discard pile (the most recently discarded card) into your hand.",
+    "alt_text": "a raccoon triumphantly holding a card above an open trash can",
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "discard",
+            "selector": "top",
+            "count": 1,
+            "to_zone": "hand",
+            "to_player": "self"
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='discard', selector='top', count=1, to_zone='hand', to_player='self')"
+    }
+  },
+  {
+    "id": "eval-084",
+    "title": "Periscope Up",
+    "description": "Raise the periscope: peek at the top 2 cards of the deck, then put them back in any order or send either to the bottom. Tell no one what you saw.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "none",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "peek",
+          "request": {
+            "kind": "card_order",
+            "prompt": "Peek at the top 2 cards of the deck. Reorder them or send either to the bottom.",
+            "count": 2
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    seq = ctx['interactions']['peek'][ctx['actor_id']]\n    for cid in seq['to_bottom']:\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='bottom')\n    for cid in reversed(seq['order']):\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='top')"
+        }
+      ]
+    }
   }
 ]
