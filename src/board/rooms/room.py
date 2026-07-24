@@ -57,6 +57,7 @@ from models.card import MAX_ROOM_ART_BYTES
 from models.effects import (
     AddPointsOp,
     CustomNoteOp,
+    DestroyCardOp,
     DrawCardsOp,
     EffectProgram,
     InteractionStep,
@@ -119,6 +120,13 @@ AGENT_COMMENT_PREFIX = "🤖 "
 # A reactor claiming the window (e.g. to answer a prompt_choice) restarts the
 # timer so an abandoned follow-up can never wedge the room.
 REACTION_WINDOW_SECONDS = 15.0
+
+# The synthetic hand-limit discard plan (rules.hand_limit enforcement at end of
+# turn). The result_key names the CardPickInteraction's collected picks; the
+# timeout bounds how long an over-limit player may stall the table before the
+# hand tail is discarded for them.
+HAND_LIMIT_RESULT_KEY = "hand_limit_discards"
+HAND_LIMIT_TIMEOUT_SECONDS = 60
 
 
 class PlanExecutionError(Exception):
@@ -717,8 +725,17 @@ class Room:
           catch-all for any other route (e.g. ``_handle_pass``).
         - ``win_condition_met(state)``: a live win condition (e.g. ``first_to``
           a threshold) was satisfied. Same defensive-catch-all reasoning.
+
+        ``rules.hand_limit`` is enforced FIRST, before the ON_TURN_END hooks:
+        when the active player's hand exceeds the limit, a synthetic discard
+        plan pauses here and this method returns; its completion trims any
+        remainder and re-enters ``_advance_turn``, whose limit check then
+        passes — so the hooks fire exactly once per turn end, and cards a
+        turn-end hook grants escape the limit until the player's next turn.
         """
         if not self.state.players:
+            return
+        if await self._maybe_enforce_hand_limit():
             return
         await self._emit_hooks(GameEvent.ON_TURN_END, self.state.active_player().id)
         if self._deck_exhausted or self._end_now() or win_condition_met(self.state):
@@ -731,6 +748,120 @@ class Room:
         """A met end condition that does NOT defer to the drawer-finishes-turn
         timing (everything except deck_empty ends play immediately)."""
         return self.state.rules.end_condition.type != "deck_empty" and evaluate_end_condition(self.state)
+
+    # ── hand-limit enforcement (rules.hand_limit) ──
+    async def _maybe_enforce_hand_limit(self) -> bool:
+        """Enforce ``rules.hand_limit`` at end of turn via a synthetic plan.
+
+        When the active player's hand exceeds the limit, run a one-interaction
+        ResolutionPlan (a from_hand card_pick for exactly the excess, then a
+        snippet destroying the picks) through the ordinary
+        ``_execute_plan``/``_pause_resolution`` machinery. Returns True when
+        the turn advance is now suspended behind that interaction — completion
+        (or timeout, which discards from the hand tail) re-enters
+        ``_advance_turn`` via ``_finish_hand_limit``. Eliminated players are
+        exempt (their hand was already discarded; a stale over-limit hand must
+        not wedge the advance). Enforcement must never brick the turn: if the
+        pause cannot be set up, the tail is trimmed synchronously instead.
+        """
+        limit = self.state.rules.hand_limit
+        if limit is None:
+            return False
+        active = self.state.active_player()
+        if active.eliminated:
+            return False
+        excess = len(active.hand) - limit
+        if excess <= 0:
+            return False
+        plan = self._hand_limit_plan(limit, min(excess, 200))
+        ctx = HookContext(event=GameEvent.ON_TURN_END, actor_id=active.id)
+        card = {"id": "", "title": f"Hand limit ({limit})"}
+        try:
+            self.state = await self._execute_plan(self.state, plan, ctx, card, working_state=self.state)
+        except PlanPaused as paused:
+            try:
+                await self._pause_resolution(
+                    paused,
+                    plan=plan,
+                    ctx=ctx,
+                    card=card,
+                    correlation_id=str(uuid.uuid4()),
+                    before_scores={p.id: p.score for p in self.state.players},
+                    deck_count_before=len(self.state.deck),
+                    purpose="hand_limit",
+                )
+            except Exception as exc:
+                logger.warning("hand limit interaction setup failed player=%s reason=%s", active.id, exc)
+                self._trim_hand_to_limit(active.id)
+                return False
+            return True
+        except Exception as exc:
+            logger.warning("hand limit plan failed player=%s reason=%s", active.id, exc)
+        self._trim_hand_to_limit(active.id)
+        return False
+
+    def _hand_limit_plan(self, limit: int, excess: int) -> ResolutionPlan:
+        """The synthetic hand-limit ResolutionPlan: pick exactly ``excess``
+        cards from your own hand, then destroy the picks. The snippet accepts
+        both pick shapes (a bare id when excess == 1, else a list)."""
+        noun = "card" if excess == 1 else f"{excess} cards"
+        request = CardPickInteraction(
+            prompt=f"Hand limit is {limit} — choose {noun} to discard",
+            audience="active",
+            from_hand=True,
+            min_picks=excess,
+            max_picks=excess,
+            timeout_seconds=HAND_LIMIT_TIMEOUT_SECONDS,
+        )
+        code = (
+            "def apply(state, ctx):\n"
+            f"    picks = ctx['interactions']['{HAND_LIMIT_RESULT_KEY}'].get(ctx['actor_id'])\n"
+            "    if isinstance(picks, str):\n"
+            "        picks = [picks]\n"
+            "    for card_id in picks or []:\n"
+            "        state.destroy_card(card_id=card_id)\n"
+        )
+        return ResolutionPlan(
+            steps=[
+                InteractionStep(result_key=HAND_LIMIT_RESULT_KEY, request=request),
+                SnippetStep(code=code, explanation="Destroy the cards picked for the hand limit."),
+            ]
+        )
+
+    def _hand_limit_default_picks(self, pending: PendingResolution, player_id: str) -> list[str]:
+        """Timeout auto-discard: the hand TAIL stands in for unmade picks."""
+        hand = self._from_hand_options(player_id)
+        count = getattr(pending.request, "max_picks", 1)
+        return hand[len(hand) - min(count, len(hand)) :]
+
+    def _trim_hand_to_limit(self, player_id: str) -> None:
+        """Deterministically discard ``player_id``'s hand tail down to
+        ``rules.hand_limit`` — the no-input backstop (failed synthetic plan,
+        snippet error, or leftover excess). Guarantees the ``_advance_turn``
+        re-entry check passes, so enforcement can never loop."""
+        limit = self.state.rules.hand_limit
+        if limit is None:
+            return
+        try:
+            hand = self.state.get_player(player_id).hand
+        except KeyError:
+            return
+        excess = len(hand) - limit
+        if excess <= 0:
+            return
+        ops: list[Op] = [DestroyCardOp(card_id=cid) for cid in hand[-excess:]]
+        ctx = HookContext(event=GameEvent.ON_TURN_END, actor_id=player_id)
+        self.state = apply_effect(self.state, EffectProgram(ops=ops), ctx, bus=self._hook_bus())
+
+    async def _finish_hand_limit(self, pending: PendingResolution) -> None:
+        """Tail of the synthetic hand-limit resolution, success or failure:
+        trim any remaining excess off the hand tail, log, and resume the turn
+        advance the enforcement pause interrupted. Not a play — no zone move,
+        no mechanical status, no play-allowance accounting."""
+        limit = self.state.rules.hand_limit
+        self._trim_hand_to_limit(pending.actor_id)
+        await self._log_and_broadcast(f"{self._name(pending.actor_id)} discarded down to the hand limit ({limit})")
+        await self._advance_turn()
 
     def _hook_bus(self) -> EventBus:
         fingerprint = tuple(h.id for h in self.state.hooks)
@@ -1883,6 +2014,7 @@ class Room:
         before_scores: dict[str, int],
         deck_count_before: int,
         zone_owner: str | None = None,
+        purpose: str = "play",
     ) -> None:
         request, refs = self._materialize_interaction(paused.step, ctx.interactions)
         audience = self._resolve_interaction_audience(request.audience, ctx.actor_id)
@@ -1894,6 +2026,7 @@ class Room:
             interaction_id=interaction_id,
             card_id=ctx.card_id or "",
             actor_id=ctx.actor_id,
+            purpose=purpose,
             zone_owner=zone_owner or ctx.actor_id,
             card=card,
             plan=plan,
@@ -2133,18 +2266,21 @@ class Room:
             and not self._interaction_timer.done()
         ):
             self._interaction_timer.cancel()
-        if timed_out and not pending.responses:
+        if timed_out and not pending.responses and pending.purpose != "hand_limit":
             timeout_notice = "No one responded before the interaction timed out."
             await self._fail_pending_resolution(timeout_notice, notice=timeout_notice)
             return
         values: dict[str, object] = {}
         for player_id in pending.resolved_audience:
             payload = pending.responses.get(player_id)
-            values[player_id] = (
-                self._validate_interaction_response(pending.request, payload, player_id)
-                if payload is not None
-                else self._default_interaction_value(pending.request)
-            )
+            if payload is not None:
+                values[player_id] = self._validate_interaction_response(pending.request, payload, player_id)
+            elif pending.purpose == "hand_limit":
+                # The hand-limit discard must always happen: an unresponsive
+                # player's picks default to their hand tail, not to "no picks".
+                values[player_id] = self._hand_limit_default_picks(pending, player_id)
+            else:
+                values[player_id] = self._default_interaction_value(pending.request)
         interactions = {**pending.interactions, pending.result_key: values}
         self._pending_resolution = None
         ctx = HookContext(
@@ -2175,6 +2311,7 @@ class Room:
                     correlation_id=pending.correlation_id,
                     before_scores=pending.before_scores,
                     deck_count_before=pending.deck_count_before,
+                    purpose=pending.purpose,
                 )
             except Exception as exc:
                 self._report_failure_for_triage("interaction_resolve", pending.card, pending.correlation_id, exc=exc)
@@ -2207,6 +2344,12 @@ class Room:
         if pending is None:
             return
         self._pending_resolution = None
+        if pending.purpose == "hand_limit":
+            # Not a play: nothing to move or compensate. The tail trim in
+            # _finish_hand_limit is the enforcement of last resort.
+            logger.warning("hand limit interaction failed player=%s reason=%s", pending.actor_id, reason)
+            await self._finish_hand_limit(pending)
+            return
         self._set_card_mechanical_status(pending.card_id, "fallback", pending.correlation_id, reason)
         destination = self._play_destination(pending.card)
         owner = pending.zone_owner or pending.actor_id
@@ -2240,6 +2383,9 @@ class Room:
 
     async def _commit_pending_resolution(self, pending: PendingResolution, completed: GameState) -> None:
         self.state = completed
+        if pending.purpose == "hand_limit":
+            await self._finish_hand_limit(pending)
+            return
         self._set_card_mechanical_status(pending.card_id, "applied", pending.correlation_id)
         await self._log_and_broadcast(self._describe_play(pending.actor_id, pending.card, pending.before_scores))
         await self._emit_hooks(

@@ -56,6 +56,10 @@ class Rules(BaseModel):
     cannot_play: dict[str, Any] = Field(default_factory=lambda: {"draw": 1})
     end_condition: EndCondition = Field(default_factory=EndCondition)
     win_condition: WinCondition = Field(default_factory=WinCondition)
+    # Maximum hand size, ENFORCED by the room at end of turn: an over-limit
+    # active player picks cards to discard down to the limit (timeout discards
+    # from the hand tail). None = no limit.
+    hand_limit: int | None = Field(default=None, ge=0)
     # None or a registered predicate name (see engine.loop.register_skip_predicate).
     skip_predicate: str | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
