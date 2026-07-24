@@ -10,9 +10,9 @@ from langchain_core.tools import StructuredTool
 from engine.apply import apply_effect
 from engine.events import EventBus, GameEvent, HookContext
 from engine.hooks import build_registry
-from engine.sandbox.revalidate import apply_snippet_diff
+from engine.sandbox.revalidate import apply_snippet_diff, extract_counter
 from engine.sandbox.runner import execute_snippet
-from models.effects import EffectProgram, InteractionStep, OpsStep, ResolutionPlan, SnippetStep
+from models.effects import CounterPlayOp, EffectProgram, InteractionStep, OpsStep, ResolutionPlan, SnippetStep
 from models.game_state import GameState
 from models.interactions import (
     CardPickInteraction,
@@ -40,6 +40,42 @@ def _resolve_ref(results: dict[str, Any], result_key: str, path: list[str | int]
     for part in path:
         value = value[part]
     return value
+
+
+# Reaction plans are only meaningful inside a reaction window: counter_play is
+# rejected outside one and the pending_* ctx keys don't exist there. Detected
+# from the plan itself (there is no trigger field on a ResolutionPlan).
+_REACTION_MARKERS = ("counter_play", "pending_card_id", "pending_actor_id", "pending_card_title", "pending_ops")
+
+
+def _is_reaction_plan(plan: ResolutionPlan) -> bool:
+    for step in plan.steps:
+        if isinstance(step, OpsStep) and any(isinstance(op, CounterPlayOp) for op in step.ops):
+            return True
+        if isinstance(step, SnippetStep) and any(marker in step.code for marker in _REACTION_MARKERS):
+            return True
+    return False
+
+
+def _pending_play(state: GameState, actor_id: str) -> dict[str, Any]:
+    """Synthesize a plausible pending play so a reaction plan can be dry-run.
+
+    Mirrors the ctx the Room supplies in a live reaction window (see
+    ``Room._execute_reaction``): another player just played a card. The top of
+    the discard is the most natural stand-in; failing that, any card of the
+    pending actor's, then a placeholder id.
+    """
+    others = [player for player in state.players if player.id != actor_id]
+    pending_actor = others[0] if others else state.get_player(actor_id)
+    card_id = state.discard[-1] if state.discard else (pending_actor.hand[0] if pending_actor.hand else "pending-card")
+    card = state.cards.get(card_id) or {}
+    title = card.get("title") if isinstance(card, dict) else getattr(card, "title", None)
+    return {
+        "pending_card_id": card_id,
+        "pending_actor_id": pending_actor.id,
+        "pending_card_title": title or "Pending Card",
+        "pending_ops": [{"op": "add_points", "target": "self", "amount": 5}],
+    }
 
 
 def _snapshot(state: GameState) -> dict[str, Any]:
@@ -70,12 +106,15 @@ def dry_run_resolution_plan(
         working = working.move_card(card_id, "hand", "discard", from_player_id=actor_id)
 
     before = _snapshot(working)
+    reaction = _is_reaction_plan(plan)
+    pending = _pending_play(working, actor_id) if reaction else {}
     ctx = HookContext(
-        event=GameEvent.ON_PLAY,
+        event=GameEvent.ON_REACTION if reaction else GameEvent.ON_PLAY,
         actor_id=actor_id,
         card_id=card_id,
         chosen_player_id=chosen_player_id,
         chosen_card_id=chosen_card_id,
+        extra=dict(pending),
     )
     ctx_dict = {
         "actor_id": actor_id,
@@ -84,6 +123,7 @@ def dry_run_resolution_plan(
         "amount": None,
         "chosen_player_id": chosen_player_id,
         "chosen_card_id": chosen_card_id,
+        **pending,
     }
     emitted: list[dict[str, Any]] = []
     interactions: dict[str, Any] = {}
@@ -159,7 +199,13 @@ def dry_run_resolution_plan(
                 emitted.extend(op.model_dump() for op in step.ops)
                 continue
             raw_ops = execute_snippet(step.code, json.loads(working.model_dump_json()), ctx_dict, rng_seed=0)
-            working = apply_snippet_diff(working, raw_ops, ctx, origin="play", bus=bus, rng=rng)
+            # counter_play is control flow the Room consumes, not a reducer op:
+            # split it out (mirroring Room._execute_reaction) but keep it in
+            # emitted_ops so callers see the counter decision.
+            side_ops = extract_counter(raw_ops)[1] if reaction else raw_ops
+            working = apply_snippet_diff(
+                working, side_ops, ctx, origin="reaction" if reaction else "play", bus=bus, rng=rng
+            )
             emitted.extend(raw_ops)
     except Exception as exc:
         error = str(exc)
@@ -225,6 +271,7 @@ def make_dry_run_effect_tool(
         description=(
             "Execute proposed sandbox code or an ordered ResolutionPlan against a cloned live state. "
             "Use this before returning every generated snippet or hook; it reports validation/runtime errors, "
-            "emitted ops, and projected public state changes without mutating the game."
+            "emitted ops, and projected public state changes without mutating the game. Reaction plans "
+            "(counter_play / pending_* ctx reads) are dry-run inside a synthesized reaction window."
         ),
     )

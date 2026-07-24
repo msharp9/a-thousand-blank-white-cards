@@ -2149,7 +2149,7 @@
   {
     "id": "seed-filler-011",
     "title": "Time Warp",
-    "description": "Undo the last card played as if it never happened. The card goes back into the hand it came from.",
+    "description": "Return the last card played to its owner's hand: pick that card and its owner. The table agrees its effect never happened.",
     "alt_text": null,
     "canonical": {
       "target": "card",
@@ -2160,7 +2160,7 @@
         {
           "op": "custom_note",
           "args": {
-            "note": "The last card played never happened; the table unwinds its effects. Choose that card and the player whose hand it came from."
+            "note": "The table agrees the last card played never happened. Pick that card as the chosen card and its owner as the chosen player."
           }
         },
         {
@@ -2171,7 +2171,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('The last card played never happened; the table unwinds its effects.')\n    state.transfer_card('chosen_card', chosen)"
+      "sandbox": "def apply(state, ctx):\n    owner = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('The table agrees the last card played never happened.')\n    state.transfer_card('chosen_card', owner)"
     }
   },
   {

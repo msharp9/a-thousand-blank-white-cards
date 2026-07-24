@@ -31,11 +31,16 @@ class EvalItem:
 
 @dataclass(frozen=True, slots=True)
 class Score:
-    score: float
+    """A 0..1 score, or ``None`` to abstain (metric not applicable to this card).
+
+    Abstentions are skipped by aggregation (``quality_score``, run summaries)
+    rather than counted as 0."""
+
+    score: float | None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not 0.0 <= self.score <= 1.0:
+        if self.score is not None and not 0.0 <= self.score <= 1.0:
             raise ValueError(f"Score must be 0..1, got {self.score}")
 
 

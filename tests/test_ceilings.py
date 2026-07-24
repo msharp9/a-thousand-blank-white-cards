@@ -54,6 +54,16 @@ def test_benchmark_ceilings_empty() -> None:
     assert benchmark_ceilings([]) == {}
 
 
+def test_every_eval_canonical_is_executable() -> None:
+    """A gold label the harness itself can't execute (e.g. a reaction canonical
+    dry-run outside a reaction window — hard-014's failure mode) means no answer
+    can pass; that's a harness bug, so it fails CI here."""
+    for name in ("eval/eval_cards.json", "eval/eval_cards_hard.json"):
+        cards = json.loads((DATA_DIR / name).read_text())
+        broken = [card["id"] for card in cards if not card_ceiling(card)["executable"]]
+        assert not broken, f"{name}: gold canonicals with executable=False: {broken}"
+
+
 def test_real_seed_corpus_ceilings_are_sane() -> None:
     cards = json.loads((DATA_DIR / "seed_cards.json").read_text())
     agg = benchmark_ceilings(cards)

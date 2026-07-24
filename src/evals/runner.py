@@ -101,7 +101,7 @@ class CardResult:
     metrics: RunMetrics
     latency_ms: float
     cost_usd: float | None
-    scores: dict[str, float]
+    scores: dict[str, float | None]  # None = the scorer abstained (metric not applicable)
     score_meta: dict[str, dict[str, Any]]
 
 
@@ -225,7 +225,7 @@ def _run_one(config: EvalConfig, card: dict[str, Any], sample_index: int, scorer
 
         item = EvalItem(id=str(card.get("id", "card")), input=card, expected=expected)
         ctx = ScorerContext(item=item, output=output)
-        scores: dict[str, float] = {}
+        scores: dict[str, float | None] = {}
         score_meta: dict[str, dict[str, Any]] = {}
         for scorer in scorers:
             try:
@@ -347,7 +347,7 @@ def _aggregate(run: EvalRunResult) -> dict[str, Any]:
         "agent_error_rate": sum(1 for r in rows if r.output.get("agent_error")) / len(rows),
     }
     for name in run.scorer_names:
-        vals = [r.scores[name] for r in rows if name in r.scores]
+        vals = [r.scores[name] for r in rows if r.scores.get(name) is not None]
         summary[name] = fmean(vals) if vals else None
 
     summary["sandbox_interaction_skipped"] = sum(
@@ -400,9 +400,9 @@ def _consistency(run: EvalRunResult) -> dict[str, float]:
     out: dict[str, float] = {}
     for probe in ("intent_match", "executability", "did_something"):
         spreads = [
-            pstdev([r.scores[probe] for r in group if probe in r.scores])
+            pstdev([r.scores[probe] for r in group if r.scores.get(probe) is not None])
             for group in by_card.values()
-            if len([r for r in group if probe in r.scores]) > 1
+            if len([r for r in group if r.scores.get(probe) is not None]) > 1
         ]
         if spreads:
             out[f"{probe}_stdev"] = fmean(spreads)

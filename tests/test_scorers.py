@@ -278,3 +278,58 @@ class TestSandboxBehavior:
         }
         output = _ops_plan({"op": "add_points", "target": "chooser", "amount": 3})
         assert sandbox_behavior.evaluate(self._ctx(output, expected)).score == 1.0
+
+
+class TestDeliberateNoOpCards:
+    """Cards whose OWN canonical is a no-op (pure flavour): did_something
+    abstains instead of zeroing an unreachable metric, and a plan-less output
+    matches an empty expected diff (empty == empty)."""
+
+    _NOOP_EXPECTED = {
+        "target": "self",
+        "placement": "discard",
+        "ops": [{"op": "custom_note", "args": {"note": "flavor only"}}],
+        "trigger": None,
+        "venue": "all",
+        "sandbox": "def apply(state, ctx):\n    state.note('flavor only')",
+    }
+
+    def test_did_something_abstains_on_noop_canonical(self) -> None:
+        output = {"verdict": "ok", **_ops_plan({"op": "custom_note", "note": "flavor"})}
+        score = did_something.evaluate(_ctx(output, expected=self._NOOP_EXPECTED))
+        assert score.score is None
+        assert "no-op" in score.metadata["skipped"]
+
+    def test_did_something_still_zeroes_noop_answer_to_mechanical_card(self) -> None:
+        expected = {
+            "target": "self",
+            "placement": "discard",
+            "ops": [{"op": "add_points", "args": {"target": "self", "amount": 5}}],
+            "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)",
+        }
+        output = {"verdict": "ok", **_ops_plan({"op": "custom_note", "note": "nothing"})}
+        assert did_something.evaluate(_ctx(output, expected=expected)).score == 0.0
+
+    def test_sandbox_behavior_scores_no_plan_as_match_when_expected_diff_empty(self) -> None:
+        score = sandbox_behavior.evaluate(_ctx({"verdict": "ok"}, expected=self._NOOP_EXPECTED))
+        assert score.score == 1.0
+
+    def test_sandbox_behavior_still_zeroes_no_plan_against_mechanical_sandbox(self) -> None:
+        expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
+        assert sandbox_behavior.evaluate(_ctx({"verdict": "ok"}, expected=expected)).score == 0.0
+
+
+class TestReactionCards:
+    """Reaction plans (counter_play / pending_* reads) dry-run in a synthesized
+    reaction window; counter_play counts as a mechanical op."""
+
+    def test_counter_play_ops_plan_executes_and_did_something(self) -> None:
+        output = {"verdict": "ok", **_ops_plan({"op": "counter_play", "mode": "steal_hand"})}
+        assert executability.evaluate(_ctx(output)).score == 1.0
+        assert did_something.evaluate(_ctx(output)).score == 1.0
+
+    def test_reaction_snippet_form_scores_like_ops_form(self) -> None:
+        code = "def apply(state, ctx):\n    if ctx.get('pending_card_id'):\n        state.counter_play('steal_hand')\n"
+        output = {"verdict": "ok", "resolution_plan": {"steps": [{"kind": "snippet", "code": code}]}}
+        assert executability.evaluate(_ctx(output)).score == 1.0
+        assert did_something.evaluate(_ctx(output)).score == 1.0
