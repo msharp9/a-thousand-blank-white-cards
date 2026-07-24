@@ -416,9 +416,28 @@ invalid rate — the earlier "≈ −0.2" read was real. Second, and more surpri
 game-rules, and history) actually *beats* the full toolbox at n=3 (composite 0.911 vs
 0.871), suggesting the extra retrieval tools add more distraction than signal on
 `eval_hard` specifically — consistent with the earlier finding that card-RAG barely gets
-called on the hard set. That is logged as a follow-up rather than acted on here: the
-hard set under-exercises card-RAG, so this is not yet evidence to drop those tools from
-the seed/live toolbox.
+called on the hard set.
+
+To check whether that was an artifact of `eval_hard` under-exercising card-RAG, the
+lean-vs-full comparison was re-run on the **seed** benchmark (69-card sample, n=3), where
+card-RAG *is* called (19 times for the full box, matching historical adoption):
+
+| Toolbox (seed, n=3, cap 12) | composite | intent_match | sandbox_behavior | invalid | tool calls | card-RAG calls |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| full production toolbox | 0.900 | **0.884** | 0.701 | 0.058 | 4.41 | 19 |
+| dry_run + engine_methods + game_state | **0.908** | 0.883 | **0.735** | **0.039** | **3.72** | 0 |
+
+Even where card-RAG is exercised, the two boxes are a statistical tie (0.908 vs 0.900,
+inside the ≈0.08 `intent_match` stdev), with the lean box marginally ahead on a smaller
+tool budget. So the `eval_hard` result was not a fluke: across both benchmarks the
+retrieval tools (card-RAG, game-rules, history) add cost without measurable quality.
+**Production keeps the full toolbox anyway** — deliberately, not by inertia. The seed and
+`eval_hard` sets score independent static cards against fixed canonicals; card-RAG was
+added for a use case neither benchmark captures: interpreting a *live* game's novel
+player cards consistently with the table's earlier rulings (precedent retrieval). Trimming
+the toolbox is a one-way change to live play, so the bar is evidence on that live
+precedent-consistency axis, not on static single-card accuracy — which is future
+benchmark work, not a change to make on these numbers.
 
 ---
 
