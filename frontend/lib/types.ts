@@ -150,12 +150,25 @@ export type PlayerSnapshot = {
   id: string;
   name: string;
   score: number;
+  // Card ids in this player's hand. The server redacts snapshots per viewer:
+  // only YOUR OWN entry carries real ids — every other player's hand arrives
+  // empty, with hand_count as the only public fact. Render opponents' fans
+  // from hand_count, never hand.length.
   hand: string[];
+  // Number of cards in this player's hand (present for every player, including
+  // redacted ones). Optional only for back-compat with older servers.
+  hand_count?: number;
   // Cards this player has played in front of them (visible to everyone on the
   // table). Resolve ids against GameStateSnapshot.cards to render them.
   in_play: string[];
   connected: boolean;
   conditions: Record<string, unknown>;
+  // Hand visibility (reveal_hand op). hand_public = this hand is played face
+  // up: every viewer's snapshot carries its real ids (render it face-up with a
+  // "revealed" badge). hand_revealed_to = player ids allowed to see the hand;
+  // the server only sends the real ids to those viewers, so check for MY id.
+  hand_public?: boolean;
+  hand_revealed_to?: string[];
 };
 
 export type MechanicalStatus =
@@ -205,7 +218,13 @@ export type SpectatorSnapshot = {
 
 // Mirrors models.game_state.HistoryKind.
 export type HistoryEventKind =
-  "draw" | "play" | "score_change" | "rule_change" | "interaction" | "game_end";
+  | "draw"
+  | "play"
+  | "score_change"
+  | "rule_change"
+  | "interaction"
+  | "reveal"
+  | "game_end";
 
 // One privacy-safe, append-only fact about completed game mechanics. Mirrors
 // models.game_state.HistoryEvent. The "Everything Played" history modal reads
@@ -248,7 +267,14 @@ export type GameStateSnapshot = {
   turn_order: string[];
   rules: RulesSnapshot;
   draw_count: number;
+  // Draw-pile card ids. Redacted server-side once the game starts (contents
+  // and order back scry/stacked-deck effects), so this is [] during play —
+  // read deck_count instead. During lobby/setup it still carries the public
+  // pre-made pool the authoring screen renders.
   deck: string[];
+  // Number of cards left in the draw pile (present in every phase). Optional
+  // only for back-compat with older servers.
+  deck_count?: number;
   discard: string[];
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
@@ -403,6 +429,18 @@ export type InteractionProgressMsg = {
   progress: InteractionProgress;
 };
 
+// Targeted push: a one-shot reveal_hand showed player_id's hand to ME (sent
+// only to the reveal's resolved audience). Modal like the reaction window —
+// not state, lost on reconnect. cards carries the revealed bodies because
+// redacted snapshots never include hidden hand content.
+export type HandRevealedMsg = {
+  type: "hand_revealed";
+  player_id: string;
+  player_name?: string;
+  card_ids: string[];
+  cards: Record<string, CardSnapshot>;
+};
+
 // A play opened a reaction window: the pending card is in the state snapshot
 // (pending_play); this push carries the deadline for the countdown.
 export type ReactionWindowMsg = {
@@ -433,5 +471,6 @@ export type ServerMsg =
   | BrewingMsg
   | InteractionRequestMsg
   | InteractionProgressMsg
+  | HandRevealedMsg
   | ReactionWindowMsg
   | ReactionResultMsg;

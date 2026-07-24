@@ -43,6 +43,7 @@ from models.effects import (
     ResolutionPlan,
     OpsStep,
     Op,
+    RevealHandOp,
     ReverseOrderOp,
     ScrambleOrderOp,
     SetCardAttributeOp,
@@ -180,6 +181,13 @@ def _compile_op(name: str, args: dict) -> Op | None:
         return TransferCardOp(
             card_target=args.get("card_target", "this"),
             to_target=_map_target(args.get("to_target", args.get("to", "self")), default="self", op_name=name),
+        )
+    if name == "reveal_hand":
+        return RevealHandOp(
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
+            to=_map_target(args.get("to", args.get("to_target", "all")), default="all", op_name=name, field="to"),
+            persistent=bool(args.get("persistent", False)),
+            mode=args.get("mode", "reveal"),
         )
     if name in _END_GAME_OP_NAMES:
         winner = args.get("winner")

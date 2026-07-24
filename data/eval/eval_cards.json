@@ -1214,5 +1214,101 @@
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 2)\n    state.draw_cards('self', 1)"
     }
+  },
+  {
+    "id": "eval-045",
+    "title": "Open Book",
+    "description": "Turn your hand around and let the whole table read it. One good look for everyone.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "self",
+            "to": "all",
+            "persistent": false
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all')"
+    }
+  },
+  {
+    "id": "eval-046",
+    "title": "Fishbowl",
+    "description": "Pick a player. For the rest of the game they hold their cards facing out where everyone can see them.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "player",
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "chooser",
+            "to": "all",
+            "persistent": true
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.reveal_hand('id:' + pid, to='all', persistent=True)"
+    }
+  },
+  {
+    "id": "eval-047",
+    "title": "Over the Shoulder",
+    "description": "Quietly glance at the hand of a player you choose. Nobody else sees a thing.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "chooser",
+            "to": "self",
+            "persistent": false
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.reveal_hand('id:' + pid, to='self')"
+    }
+  },
+  {
+    "id": "eval-048",
+    "title": "Close the Blinds",
+    "description": "Your cards go back to being private. Any effect that was showing your hand to the table ends now.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "self",
+            "to": "all",
+            "mode": "conceal"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all', mode='conceal')"
+    }
   }
 ]

@@ -5,6 +5,7 @@ import type {
   CardSnapshot,
   ClientMsg,
   GameStateSnapshot,
+  HandRevealedMsg,
   InteractionProgressMsg,
   InteractionRequestMsg,
   PreviewResult,
@@ -83,6 +84,11 @@ export interface GameSocketState {
   // driven by gameState.pending_play (the reconnect-safe source of truth).
   // Cleared automatically after a few seconds or when a new window opens.
   reactionResult: ReactionResultMsg | null;
+  // A one-shot hand reveal targeted at THIS client (hand_revealed push).
+  // Deliberately transient — not part of the state snapshot, lost on
+  // reconnect — and dismissed via clearHandReveal.
+  handReveal: HandRevealedMsg | null;
+  clearHandReveal: () => void;
   send: (msg: ClientMsg) => void;
 }
 
@@ -109,6 +115,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     useState<InteractionProgressMsg | null>(null);
   const [reactionResult, setReactionResult] =
     useState<ReactionResultMsg | null>(null);
+  const [handReveal, setHandReveal] = useState<HandRevealedMsg | null>(null);
   const reactionResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -140,6 +147,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
   }, []);
 
   const clearPromptChoice = useCallback(() => setPromptChoice(null), []);
+  const clearHandReveal = useCallback(() => setHandReveal(null), []);
 
   useEffect(() => {
     if (!code || !name) return;
@@ -249,6 +257,9 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             break;
           case "interaction_progress":
             setInteractionProgress(msg);
+            break;
+          case "hand_revealed":
+            setHandReveal(msg);
             break;
           case "reaction_window":
             // The window UI is driven by the state snapshot's pending_play
@@ -361,6 +372,8 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     interactionRequest,
     interactionProgress,
     reactionResult,
+    handReveal,
+    clearHandReveal,
     send,
   };
 }

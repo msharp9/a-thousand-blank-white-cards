@@ -61,7 +61,8 @@ NOT YET SUPPORTED: eliminating a single player while the rest keep playing. Fall
 
 == Visibility ==
 Hands are private; in-play, center, and discard cards are public.
-NOT YET SUPPORTED: revealing a hand to everyone or to one player, or playing with a hand permanently face up. Fallback: a visible note describing what should be revealed.
+Hands can be revealed with the reveal_hand op: one-shot to everyone or to chosen players (persistent=false), or persistently — to="all" plays the hand face up — and concealed again with mode="conceal". Revealing changes only who can SEE the cards; it never moves them.
+NOT YET SUPPORTED: revealing a single card, revealing other zones (deck, a specific card in the discard order), or per-card visibility. Fallback: reveal the whole hand, or a visible note.
 
 == Timers ==
 NOT YET SUPPORTED: turn timers or time limits on players. Fallback: a visible note; do not try to enforce time.

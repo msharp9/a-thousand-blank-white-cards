@@ -426,5 +426,35 @@
       "venue": "all",
       "sandbox": null
     }
+  },
+  {
+    "id": "hard-025",
+    "title": "Public Audit",
+    "description": "Choose a player. Their hand gets shown to the whole table, and they lose 1 point for every card in it.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if not pid:\n        return\n    state.reveal_hand('id:' + pid, to='all')\n    size = state.hand_size(pid)\n    if size > 0:\n        state.subtract_points('id:' + pid, size)"
+    }
+  },
+  {
+    "id": "hard-026",
+    "title": "Transparency Report",
+    "description": "Every hand is shown to the table. Whoever is hoarding the most cards loses 3 points; on a tie, everyone tied pays.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('all', to='all')\n    sizes = {p.id: state.hand_size(p.id) for p in state.players()}\n    if not sizes:\n        return\n    biggest = max(sizes.values())\n    if biggest == 0:\n        return\n    for pid, size in sizes.items():\n        if size == biggest:\n            state.subtract_points('id:' + pid, 3)"
+    }
   }
 ]

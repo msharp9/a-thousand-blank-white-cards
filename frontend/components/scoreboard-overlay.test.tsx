@@ -37,6 +37,16 @@ describe("ScoreboardOverlay", () => {
     expect(screen.getByText("0 in hand · 1 in play")).toBeTruthy();
   });
 
+  it("renders hand_count when the hand is redacted to a count", () => {
+    // Server-side redaction empties other players' hands and ships only
+    // hand_count; the row must show the count, not hand.length.
+    const players: PlayerSnapshot[] = [
+      player({ id: "p1", name: "Alice", hand: [], hand_count: 4 }),
+    ];
+    render(<ScoreboardOverlay players={players} onClose={() => {}} />);
+    expect(screen.getByText("4 in hand · 0 in play")).toBeTruthy();
+  });
+
   it("colors each row by the player's turn-order identity, not standings order", () => {
     const players: PlayerSnapshot[] = [
       player({ id: "p1", name: "Alice", score: 1 }),

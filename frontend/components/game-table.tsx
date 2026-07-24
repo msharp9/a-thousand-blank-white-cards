@@ -41,6 +41,7 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
               cards={cards}
               roomCode={gameState.room_code}
               isActive={player.id === activePlayerId}
+              myPlayerId={myPlayerId}
             />
           ),
         )}
@@ -69,18 +70,36 @@ function OpponentPanel({
   cards,
   roomCode,
   isActive,
+  myPlayerId,
 }: {
   player: PlayerSnapshot;
   color: string;
   cards: Record<string, CardSnapshot>;
   roomCode: string;
   isActive: boolean;
+  myPlayerId: string;
 }) {
   // Cards this player has played in front of them, resolved to snapshots so
   // everyone at the table can see what others played.
   const inPlayCards = (player.in_play ?? [])
     .map((id) => cards[id])
     .filter((c): c is CardSnapshot => Boolean(c));
+
+  // The server redacts other players' hands to a bare count; the face-down
+  // fan renders from that count (hand.length covers older servers).
+  const handCount = player.hand_count ?? player.hand.length;
+
+  // Revealed hand (reveal_hand op): face-up play (hand_public) or a hand
+  // persistently revealed to ME. The server only sends real hand ids to
+  // permitted viewers, so resolving against the registry is the content gate.
+  const handRevealed =
+    Boolean(player.hand_public) ||
+    (player.hand_revealed_to ?? []).includes(myPlayerId);
+  const revealedHandCards = handRevealed
+    ? player.hand
+        .map((id) => cards[id])
+        .filter((c): c is CardSnapshot => Boolean(c))
+    : [];
 
   // Drop target for a targeted play: dropping a dragged hand card on this
   // seat plays it with chosen_player_id = this player (see PlayDndContext).
@@ -120,24 +139,51 @@ function OpponentPanel({
         <span className="font-marker text-lg tabular-nums" style={{ color }}>
           {player.score}
         </span>
+        {handRevealed && (
+          <span
+            className="rounded-lg border-[1.5px] border-ink bg-panel-paper px-1.5 py-0.5 font-hand text-xs"
+            title={
+              player.hand_public
+                ? "This hand is played face up"
+                : "This hand is revealed to you"
+            }
+          >
+            👀 revealed
+          </span>
+        )}
       </div>
-      {player.hand.length > 0 && (
-        <div
-          className="flex items-end"
-          title={`${player.hand.length} cards in hand`}
-        >
-          {player.hand.map((id, i) => (
-            <SketchCard
-              key={id}
-              w={40}
-              faceDown
-              showTape={false}
-              rot={(i - (player.hand.length - 1) / 2) * 5}
-              className={cn(i > 0 && "-ml-[22px]")}
-            />
-          ))}
-        </div>
-      )}
+      {handCount > 0 &&
+        (handRevealed && revealedHandCards.length > 0 ? (
+          <div
+            className="flex items-end"
+            title={`${handCount} cards in hand (revealed)`}
+          >
+            {revealedHandCards.map((card, i) => (
+              <SketchCard
+                key={card.id}
+                card={card}
+                w={52}
+                showTape={false}
+                rot={(i - (revealedHandCards.length - 1) / 2) * 4}
+                artUrl={getCardArtUrl(roomCode, card)}
+                className={cn(i > 0 && "-ml-[16px]", "hover:z-10")}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-end" title={`${handCount} cards in hand`}>
+            {Array.from({ length: handCount }, (_, i) => (
+              <SketchCard
+                key={i}
+                w={40}
+                faceDown
+                showTape={false}
+                rot={(i - (handCount - 1) / 2) * 5}
+                className={cn(i > 0 && "-ml-[22px]")}
+              />
+            ))}
+          </div>
+        ))}
       {inPlayCards.length > 0 && (
         <div className="mt-0.5 flex items-center gap-1.5 border-t-[1.5px] border-dashed border-ink/20 pt-1.5">
           <span className="whitespace-nowrap font-hand text-xs text-muted-foreground">

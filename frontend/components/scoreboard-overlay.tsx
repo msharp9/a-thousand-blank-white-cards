@@ -48,7 +48,8 @@ export function ScoreboardOverlay({
             nameSuffix={` ${MEDALS[rank] ?? ""}`}
             caption={
               <p className="font-hand text-sm text-muted-foreground">
-                {player.hand.length} in hand · {player.in_play.length} in play
+                {player.hand_count ?? player.hand.length} in hand ·{" "}
+                {player.in_play.length} in play
               </p>
             }
           />
