@@ -815,17 +815,40 @@ class Room:
         interleave with a suspended play. End-of-game timing is handled in
         ``_advance_turn`` (once the deck is exhausted the drawer finishes,
         then the game ends).
+
+        ON_TURN_START / ON_DRAW_STEP hooks may eliminate the very player whose
+        turn is starting (a landmine/poison rule); their turn cannot proceed,
+        so it ends immediately via ``_advance_turn`` — mirroring the
+        eliminated-active-player handling in ``_turn_decision``. A stale
+        auto-play prompt from a force-ended turn is dropped here; its card is
+        still in hand, so this turn's scan re-prompts fresh.
         """
         self._has_drawn = False
         self._plays_this_turn = 0
         self._auto_plays_this_turn = 0
         self._auto_play_deferred.clear()
         self._advance_after_auto_play = False
+        self._pending_auto_play = None
         self._last_run_metrics.clear()
         await self._arm_turn_timer(player_id)
         await self._emit_hooks(GameEvent.ON_TURN_START, player_id)
+        if self.state.get_player(player_id).eliminated:
+            await self._advance_turn()
+            return
         await self._auto_draw(player_id)
+        if self.state.get_player(player_id).eliminated:
+            await self._advance_turn()
+            return
         await self._process_play_on_draw()
+        if (
+            self._pending is None
+            and self._pending_resolution is None
+            and self._pending_auto_play is None
+            and self.state.phase == "playing"
+            and self.state.active_player().eliminated
+        ):
+            await self._advance_turn()
+            return
         await self._broadcast_state()
 
     async def _auto_draw(self, player_id: str) -> None:
@@ -2225,10 +2248,12 @@ class Room:
             return
         game_ending = game_ending or self._end_now() or win_condition_met(self.state)
         await self._broadcast_state()
-        if self._pending is not None or self._pending_resolution is not None:
-            # The scan suspended the room mid-chain. Defer this counted play's
-            # turn decision to the chain's completing (count_as_play=False)
-            # tail; an uncounted tail has nothing of its own to defer.
+        if self._pending is not None or self._pending_resolution is not None or self._pending_auto_play is not None:
+            # The scan suspended the room mid-chain (reaction window,
+            # interaction barrier, or an auto-play awaiting its owner's
+            # prompt_choice answer). Defer this counted play's turn decision
+            # to the chain's completing (count_as_play=False) tail; an
+            # uncounted tail has nothing of its own to defer.
             if count_as_play:
                 self._advance_after_auto_play = True
             return
@@ -2315,11 +2340,17 @@ class Room:
         from every play's accounting tail, so mid-effect draw_cards are
         covered). Each auto-play runs the normal resolve/execute path as its
         OWNER at no action cost. Stops when the room suspends (reaction
-        window / interaction barrier) — the suspension's completing tail
-        re-enters here — and hard-caps at MAX_AUTO_PLAYS_PER_TURN per turn,
-        deferring the rest to a later turn with a log line.
+        window, interaction barrier, or an auto-play awaiting its owner's
+        prompt_choice answer) — the suspension's completing tail re-enters
+        here — and hard-caps at MAX_AUTO_PLAYS_PER_TURN per turn, deferring
+        the rest to a later turn with a log line.
         """
-        while self.state.phase == "playing" and self._pending is None and self._pending_resolution is None:
+        while (
+            self.state.phase == "playing"
+            and self._pending is None
+            and self._pending_resolution is None
+            and self._pending_auto_play is None
+        ):
             candidates = self._play_on_draw_candidates()
             if not candidates:
                 return
@@ -2436,6 +2467,7 @@ class Room:
         if card is None or pending.card_id not in hand:
             self._pending_auto_play = None
             await self.connections.send(player_id, {"type": "error", "message": "That card is no longer in your hand"})
+            await self._finish_auto_play_chain()
             return
         chosen_player_id = getattr(msg, "chosen_player_id", None) or pending.chosen_player_id
         chosen_card_id = getattr(msg, "chosen_card_id", None) or pending.chosen_card_id
@@ -2466,6 +2498,23 @@ class Room:
             chosen_player_id=chosen_player_id,
             chosen_card_id=chosen_card_id,
         )
+
+    async def _finish_auto_play_chain(self) -> None:
+        """Resume a suspended auto-play chain whose pending prompt died without
+        a completing play tail (its card left the owner's hand). Scans for the
+        candidates queued behind it, then — unless the room re-suspended —
+        honours the deferred turn decision of the counted play that started
+        the chain, so a spent turn can never strand on the dead prompt."""
+        await self._process_play_on_draw()
+        if self.state.phase != "playing":
+            return
+        if self._pending is not None or self._pending_resolution is not None or self._pending_auto_play is not None:
+            return
+        if self._advance_after_auto_play:
+            self._advance_after_auto_play = False
+            await self._turn_decision(self._end_now() or win_condition_met(self.state))
+        elif self.state.active_player().eliminated:
+            await self._advance_turn()
 
     async def _commit_auto_play(
         self,

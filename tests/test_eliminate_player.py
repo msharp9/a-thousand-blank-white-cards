@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+from unittest.mock import AsyncMock
+
+from board.rooms.room import Room
 from engine.compile import compile_card
 from engine.events import GameEvent, HookContext
 from engine.loop import advance_turn
@@ -10,6 +14,7 @@ from engine.sandbox.api_surface import SandboxGame
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, win_condition_met
 from models.effects import EliminatePlayerOp
 from models.game_state import GameState, Player
+from models.ws_messages import PlayMsg
 
 
 def _players() -> list[Player]:
@@ -171,3 +176,57 @@ class TestCompile:
         program = compile_card({"ops": [{"op": "eliminate_player", "args": {}}]})
         assert program is not None
         assert program.ops == [EliminatePlayerOp(target="chooser")]
+
+
+class TestRoomTurnStart:
+    """A hook that eliminates the incoming active player ends that turn
+    immediately: no auto-draw for them, and the turn passes straight to the
+    next survivor instead of leaving an eliminated player 'on the clock'."""
+
+    @staticmethod
+    def _room(hook_event: str) -> "Room":
+        code = "def apply(state, ctx):\n    state.eliminate_player('id:p2')\n"
+        landmine = {
+            "id": "landmine",
+            "title": "Landmine",
+            "description": "",
+            "canonical": {"ops": [{"op": "register_hook", "args": {"event": hook_event, "code": code}}]},
+        }
+        room = Room("ELIMTS")
+        room.add_player("p1", "A")
+        room.add_player("p2", "B")
+        room.add_player("p3", "C")
+        players = [p.model_copy(update={"hand": ["landmine"] if p.id == "p1" else []}) for p in room.state.players]
+        room.state = room.state.model_copy(
+            update={
+                "phase": "playing",
+                "deck": ["d1", "d2", "d3"],
+                "cards": {"landmine": landmine},
+                "players": players,
+            }
+        )
+        room._has_drawn = True
+        for pid in ("p1", "p2", "p3"):
+            room.connections.connect(pid, AsyncMock())
+        return room
+
+    def test_on_turn_start_elimination_skips_to_the_next_survivor(self):
+        room = self._room("on_turn_start")
+
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="landmine")))
+
+        p2 = room.state.get_player("p2")
+        assert p2.eliminated is True
+        assert p2.hand == []  # never auto-drew
+        assert room.state.active_player().id == "p3"
+        assert "d1" in room.state.get_player("p3").hand
+
+    def test_on_draw_step_elimination_skips_to_the_next_survivor(self):
+        room = self._room("on_draw_step")
+
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="landmine")))
+
+        p2 = room.state.get_player("p2")
+        assert p2.eliminated is True
+        assert p2.hand == []  # the drawn card was discarded with the hand
+        assert room.state.active_player().id == "p3"

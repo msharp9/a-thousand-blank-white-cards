@@ -271,3 +271,84 @@ def test_eliminated_players_hands_are_not_scanned() -> None:
 
     assert room.state.get_player("p2").hand == ["pod1"]
     assert room._auto_plays_this_turn == 0
+
+
+CHOOSER5 = [{"op": "add_points", "args": {"target": "chooser", "amount": 5}}]
+
+
+def test_outstanding_choice_prompt_suspends_the_counted_plays_turn() -> None:
+    cards = {
+        "starter": _plain_card("starter", DRAW1),
+        "podc": _pod_card("podc", CHOOSER5),
+        "filler": _plain_card("filler", ADD3),
+    }
+    room = _room(cards, deck=["podc", "filler"], p1_hand=["starter"])
+    room._has_drawn = True
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="starter")))
+
+    # The manual play's turn decision waits for the auto-play's answer.
+    assert room._pending_auto_play is not None and room._pending_auto_play.card_id == "podc"
+    assert room.state.active_player().id == "p1"
+    assert room._advance_after_auto_play is True
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="podc", chosen_player_id="p2")))
+
+    assert room._pending_auto_play is None
+    assert room.state.get_player("p2").score == 5
+    assert "podc" in room.state.discard
+    assert room.state.active_player().id == "p2"  # deferred decision resumed
+
+
+def test_two_choice_needing_cards_prompt_one_at_a_time() -> None:
+    cards = {
+        "poda": _pod_card("poda", CHOOSER5),
+        "podb": _pod_card("podb", CHOOSER5),
+        "filler": _plain_card("filler", ADD3),
+    }
+    room = _room(cards, deck=["poda", "podb", "filler"])
+    room.state = room.state.model_copy(update={"rules": room.state.rules.model_copy(update={"draw": 2})})
+
+    asyncio.run(room._start_turn("p1"))
+
+    # The scan stops at the first prompt — podb neither clobbers the pending
+    # slot nor burns the auto-play budget on a duplicate resolution.
+    assert room._pending_auto_play is not None and room._pending_auto_play.card_id == "poda"
+    assert room._auto_plays_this_turn == 1
+    assert sum("plays itself" in line for line in room.state.log) == 1
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="poda", chosen_player_id="p2")))
+
+    assert room._pending_auto_play is not None and room._pending_auto_play.card_id == "podb"
+    assert room._auto_plays_this_turn == 2
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="podb", chosen_player_id="p1")))
+
+    assert room._pending_auto_play is None
+    assert {"poda", "podb"} <= set(room.state.discard)
+    assert room.state.get_player("p1").score == 5
+    assert room.state.get_player("p2").score == 5
+    assert room.state.active_player().id == "p1"  # auto-plays cost no action
+
+
+def test_dead_prompt_still_runs_the_deferred_turn_decision() -> None:
+    cards = {
+        "starter": _plain_card("starter", DRAW1),
+        "podc": _pod_card("podc", CHOOSER5),
+        "filler": _plain_card("filler", ADD3),
+    }
+    room = _room(cards, deck=["podc", "filler"], p1_hand=["starter"])
+    room._has_drawn = True
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="starter"))
+        players = [p.model_copy(update={"hand": [c for c in p.hand if c != "podc"]}) for p in room.state.players]
+        room.state = room.state.model_copy(update={"players": players})
+        await room.handle_action("p1", PlayMsg(card_id="podc", chosen_player_id="p2"))
+
+    asyncio.run(scenario())
+
+    assert room._pending_auto_play is None
+    assert room._advance_after_auto_play is False
+    assert any("no longer in your hand" in m.get("message", "") for m in _sent(room, "p1"))
+    assert room.state.active_player().id == "p2"  # the spent turn did not strand
