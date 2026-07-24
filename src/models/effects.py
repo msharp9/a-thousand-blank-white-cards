@@ -306,6 +306,64 @@ class DiscardRandomOp(BaseModel):
     count: int = Field(default=1, ge=1, le=10)
 
 
+# Zones move_cards can address. "exile" is the op-level spelling of the
+# GameState "exiled" pile (the reducer maps it); every other name matches the
+# GameState zone taxonomy (see models.game_state.GameState docstring).
+Zone = Literal["deck", "discard", "hand", "in_play", "center", "exile"]
+
+_PLAYER_ZONES: frozenset[str] = frozenset({"hand", "in_play"})
+
+
+class MoveCardsOp(BaseModel):
+    """Move cards between zones without playing them (mill, tuck, unbury…).
+
+    Source is EITHER an explicit ``card_target`` (cards move from wherever
+    they currently live) OR a ``from_zone`` with a ``selector``/``count``
+    (``selector="random"`` picks with the engine's injected rng at reduce
+    time — never pre-resolved, so snippets learn nothing about hidden cards).
+    "top" of the deck is the next card drawn; "top" of any other zone is its
+    most recently added card. ``from_player``/``to_player`` are required
+    exactly when the corresponding zone is per-player (hand/in_play).
+    ``to_position`` applies only when the destination is the deck: "top",
+    "bottom", or "shuffle" (a random position per card).
+    """
+
+    op: Literal["move_cards"] = "move_cards"
+    card_target: CardTarget | None = None
+    from_zone: Zone | None = None
+    selector: Literal["top", "bottom", "all", "random"] = "top"
+    count: int = Field(default=1, ge=1, le=50)
+    from_player: Target | None = None
+    to_zone: Zone
+    to_position: Literal["top", "bottom", "shuffle"] = "top"
+    to_player: Target | None = None
+
+    @model_validator(mode="after")
+    def _source_shape_and_player_zones(self) -> MoveCardsOp:
+        if (self.card_target is None) == (self.from_zone is None):
+            raise ValueError("move_cards requires exactly one of card_target or from_zone")
+        if self.from_zone in _PLAYER_ZONES and self.from_player is None:
+            raise ValueError(f"move_cards from_zone {self.from_zone!r} requires from_player")
+        if self.from_player is not None and self.from_zone not in _PLAYER_ZONES:
+            raise ValueError("move_cards from_player is only valid with from_zone 'hand' or 'in_play'")
+        if self.to_zone in _PLAYER_ZONES and self.to_player is None:
+            raise ValueError(f"move_cards to_zone {self.to_zone!r} requires to_player")
+        if self.to_player is not None and self.to_zone not in _PLAYER_ZONES:
+            raise ValueError("move_cards to_player is only valid with to_zone 'hand' or 'in_play'")
+        return self
+
+
+class ShuffleDeckOp(BaseModel):
+    """Shuffle the draw pile in place with the engine's injected rng.
+
+    ``include_discard=True`` is the classic reshuffle: the discard pile is
+    folded into the deck before shuffling and left empty.
+    """
+
+    op: Literal["shuffle_deck"] = "shuffle_deck"
+    include_discard: bool = False
+
+
 class DestroyCardOp(BaseModel):
     op: Literal["destroy_card"] = "destroy_card"
     # Back-compat: the raw single card id to remove (from hand / in_play /
@@ -383,12 +441,12 @@ class CreateCardOp(BaseModel):
 
     Created cards carry structured authoring ``ops`` (compiled deterministically
     when later drawn/played — no LLM round-trip) plus optional ``attributes``.
-    ``destination``: "deck_shuffle" (random deck positions), "deck_top", or
-    "hand". When "hand", copies go to the resolved ``target`` player(s) —
-    defaulting to "self" (the actor), but any Target works, so
-    ``destination="hand", target="id:<player_id>"`` hands cards to a specific
-    player (e.g. an auction winner). Capped at 10 copies per op so one card
-    cannot flood the game.
+    ``destination``: "deck_shuffle" (random deck positions), "deck_top",
+    "deck_bottom", "hand", "discard", or "center". When "hand", copies go to
+    the resolved ``target`` player(s) — defaulting to "self" (the actor), but
+    any Target works, so ``destination="hand", target="id:<player_id>"`` hands
+    cards to a specific player (e.g. an auction winner). Capped at 10 copies
+    per op so one card cannot flood the game.
     """
 
     op: Literal["create_card"] = "create_card"
@@ -396,7 +454,7 @@ class CreateCardOp(BaseModel):
     description: str = ""
     ops: list[dict[str, Any]] = Field(default_factory=list)
     attributes: dict[str, Any] = Field(default_factory=dict)
-    destination: Literal["deck_shuffle", "deck_top", "hand"] = "deck_shuffle"
+    destination: Literal["deck_shuffle", "deck_top", "deck_bottom", "hand", "discard", "center"] = "deck_shuffle"
     target: Target = "self"
     count: int = Field(default=1, ge=1, le=10)
 
@@ -503,6 +561,8 @@ Op = Annotated[
         RollDieOp,
         DiscardRandomOp,
         DestroyCardOp,
+        MoveCardsOp,
+        ShuffleDeckOp,
         TransferCardOp,
         RevealHandOp,
         SetWinConditionOp,
@@ -524,7 +584,7 @@ Op = Annotated[
 _CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
 
 # Op fields that hold a player Target address.
-_TARGET_FIELDS: tuple[str, ...] = ("target", "from_target", "to_target", "to", "winner")
+_TARGET_FIELDS: tuple[str, ...] = ("target", "from_target", "to_target", "to", "winner", "from_player", "to_player")
 
 
 def op_requires_choice(op: Op) -> bool:

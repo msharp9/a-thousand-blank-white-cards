@@ -62,7 +62,8 @@ OP_CATALOG_GUIDE = """\
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, roll_die, discard_random, destroy_card, transfer_card, reveal_hand, set_win_condition, set_rule,
+  draw_cards, roll_die, discard_random, destroy_card, transfer_card, move_cards, shuffle_deck,
+  reveal_hand, set_win_condition, set_rule,
   set_condition, set_card_attribute, create_card, custom_note, end_game) into an
   EffectProgram.
   * set_rule writes game rules as data (paths: draw, play, end_condition.type,
@@ -84,6 +85,18 @@ OP_CATALOG_GUIDE = """\
     simultaneously — followed by a snippet that destroys each picked card. To discard
     MORE than one per player ("everyone discards 2 cards") set the card_pick's
     max_picks=N: each player's collected value is then a LIST of card ids to iterate.
+  * move_cards moves cards between zones (deck, discard, hand, in_play, center, exile)
+    WITHOUT playing them. Source is EITHER an explicit card_target OR a from_zone with
+    selector "top"/"bottom"/"all"/"random" and count (1-50); from_player / to_player name
+    whose hand or in-play zone and are required exactly for those zones. Mill = from_zone
+    "deck", selector "top", to_zone "discard". Take the top discard into your hand =
+    from_zone "discard", to_zone "hand", to_player "self". Remove the whole deck from the
+    game = from_zone "deck", selector "all", to_zone "exile". Return a card to the bottom
+    of the deck = to_zone "deck", to_position "bottom" ("top" and "shuffle" also work).
+    The ENGINE picks random cards — never pick them yourself — and moving a hidden card
+    reveals nothing about it.
+  * shuffle_deck shuffles the draw pile in place; include_discard=true is the classic
+    reshuffle ("shuffle the discard pile back into the deck").
   * reveal_hand shows a hand: target = whose hand, to = who may see it ("all", "chooser",
     "id:<player_id>", …). persistent=false is a one-shot peek ("show your hand to the
     player on your left"); persistent=true keeps the hand visible — to="all" means the
@@ -104,8 +117,9 @@ OP_CATALOG_GUIDE = """\
     TOTAL, so a snippet can branch on it or feed it into any other effect
     ("roll a d6, skip that many turns" = roll then loop). Note: a dry-run
     preview's rolls are illustrative; the live play rolls fresh dice.
-  * create_card mints new cards (with their own ops!) into the deck or a hand — a card
-    can add Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
+  * create_card mints new cards (with their own ops!) into the deck ("deck_shuffle",
+    "deck_top", "deck_bottom"), a hand, the discard pile, or the center — a card can add
+    Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
     the copies to its target player (default "self"); route to a SPECIFIC player with
     destination="hand", target="id:<player_id>" (e.g. hand an auctioned card to the winner).
   * register_hook installs a PERSISTENT sandboxed snippet that fires on a game event

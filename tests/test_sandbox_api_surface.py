@@ -232,6 +232,8 @@ class TestWideFacade:
         g.set_card_attribute("all_in_hand", "color", "blue")
         g.create_card("Draw 2", ops=[{"op": "draw_cards", "args": {"amount": 2}}], count=2)
         g.shuffle_into_deck("Reverse")
+        g.move_cards(from_zone="deck", selector="top", count=2, to_zone="discard")
+        g.shuffle_deck(include_discard=True)
         g.register_hook("on_turn_start", code="def apply(state, ctx):\n    pass\n")
         g.unregister_hook("source-card")
         g.reject_play("wrong color")
@@ -250,6 +252,8 @@ class TestWideFacade:
             "set_condition",
             "set_card_attribute",
             "create_card",
+            "move_cards",
+            "shuffle_deck",
             "register_hook",
             "unregister_hook",
             "reject_play",

@@ -40,6 +40,7 @@ from models.effects import (
     EndGameOp,
     ExtraTurnOp,
     InteractionStep,
+    MoveCardsOp,
     RegisterHookOp,
     ResolutionPlan,
     OpsStep,
@@ -53,6 +54,7 @@ from models.effects import (
     SetPointsOp,
     SetRuleOp,
     SetWinConditionOp,
+    ShuffleDeckOp,
     SkipTurnOp,
     StealPointsOp,
     SubtractPointsOp,
@@ -195,6 +197,28 @@ def _compile_op(name: str, args: dict) -> Op | None:
             card_target=args.get("card_target"),
             card_id=args.get("card_id"),
         )
+    if name == "move_cards":
+        to_zone = args.get("to_zone")
+        if not to_zone:
+            raise ValueError("move_cards missing 'to_zone'")
+        from_player = args.get("from_player")
+        to_player = args.get("to_player")
+        return MoveCardsOp(
+            card_target=args.get("card_target"),
+            from_zone=args.get("from_zone"),
+            selector=args.get("selector", "top"),
+            count=int(args.get("count", 1)),
+            from_player=_map_target(from_player, default="chooser", op_name=name, field="from_player")
+            if from_player is not None
+            else None,
+            to_zone=to_zone,
+            to_position=args.get("to_position", "top"),
+            to_player=_map_target(to_player, default="self", op_name=name, field="to_player")
+            if to_player is not None
+            else None,
+        )
+    if name == "shuffle_deck":
+        return ShuffleDeckOp(include_discard=bool(args.get("include_discard", False)))
     if name == "transfer_card":
         return TransferCardOp(
             card_target=args.get("card_target", "this"),

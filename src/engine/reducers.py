@@ -25,6 +25,7 @@ from models.effects import (
     DrawCardsOp,
     EndGameOp,
     ExtraTurnOp,
+    MoveCardsOp,
     Op,
     RevealHandOp,
     ReverseOrderOp,
@@ -37,6 +38,7 @@ from models.effects import (
     SetPointsOp,
     SetRuleOp,
     SetWinConditionOp,
+    ShuffleDeckOp,
     SkipTurnOp,
     StealPointsOp,
     SubtractPointsOp,
@@ -439,6 +441,158 @@ def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext
     )
 
 
+# Op-level zone name -> GameState.move_card zone literal ("exile" is the only
+# spelling difference; see models.effects.Zone).
+_MOVE_CARD_ZONE: dict[str, str] = {
+    "deck": "deck",
+    "discard": "discard",
+    "hand": "hand",
+    "in_play": "in_play",
+    "center": "center",
+    "exile": "exiled",
+}
+
+_PLAYER_ZONES: frozenset[str] = frozenset({"hand", "in_play"})
+
+
+def _zone_card_ids(state: GameState, zone: str, player_id: str | None = None) -> list[str]:
+    """The card ids currently in one op-level zone (a copy, list order kept)."""
+    if zone in _PLAYER_ZONES:
+        return list(getattr(state.get_player(player_id), zone))
+    if zone == "center":
+        return state.center_cards()
+    if zone == "exile":
+        return list(state.exiled)
+    return list(getattr(state, zone))
+
+
+def _locate_card_zone(state: GameState, card_id: str) -> tuple[str | None, str | None]:
+    """Find which op-level zone (and owner, for hand/in_play) holds ``card_id``."""
+    for zone in ("deck", "discard"):
+        if card_id in getattr(state, zone):
+            return zone, None
+    if card_id in state.exiled:
+        return "exile", None
+    if card_id in state.house_rules:
+        return "center", None
+    for player in state.players:
+        if card_id in player.hand:
+            return "hand", player.id
+        if card_id in player.in_play:
+            return "in_play", player.id
+    return None, None
+
+
+def _select_from_zone(cards: list[str], zone: str, selector: str, count: int, rng: random.Random) -> list[str]:
+    """Apply a MoveCardsOp selector to one zone's card list, top-most first.
+
+    The deck is front-ordered (index 0 is the next draw); every other zone
+    appends, so its "top" (most recent) is the END of the list.
+    """
+    if selector == "all":
+        return list(cards)
+    n = min(count, len(cards))
+    if n == 0:
+        return []
+    if selector == "random":
+        return rng.sample(cards, n)
+    top_first = cards[:n] if zone == "deck" else list(reversed(cards[-n:]))
+    if selector == "top":
+        return top_first
+    return list(reversed(cards[-n:])) if zone == "deck" else cards[:n]
+
+
+def _reduce_move_cards(
+    state: GameState, op: MoveCardsOp, ctx: HookContext, *, rng: random.Random | None = None
+) -> GameState:
+    """Move cards between zones (see :class:`~models.effects.MoveCardsOp`).
+
+    ``selector="random"`` and ``to_position="shuffle"`` draw from the injected
+    rng at reduce time — never pre-resolved by the sandbox, so snippets cannot
+    observe which hidden card moved. An empty source resolution is a logged
+    no-op. The log and history stay privacy-safe: counts and zone names only,
+    except moves INTO the discard pile (public), which record a "discard"
+    history event carrying the card ids like discard_random.
+    """
+    rng = rng or random.Random()
+
+    moves: list[tuple[str, str, str | None]] = []
+    if op.card_target is not None:
+        for cid in _resolve_card_targets(op.card_target, ctx, state):
+            zone, owner = _locate_card_zone(state, cid)
+            if zone is not None:
+                moves.append((cid, zone, owner))
+    else:
+        if op.from_zone in _PLAYER_ZONES:
+            sources = [(op.from_zone, pid) for pid in _resolve_targets(op.from_player, ctx, state)]
+        else:
+            sources = [(op.from_zone, None)]
+        for zone, owner in sources:
+            for cid in _select_from_zone(_zone_card_ids(state, zone, owner), zone, op.selector, op.count, rng):
+                moves.append((cid, zone, owner))
+
+    source_label = op.card_target if op.card_target is not None else op.from_zone
+    if not moves:
+        return state.with_log(f"[move_cards no-op] no cards to move from {source_label!r}")
+
+    to_player_id: str | None = None
+    if op.to_zone in _PLAYER_ZONES:
+        recipients = _resolve_targets(op.to_player, ctx, state)
+        if not recipients:
+            return state.with_log(f"[move_cards no-op] resolved no players for to_player {op.to_player!r}")
+        if len(recipients) > 1:
+            raise ValueError("move_cards requires exactly one destination player")
+        to_player_id = recipients[0]
+
+    for position, (cid, zone, owner) in enumerate(moves):
+        deck_index: int | None = None
+        if op.to_zone == "deck":
+            if op.to_position == "top":
+                deck_index = position
+            elif op.to_position == "shuffle":
+                deck_index = rng.randint(0, max(len(state.deck) - (1 if zone == "deck" else 0), 0))
+        state = state.move_card(
+            cid,
+            _MOVE_CARD_ZONE[zone],
+            _MOVE_CARD_ZONE[op.to_zone],
+            from_player_id=owner,
+            to_player_id=to_player_id,
+            deck_index=deck_index,
+        )
+
+    count = len(moves)
+    dest_label = op.to_zone if to_player_id is None else f"{op.to_zone}({to_player_id})"
+    state = state.with_log(f"[move_cards] {count} card{'s' if count != 1 else ''}: {source_label} -> {dest_label}")
+    if op.to_zone == "discard":
+        state = append_history_event(
+            state,
+            "discard",
+            actor_id=ctx.actor_id,
+            target_player_ids=list(dict.fromkeys(owner for _, _, owner in moves if owner is not None)),
+            card_id=ctx.card_id,
+            amount=count,
+            source="move_cards",
+            data={"card_ids": [cid for cid, _, _ in moves]},
+        )
+    return state
+
+
+def _reduce_shuffle_deck(
+    state: GameState, op: ShuffleDeckOp, ctx: HookContext, *, rng: random.Random | None = None
+) -> GameState:
+    """Shuffle the deck in place; ``include_discard`` folds the discard pile in first."""
+    rng = rng or random.Random()
+    deck = list(state.deck)
+    update: dict[str, Any] = {}
+    if op.include_discard:
+        deck = [*deck, *state.discard]
+        update["discard"] = []
+    rng.shuffle(deck)
+    update["deck"] = deck
+    line = "shuffled the discard pile into the deck" if op.include_discard else "shuffled the deck"
+    return state.model_copy(update=update).with_log(f"[shuffle_deck] {line}")
+
+
 def _update_player_visibility(state: GameState, player_id: str, update: dict[str, Any]) -> GameState:
     players = [p.model_copy(update=update) if p.id == player_id else p for p in state.players]
     return state.model_copy(update={"players": players})
@@ -545,6 +699,8 @@ def _reduce_create_card(
     rng = rng or random.Random()
     cards = dict(state.cards)
     deck = list(state.deck)
+    discard = list(state.discard)
+    house_rules = list(state.house_rules)
     players = list(state.players)
     base = ctx.card_id or "card"
     serial = sum(1 for cid in cards if cid.startswith("created-"))
@@ -570,17 +726,23 @@ def _reduce_create_card(
     destination_label = op.destination
     if op.destination == "deck_top":
         deck = [*new_ids, *deck]
+    elif op.destination == "deck_bottom":
+        deck = [*deck, *new_ids]
     elif op.destination == "deck_shuffle":
         for cid in new_ids:
             deck.insert(rng.randint(0, len(deck)), cid)
+    elif op.destination == "discard":
+        discard = [*discard, *new_ids]
+    elif op.destination == "center":
+        house_rules = [*house_rules, *new_ids]
     else:
         targets = set(_resolve_targets(op.target, ctx, state))
         players = [p.model_copy(update={"hand": [*p.hand, *new_ids]}) if p.id in targets else p for p in players]
         destination_label = f"hand({op.target})"
 
-    return state.model_copy(update={"cards": cards, "deck": deck, "players": players}).with_log(
-        f"[created] {op.count}x '{op.title}' -> {destination_label}"
-    )
+    return state.model_copy(
+        update={"cards": cards, "deck": deck, "discard": discard, "house_rules": house_rules, "players": players}
+    ).with_log(f"[created] {op.count}x '{op.title}' -> {destination_label}")
 
 
 _MAX_HOOKS_PER_CARD = 3
@@ -758,8 +920,8 @@ def apply_op(state: GameState, op: Op, ctx: HookContext, *, rng: random.Random |
     """Dispatch a single op to its reducer, returning a new GameState.
 
     ``rng`` is only consumed by ``scramble_order``, ``create_card``,
-    ``roll_die`` and ``discard_random`` (dependency-injectable for
-    deterministic tests); every other op ignores it.
+    ``roll_die``, ``discard_random``, ``move_cards`` and ``shuffle_deck``
+    (dependency-injectable for deterministic tests); every other op ignores it.
     """
     before = state
     if op.op == "scramble_order":
@@ -770,6 +932,10 @@ def apply_op(state: GameState, op: Op, ctx: HookContext, *, rng: random.Random |
         state = _reduce_roll_die(state, op, ctx, rng=rng)
     elif op.op == "discard_random":
         state = _reduce_discard_random(state, op, ctx, rng=rng)
+    elif op.op == "move_cards":
+        state = _reduce_move_cards(state, op, ctx, rng=rng)
+    elif op.op == "shuffle_deck":
+        state = _reduce_shuffle_deck(state, op, ctx, rng=rng)
     else:
         state = _REDUCERS[op.op](state, op, ctx)
 
