@@ -138,14 +138,17 @@ def _resolve_card_targets(card_target: CardTarget, ctx: HookContext, state: Game
                            composition is a documented future extension.
     - ``"all_in_center"`` -> every card in the shared center zone
                            (``state.center_cards()``).
-    - ``"last_played"`` -> the card of the most recent "play" history event,
-                           EXCLUDING the card currently resolving (ctx.card_id):
-                           "the last card played", read from the played card's
-                           own perspective, means the PREVIOUS play — and while
-                           it resolves the acting card IS ctx.card_id. Plays
-                           with no card and plays whose card has since left the
-                           registry are skipped; no surviving prior play
-                           resolves to an empty list.
+    - ``"last_played"`` -> the card of the most recent "play" history event.
+                           The card currently resolving is NOT filtered out by
+                           id: a play is recorded only AFTER its effects finish
+                           (see room._after_play_effects / facade / loop), so
+                           the acting play is never in history yet during its
+                           own resolution — while an EARLIER, genuinely
+                           completed play of the same card (e.g. one returned to
+                           hand and replayed) is a real prior play and must
+                           still resolve. Plays with no card and plays whose
+                           card has since left the registry are skipped; no
+                           surviving prior play resolves to an empty list.
     """
     if card_target.startswith("id:"):
         cid = card_target[3:]
@@ -175,7 +178,7 @@ def _resolve_card_targets(card_target: CardTarget, ctx: HookContext, state: Game
             for event in reversed(state.history_events):
                 if event.kind != "play" or event.card_id is None:
                     continue
-                if event.card_id == ctx.card_id or event.card_id not in state.cards:
+                if event.card_id not in state.cards:
                     continue
                 return [event.card_id]
             return []
@@ -447,7 +450,9 @@ def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext
         for card_id in known:
             owner = _resolve_card_owner(state, card_id)
             if owner is None:
-                state = state.with_log(f"[transfer_card no-op] no resolvable owner for card {card_id!r}")
+                state = state.with_log(
+                    f"[transfer_card no-op] no resolvable owner for {_log_card_name(state, card_id)}"
+                )
                 continue
             assignments.append((card_id, owner))
         if not assignments:
@@ -518,6 +523,26 @@ def _locate_card_zone(state: GameState, card_id: str) -> tuple[str | None, str |
         if card_id in player.in_play:
             return "in_play", player.id
     return None, None
+
+
+# Zones whose contents are public (see board.rooms.redaction): a card sitting
+# in one of these may be named in the shared log. "deck" and "hand" are hidden.
+_PUBLIC_LOG_ZONES: frozenset[str] = frozenset({"discard", "in_play", "center", "exile"})
+
+
+def _log_card_name(state: GameState, card_id: str) -> str:
+    """A shared-log-safe label for ``card_id``.
+
+    Naming a raw id is a privacy hazard when the card is otherwise hidden
+    (still in the deck, or in an opponent's hand): the shared log is not
+    per-viewer redacted, so an id written here leaks to everyone. A card is
+    safe to name only once it sits in a public zone or has already been named
+    by a history event (e.g. a completed play); otherwise it is a placeholder.
+    """
+    zone, _ = _locate_card_zone(state, card_id)
+    if zone in _PUBLIC_LOG_ZONES or any(event.card_id == card_id for event in state.history_events):
+        return f"card {card_id!r}"
+    return "a hidden card"
 
 
 def _resolve_card_owner(state: GameState, card_id: str) -> str | None:
@@ -614,7 +639,7 @@ def _reduce_move_cards(
         # stay put as logged per-card no-ops.
         owners = {cid: _resolve_card_owner(state, cid) for cid, _, _ in moves}
         for cid in (cid for cid, resolved in owners.items() if resolved is None):
-            state = state.with_log(f"[move_cards no-op] no resolvable owner for card {cid!r}")
+            state = state.with_log(f"[move_cards no-op] no resolvable owner for {_log_card_name(state, cid)}")
         moves = [move for move in moves if owners[move[0]] is not None]
         if not moves:
             return state

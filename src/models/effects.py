@@ -83,11 +83,12 @@ Target = Annotated[str, AfterValidator(_validate_target)]
 #   "all_in_center" — every card in the shared center zone
 #                   (state.center_cards(), i.e. the house-rules area).
 #   "last_played" — the card of the most recent completed "play" history
-#                   event, EXCLUDING the card currently resolving
-#                   (ctx.card_id): "the last card played" from the played
-#                   card's own perspective means the PREVIOUS play. Plays
-#                   whose card has since left the card registry are skipped;
-#                   no surviving prior play resolves to nothing.
+#                   event. The acting card's own play is recorded only after
+#                   its effects finish, so it is never the match during its
+#                   own resolution — but an earlier, genuinely completed play
+#                   of the same card (returned to hand, then replayed) still
+#                   counts. Plays whose card has since left the card registry
+#                   are skipped; no surviving prior play resolves to nothing.
 # Open, validated prefix forms (mirroring the player Target grammar):
 #   "id:<card_id>"   — one specific card (missing id resolves to nothing)
 #   "attr:<k>=<v>"   — every card whose attributes bag has key k stringifying to v

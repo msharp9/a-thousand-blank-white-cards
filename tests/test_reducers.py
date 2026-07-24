@@ -449,12 +449,22 @@ class TestResolveCardTargets:
         ctx = make_card_ctx("p1", card_id="acting")
         assert _resolve_card_targets("last_played", ctx, state) == ["newer"]
 
-    def test_last_played_excludes_the_card_currently_resolving(self):
-        """During resolution the acting card is ctx.card_id — 'the last card
-        played' from its own perspective means the play BEFORE it."""
+    def test_last_played_resolves_an_earlier_completed_play_of_the_same_card(self):
+        """A play is recorded only after its effects finish, so the acting
+        play is never in history during its own resolution. An EARLIER,
+        genuinely completed play of the same card (returned to hand, then
+        replayed) is a real prior play and must still resolve — it is not
+        filtered out just because its id matches ctx.card_id."""
+        state = self._state_with_plays(["acting"])
+        ctx = make_card_ctx("p1", card_id="acting")
+        assert _resolve_card_targets("last_played", ctx, state) == ["acting"]
+
+    def test_last_played_uses_the_most_recent_completed_play(self):
+        """With several plays recorded, the newest surviving one wins, even
+        when its id happens to equal the acting card's id."""
         state = self._state_with_plays(["older", "acting"])
         ctx = make_card_ctx("p1", card_id="acting")
-        assert _resolve_card_targets("last_played", ctx, state) == ["older"]
+        assert _resolve_card_targets("last_played", ctx, state) == ["acting"]
 
     def test_last_played_empty_history_resolves_empty(self):
         state = self._state_with_plays([])
@@ -668,7 +678,20 @@ class TestTransferCardOwner:
         new = apply_op(state, TransferCardOp(card_target="id:seed", to_target="card_owner"), make_card_ctx("p1"))
         assert new.discard == ["seed"]
         assert all(p.hand == [] for p in new.players)
-        assert any("no resolvable owner" in entry for entry in new.log)
+        assert any("no resolvable owner for card 'seed'" in entry for entry in new.log)
+
+    def test_no_resolvable_owner_hidden_card_is_not_named(self):
+        """An ownerless card in a hidden zone (deck) is logged with a
+        placeholder, never its raw id: the shared log is not per-viewer
+        redacted, so naming a deck card leaks it to the whole table."""
+        state = self._state(
+            cards={"hidden1": {"id": "hidden1", "title": "Secret", "attributes": {"color": "red"}}},
+            deck=["hidden1"],
+        )
+        new = apply_op(state, TransferCardOp(card_target="attr:color=red", to_target="card_owner"), make_card_ctx("p1"))
+        assert new.deck == ["hidden1"]
+        assert any("no resolvable owner for a hidden card" in entry for entry in new.log)
+        assert not any("hidden1" in entry for entry in new.log)
 
     def test_multiple_cards_route_to_their_own_owners(self):
         state = self._state(
