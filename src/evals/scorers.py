@@ -25,12 +25,14 @@ from evals.judge import JudgeLLM, Verdict
 _CACHE_MAX = 512
 _VERDICT_CACHE: dict[int, Verdict] = {}
 _DRY_RUN_CACHE: dict[int, dict[str, Any]] = {}
+_CEILING_CACHE: dict[str, dict[str, bool]] = {}
 
 
 def reset_run_caches() -> None:
     """Clear the per-run scorer caches. Call at the start of every eval run."""
     _VERDICT_CACHE.clear()
     _DRY_RUN_CACHE.clear()
+    _CEILING_CACHE.clear()
 
 
 @lru_cache(maxsize=1)
@@ -234,11 +236,34 @@ executability = create_scorer(
 _NON_MECHANICAL_EMITTED = frozenset({"custom_note", "note"})
 
 
+def _canonical_ceiling(expected: dict[str, Any]) -> dict[str, bool]:
+    """The card's own ceiling (evals.ceilings), cached per canonical."""
+    key = json.dumps(expected, sort_keys=True, default=str)
+    cached = _CEILING_CACHE.get(key)
+    if cached is None:
+        from evals.ceilings import card_ceiling
+
+        cached = card_ceiling({"id": "ceiling", "human_canonical": expected})
+        if len(_CEILING_CACHE) >= _CACHE_MAX:
+            _CEILING_CACHE.clear()
+        _CEILING_CACHE[key] = cached
+    return cached
+
+
 def _did_something_scorer(context: ScorerContext) -> Score:
     """The fun metric: a no-op kills the fun even when the reading is "right",
     so 1.0 requires verdict != invalid AND a clean dry-run AND >=1 mechanical op
-    (a bare custom_note changes no game state and doesn't count)."""
+    (a bare custom_note changes no game state and doesn't count).
+
+    Abstains (score=None) when the card's OWN canonical is a deliberate no-op
+    (executable but non-mechanical, e.g. a pure flavour card): the metric is
+    unreachable there by design, so a 0 would punish a perfect answer."""
     output = context.output or {}
+    expected = context.expected or {}
+    if expected:
+        ceiling = _canonical_ceiling(expected)
+        if ceiling["executable"] and not ceiling["mechanical"]:
+            return Score(score=None, metadata={"skipped": "canonical is a deliberate no-op (non-mechanical ceiling)"})
     if output.get("verdict") == "invalid":
         return Score(score=0.0, metadata={"reason": "verdict=invalid"})
     report = _dry_run_output(output)
@@ -313,7 +338,16 @@ def _sandbox_behavior_scorer(context: ScorerContext) -> Score:
 
     codes, plain_ops = _generated_effect_forms(context.output or {})
     if not codes and not plain_ops:
-        return Score(score=0.0, metadata={"reason": "no generated effect to execute"})
+        # No plan is behaviorally identical to a canonical whose normalised
+        # diff is empty (note-only card): empty == empty, matching
+        # multiset_jaccard's own convention. Otherwise it's a real miss.
+        try:
+            for state_dict, ctx_dict in fixture_states():
+                if normalise_ops(execute_snippet(expected_code, state_dict, ctx_dict), ctx_dict, state_dict):
+                    return Score(score=0.0, metadata={"reason": "no generated effect to execute"})
+        except Exception as exc:  # noqa: BLE001
+            return Score(score=0.0, metadata={"reason": f"no generated effect to execute ({exc})"})
+        return Score(score=1.0, metadata={"note": "no plan vs empty expected diff — behaviorally identical"})
 
     similarities: list[float] = []
     for state_dict, ctx_dict in fixture_states():

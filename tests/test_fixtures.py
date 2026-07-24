@@ -88,3 +88,23 @@ def test_resolution_skipped_without_state() -> None:
     assert normalise_ops([{"op": "add_points", "target": "all_others", "amount": 1}], _CTX) == [
         '{"amount": 1, "op": "add_points", "target": "all_others"}'
     ]
+
+
+def test_chosen_card_alias_resolves_to_chosen_card_id() -> None:
+    # ctx chosen_card_id is c7: an abstract chosen_card address, an id: address,
+    # and a literal destroy_card card_id must all compare equal.
+    assert _eq(
+        [{"op": "destroy_card", "card_target": "chosen_card"}],
+        [{"op": "destroy_card", "card_id": "c7"}],
+    )
+    assert _eq(
+        [{"op": "transfer_card", "card_target": "chosen_card", "to_target": "self"}],
+        [{"op": "transfer_card", "card_target": "id:c7", "to_target": "self"}],
+    )
+
+
+def test_wrong_literal_card_still_differs() -> None:
+    assert not _eq(
+        [{"op": "destroy_card", "card_target": "chosen_card"}],
+        [{"op": "destroy_card", "card_id": "c1"}],
+    )

@@ -20,6 +20,10 @@ _NON_MECHANICAL_OPS = frozenset({"custom_note", "note"})
 # abstractly; expected sandbox code addresses them via ctx["chosen_player_id"].
 _CHOICE_TARGETS = frozenset({"chooser", "target_player", "player", "chosen_player"})
 
+# Same for cards: "chosen_card" resolves to ctx["chosen_card_id"] at runtime,
+# and destroy_card accepts either a card_target address or a literal card_id.
+_CARD_CHOICE_TARGETS = frozenset({"chosen_card"})
+
 
 def _players() -> list[dict[str, Any]]:
     return [
@@ -185,6 +189,7 @@ def normalise_ops(raw_ops: list[dict[str, Any]], ctx: dict[str, Any], state: dic
     count-sensitive.
     """
     chosen = f"id:{ctx.get('chosen_player_id') or ''}"
+    chosen_card = ctx.get("chosen_card_id")
     resolve = _make_resolver(ctx, state)
     normalised: list[str] = []
     for raw in raw_ops or []:
@@ -194,6 +199,10 @@ def normalise_ops(raw_ops: list[dict[str, Any]], ctx: dict[str, Any], state: dic
         for key in ("target", "from_target", "to_target", "to", "winner"):
             if entry.get(key) in _CHOICE_TARGETS:
                 entry[key] = chosen
+        if entry.get("card_target") in _CARD_CHOICE_TARGETS and chosen_card:
+            entry["card_target"] = f"id:{chosen_card}"
+        if entry.get("op") == "destroy_card" and entry.get("card_id") and not entry.get("card_target"):
+            entry["card_target"] = f"id:{entry.pop('card_id')}"
         for atom in _expand_target(entry, resolve):
             normalised.append(json.dumps(_canonicalise_op(atom), sort_keys=True, default=str))
     return sorted(normalised)
