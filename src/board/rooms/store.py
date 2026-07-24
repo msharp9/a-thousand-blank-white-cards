@@ -228,6 +228,9 @@ def _room_from_dict(data: dict) -> Room:
         for cid, card in state.cards.items()
     }
     room.state = state.model_copy(update={"cards": cards})
+    # Rolls recorded before the restart were pushed (or lost with the sockets);
+    # start the dice watermark at the tip so reconnects never replay them.
+    room._dice_seq_pushed = room._history_seq()
     turn_state = data.get("turn_state") or {}
     room._has_drawn = bool(turn_state.get("has_drawn", False))
     room._plays_this_turn = int(turn_state.get("plays_this_turn", 0))

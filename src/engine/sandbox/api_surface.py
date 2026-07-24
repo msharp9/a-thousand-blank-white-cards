@@ -8,6 +8,7 @@ it through the engine's own reducers.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Any
 
@@ -31,10 +32,16 @@ class SandboxGame:
     state/ctx; records ops which the child serialises to stdout for the parent.
     """
 
-    def __init__(self, state_dict: dict[str, Any], ctx_dict: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        state_dict: dict[str, Any],
+        ctx_dict: dict[str, Any],
+        rng_seed: int | None = None,
+    ) -> None:
         self._state = state_dict
         self._ctx = ctx_dict
         self._ops: list[dict[str, Any]] = []
+        self._rng = random.Random(rng_seed)
 
     # ------------------------------------------------------------------
     # Read-only views
@@ -221,6 +228,46 @@ class SandboxGame:
         """Have player `target` draw `amount` cards from the deck."""
         self._require_nonneg_int(amount)
         self._ops.append({"op": "draw_cards", "target": target, "amount": amount})
+
+    def roll_die(
+        self,
+        sides: int = 6,
+        count: int = 1,
+        target: str = "self",
+        outcome: str = "none",
+    ) -> int:
+        """Roll `count` dice (1-10) of `sides` sides (2-1000); returns the TOTAL.
+
+        The roll happens HERE, immediately, and the recorded op carries the
+        rolled values in `result` — so revalidation replays this exact roll
+        instead of re-rolling. Callers can never supply the values: the engine
+        alone rolls. `outcome` feeds the total into "add_points",
+        "subtract_points" or "draw_cards" for `target`; "none" is a bare roll
+        whose returned total your code can branch on.
+        """
+        if not isinstance(sides, int) or isinstance(sides, bool) or not 2 <= sides <= 1000:
+            raise ValueError(f"sides must be an int in 2..1000, got {sides!r}")
+        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 10:
+            raise ValueError(f"count must be an int in 1..10, got {count!r}")
+        if outcome not in ("add_points", "subtract_points", "draw_cards", "none"):
+            raise ValueError(f"outcome must be add_points/subtract_points/draw_cards/none, got {outcome!r}")
+        values = [self._rng.randint(1, sides) for _ in range(count)]
+        self._ops.append(
+            {"op": "roll_die", "sides": sides, "count": count, "target": target, "outcome": outcome, "result": values}
+        )
+        return sum(values)
+
+    def discard_random(self, target: str = "self", count: int = 1) -> None:
+        """Discard `count` (1-10) random cards from each `target` player's hand.
+
+        Unlike roll_die, the picks are NOT resolved here: snippets cannot read
+        other players' hands, so the engine draws the cards at apply time (a
+        player holding fewer than `count` discards their whole hand). There is
+        no return value to branch on.
+        """
+        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 10:
+            raise ValueError(f"count must be an int in 1..10, got {count!r}")
+        self._ops.append({"op": "discard_random", "target": target, "count": count})
 
     def destroy_card(self, card_id: str | None = None, card_target: str | None = None) -> None:
         """Destroy cards by CardTarget address ('this', 'all_in_play', 'all_in_center', 'id:…', 'attr:k=v')."""

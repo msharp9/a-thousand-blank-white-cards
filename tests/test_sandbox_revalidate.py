@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import random
+
 import pytest
 
 from engine.events import GameEvent, HookContext
@@ -128,6 +130,56 @@ def test_extract_counter_splits_mode_and_side_ops() -> None:
     assert rest == [{"op": "add_points", "target": "self", "amount": 2}]
     # Post-extraction, the remaining diff parses cleanly for the reaction origin.
     assert len(parse_diff(rest, origin="reaction").ops) == 1
+
+
+def test_roll_die_diff_replays_recorded_result_deterministically() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A", score=0)])
+    ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1")
+    diff = [{"op": "roll_die", "sides": 6, "count": 2, "target": "self", "outcome": "add_points", "result": [3, 5]}]
+
+    first = apply_snippet_diff(state, diff, ctx, rng=random.Random(1))
+    second = apply_snippet_diff(state, diff, ctx, rng=random.Random(2))
+
+    assert first.get_player("p1").score == 8
+    assert second.get_player("p1").score == 8
+    (event,) = [e for e in first.history_events if e.kind == "dice_roll"]
+    assert event.data["values"] == [3, 5]
+
+
+def test_sandbox_roll_die_return_value_matches_replayed_total() -> None:
+    from engine.sandbox.api_surface import SandboxGame
+
+    g = SandboxGame(
+        {"players": [{"id": "p1", "name": "A", "score": 0, "hand": []}], "turn_index": 0}, {"actor_id": "p1"}
+    )
+    total = g.roll_die(sides=6, count=3, outcome="add_points")
+
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A", score=0)])
+    ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1")
+    new = apply_snippet_diff(state, g.ops(), ctx, rng=random.Random(99))
+
+    assert new.get_player("p1").score == total
+
+
+def test_discard_random_diff_resolves_at_reduce_time() -> None:
+    state = GameState(
+        room_code="AAAA",
+        players=[Player(id="p1", name="A", hand=["c1", "c2", "c3"])],
+    )
+    ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1")
+
+    new = apply_snippet_diff(state, [{"op": "discard_random", "target": "self", "count": 2}], ctx, rng=random.Random(5))
+
+    assert len(new.get_player("p1").hand) == 1
+    assert len(new.discard) == 2
+    assert state.get_player("p1").hand == ["c1", "c2", "c3"]
+
+
+def test_roll_die_diff_rejects_forged_result() -> None:
+    with pytest.raises(DiffValidationError, match="outside 1..6"):
+        parse_diff([{"op": "roll_die", "sides": 6, "count": 1, "result": [7]}])
+    with pytest.raises(DiffValidationError, match="count=2"):
+        parse_diff([{"op": "roll_die", "sides": 6, "count": 2, "result": [3]}])
 
 
 def test_extract_counter_none_when_no_counter() -> None:

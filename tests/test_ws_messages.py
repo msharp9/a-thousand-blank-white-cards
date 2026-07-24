@@ -184,3 +184,20 @@ def test_reaction_server_messages_round_trip() -> None:
     assert json.loads(window.model_dump_json())["type"] == "reaction_window"
     result = ReactionResultMsg(window_id="w1", outcome="countered", reactor_id="p2", reaction_card_id="c9")
     assert json.loads(result.model_dump_json())["outcome"] == "countered"
+
+
+def test_dice_roll_server_message_round_trip() -> None:
+    from models.ws_messages import DiceRollMsg
+
+    msg = DiceRollMsg(actor_id="p1", sides=6, values=[3, 5], total=8, card_id="c1")
+    payload = json.loads(msg.model_dump_json())
+    assert payload == {
+        "type": "dice_roll",
+        "actor_id": "p1",
+        "sides": 6,
+        "values": [3, 5],
+        "total": 8,
+        "card_id": "c1",
+    }
+    # card_id is optional: hook-originated rolls may have no card in context.
+    assert DiceRollMsg(actor_id="p1", sides=2, values=[1], total=1).card_id is None

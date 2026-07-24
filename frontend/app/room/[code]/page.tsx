@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DiceRollOverlay } from "@/components/dice-roll-overlay";
 import { DiscardPile } from "@/components/discard-pile";
 import { EffectLog } from "@/components/effect-log";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
@@ -140,6 +141,7 @@ export default function RoomPage() {
     reactionResult,
     handReveal,
     clearHandReveal,
+    diceRoll,
     send,
   } = useGameSocket(nameSet ? code : "", name);
 
@@ -357,6 +359,15 @@ export default function RoomPage() {
         <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit rotate-[0.4deg] rounded-xl border-2 border-ink bg-card px-4 py-2 font-hand text-lg sticker-shadow-sm">
           {reactionResultText}
         </div>
+      )}
+      {diceRoll && (
+        <DiceRollOverlay
+          roll={diceRoll}
+          actorName={
+            gameState?.players.find((p) => p.id === diceRoll.actor_id)?.name ??
+            "Someone"
+          }
+        />
       )}
       <header className="sticky top-0 z-40 flex items-center gap-3.5 border-b-[2.5px] border-ink bg-card px-5 py-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)]">
         <Link

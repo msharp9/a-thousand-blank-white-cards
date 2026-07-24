@@ -11,7 +11,16 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, computed_field, model_validator
 
 HistoryKind = Literal[
-    "draw", "play", "score_change", "rule_change", "interaction", "reveal", "game_end", "card_fallback"
+    "draw",
+    "play",
+    "score_change",
+    "rule_change",
+    "interaction",
+    "reveal",
+    "game_end",
+    "card_fallback",
+    "dice_roll",
+    "discard",
 ]
 
 
@@ -154,6 +163,11 @@ class HistoryEvent(BaseModel):
     # every caller. Lets a client group/label history entries by turn (e.g.
     # the "Everything Played" history modal) without re-deriving it.
     turn: int | None = None
+    # Kind-specific structured detail, privacy-safe like every other field
+    # (never hand contents or prose). "dice_roll" carries
+    # {sides, values, total}; "discard" carries {card_ids} (the discard pile
+    # is public); other kinds leave it None.
+    data: dict[str, Any] | None = None
 
 
 class Spectator(BaseModel):

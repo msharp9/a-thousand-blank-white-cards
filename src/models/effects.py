@@ -260,6 +260,52 @@ class DrawCardsOp(BaseModel):
     amount: int = 1
 
 
+class RollDieOp(BaseModel):
+    """Roll ``count`` dice of ``sides`` sides with the engine's injected rng.
+
+    The roll TOTAL feeds ``outcome`` (points/draws applied to the resolved
+    ``target``); ``outcome="none"`` is a bare roll — pure theater, or a value
+    later steps read back from the recorded dice_roll history event.
+
+    ``result`` pre-resolves the roll: when set, the reducer uses these values
+    instead of rolling. The sandbox/replay path fills it in so revalidation
+    replays the SAME roll deterministically instead of re-rolling.
+    """
+
+    op: Literal["roll_die"] = "roll_die"
+    sides: int = Field(default=6, ge=2, le=1000)
+    count: int = Field(default=1, ge=1, le=10)
+    target: Target = "self"
+    outcome: Literal["add_points", "subtract_points", "draw_cards", "none"] = "none"
+    result: list[int] | None = None
+
+    @model_validator(mode="after")
+    def _result_matches_roll(self) -> RollDieOp:
+        if self.result is None:
+            return self
+        if len(self.result) != self.count:
+            raise ValueError(f"roll_die result has {len(self.result)} values but count={self.count}")
+        for value in self.result:
+            if not 1 <= value <= self.sides:
+                raise ValueError(f"roll_die result value {value} outside 1..{self.sides}")
+        return self
+
+
+class DiscardRandomOp(BaseModel):
+    """Discard ``count`` random cards from each resolved target's hand.
+
+    Deliberately NOT pre-resolved by the sandbox (unlike ``roll_die``):
+    snippets cannot read other players' hands or observe the picks, so the
+    reducer draws them at reduce time from the injected rng — no branch/desync
+    risk. A target holding fewer than ``count`` cards discards their whole
+    hand.
+    """
+
+    op: Literal["discard_random"] = "discard_random"
+    target: Target = "self"
+    count: int = Field(default=1, ge=1, le=10)
+
+
 class DestroyCardOp(BaseModel):
     op: Literal["destroy_card"] = "destroy_card"
     # Back-compat: the raw single card id to remove (from hand / in_play /
@@ -454,6 +500,8 @@ Op = Annotated[
         ChangeDrawCountOp,
         StealPointsOp,
         DrawCardsOp,
+        RollDieOp,
+        DiscardRandomOp,
         DestroyCardOp,
         TransferCardOp,
         RevealHandOp,

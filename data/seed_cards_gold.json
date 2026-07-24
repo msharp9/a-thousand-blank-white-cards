@@ -1701,5 +1701,134 @@
       ],
       "sandbox": "def apply(state, ctx):\n    state.reveal_hand('all', to='all')\n"
     }
+  },
+  {
+    "id": "seed-gold-064",
+    "title": "Roll for It",
+    "description": "Roll a d20 where everyone can see it. The table decides what your number means.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 20,
+            "count": 1,
+            "outcome": "none"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    total = state.roll_die(sides=20)\n    state.note('The d20 shows ' + str(total) + '. The table decides what it means.')\n"
+    }
+  },
+  {
+    "id": "seed-gold-065",
+    "title": "High Roller",
+    "description": "Roll a d6 and gain that many points. Let it ride.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 6,
+            "count": 1,
+            "target": "self",
+            "outcome": "add_points"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.roll_die(sides=6, outcome='add_points', target='self')\n"
+    }
+  },
+  {
+    "id": "seed-gold-066",
+    "title": "Lucky Dip",
+    "description": "Roll two d4 and draw that many cards from the deck.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 4,
+            "count": 2,
+            "target": "self",
+            "outcome": "draw_cards"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.roll_die(sides=4, count=2, outcome='draw_cards', target='self')\n"
+    }
+  },
+  {
+    "id": "seed-gold-067",
+    "title": "Odds or Evens",
+    "description": "Roll a d6. Even: gain 4 points. Odd: lose 4 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": null,
+      "sandbox": "def apply(state, ctx):\n    total = state.roll_die(sides=6)\n    if total % 2 == 0:\n        state.add_points('self', 4)\n    else:\n        state.subtract_points('self', 4)\n"
+    }
+  },
+  {
+    "id": "seed-gold-068",
+    "title": "Butterfingers",
+    "description": "Whoops. Discard 2 random cards from your hand.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "discard_random",
+          "args": {
+            "target": "self",
+            "count": 2
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.discard_random('self', 2)\n"
+    }
+  },
+  {
+    "id": "seed-gold-069",
+    "title": "Pickpocket",
+    "description": "Choose a player. They discard a random card from their hand — nobody gets to pick which.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "discard_random",
+          "args": {
+            "target": "chosen_player",
+            "count": 1
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    state.discard_random(chosen, 1)\n"
+    }
   }
 ]

@@ -78,6 +78,48 @@ def test_dry_run_supplies_deterministic_interaction_values_to_later_steps() -> N
     assert report["after"]["scores"]["p1"] == 4
 
 
+def test_dry_run_flags_random_results_as_illustrative() -> None:
+    plan = ResolutionPlan(
+        steps=[
+            SnippetStep(
+                code="def apply(state, ctx):\n    state.add_points('self', state.roll_die(sides=6, count=2))\n"
+            ),
+        ]
+    )
+
+    report = dry_run_resolution_plan(_state(), plan, "p1", "played")
+
+    assert report["ok"] is True
+    assert "illustrative" in report["note"]
+    assert 2 <= report["after"]["scores"]["p1"] <= 12
+
+
+def test_dry_run_snippet_rolls_replay_identically_across_previews() -> None:
+    plan = ResolutionPlan(
+        steps=[
+            SnippetStep(
+                code="def apply(state, ctx):\n    state.add_points('self', state.roll_die(sides=1000, count=3))\n"
+            ),
+        ]
+    )
+
+    first = dry_run_resolution_plan(_state(), plan, "p1", "played")
+    second = dry_run_resolution_plan(_state(), plan, "p1", "played")
+
+    assert first["ok"] is True and second["ok"] is True
+    assert first["after"]["scores"]["p1"] == second["after"]["scores"]["p1"]
+    assert first["emitted_ops"] == second["emitted_ops"]
+
+
+def test_dry_run_omits_random_note_for_deterministic_plans() -> None:
+    plan = ResolutionPlan(steps=[OpsStep(ops=[DrawCardsOp(target="self", amount=1)])])
+
+    report = dry_run_resolution_plan(_state(), plan, "p1", "played")
+
+    assert report["ok"] is True
+    assert "note" not in report
+
+
 def test_interaction_misplumbing_error_includes_shape_hint() -> None:
     # A snippet that treats ctx['interactions'][key] as a scalar fails; the error
     # must remind the agent of the {player_id: value} shape so it can self-correct.

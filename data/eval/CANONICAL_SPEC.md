@@ -168,6 +168,8 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
 - `set_points` — `{"target": <TARGET>, "amount": <int>}`
 - `skip_turn` / `extra_turn` — `{"target": <TARGET>}`
 - `draw_cards` — `{"target": <TARGET>, "amount": <int>}`
+- `roll_die` — `{"sides": <int 2-1000>, "count": <int 1-10>, "target": <TARGET>, "outcome": "add_points"|"subtract_points"|"draw_cards"|"none"}` — the engine rolls; the total feeds `outcome` for `target` (`none` = bare roll, shown and recorded in history)
+- `discard_random` — `{"target": <TARGET>, "count": <int 1-10>}` — the engine picks the cards at apply time
 - `reverse_order` / `scramble_order` — `{}`
 - `change_draw_count` — `{"amount": <int>}` (new absolute draw count)
 - `destroy_card` — `{"card_target": "this" | "chosen_card" | "all_in_play" | ...}`
@@ -207,7 +209,9 @@ reads — `current_player_id`, `actor_id`, `draw_count`, `deck_size`,
 (returns `title`, `description`, `alt_text`, `attributes`, `origin`);
 mutators — `add_points`, `subtract_points`, `set_points`, `skip_turn`,
 `extra_turn`, `set_draw_count`, `note`, `reverse_order`, `scramble_order`,
-`steal_points`, `draw_cards`, `destroy_card`, `transfer_card`,
+`steal_points`, `draw_cards`, `roll_die` (rolls immediately and RETURNS the
+total, so code can branch on it), `discard_random` (engine picks at apply
+time; no return value), `destroy_card`, `transfer_card`,
 `set_win_condition`, `end_game`, `set_rule`, `set_condition`,
 `set_card_attribute`, `create_card`, `shuffle_into_deck`, `register_hook`,
 `unregister_hook`, plus context-gated `reject_play` (on_validate_play hooks)

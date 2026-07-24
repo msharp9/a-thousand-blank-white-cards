@@ -286,10 +286,15 @@ def test_canonical_mutators_match_op_names_and_parameters() -> None:
         if not name.startswith("_")
     }
 
+    # Op fields deliberately absent from the snippet-facing signature:
+    # roll_die.result is engine-filled (a snippet supplying it could forge rolls).
+    trusted_only_fields = {"roll_die": ("result",)}
+
     assert public_methods == set(expected) | aliases | read_and_control
     for name, fields in expected.items():
+        hidden = trusted_only_fields.get(name, ())
         signature = inspect.signature(getattr(SandboxGame, name))
-        assert tuple(signature.parameters)[1:] == fields
+        assert tuple(signature.parameters)[1:] == tuple(f for f in fields if f not in hidden)
 
 
 class TestCounterPlay:
@@ -315,3 +320,57 @@ class TestCounterPlay:
         g = self._game()
         with pytest.raises(ValueError):
             g.counter_play("obliterate")
+
+
+class TestRollDie:
+    def test_roll_records_pre_resolved_op(self):
+        g = make_game()
+        total = g.roll_die(sides=6, count=2, outcome="add_points")
+        (op,) = g.ops()
+        assert op["op"] == "roll_die"
+        assert (op["sides"], op["count"], op["target"], op["outcome"]) == (6, 2, "self", "add_points")
+        assert len(op["result"]) == 2
+        assert all(1 <= v <= 6 for v in op["result"])
+        assert total == sum(op["result"])
+
+    def test_result_kwarg_is_not_snippet_callable(self):
+        g = make_game()
+        with pytest.raises(TypeError):
+            g.roll_die(sides=6, count=2, result=[3, 5])
+        assert g.ops() == []
+
+    def test_seeded_rng_replays_identically(self):
+        first = SandboxGame({"players": [{"id": "p1", "name": "A", "score": 0, "hand": []}]}, {}, rng_seed=0)
+        second = SandboxGame({"players": [{"id": "p1", "name": "A", "score": 0, "hand": []}]}, {}, rng_seed=0)
+        assert first.roll_die(sides=1000, count=5) == second.roll_die(sides=1000, count=5)
+        assert first.ops() == second.ops()
+
+    def test_rejects_bad_arguments(self):
+        g = make_game()
+        with pytest.raises(ValueError):
+            g.roll_die(sides=1)
+        with pytest.raises(ValueError):
+            g.roll_die(count=0)
+        with pytest.raises(ValueError):
+            g.roll_die(outcome="explode")
+        assert g.ops() == []
+
+
+class TestDiscardRandom:
+    def test_records_unresolved_op(self):
+        g = make_game()
+        assert g.discard_random("all_others", 2) is None
+        assert g.ops() == [{"op": "discard_random", "target": "all_others", "count": 2}]
+
+    def test_defaults(self):
+        g = make_game()
+        g.discard_random()
+        assert g.ops() == [{"op": "discard_random", "target": "self", "count": 1}]
+
+    def test_rejects_bad_count(self):
+        g = make_game()
+        with pytest.raises(ValueError):
+            g.discard_random(count=0)
+        with pytest.raises(ValueError):
+            g.discard_random(count=11)
+        assert g.ops() == []

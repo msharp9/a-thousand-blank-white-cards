@@ -19,6 +19,7 @@ def append_history_event(
     amount: int | None = None,
     source: str | None = None,
     rule_path: str | None = None,
+    data: dict[str, Any] | None = None,
 ) -> GameState:
     return state.with_history_event(
         HistoryEvent(
@@ -30,6 +31,7 @@ def append_history_event(
             amount=amount,
             source=source,
             rule_path=rule_path,
+            data=data,
         )
     )
 

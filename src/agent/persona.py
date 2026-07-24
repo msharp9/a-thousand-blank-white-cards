@@ -62,7 +62,7 @@ OP_CATALOG_GUIDE = """\
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, destroy_card, transfer_card, reveal_hand, set_win_condition, set_rule,
+  draw_cards, roll_die, discard_random, destroy_card, transfer_card, reveal_hand, set_win_condition, set_rule,
   set_condition, set_card_attribute, create_card, custom_note, end_game) into an
   EffectProgram.
   * set_rule writes game rules as data (paths: draw, play, end_condition.type,
@@ -89,6 +89,21 @@ OP_CATALOG_GUIDE = """\
     player on your left"); persistent=true keeps the hand visible — to="all" means the
     hand is played face-up — until a mode="conceal" reveal_hand hides it again. It never
     moves cards; it only changes who can SEE them.
+  * discard_random discards AT RANDOM: "discard a random card" / "each opponent
+    discards 2 cards at random" = discard_random with target and count (1-10). The
+    ENGINE picks the cards at apply time — never pick them yourself, and never
+    build a pick prompt for a discard the card says is random. A player holding
+    fewer than count cards simply discards their whole hand.
+  * roll_die rolls REAL dice in the engine: count dice (1-10) of sides sides (2-1000,
+    default 1d6); the roll TOTAL feeds outcome "add_points" / "subtract_points" /
+    "draw_cards" applied to target. "Roll a d6 and gain that many points" =
+    roll_die sides=6 outcome="add_points". A coin flip is roll_die sides=2. Use
+    outcome "none" for a bare roll (shown to everyone and recorded in history for
+    later steps to read). NEVER pick the number yourself — the engine rolls.
+    In SANDBOX code, state.roll_die(...) rolls immediately and RETURNS the roll
+    TOTAL, so a snippet can branch on it or feed it into any other effect
+    ("roll a d6, skip that many turns" = roll then loop). Note: a dry-run
+    preview's rolls are illustrative; the live play rolls fresh dice.
   * create_card mints new cards (with their own ops!) into the deck or a hand — a card
     can add Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
     the copies to its target player (default "self"); route to a SPECIFIC player with
@@ -138,7 +153,8 @@ SANDBOX_RULES = """\
 - Sandbox code calls the exact op-named methods documented by `read_engine_methods`.
   It receives SandboxGame, not GameEngine: `state.draw_cards('self', 2)` is valid;
   `state.draw(...)` is not. Sandbox writes are deferred, so a read after a write in
-  the same snippet still sees that step's input state. Use an ordered ResolutionPlan
+  the same snippet still sees that step's input state — EXCEPT `state.roll_die(...)`,
+  which resolves immediately and returns the roll total. Use an ordered ResolutionPlan
   with an ops step followed by a snippet step when later logic reads earlier results.
 - For player input, put an interaction step in the ordered plan. Supported kinds are
   choice, number, text, card_pick, confirm, and drawing; audience is active, all,

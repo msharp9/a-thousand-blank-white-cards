@@ -25,6 +25,16 @@ from models.interactions import (
 )
 
 
+# Ops whose outcome consumes rng. Previews run with a fixed seed, so their
+# results are illustrative only — the live play draws its own randomness.
+_RANDOM_OPS = frozenset({"roll_die", "scramble_order", "create_card", "discard_random"})
+
+_RANDOM_NOTE = (
+    "random results in this preview (dice rolls, shuffles, random picks) are "
+    "illustrative only; the live play re-rolls with fresh randomness"
+)
+
+
 def _resolve_ref(results: dict[str, Any], result_key: str, path: list[str | int]) -> Any:
     value = results[result_key]
     for part in path:
@@ -148,7 +158,7 @@ def dry_run_resolution_plan(
                 working = apply_effect(working, EffectProgram(ops=step.ops), ctx, bus=bus, rng=rng)
                 emitted.extend(op.model_dump() for op in step.ops)
                 continue
-            raw_ops = execute_snippet(step.code, json.loads(working.model_dump_json()), ctx_dict)
+            raw_ops = execute_snippet(step.code, json.loads(working.model_dump_json()), ctx_dict, rng_seed=0)
             working = apply_snippet_diff(working, raw_ops, ctx, origin="play", bus=bus, rng=rng)
             emitted.extend(raw_ops)
     except Exception as exc:
@@ -163,13 +173,16 @@ def dry_run_resolution_plan(
             )
         return {"ok": False, "error": error, "emitted_ops": emitted}
 
-    return {
+    result = {
         "ok": True,
         "before": before,
         "after": _snapshot(working),
         "emitted_ops": emitted,
         "interactions": interactions,
     }
+    if any(isinstance(entry, dict) and entry.get("op") in _RANDOM_OPS for entry in emitted):
+        result["note"] = _RANDOM_NOTE
+    return result
 
 
 def make_dry_run_effect_tool(

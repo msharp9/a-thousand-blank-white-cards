@@ -205,6 +205,10 @@ class Room:
         self._has_drawn: bool = False
         self._plays_this_turn: int = 0
         self._deck_exhausted: bool = False
+        # High-water mark of dice_roll history sequences already broadcast as
+        # immediacy pushes (see _push_dice_rolls). Restored rooms start at the
+        # current history tip so reconnects never replay old roll animations.
+        self._dice_seq_pushed: int = 0
         # Per-room hook registry, a cache DERIVED from state.hooks (rebuilt when
         # the hook id list changes) — hooks are serialized state, so they survive
         # restarts and never leak across rooms. See engine.hooks.build_registry.
@@ -761,6 +765,7 @@ class Room:
         with collect_hook_errors() as errors, collect_hand_reveals() as reveals:
             self.state = await asyncio.to_thread(bus.emit, event, self.state, ctx)
         await self._push_hand_reveals(reveals)
+        await self._push_dice_rolls()
         for err in errors:
             card = self.state.cards.get(err["card_id"]) or {"id": err["card_id"], "title": err["card_id"]}
             self._report_failure_for_triage(
@@ -1773,14 +1778,15 @@ class Room:
     ) -> None:
         """The single post-play accounting tail, shared by direct plays
         (_finish_play) and resumed interaction plays (_complete_interaction_play):
-        history, deck-exhaustion latch, play allowance, broadcast, end/advance.
-        Runs exactly once per original play regardless of outcome.
+        dice pushes, history, deck-exhaustion latch, play allowance, broadcast,
+        end/advance. Runs exactly once per original play regardless of outcome.
 
         ``target_player_ids`` records who (beyond the actor) this play was
         aimed at, when known — e.g. a card played to a chosen player, or
         an interaction's resolved audience. Defaults to empty (no known
         target) rather than the actor, since actor_id already covers that.
         """
+        await self._push_dice_rolls()
         self.state = append_history_event(
             self.state,
             "play",
@@ -1806,6 +1812,37 @@ class Room:
             await self._broadcast_state()
         else:
             await self._advance_turn()
+
+    def _history_seq(self) -> int:
+        """The last recorded history sequence (0 when history is empty)."""
+        return self.state.history_events[-1].sequence if self.state.history_events else 0
+
+    async def _push_dice_rolls(self) -> None:
+        """Broadcast one dice_roll push per roll not yet pushed, then advance
+        the ``_dice_seq_pushed`` watermark to the history tip.
+
+        The history event is the reconnect-safe record (it rides every state
+        snapshot); this push is the immediacy signal that drives the client's
+        roll animation — the brewing/reaction_window split. The watermark makes
+        the push idempotent, so every state-mutating tail (play, reaction,
+        lifecycle hooks) can call this without double-pushing.
+        """
+        watermark = self._dice_seq_pushed
+        self._dice_seq_pushed = self._history_seq()
+        for event in self.state.history_events:
+            if event.sequence <= watermark or event.kind != "dice_roll":
+                continue
+            data = event.data or {}
+            await self.connections.broadcast(
+                {
+                    "type": "dice_roll",
+                    "actor_id": event.actor_id or "",
+                    "sides": data.get("sides", 0),
+                    "values": list(data.get("values", [])),
+                    "total": data.get("total", 0),
+                    "card_id": event.card_id,
+                }
+            )
 
     # ── generic interaction barriers ──
     @staticmethod
@@ -2594,6 +2631,7 @@ class Room:
                 working = apply_snippet_diff(working, side_raw, ctx, origin="reaction", bus=bus, rng=rng)
         self.state = working
         await self._push_hand_reveals(reveals)
+        await self._push_dice_rolls()
         deltas = {p.id: p.score - before.get(p.id, p.score) for p in self.state.players}
         line = f"{self._name(reactor_id)} reacts with {self._card_title(card)}"
         formatted = self._format_score_deltas(deltas)

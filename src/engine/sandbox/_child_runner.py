@@ -94,7 +94,7 @@ def main() -> None:
 
     from engine.sandbox.api_surface import SandboxGame
 
-    sandbox = SandboxGame(state_dict, ctx_dict)
+    sandbox = SandboxGame(state_dict, ctx_dict, rng_seed=payload.get("rng_seed"))
 
     ns: dict = {"__builtins__": _SAFE_BUILTINS}
     exec(compile(code, "<snippet>", "exec"), ns)

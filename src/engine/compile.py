@@ -34,6 +34,7 @@ from models.effects import (
     CreateCardOp,
     CustomNoteOp,
     DestroyCardOp,
+    DiscardRandomOp,
     DrawCardsOp,
     EffectProgram,
     EndGameOp,
@@ -45,6 +46,7 @@ from models.effects import (
     Op,
     RevealHandOp,
     ReverseOrderOp,
+    RollDieOp,
     ScrambleOrderOp,
     SetCardAttributeOp,
     SetConditionOp,
@@ -163,6 +165,22 @@ def _compile_op(name: str, args: dict) -> Op | None:
         return DrawCardsOp(
             target=_map_target(args.get("target", "self"), default="self", op_name=name),
             amount=int(args.get("amount", 1)),
+        )
+    if name == "roll_die":
+        # `result` is deliberately dropped: pre-resolved rolls belong only to
+        # the transient sandbox-diff replay path (engine.sandbox.revalidate).
+        # Authoring ops are persisted and re-compiled on EVERY play, so a
+        # result smuggled into canonical ops would freeze the die forever.
+        return RollDieOp(
+            sides=int(args.get("sides", 6)),
+            count=int(args.get("count", 1)),
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
+            outcome=args.get("outcome", "none"),
+        )
+    if name == "discard_random":
+        return DiscardRandomOp(
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
+            count=int(args.get("count", 1)),
         )
     if name == "set_win_condition":
         if "kind" not in args or args["kind"] is None:
