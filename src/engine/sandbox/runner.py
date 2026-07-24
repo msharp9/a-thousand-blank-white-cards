@@ -29,8 +29,12 @@ def execute_snippet(
     ctx_dict: dict[str, Any],
     *,
     timeout: float = _WALL_TIMEOUT,
+    rng_seed: int | None = None,
 ) -> list[dict[str, Any]]:
     """Execute `code` in an isolated subprocess and return the recorded op diff.
+
+    `rng_seed` seeds the child's SandboxGame rng so previews (dry_run) replay
+    identically; live callers leave it None for fresh randomness.
 
     Raises SnippetExecutionError on AST-validation failure, timeout, crash, or
     error JSON from the child.
@@ -44,7 +48,7 @@ def execute_snippet(
     if not result_check.ok:
         raise SnippetExecutionError(f"Snippet failed validation: {result_check.error}")
 
-    payload = json.dumps({"state": state_dict, "ctx": ctx_dict, "code": code})
+    payload = json.dumps({"state": state_dict, "ctx": ctx_dict, "code": code, "rng_seed": rng_seed})
     src_dir = str(Path(__file__).parent.parent.parent)  # .../src (engine/sandbox/runner.py -> src)
     bootstrap = "import runpy,sys; sys.path.insert(0, sys.argv[1]); runpy.run_path(sys.argv[2], run_name='__main__')"
     cmd = [sys.executable, "-I", "-c", bootstrap, src_dir, str(_CHILD_RUNNER)]

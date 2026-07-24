@@ -32,10 +32,16 @@ class SandboxGame:
     state/ctx; records ops which the child serialises to stdout for the parent.
     """
 
-    def __init__(self, state_dict: dict[str, Any], ctx_dict: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        state_dict: dict[str, Any],
+        ctx_dict: dict[str, Any],
+        rng_seed: int | None = None,
+    ) -> None:
         self._state = state_dict
         self._ctx = ctx_dict
         self._ops: list[dict[str, Any]] = []
+        self._rng = random.Random(rng_seed)
 
     # ------------------------------------------------------------------
     # Read-only views
@@ -229,16 +235,15 @@ class SandboxGame:
         count: int = 1,
         target: str = "self",
         outcome: str = "none",
-        result: list[int] | None = None,
     ) -> int:
         """Roll `count` dice (1-10) of `sides` sides (2-1000); returns the TOTAL.
 
         The roll happens HERE, immediately, and the recorded op carries the
         rolled values in `result` — so revalidation replays this exact roll
-        instead of re-rolling. `outcome` feeds the total into "add_points",
+        instead of re-rolling. Callers can never supply the values: the engine
+        alone rolls. `outcome` feeds the total into "add_points",
         "subtract_points" or "draw_cards" for `target`; "none" is a bare roll
-        whose returned total your code can branch on. Passing `result`
-        forces the values (replay).
+        whose returned total your code can branch on.
         """
         if not isinstance(sides, int) or isinstance(sides, bool) or not 2 <= sides <= 1000:
             raise ValueError(f"sides must be an int in 2..1000, got {sides!r}")
@@ -246,15 +251,7 @@ class SandboxGame:
             raise ValueError(f"count must be an int in 1..10, got {count!r}")
         if outcome not in ("add_points", "subtract_points", "draw_cards", "none"):
             raise ValueError(f"outcome must be add_points/subtract_points/draw_cards/none, got {outcome!r}")
-        if result is not None:
-            if len(result) != count:
-                raise ValueError(f"result has {len(result)} values but count={count}")
-            for value in result:
-                if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= sides:
-                    raise ValueError(f"result value {value!r} outside 1..{sides}")
-            values = list(result)
-        else:
-            values = [random.randint(1, sides) for _ in range(count)]
+        values = [self._rng.randint(1, sides) for _ in range(count)]
         self._ops.append(
             {"op": "roll_die", "sides": sides, "count": count, "target": target, "outcome": outcome, "result": values}
         )

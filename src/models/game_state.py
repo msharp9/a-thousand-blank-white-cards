@@ -131,7 +131,8 @@ class HistoryEvent(BaseModel):
     turn: int | None = None
     # Kind-specific structured detail, privacy-safe like every other field
     # (never hand contents or prose). "dice_roll" carries
-    # {sides, values, total}; other kinds leave it None.
+    # {sides, values, total}; "discard" carries {card_ids} (the discard pile
+    # is public); other kinds leave it None.
     data: dict[str, Any] | None = None
 
 

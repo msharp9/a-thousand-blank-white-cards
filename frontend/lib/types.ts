@@ -231,7 +231,8 @@ export type HistoryEventSnapshot = {
   // Turn number the event occurred on (GameState.turn_number at record time).
   turn?: number | null;
   // Kind-specific structured detail; "dice_roll" carries
-  // {sides, values, total}. Privacy-safe like every other field.
+  // {sides, values, total}, "discard" carries {card_ids}. Privacy-safe like
+  // every other field.
   data?: Record<string, unknown> | null;
 };
 

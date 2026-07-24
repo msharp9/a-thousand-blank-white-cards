@@ -286,10 +286,15 @@ def test_canonical_mutators_match_op_names_and_parameters() -> None:
         if not name.startswith("_")
     }
 
+    # Op fields deliberately absent from the snippet-facing signature:
+    # roll_die.result is engine-filled (a snippet supplying it could forge rolls).
+    trusted_only_fields = {"roll_die": ("result",)}
+
     assert public_methods == set(expected) | aliases | read_and_control
     for name, fields in expected.items():
+        hidden = trusted_only_fields.get(name, ())
         signature = inspect.signature(getattr(SandboxGame, name))
-        assert tuple(signature.parameters)[1:] == fields
+        assert tuple(signature.parameters)[1:] == tuple(f for f in fields if f not in hidden)
 
 
 class TestCounterPlay:
@@ -328,10 +333,17 @@ class TestRollDie:
         assert all(1 <= v <= 6 for v in op["result"])
         assert total == sum(op["result"])
 
-    def test_forced_result_is_recorded_verbatim(self):
+    def test_result_kwarg_is_not_snippet_callable(self):
         g = make_game()
-        assert g.roll_die(sides=6, count=2, result=[3, 5]) == 8
-        assert g.ops()[0]["result"] == [3, 5]
+        with pytest.raises(TypeError):
+            g.roll_die(sides=6, count=2, result=[3, 5])
+        assert g.ops() == []
+
+    def test_seeded_rng_replays_identically(self):
+        first = SandboxGame({"players": [{"id": "p1", "name": "A", "score": 0, "hand": []}]}, {}, rng_seed=0)
+        second = SandboxGame({"players": [{"id": "p1", "name": "A", "score": 0, "hand": []}]}, {}, rng_seed=0)
+        assert first.roll_die(sides=1000, count=5) == second.roll_die(sides=1000, count=5)
+        assert first.ops() == second.ops()
 
     def test_rejects_bad_arguments(self):
         g = make_game()
@@ -341,10 +353,6 @@ class TestRollDie:
             g.roll_die(count=0)
         with pytest.raises(ValueError):
             g.roll_die(outcome="explode")
-        with pytest.raises(ValueError):
-            g.roll_die(sides=6, count=1, result=[7])
-        with pytest.raises(ValueError):
-            g.roll_die(sides=6, count=2, result=[3])
         assert g.ops() == []
 
 

@@ -158,7 +158,7 @@ def dry_run_resolution_plan(
                 working = apply_effect(working, EffectProgram(ops=step.ops), ctx, bus=bus, rng=rng)
                 emitted.extend(op.model_dump() for op in step.ops)
                 continue
-            raw_ops = execute_snippet(step.code, json.loads(working.model_dump_json()), ctx_dict)
+            raw_ops = execute_snippet(step.code, json.loads(working.model_dump_json()), ctx_dict, rng_seed=0)
             working = apply_snippet_diff(working, raw_ops, ctx, origin="play", bus=bus, rng=rng)
             emitted.extend(raw_ops)
     except Exception as exc:
