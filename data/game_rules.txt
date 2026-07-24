@@ -29,7 +29,8 @@ NOT YET SUPPORTED: drawing blindly from the top of the discard pile, or moving a
 
 == Randomness and dice ==
 Dice rolls ARE supported: the roll_die op rolls 1-10 dice of any size from 2 to 1000 sides inside the engine, and its total can add points, subtract points, or draw that many cards for a target ("roll a d6, gain that many points" = roll_die with outcome add_points). A coin flip is a 2-sided die (say which side means what in your comment). A bare roll (outcome none) is also valid — the roll is shown to everyone and recorded in history.
-NOT YET SUPPORTED: feeding a roll into any OTHER effect (e.g. "roll a die, skip that many turns"), a random choice among players or cards, or persistent random effects (a hook that rolls every turn — snippets cannot import random). Fallback: the closest supported outcome or a deterministic reading, noted in your comment.
+Feeding a roll into any OTHER effect IS supported through sandbox code: state.roll_die(...) rolls immediately and RETURNS the roll total, so a snippet can branch on it ("roll a die, skip that many turns" = roll, then apply that many skips). Hooks can roll too, so persistent random effects (a hook that rolls every turn) work. A random choice among players is a bare roll indexed into state.turn_order in a snippet.
+Dry-run previews of random effects are illustrative only: the preview rolls placeholder dice; the live play rolls its own.
 
 == Conditions and statuses ==
 Any free-form status can be put on a player (poisoned, confused, cursed, polite...) with any value, and removed later; other cards can target "players that have" a given status.

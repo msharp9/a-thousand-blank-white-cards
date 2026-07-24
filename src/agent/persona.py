@@ -87,6 +87,10 @@ OP_CATALOG_GUIDE = """\
     roll_die sides=6 outcome="add_points". A coin flip is roll_die sides=2. Use
     outcome "none" for a bare roll (shown to everyone and recorded in history for
     later steps to read). NEVER pick the number yourself — the engine rolls.
+    In SANDBOX code, state.roll_die(...) rolls immediately and RETURNS the roll
+    TOTAL, so a snippet can branch on it or feed it into any other effect
+    ("roll a d6, skip that many turns" = roll then loop). Note: a dry-run
+    preview's rolls are illustrative; the live play rolls fresh dice.
   * create_card mints new cards (with their own ops!) into the deck or a hand — a card
     can add Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
     the copies to its target player (default "self"); route to a SPECIFIC player with
@@ -136,7 +140,8 @@ SANDBOX_RULES = """\
 - Sandbox code calls the exact op-named methods documented by `read_engine_methods`.
   It receives SandboxGame, not GameEngine: `state.draw_cards('self', 2)` is valid;
   `state.draw(...)` is not. Sandbox writes are deferred, so a read after a write in
-  the same snippet still sees that step's input state. Use an ordered ResolutionPlan
+  the same snippet still sees that step's input state — EXCEPT `state.roll_die(...)`,
+  which resolves immediately and returns the roll total. Use an ordered ResolutionPlan
   with an ops step followed by a snippet step when later logic reads earlier results.
 - For player input, put an interaction step in the ordered plan. Supported kinds are
   choice, number, text, card_pick, confirm, and drawing; audience is active, all,
