@@ -103,7 +103,10 @@ def _build_reference() -> str:
         "Valid CardTarget values (for card-manipulating ops): "
         + ", ".join(sorted(_VALID_CARD_TARGETS))
         + ". Open prefixed forms: 'id:<card_id>' and 'attr:<key>=<value>' (cards whose "
-        "attributes bag matches, e.g. attr:color=red)."
+        "attributes bag matches, e.g. attr:color=red). "
+        "'card_owner' is additionally valid ONLY as transfer_card to_target / move_cards "
+        "to_player: each moved card routes to its own owner (current holder, else who "
+        "played it, else its creator)."
     )
 
     parts.append("")

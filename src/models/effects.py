@@ -82,6 +82,12 @@ Target = Annotated[str, AfterValidator(_validate_target)]
 #                   overloading this literal.
 #   "all_in_center" — every card in the shared center zone
 #                   (state.center_cards(), i.e. the house-rules area).
+#   "last_played" — the card of the most recent completed "play" history
+#                   event, EXCLUDING the card currently resolving
+#                   (ctx.card_id): "the last card played" from the played
+#                   card's own perspective means the PREVIOUS play. Plays
+#                   whose card has since left the card registry are skipped;
+#                   no surviving prior play resolves to nothing.
 # Open, validated prefix forms (mirroring the player Target grammar):
 #   "id:<card_id>"   — one specific card (missing id resolves to nothing)
 #   "attr:<k>=<v>"   — every card whose attributes bag has key k stringifying to v
@@ -92,6 +98,7 @@ _VALID_CARD_TARGETS: frozenset[str] = frozenset(
         "all_in_play",
         "all_in_hand",
         "all_in_center",
+        "last_played",
     }
 )
 
@@ -110,6 +117,31 @@ def _validate_card_target(value: str) -> str:
 
 
 CardTarget = Annotated[str, AfterValidator(_validate_card_target)]
+
+# ---------------------------------------------------------------------------
+# Card-flow destinations
+# ---------------------------------------------------------------------------
+# "card_owner" is a PER-CARD destination, valid only where cards flow INTO a
+# player zone (TransferCardOp.to_target, MoveCardsOp.to_player) — never as a
+# general player Target, because it is meaningless without a card to own.
+# The reducer (engine.reducers._resolve_card_owner) resolves it per moved card:
+#   1. the player whose hand/in_play zone currently holds the card;
+#   2. else the actor of the card's most recent "play" history event (the
+#      hand the card was played FROM — a played-then-discarded card still
+#      belongs to whoever played it);
+#   3. else the card dict's recorded ``creator_id`` when it names a live
+#      player (seed/blank cards carry a source label there instead).
+# A card with no resolvable owner is a logged per-card no-op.
+CARD_OWNER = "card_owner"
+
+
+def _validate_card_flow_target(value: str) -> str:
+    if value == CARD_OWNER:
+        return value
+    return _validate_target(value)
+
+
+CardFlowTarget = Annotated[str, AfterValidator(_validate_card_flow_target)]
 
 # CardTargets that mean "the actor picks a card at play time" — their presence
 # flips EffectProgram.requires_choice, mirroring the player _CHOICE_TARGETS.
@@ -325,7 +357,9 @@ class MoveCardsOp(BaseModel):
     most recently added card. ``from_player``/``to_player`` are required
     exactly when the corresponding zone is per-player (hand/in_play).
     ``to_position`` applies only when the destination is the deck: "top",
-    "bottom", or "shuffle" (a random position per card).
+    "bottom", or "shuffle" (a random position per card). ``to_player`` also
+    accepts "card_owner" — each moved card routes to its own owner (see the
+    CardFlowTarget notes above).
     """
 
     op: Literal["move_cards"] = "move_cards"
@@ -336,7 +370,7 @@ class MoveCardsOp(BaseModel):
     from_player: Target | None = None
     to_zone: Zone
     to_position: Literal["top", "bottom", "shuffle"] = "top"
-    to_player: Target | None = None
+    to_player: CardFlowTarget | None = None
 
     @model_validator(mode="after")
     def _source_shape_and_player_zones(self) -> MoveCardsOp:
@@ -375,11 +409,17 @@ class DestroyCardOp(BaseModel):
 
 
 class TransferCardOp(BaseModel):
-    """Move selected cards from their current zone into a player's hand."""
+    """Move selected cards from their current zone into a player's hand.
+
+    ``to_target`` names ONE player — or "card_owner", which routes each
+    resolved card to its own owner (see the CardFlowTarget notes above), so
+    "return the last card played to its owner's hand" is
+    ``transfer_card(card_target="last_played", to_target="card_owner")``.
+    """
 
     op: Literal["transfer_card"] = "transfer_card"
     card_target: CardTarget = "this"
-    to_target: Target = "self"
+    to_target: CardFlowTarget = "self"
 
 
 class RevealHandOp(BaseModel):

@@ -289,10 +289,12 @@ class SandboxGame:
         Give EITHER an explicit `card_target` OR a `from_zone` with
         `selector` ("top"/"bottom"/"all"/"random") and `count` (1-50);
         `from_player`/`to_player` are required exactly when the corresponding
-        zone is "hand" or "in_play". `to_position` applies only to a deck
-        destination: "top", "bottom", or "shuffle" (random positions). Random
-        picks happen in the ENGINE at apply time and nothing is returned —
-        your code can never learn which hidden card moved.
+        zone is "hand" or "in_play"; `to_player` also accepts "card_owner"
+        (each moved card routes to its own owner). `to_position` applies only
+        to a deck destination: "top", "bottom", or "shuffle" (random
+        positions). Random picks happen in the ENGINE at apply time and
+        nothing is returned — your code can never learn which hidden card
+        moved.
         """
         if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 50:
             raise ValueError(f"count must be an int in 1..50, got {count!r}")
@@ -329,8 +331,8 @@ class SandboxGame:
         self._ops.append({"op": "shuffle_deck", "include_discard": bool(include_discard)})
 
     def destroy_card(self, card_id: str | None = None, card_target: str | None = None) -> None:
-        """Destroy cards by CardTarget address ('this', 'all_in_play', 'all_in_center', 'id:…', 'attr:k=v')."""
-        legacy_targets = {"all_in_hand", "all_in_play", "all_in_center", "chosen_card", "this"}
+        """Destroy cards by CardTarget address ('this', 'last_played', 'all_in_play', 'all_in_center', 'id:…', 'attr:k=v')."""
+        legacy_targets = {"all_in_hand", "all_in_play", "all_in_center", "chosen_card", "this", "last_played"}
         if (
             card_target is None
             and card_id is not None
@@ -345,7 +347,13 @@ class SandboxGame:
         self._ops.append(op)
 
     def transfer_card(self, card_target: str = "this", to_target: str = "self") -> None:
-        """Move selected cards from their current zone into one player's hand."""
+        """Move selected cards from their current zone into a player's hand.
+
+        `to_target` names one player, or "card_owner" to route each card to
+        its own owner (current holder, else who played it, else its creator).
+        "Return the last card played to its owner's hand" =
+        transfer_card('last_played', 'card_owner').
+        """
         self._ops.append({"op": "transfer_card", "card_target": card_target, "to_target": to_target})
 
     def reveal_hand(

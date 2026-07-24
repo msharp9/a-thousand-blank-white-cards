@@ -182,14 +182,20 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
   EITHER `{"card_target": ...}` OR `{"from_zone": <zone>, "selector": "top"|"bottom"|"all"|"random", "count": <int 1-50>}`;
   destination is `{"to_zone": <zone>, "to_position": "top"|"bottom"|"shuffle"}` (`to_position`
   applies only to a deck destination). `from_player`/`to_player` (`<TARGET>`) are required
-  exactly when the corresponding zone is `hand`/`in_play`. Random picks use the engine's rng
+  exactly when the corresponding zone is `hand`/`in_play`; `to_player` also accepts
+  `"card_owner"` (each moved card routes to its own owner). Random picks use the engine's rng
   at apply time — hidden cards stay hidden.
 - `shuffle_deck` — `{"include_discard": <bool>}` — shuffle the draw pile;
   `true` is the classic reshuffle (discard pile folded in first, left empty)
 - `reverse_order` / `scramble_order` — `{}`
 - `change_draw_count` — `{"amount": <int>}` (new absolute draw count)
-- `destroy_card` — `{"card_target": "this" | "chosen_card" | "all_in_play" | ...}`
-- `transfer_card` — `{"card_target": ..., "to_target": <TARGET>}` (moves cards into one player's hand)
+- `destroy_card` — `{"card_target": "this" | "chosen_card" | "last_played" | "all_in_play" | "all_in_hand" | "all_in_center" | "id:<card_id>" | "attr:<k>=<v>"}`
+  (`last_played` = the most recent completed play other than this card, skipping
+  plays whose card has since left the game)
+- `transfer_card` — `{"card_target": ..., "to_target": <TARGET> | "card_owner"}` (moves cards
+  into a player's hand; `card_owner` routes each card to its own owner — the player whose
+  hand/in-play zone holds it, else whoever played it, else its creator — so "return the
+  last card played to its owner's hand" is `card_target: "last_played", to_target: "card_owner"`)
 - `set_win_condition` — `{"kind": "highest_points"|"lowest_points"|"first_to"|"empty_hand"|"last_standing"|"none", "threshold": <int|null>}`
 - `set_rule` — `{"path": <str>, "value": ...}`
 - `set_condition` — `{"target": <TARGET>, "key": <str>, "value": ..., "duration_turns": <int|null>}`

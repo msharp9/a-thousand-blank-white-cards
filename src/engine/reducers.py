@@ -16,6 +16,7 @@ from typing import Any
 from engine.events import HookContext
 from engine.history import append_history_event, record_op_history
 from models.effects import (
+    CARD_OWNER,
     AddPointsOp,
     CardTarget,
     ChangeDrawCountOp,
@@ -137,6 +138,14 @@ def _resolve_card_targets(card_target: CardTarget, ctx: HookContext, state: Game
                            composition is a documented future extension.
     - ``"all_in_center"`` -> every card in the shared center zone
                            (``state.center_cards()``).
+    - ``"last_played"`` -> the card of the most recent "play" history event,
+                           EXCLUDING the card currently resolving (ctx.card_id):
+                           "the last card played", read from the played card's
+                           own perspective, means the PREVIOUS play — and while
+                           it resolves the acting card IS ctx.card_id. Plays
+                           with no card and plays whose card has since left the
+                           registry are skipped; no surviving prior play
+                           resolves to an empty list.
     """
     if card_target.startswith("id:"):
         cid = card_target[3:]
@@ -162,6 +171,14 @@ def _resolve_card_targets(card_target: CardTarget, ctx: HookContext, state: Game
             return list(state.get_player(ctx.actor_id).hand)
         case "all_in_center":
             return state.center_cards()
+        case "last_played":
+            for event in reversed(state.history_events):
+                if event.kind != "play" or event.card_id is None:
+                    continue
+                if event.card_id == ctx.card_id or event.card_id not in state.cards:
+                    continue
+                return [event.card_id]
+            return []
         case _:
             raise ValueError(f"Unknown card target: {card_target!r}")
 
@@ -404,15 +421,16 @@ def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) 
 
 
 def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext) -> GameState:
-    """Move resolved cards from any current zone into exactly one player's hand.
+    """Move resolved cards from any current zone into player hands.
 
     Finding the source zone here is intentional: during a resolution plan the
     played card is already staged in discard, while persistent cards or chosen
     cards may live in a hand, in-play, center, deck, or discard.
+
+    ``to_target`` resolves to exactly one recipient — except "card_owner",
+    which routes EACH card to its own owner (see ``_resolve_card_owner``);
+    cards whose owner cannot be resolved stay put as logged per-card no-ops.
     """
-    recipients = _resolve_targets(op.to_target, ctx, state)
-    if len(recipients) != 1:
-        raise ValueError("transfer_card requires exactly one destination player")
     card_ids = _resolve_card_targets(op.card_target, ctx, state)
     located = {
         *state.deck,
@@ -423,14 +441,32 @@ def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext
     known = [card_id for card_id in card_ids if card_id in state.cards and card_id in located]
     if not known:
         raise ValueError("transfer_card resolved no cards")
-    targets = set(known)
-    recipient = recipients[0]
+
+    if op.to_target == CARD_OWNER:
+        assignments: list[tuple[str, str]] = []
+        for card_id in known:
+            owner = _resolve_card_owner(state, card_id)
+            if owner is None:
+                state = state.with_log(f"[transfer_card no-op] no resolvable owner for card {card_id!r}")
+                continue
+            assignments.append((card_id, owner))
+        if not assignments:
+            return state
+    else:
+        recipients = _resolve_targets(op.to_target, ctx, state)
+        if len(recipients) != 1:
+            raise ValueError("transfer_card requires exactly one destination player")
+        assignments = [(card_id, recipients[0]) for card_id in known]
+
+    targets = {card_id for card_id, _ in assignments}
+    by_recipient: dict[str, list[str]] = {}
+    for card_id, recipient in assignments:
+        by_recipient.setdefault(recipient, []).append(card_id)
     players = []
     for player in state.players:
         hand = [card for card in player.hand if card not in targets]
         in_play = [card for card in player.in_play if card not in targets]
-        if player.id == recipient:
-            hand.extend(card for card in known if card not in hand)
+        hand.extend(card for card in by_recipient.get(player.id, ()) if card not in hand)
         players.append(player.model_copy(update={"hand": hand, "in_play": in_play}))
     return state.model_copy(
         update={
@@ -482,6 +518,30 @@ def _locate_card_zone(state: GameState, card_id: str) -> tuple[str | None, str |
         if card_id in player.in_play:
             return "in_play", player.id
     return None, None
+
+
+def _resolve_card_owner(state: GameState, card_id: str) -> str | None:
+    """Resolve the "card_owner" destination for ONE card, or None if unowned.
+
+    Precedence (most defensible claim first):
+      1. The player whose hand/in_play zone currently holds the card.
+      2. The actor of the card's most recent "play" history event — the hand
+         the card was played FROM, so a played-then-discarded card ("return
+         the last card played to its owner's hand") goes back to whoever
+         played it, not whoever wrote it.
+      3. The ``creator_id`` recorded on the card dict, when it names a live
+         player (seed/blank cards hold a source label there, not a player id).
+    """
+    zone, holder = _locate_card_zone(state, card_id)
+    if zone in _PLAYER_ZONES and holder is not None:
+        return holder
+    player_ids = {player.id for player in state.players}
+    for event in reversed(state.history_events):
+        if event.kind == "play" and event.card_id == card_id and event.actor_id in player_ids:
+            return event.actor_id
+    card = state.cards.get(card_id)
+    creator = card.get("creator_id") if isinstance(card, dict) else None
+    return creator if creator in player_ids else None
 
 
 def _select_from_zone(cards: list[str], zone: str, selector: str, count: int, rng: random.Random) -> list[str]:
@@ -547,7 +607,18 @@ def _reduce_move_cards(
         return state.with_log(f"[move_cards no-op] no cards to move from {source_label!r}")
 
     to_player_id: str | None = None
-    if op.to_zone in _PLAYER_ZONES:
+    owner_routing = op.to_zone in _PLAYER_ZONES and op.to_player == CARD_OWNER
+    if owner_routing:
+        # Owners resolve against the PRE-move state, per card ("card_owner" is
+        # a per-card destination — see _resolve_card_owner); ownerless cards
+        # stay put as logged per-card no-ops.
+        owners = {cid: _resolve_card_owner(state, cid) for cid, _, _ in moves}
+        for cid in (cid for cid, resolved in owners.items() if resolved is None):
+            state = state.with_log(f"[move_cards no-op] no resolvable owner for card {cid!r}")
+        moves = [move for move in moves if owners[move[0]] is not None]
+        if not moves:
+            return state
+    elif op.to_zone in _PLAYER_ZONES:
         recipients = _resolve_targets(op.to_player, ctx, state)
         if not recipients:
             return state.with_log(f"[move_cards no-op] resolved no players for to_player {op.to_player!r}")
@@ -567,7 +638,7 @@ def _reduce_move_cards(
             _MOVE_CARD_ZONE[zone],
             _MOVE_CARD_ZONE[op.to_zone],
             from_player_id=owner,
-            to_player_id=to_player_id,
+            to_player_id=owners[cid] if owner_routing else to_player_id,
             deck_index=deck_index,
         )
 
@@ -582,7 +653,10 @@ def _reduce_move_cards(
             state = _release_rule_bindings(state, departed)
 
     count = len(moves)
-    dest_label = op.to_zone if to_player_id is None else f"{op.to_zone}({to_player_id})"
+    if owner_routing:
+        dest_label = f"{op.to_zone}(card_owner)"
+    else:
+        dest_label = op.to_zone if to_player_id is None else f"{op.to_zone}({to_player_id})"
     state = state.with_log(f"[move_cards] {count} card{'s' if count != 1 else ''}: {source_label} -> {dest_label}")
     if op.to_zone == "discard":
         state = append_history_event(

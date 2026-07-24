@@ -125,6 +125,13 @@ OP_CATALOG_GUIDE = """\
     is NOT a bare move_cards: it needs a card_order or from_deck_top card_pick
     interaction step (see the interaction rules) so the faces reach only the peeking
     player.
+  * "The last card played" is the card target "last_played": the most recent completed
+    play OTHER than this card (the previous play), skipping plays whose card has since
+    left the game. "Return the last card played to its owner's hand" = transfer_card
+    card_target="last_played", to_target="card_owner" — "card_owner" routes each moved
+    card to its own owner (the player whose hand/in-play zone holds it, else whoever
+    played it, else its creator) and is valid ONLY as transfer_card to_target /
+    move_cards to_player, never as a general player target.
   * shuffle_deck shuffles the draw pile in place; include_discard=true is the classic
     reshuffle ("shuffle the discard pile back into the deck").
   * reveal_hand shows a hand: target = whose hand, to = who may see it ("all", "chooser",

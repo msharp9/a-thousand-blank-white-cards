@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 
 from models.effects import (
+    CARD_OWNER,
     AddPointsOp,
     ChangeDrawCountOp,
     CounterPlayOp,
@@ -214,16 +215,23 @@ def _compile_op(name: str, args: dict) -> Op | None:
             else None,
             to_zone=to_zone,
             to_position=args.get("to_position", "top"),
-            to_player=_map_target(to_player, default="self", op_name=name, field="to_player")
+            # "card_owner" is a card-flow destination, not a player Target —
+            # it must bypass the alias mapping or drift-warn into "self".
+            to_player=to_player
+            if to_player == CARD_OWNER
+            else _map_target(to_player, default="self", op_name=name, field="to_player")
             if to_player is not None
             else None,
         )
     if name == "shuffle_deck":
         return ShuffleDeckOp(include_discard=bool(args.get("include_discard", False)))
     if name == "transfer_card":
+        raw_to = args.get("to_target", args.get("to", "self"))
         return TransferCardOp(
             card_target=args.get("card_target", "this"),
-            to_target=_map_target(args.get("to_target", args.get("to", "self")), default="self", op_name=name),
+            to_target=raw_to
+            if raw_to == CARD_OWNER
+            else _map_target(raw_to, default="self", op_name=name, field="to_target"),
         )
     if name == "reveal_hand":
         return RevealHandOp(

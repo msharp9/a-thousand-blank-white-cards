@@ -30,6 +30,7 @@ Discarding at random IS supported in a single op: discard_random discards count 
 == Discard pile ==
 The discard pile is public; a specific named card can be moved from the discard pile into a player's hand.
 Drawing blindly from the top of the discard pile IS supported (move_cards from the discard, selector top), as is moving a discard-pile card directly into play, into the center, into the deck, or out of the game.
+"The last card played" IS addressable in a single op (the card target last_played): it names the most recent completed play other than the card doing the addressing, skipping plays whose card has since left the game. "Return the last card played to its owner's hand" = transfer_card with card_target last_played and to_target card_owner — card_owner routes each moved card to its own owner (the player whose hand or in-play zone holds it, else whoever played it, else its creator) and is valid only as a transfer_card/move_cards destination.
 
 == Randomness and dice ==
 Dice rolls ARE supported: the roll_die op rolls 1-10 dice of any size from 2 to 1000 sides inside the engine, and its total can add points, subtract points, or draw that many cards for a target ("roll a d6, gain that many points" = roll_die with outcome add_points). A coin flip is a 2-sided die (say which side means what in your comment). A bare roll (outcome none) is also valid — the roll is shown to everyone and recorded in history.
