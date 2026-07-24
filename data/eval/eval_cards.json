@@ -1310,5 +1310,55 @@
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all', mode='conceal')"
     }
+  },
+  {
+    "id": "eval-070",
+    "title": "Hot Streak",
+    "description": "You are On Fire for your next 2 turns. After that you cool back down on your own.",
+    "alt_text": "a stick figure with flames for hair, grinning",
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "on_fire",
+            "value": true,
+            "duration_turns": 2
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'on_fire', True, duration_turns=2)"
+    }
+  },
+  {
+    "id": "eval-071",
+    "title": "Frog Spell",
+    "description": "Choose a player. They are a Frog for their next 3 turns, then the spell wears off by itself.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "chosen_player",
+            "key": "frog",
+            "value": true,
+            "duration_turns": 3
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'frog', True, duration_turns=3)"
+    }
   }
 ]
