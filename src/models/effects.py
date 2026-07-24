@@ -343,6 +343,21 @@ class RevealHandOp(BaseModel):
     mode: Literal["reveal", "conceal"] = "reveal"  # conceal = un-reveal
 
 
+class EliminatePlayerOp(BaseModel):
+    """Knock the targeted player(s) out of the game; everyone else plays on.
+
+    The reducer sets the structural ``Player.eliminated`` flag and discards the
+    player's hand; their ``in_play`` cards (and any hooks/rules those set)
+    stay in effect. The turn loop skips eliminated players and win scoring
+    ignores them — with win_condition "last_standing", the last non-eliminated
+    player wins. The last active player can never be eliminated (guarded
+    no-op), so the game always has someone standing.
+    """
+
+    op: Literal["eliminate_player"] = "eliminate_player"
+    target: Target
+
+
 class SetWinConditionOp(BaseModel):
     op: Literal["set_win_condition"] = "set_win_condition"
     kind: Literal["highest_points", "lowest_points", "first_to", "empty_hand", "last_standing", "none"]
@@ -512,6 +527,7 @@ Op = Annotated[
         DestroyCardOp,
         TransferCardOp,
         RevealHandOp,
+        EliminatePlayerOp,
         SetWinConditionOp,
         SetRuleOp,
         RegisterHookOp,

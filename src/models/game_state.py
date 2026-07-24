@@ -65,6 +65,16 @@ class Rules(BaseModel):
     cannot_play: dict[str, Any] = Field(default_factory=lambda: {"draw": 1})
     end_condition: EndCondition = Field(default_factory=EndCondition)
     win_condition: WinCondition = Field(default_factory=WinCondition)
+    # Maximum hand size, ENFORCED by the room at end of turn: an over-limit
+    # active player picks cards to discard down to the limit (timeout discards
+    # from the hand tail). None = no limit.
+    hand_limit: int | None = Field(default=None, ge=0)
+    # Seconds the active player has to end their turn before the room ends it
+    # for them (pausable turn clock, ENFORCED by board.rooms.room.TurnTimer:
+    # the clock pauses while the room is suspended on brewing, a reaction
+    # window, or an interaction). Read once at turn start, so a mid-turn
+    # change applies from the next turn. None = no time limit.
+    turn_timer: int | None = Field(default=None, ge=1)
     # None or a registered predicate name (see engine.loop.register_skip_predicate).
     skip_predicate: str | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
@@ -78,6 +88,12 @@ class Player(BaseModel):
     # Cards played and persisting "in front of" this player (the in-play zone).
     in_play: list[str] = Field(default_factory=list)  # card ids
     connected: bool = True
+    # Knocked out of the game (eliminate_player op). STRUCTURAL like
+    # ``connected``, not a conditions key: the turn loop and win scoring must
+    # consult it reliably, and the conditions bag is free-form state any card
+    # can clobber. An eliminated player takes no turns and cannot win, but
+    # their in_play cards (and any hooks/rules those set) remain in effect.
+    eliminated: bool = False
     # Open-ended per-player status bag, e.g. {"skip_next": True, "poisoned": 2}.
     # "skip_next" and "extra_turn" are reserved keys consumed by
     # engine.loop.advance_turn; any other key is free-form status with no

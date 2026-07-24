@@ -54,10 +54,14 @@ class RoomManager:
     def __init__(self, store: RoomStore | None = None) -> None:
         self._store: RoomStore = store if store is not None else InMemoryRoomStore()
 
-    def create_room(self, mode: str = "both") -> str:
-        """Create a new Room and return its 6-char join code."""
+    def create_room(self, mode: str = "both", *, turn_timer: int | None = None) -> str:
+        """Create a new Room and return its 6-char join code.
+
+        ``turn_timer`` is the host-chosen per-turn time limit in seconds
+        (rules.turn_timer); None = no timer.
+        """
         code = self._unique_code()
-        room = Room(code, mode=mode, on_change=self._persist)
+        room = Room(code, mode=mode, turn_timer=turn_timer, on_change=self._persist)
         self._store.put(code, room)
         logger.info("room %s created (%d active rooms)", code, self._store.count())
         return code

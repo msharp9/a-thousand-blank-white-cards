@@ -62,12 +62,26 @@ OP_CATALOG_GUIDE = """\
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, roll_die, discard_random, destroy_card, transfer_card, reveal_hand, set_win_condition, set_rule,
-  set_condition, set_card_attribute, create_card, custom_note, end_game) into an
-  EffectProgram.
-  * set_rule writes game rules as data (paths: draw, play, end_condition.type,
-    win_condition.kind, extra.<anything>) — rule-changing cards ("draws are now 2", "game
-    ends when someone empties their hand") compose set_rule ops, not snippets.
+  draw_cards, roll_die, discard_random, destroy_card, transfer_card, reveal_hand,
+  eliminate_player, set_win_condition, set_rule, set_condition, set_card_attribute,
+  create_card, custom_note, end_game) into an EffectProgram.
+  * set_rule writes game rules as data (paths: draw, play, hand_limit, turn_timer,
+    end_condition.type, win_condition.kind, extra.<anything>) — rule-changing cards
+    ("draws are now 2", "game ends when someone empties their hand") compose set_rule
+    ops, not snippets. hand_limit is ENFORCED by the engine: at the end of each turn
+    an over-limit player picks cards to discard down to the limit (the hand tail is
+    discarded for them on timeout); set_rule path "hand_limit" value null lifts it.
+    turn_timer is ENFORCED too: value <seconds> puts every player on a per-turn
+    clock — when the active player's time runs out their turn ends automatically.
+    The clock pauses whenever the table is waiting on something that is not the
+    player (a card being interpreted, a reaction window, an interaction prompt) and
+    resumes with the time remaining. Value null lifts it; a change takes effect
+    from the next turn. "Each player has 30 seconds per turn" = set_rule path
+    "turn_timer" value 30.
+  * "New phase" cards (an attack phase, a discard phase) are NOT engine phases — there
+    is no phase enum to extend. Express them as register_hook on on_turn_start /
+    on_turn_end plus any bookkeeping as rule data under extra.<name> (or per-player
+    set_condition statuses) that other cards can read: the hook IS the phase.
   * set_condition writes free-form per-player statuses ("poisoned", "cursed"...); targets
     accept open forms 'id:<player_id>' and 'has:<condition_key>' besides the named set.
     duration_turns=N makes the status expire on its own: it stays active for exactly N
@@ -76,7 +90,13 @@ OP_CATALOG_GUIDE = """\
     duration_turns=3, no hook needed). Omit duration_turns for a status that lasts
     until something removes it; re-setting a key with a new duration restarts the clock.
   * set_card_attribute tags cards with metadata (e.g. give every card a color); card
-    targets accept 'id:<card_id>' and 'attr:<key>=<value>'.
+    targets accept 'id:<card_id>' and 'attr:<key>=<value>'. The attribute play_on_draw
+    is special and ENFORCED by the engine: a card carrying it is played automatically
+    the moment it lands in a player's hand (drawn, dealt, or minted there), at no
+    action cost to its holder. "Play this card immediately when it is drawn" is that
+    ATTRIBUTE, not an event — there is NO on_drawn hook event and register_hook cannot
+    express it. Emit set_card_attribute(card_target="this", key="play_on_draw",
+    value=true) alongside the card's normal effect ops.
   * destroy_card is ALSO how you DISCARD (destroyed cards go to the discard pile — same
     thing here). "Discard a card from your hand" = destroy_card with card_target
     "chosen_card" (the actor is prompted to pick, requires_choice=true). "Discard your
@@ -109,10 +129,19 @@ OP_CATALOG_GUIDE = """\
     TOTAL, so a snippet can branch on it or feed it into any other effect
     ("roll a d6, skip that many turns" = roll then loop). Note: a dry-run
     preview's rolls are illustrative; the live play rolls fresh dice.
+  * eliminate_player knocks the targeted player(s) OUT of the game while everyone else
+    plays on: their hand is discarded, they take no more turns and cannot win, but their
+    in-play cards (and any hooks/rules those set) stay in effect. The last player still
+    standing can never be eliminated. "You're out of the game" = eliminate_player; for
+    "last player standing wins" pair it with set_win_condition kind="last_standing" —
+    the game then ends the moment only one player remains.
   * create_card mints new cards (with their own ops!) into the deck or a hand — a card
     can add Draw 2s / Reverses / whole new mechanics to the game. destination="hand" gives
     the copies to its target player (default "self"); route to a SPECIFIC player with
     destination="hand", target="id:<player_id>" (e.g. hand an auctioned card to the winner).
+    Minted cards run their ops deterministically when played; mint with
+    attributes={"play_on_draw": true} for cards that play themselves the moment they
+    are drawn.
   * register_hook installs a PERSISTENT sandboxed snippet that fires on a game event
     (on_play, on_turn_start, on_turn_end, on_draw_step, on_score_change, on_game_end) —
     use it for ongoing house rules ("whenever anyone scores, Bob draws a card");

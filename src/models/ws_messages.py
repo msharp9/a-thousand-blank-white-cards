@@ -312,6 +312,21 @@ class DiceRollMsg(BaseModel):
     card_id: str | None = None
 
 
+class TurnTimerMsg(BaseModel):
+    """Broadcast whenever the pausable turn clock (rules.turn_timer) starts,
+    pauses, resumes, or clears. Clients render the countdown from
+    ``deadline_epoch_ms`` and re-sync on every push; the state snapshot's
+    ``turn_timer`` entry is the reconnect-safe source of truth."""
+
+    type: Literal["turn_timer"] = "turn_timer"
+    # Absolute expiry (epoch ms). Null while paused (the banked remainder is
+    # server-side only) and when the clock is cleared.
+    deadline_epoch_ms: int | None = None
+    paused: bool = False
+    # Whose turn the clock times; null when the clock is cleared.
+    player_id: str | None = None
+
+
 class ReactionResultMsg(BaseModel):
     """Broadcast when a reaction window closes, however it closed."""
 
@@ -338,4 +353,5 @@ ServerMsg = Union[
     HandRevealedMsg,
     ReactionWindowMsg,
     ReactionResultMsg,
+    TurnTimerMsg,
 ]

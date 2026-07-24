@@ -22,6 +22,7 @@ class _PlayerView:
     score: int
     hand_size: int
     connected: bool
+    eliminated: bool
 
 
 class SandboxGame:
@@ -78,6 +79,7 @@ class SandboxGame:
             score=p["score"],
             hand_size=len(p.get("hand", [])),
             connected=p.get("connected", True),
+            eliminated=p.get("eliminated", False),
         )
 
     @property
@@ -303,6 +305,12 @@ class SandboxGame:
         self._ops.append(
             {"op": "reveal_hand", "target": target, "to": to, "persistent": bool(persistent), "mode": mode}
         )
+
+    def eliminate_player(self, target: str) -> None:
+        """Knock the targeted player(s) out of the game: their hand is discarded and
+        they take no more turns, but their in-play cards stay in effect. The last
+        player still standing can never be eliminated."""
+        self._ops.append({"op": "eliminate_player", "target": target})
 
     def set_win_condition(self, kind: str, threshold: int | None = None) -> None:
         self._ops.append({"op": "set_win_condition", "kind": kind, "threshold": threshold})

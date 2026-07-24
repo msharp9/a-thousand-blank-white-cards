@@ -17,7 +17,7 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import get_settings, warn_if_no_llm_credentials
 from models.card import decode_card_art
@@ -92,6 +92,9 @@ class CreateRoomRequest(BaseModel):
     # Room mode chosen by the host at creation. Optional so old clients that
     # POST /rooms with no body still work (defaults to "both").
     mode: Literal["online", "in_person", "both"] = "both"
+    # Per-turn time limit in seconds (rules.turn_timer): the active player's
+    # turn is force-ended when it runs out. None (the default) = no timer.
+    turn_timer: int | None = Field(default=None, ge=1, le=3600)
 
 
 class CreateRoomResponse(BaseModel):
@@ -221,7 +224,8 @@ def create_app() -> FastAPI:
         to "both" so older clients keep working.
         """
         mode = body.mode if body else "both"
-        code = room_manager.create_room(mode=mode)
+        turn_timer = body.turn_timer if body else None
+        code = room_manager.create_room(mode=mode, turn_timer=turn_timer)
         return CreateRoomResponse(code=code)
 
     @application.get("/rooms", response_model=ListRoomsResponse, tags=["rooms"])

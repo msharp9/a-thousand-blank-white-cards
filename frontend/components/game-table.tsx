@@ -165,7 +165,7 @@ function OpponentPanel({
         "flex flex-col items-center gap-1.5 rounded-[14px] bg-card/60 px-3 py-2",
         "transition-[box-shadow,transform] duration-150",
         isOver && "scale-[1.03]",
-        !player.connected && "opacity-50",
+        (!player.connected || player.eliminated) && "opacity-50",
       )}
       style={{
         border: `2px dashed ${color}`,
@@ -182,6 +182,11 @@ function OpponentPanel({
           {!player.connected && (
             <span className="ml-1 text-[13px] text-muted-foreground">
               · offline
+            </span>
+          )}
+          {player.eliminated && (
+            <span className="ml-1 text-[13px] text-muted-foreground">
+              · eliminated
             </span>
           )}
         </span>
