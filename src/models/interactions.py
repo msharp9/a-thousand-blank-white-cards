@@ -109,7 +109,10 @@ class CardPickInteraction(_Descriptor):
     # draw pile instead ("draw 3, keep 1"). Like ``from_hand``, the room fills
     # the concrete ids/faces at send time — and ONLY for the audience, since
     # deck contents are hidden information (see Room._descriptor_for and
-    # board.rooms.redaction). Mutually exclusive with ``from_hand``.
+    # board.rooms.redaction). Mutually exclusive with ``from_hand``. Unlike
+    # from_hand's disjoint hands, the offered top N is ONE shared pool: across
+    # a multi-player audience picks are first-come-first-served unique (the
+    # room rejects a card another responder already claimed).
     from_deck_top: int | None = Field(default=None, ge=1, le=10)
     # How many cards each responder must pick. Defaults 1/1 (single pick). With
     # max_picks > 1 the responder picks a SET ("discard 2 cards"); min_picks 0

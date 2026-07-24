@@ -12,8 +12,8 @@ from engine.events import GameEvent, HookContext
 from engine.reducers import apply_op
 from engine.sandbox.api_surface import SandboxGame
 from engine.sandbox.revalidate import DiffValidationError, apply_snippet_diff, parse_diff
-from models.effects import CreateCardOp, MoveCardsOp, ShuffleDeckOp, op_requires_choice
-from models.game_state import GameState, Player
+from models.effects import CreateCardOp, MoveCardsOp, SetRuleOp, ShuffleDeckOp, op_requires_choice
+from models.game_state import GameState, HookSpec, Player
 
 
 def make_state(**overrides) -> GameState:
@@ -224,6 +224,84 @@ class TestMoveCardsReducer:
         for cid in ("c3", "c4", "c5"):
             assert all(cid not in line for line in move_lines)
         assert not [e for e in new.history_events if e.kind == "discard"]
+
+
+class TestMoveCardsRetiresBoardEffects:
+    """Moving a card off the board (center/in_play -> anywhere else) retires
+    its ongoing effect exactly like destroy_card: hooks unregister and rules
+    it set revert."""
+
+    HOOK_SNIPPET = "def apply(state, ctx):\n    state.add_points('self', 10)\n"
+
+    def _hooked_center_state(self, **overrides) -> GameState:
+        defaults = dict(
+            room_code="TEST",
+            players=[Player(id="p1", name="Alice")],
+            house_rules=["hr1"],
+            cards={"hr1": {"id": "hr1", "title": "Hooked", "description": ""}},
+            hooks=[
+                HookSpec(
+                    id="hook-hr1",
+                    source_card_id="hr1",
+                    event=str(GameEvent.ON_TURN_START),
+                    scope="center",
+                    code=self.HOOK_SNIPPET,
+                )
+            ],
+        )
+        defaults.update(overrides)
+        return GameState(**defaults)
+
+    def test_moving_center_card_to_exile_unregisters_its_hook(self):
+        new = apply_op(
+            self._hooked_center_state(),
+            MoveCardsOp(card_target="id:hr1", to_zone="exile"),
+            make_ctx(),
+        )
+        assert new.exiled == ["hr1"]
+        assert new.hooks == []
+        assert any("unregistered hr1" in line for line in new.log)
+
+    def test_moving_in_play_card_to_discard_unregisters_its_hook(self):
+        state = self._hooked_center_state(players=[Player(id="p1", name="Alice", in_play=["hr1"])], house_rules=[])
+        new = apply_op(
+            state,
+            MoveCardsOp(from_zone="in_play", from_player="id:p1", selector="all", to_zone="discard"),
+            make_ctx(),
+        )
+        assert new.get_player("p1").in_play == []
+        assert new.hooks == []
+
+    def test_moving_center_card_off_board_reverts_its_rule(self):
+        state = GameState(room_code="TEST", players=[Player(id="p1", name="Alice")], house_rules=["hr1"])
+        state = apply_op(state, SetRuleOp(path="draw", value=3), make_ctx(card_id="hr1"))
+        assert state.rules.draw == 3
+        new = apply_op(
+            state,
+            MoveCardsOp(from_zone="center", selector="all", to_zone="exile"),
+            make_ctx(),
+        )
+        assert new.exiled == ["hr1"]
+        assert new.rules.draw == 1
+        assert new.rule_bindings == []
+
+    def test_moving_between_board_zones_keeps_the_hook(self):
+        new = apply_op(
+            self._hooked_center_state(),
+            MoveCardsOp(card_target="id:hr1", to_zone="in_play", to_player="id:p1"),
+            make_ctx(),
+        )
+        assert new.get_player("p1").in_play == ["hr1"]
+        assert len(new.hooks) == 1
+
+    def test_moving_unrelated_cards_leaves_hooks_untouched(self):
+        state = self._hooked_center_state(deck=["d1"])
+        new = apply_op(
+            state,
+            MoveCardsOp(from_zone="deck", selector="top", count=1, to_zone="discard"),
+            make_ctx(),
+        )
+        assert len(new.hooks) == 1
 
 
 class TestShuffleDeckReducer:

@@ -8,7 +8,15 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { EyeOffIcon, RotateCcwIcon, Undo2Icon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowDownToLineIcon,
+  ArrowUpIcon,
+  ArrowUpToLineIcon,
+  EyeOffIcon,
+  RotateCcwIcon,
+  Undo2Icon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -263,6 +271,12 @@ function InteractionForm({
   const [selected, setSelected] = useState<string[]>([]);
   const [numberValue, setNumberValue] = useState("");
   const [textValue, setTextValue] = useState("");
+  // card_order (scry): null until the player first rearranges — the offered
+  // deck-top order (descriptor.card_ids) is the identity arrangement.
+  const [arrangement, setArrangement] = useState<{
+    order: string[];
+    toBottom: string[];
+  } | null>(null);
 
   switch (descriptor.kind) {
     case "choice": {
@@ -457,6 +471,135 @@ function InteractionForm({
             onClick={() => onSubmit({ kind: "card_pick", card_ids: selected })}
           >
             {`Submit ${selected.length}/${maxPicks}`}
+          </Button>
+        </div>
+      );
+    }
+    case "card_order": {
+      const offered = Array.isArray(descriptor.card_ids)
+        ? descriptor.card_ids
+        : [];
+      if (!offered.length) {
+        return (
+          <p
+            role="status"
+            className="rounded-xl border-2 border-dashed border-ink/40 bg-card p-4 font-hand"
+          >
+            No cards are available to reorder. The server will resolve this card
+            safely.
+          </p>
+        );
+      }
+      const faces = { ...cards, ...(descriptor.cards ?? {}) };
+      const current = arrangement ?? { order: offered, toBottom: [] };
+      const title = (cardId: string) => faces[cardId]?.title || cardId;
+      const shift = (index: number, delta: number) => {
+        const order = [...current.order];
+        const [moved] = order.splice(index, 1);
+        order.splice(index + delta, 0, moved);
+        setArrangement({ ...current, order });
+      };
+      const sendToBottom = (cardId: string) =>
+        setArrangement({
+          order: current.order.filter((id) => id !== cardId),
+          toBottom: [...current.toBottom, cardId],
+        });
+      const returnToTop = (cardId: string) =>
+        setArrangement({
+          order: [...current.order, cardId],
+          toBottom: current.toBottom.filter((id) => id !== cardId),
+        });
+      return (
+        <div className="flex flex-col gap-3">
+          <p className="font-hand text-sm text-muted-foreground">
+            Back on top of the deck (first is the next draw)
+          </p>
+          <ol className="flex flex-col gap-2">
+            {current.order.map((cardId, index) => (
+              <li
+                key={cardId}
+                className="flex items-center gap-2 rounded-xl border-2 border-ink bg-card p-2"
+              >
+                <span className="w-8 shrink-0 text-center font-hand text-sm text-muted-foreground">
+                  #{index + 1}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-hand text-lg">
+                  {title(cardId)}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-xs"
+                  aria-label={`Move ${title(cardId)} up`}
+                  disabled={disabled || index === 0}
+                  onClick={() => shift(index, -1)}
+                >
+                  <ArrowUpIcon />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-xs"
+                  aria-label={`Move ${title(cardId)} down`}
+                  disabled={disabled || index === current.order.length - 1}
+                  onClick={() => shift(index, 1)}
+                >
+                  <ArrowDownIcon />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-xs"
+                  aria-label={`Send ${title(cardId)} to the deck bottom`}
+                  disabled={disabled}
+                  onClick={() => sendToBottom(cardId)}
+                >
+                  <ArrowDownToLineIcon />
+                </Button>
+              </li>
+            ))}
+          </ol>
+          {current.toBottom.length > 0 && (
+            <>
+              <p className="font-hand text-sm text-muted-foreground">
+                To the bottom of the deck
+              </p>
+              <ol className="flex flex-col gap-2">
+                {current.toBottom.map((cardId) => (
+                  <li
+                    key={cardId}
+                    className="flex items-center gap-2 rounded-xl border-2 border-dashed border-ink/60 bg-card p-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate font-hand text-lg">
+                      {title(cardId)}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-xs"
+                      aria-label={`Return ${title(cardId)} to the top`}
+                      disabled={disabled}
+                      onClick={() => returnToTop(cardId)}
+                    >
+                      <ArrowUpToLineIcon />
+                    </Button>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+          <Button
+            type="button"
+            disabled={disabled}
+            onClick={() =>
+              onSubmit({
+                kind: "card_order",
+                order: current.order,
+                to_bottom: current.toBottom,
+              })
+            }
+          >
+            Submit order
           </Button>
         </div>
       );

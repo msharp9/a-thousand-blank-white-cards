@@ -513,6 +513,11 @@ def _reduce_move_cards(
     no-op. The log and history stay privacy-safe: counts and zone names only,
     except moves INTO the discard pile (public), which record a "discard"
     history event carrying the card ids like discard_random.
+
+    A card moved OFF the board (out of center/in_play into any other zone)
+    retires its ongoing effect exactly like destroy_card: its persistent hooks
+    unregister and any rule it set via set_rule reverts (see
+    ``_release_rule_bindings``).
     """
     rng = rng or random.Random()
 
@@ -564,6 +569,16 @@ def _reduce_move_cards(
             to_player_id=to_player_id,
             deck_index=deck_index,
         )
+
+    if op.to_zone not in ("center", "in_play"):
+        departed = {cid for cid, zone, _ in moves if zone in ("center", "in_play")}
+        retired = list(dict.fromkeys(h.source_card_id for h in state.hooks if h.source_card_id in departed))
+        if retired:
+            state = state.model_copy(update={"hooks": [h for h in state.hooks if h.source_card_id not in departed]})
+            for source in retired:
+                state = state.with_log(f"[hook] unregistered {source} (card left play)")
+        if departed:
+            state = _release_rule_bindings(state, departed)
 
     count = len(moves)
     dest_label = op.to_zone if to_player_id is None else f"{op.to_zone}({to_player_id})"

@@ -94,7 +94,9 @@ OP_CATALOG_GUIDE = """\
     game = from_zone "deck", selector "all", to_zone "exile". Return a card to the bottom
     of the deck = to_zone "deck", to_position "bottom" ("top" and "shuffle" also work).
     The ENGINE picks random cards — never pick them yourself — and moving a hidden card
-    reveals nothing about it. LOOKING at the top of the deck (scry, peek, draw-N-keep-1)
+    reveals nothing about it. Moving a card OFF the board (out of the center or an
+    in-play zone) retires its ongoing effect just like destroy_card: its hooks
+    unregister and any rule it set reverts. LOOKING at the top of the deck (scry, peek, draw-N-keep-1)
     is NOT a bare move_cards: it needs a card_order or from_deck_top card_pick
     interaction step (see the interaction rules) so the faces reach only the peeking
     player.
@@ -197,6 +199,10 @@ SANDBOX_RULES = """\
         state.move_cards(card_target='id:' + picked, to_zone='hand', to_player='id:' + ctx['actor_id'])
         state.move_cards(from_zone='deck', selector='top', count=N-1, to_zone='deck', to_position='bottom')
   (picked is None on timeout — guard it; skip the second move when N is 1.)
+  With a multi-player audience the offered top-N is ONE shared pool: picks are
+  first-come-first-served (the engine rejects a card another player already claimed),
+  so a late or timed-out player's value can be None — always guard it and iterate the
+  per-player dict when writing back.
 - IMPORTANT interaction-result shape: ctx['interactions'][result_key] is a dict keyed
   by player id — {player_id: value} — one entry per audience member, NOT a bare value.
   A choice value is a LIST of the selected option ids; number/text are scalars. So a

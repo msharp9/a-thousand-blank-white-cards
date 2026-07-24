@@ -52,6 +52,33 @@ def _scry_plan(count: int = 3) -> ResolutionPlan:
     )
 
 
+KEEP_EACH_SNIPPET = """def apply(state, ctx):
+    for pid, picked in ctx['interactions']['pick'].items():
+        if picked:
+            state.move_cards(card_target='id:' + picked, to_zone='hand', to_player='id:' + pid)
+"""
+
+
+def _everyone_keeps_one_plan() -> ResolutionPlan:
+    return ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "pick",
+                    "request": {
+                        "kind": "card_pick",
+                        "prompt": "Everyone keeps one",
+                        "from_deck_top": 3,
+                        "audience": "all",
+                    },
+                },
+                {"kind": "snippet", "code": KEEP_EACH_SNIPPET},
+            ]
+        }
+    )
+
+
 def _keep_one_plan() -> ResolutionPlan:
     return ResolutionPlan.model_validate(
         {
@@ -289,6 +316,35 @@ def test_from_deck_top_pick_keeps_one_and_bottoms_rest() -> None:
     assert room.state.get_player("p1").hand == ["d2"]
     assert room.state.deck == ["d4", "d1", "d3"]
     assert not any("id:d" in line for line in room.state.log)
+
+
+def test_from_deck_top_pick_is_first_come_unique_across_the_audience() -> None:
+    """The deck top is one shared pool: a card one audience member claimed
+    cannot be claimed (or silently stolen) by another."""
+    room = _room_with_plan(_everyone_keeps_one_plan())
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        assert room._pending_resolution.resolved_audience == ["p1", "p2"]
+        interaction_id = room._pending_resolution.interaction_id
+        await room.handle_action("p1", _response(interaction_id, "card_pick", card_id="d2"))
+        # p2's refreshed options no longer offer p1's claim.
+        descriptor = _requests(room, "p2")[-1]["descriptor"]
+        assert descriptor["card_ids"] == ["d1", "d3"]
+        assert set(descriptor["cards"]) == {"d1", "d3"}
+        # Claiming the same card anyway is rejected, not silently reassigned.
+        await room.handle_action("p2", _response(interaction_id, "card_pick", card_id="d2"))
+        assert room._pending_resolution is not None
+        assert "p2" not in room._pending_resolution.responses
+        await room.handle_action("p2", _response(interaction_id, "card_pick", card_id="d1"))
+
+    asyncio.run(scenario())
+    errors = [message for message in _messages(room, "p2") if message["type"] == "error"]
+    assert any("already taken" in message["message"] for message in errors)
+    assert room._pending_resolution is None
+    assert room.state.get_player("p1").hand == ["d2"]
+    assert room.state.get_player("p2").hand == ["d1"]
+    assert room.state.deck == ["d3", "d4"]
 
 
 def test_from_deck_top_rejects_card_below_the_offered_top() -> None:

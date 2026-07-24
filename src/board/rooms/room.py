@@ -2005,6 +2005,9 @@ class Room:
         deck_top_count = self._deck_top_count(request)
         if deck_top_count is not None:
             offered = self._deck_top_options(deck_top_count)
+            if isinstance(request, CardPickInteraction):
+                claimed = self._claimed_deck_top_picks(player_id)
+                offered = [cid for cid in offered if cid not in claimed]
             descriptor["card_ids"] = list(offered)
             cards = self._interaction_state().cards
             descriptor["cards"] = {cid: cards[cid] for cid in offered if cid in cards}
@@ -2030,6 +2033,19 @@ class Room:
     def _deck_top_options(self, count: int) -> list[str]:
         """The top ``count`` deck card ids a deck-top interaction offers (top first)."""
         return list(self._interaction_state().deck[:count])
+
+    def _claimed_deck_top_picks(self, player_id: str | None) -> set[str]:
+        """Deck-top cards OTHER audience members already picked in the pending
+        interaction — unavailable to ``player_id`` (see
+        :meth:`_validate_interaction_response`)."""
+        pending = self._pending_resolution
+        if pending is None:
+            return set()
+        claimed: set[str] = set()
+        for pid, payload in pending.responses.items():
+            if pid != player_id and isinstance(payload, CardPickResponse):
+                claimed.update(payload.picks)
+        return claimed
 
     def _from_hand_options(self, player_id: str) -> list[str]:
         """The hand a from_hand card_pick offers ``player_id`` (working state
@@ -2121,7 +2137,13 @@ class Room:
             if request.from_hand:
                 selectable = set(self._from_hand_options(player_id)) if player_id is not None else set()
             elif request.from_deck_top is not None:
-                selectable = set(self._deck_top_options(request.from_deck_top))
+                # The deck top is one SHARED resource (unlike from_hand's
+                # disjoint hands): with a multi-player audience, a card another
+                # responder already claimed cannot be claimed again.
+                claimed = self._claimed_deck_top_picks(player_id)
+                if set(payload.picks) & claimed:
+                    raise ValueError("card was already taken by another player")
+                selectable = set(self._deck_top_options(request.from_deck_top)) - claimed
             else:
                 selectable = set(request.card_ids)
             picks = payload.picks
@@ -2177,7 +2199,13 @@ class Room:
             await self.connections.send(player_id, {"type": "error", "message": str(exc)})
             return
         pending.responses[player_id] = msg.payload
-        await self._send_interaction_request(player_id)
+        if isinstance(pending.request, CardPickInteraction) and pending.request.from_deck_top is not None:
+            # A recorded deck-top pick shrinks everyone else's options; resend
+            # so no one is shown a card they can no longer claim.
+            for member in pending.resolved_audience:
+                await self._send_interaction_request(member)
+        else:
+            await self._send_interaction_request(player_id)
         await self._broadcast_interaction_progress()
         if len(pending.responses) >= len(pending.resolved_audience):
             await self._resume_pending_resolution(timed_out=False)

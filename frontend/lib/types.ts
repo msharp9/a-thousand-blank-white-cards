@@ -86,6 +86,9 @@ export type InteractionResponsePayload =
   | { kind: "text"; value: string }
   // Single-pick sends card_id; multi-pick (max_picks > 1) sends card_ids.
   | { kind: "card_pick"; card_id?: string; card_ids?: string[] }
+  // Scry: a full permutation of the offered deck-top ids, split into the
+  // cards going back on top (order[0] = next draw) and the cards bottomed.
+  | { kind: "card_order"; order: string[]; to_bottom: string[] }
   | { kind: "confirm"; confirmed: boolean }
   | { kind: "drawing"; strokes: DrawingStroke[] };
 
@@ -416,6 +419,11 @@ export type InteractionDescriptor = {
   // card_pick multi-select bounds (default 1/1 = single pick).
   min_picks?: number;
   max_picks?: number;
+  // card_order (scry) fields; the room also fills card_ids with the offered
+  // deck-top ids and `cards` with their faces for deck-top interactions.
+  source?: string;
+  count?: number;
+  cards?: Record<string, CardSnapshot>;
   confirm_label?: string;
   decline_label?: string;
   max_strokes?: number;
