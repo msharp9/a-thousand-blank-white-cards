@@ -1214,5 +1214,102 @@
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 2)\n    state.draw_cards('self', 1)"
     }
+  },
+  {
+    "id": "eval-045",
+    "title": "Dice Tax",
+    "description": "Roll a d8. A player of your choice loses that many points. The house always wins.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 8,
+            "count": 1,
+            "target": "chosen_player",
+            "outcome": "subtract_points"
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    state.roll_die(sides=8, outcome='subtract_points', target=chosen)"
+    }
+  },
+  {
+    "id": "eval-046",
+    "title": "The Oracle Cube",
+    "description": "Roll a d12 where the whole table can see it. Whatever it shows is an omen \u2014 the table decides what it foretells.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "none",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 12,
+            "count": 1,
+            "outcome": "none"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    total = state.roll_die(sides=12)\n    state.note('The Oracle Cube shows ' + str(total) + '. The table reads the omen.')"
+    }
+  },
+  {
+    "id": "eval-047",
+    "title": "Hand Grenade",
+    "description": "KABOOM. Every player discards 2 cards from their hand at random.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "discard_random",
+          "args": {
+            "target": "all",
+            "count": 2
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.discard_random('all', 2)"
+    }
+  },
+  {
+    "id": "eval-048",
+    "title": "Vending Machine",
+    "description": "Insert card, roll a d6, and draw that many cards from the deck. No refunds.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 6,
+            "count": 1,
+            "target": "self",
+            "outcome": "draw_cards"
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.roll_die(sides=6, outcome='draw_cards', target='self')"
+    }
   }
 ]
