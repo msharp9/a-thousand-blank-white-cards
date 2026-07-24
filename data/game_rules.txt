@@ -33,7 +33,7 @@ NOT YET SUPPORTED: dice rolls, coin flips, or any random choice inside card effe
 == Conditions and statuses ==
 Any free-form status can be put on a player (poisoned, confused, cursed, polite...) with any value, and removed later; other cards can target "players that have" a given status.
 The statuses skip_next and extra_turn are special: the engine consumes them to skip or repeat that player's turn.
-A status can carry a duration in turns: it ticks down at the start of each of that player's turns and disappears when it runs out — "poisoned for 3 turns" is a clean, directly supported effect, no hook needed.
+A status can carry a duration in turns: it stays active for exactly that many of the player's turns — ticking down at each of their turn starts, still active through the turn the counter hits 0, gone at the start of their next — "poisoned for 3 turns" is a clean, directly supported effect, no hook needed.
 A status set without a duration lasts until a card removes it; re-applying a status with a new duration restarts the clock, and re-applying it without one makes it permanent again.
 
 == Card attributes ==

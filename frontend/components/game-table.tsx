@@ -28,7 +28,8 @@ const RESERVED_CONDITION_LABELS: Record<string, string> = {
 /**
  * Player-facing label for one condition: friendly names for reserved keys,
  * "poisoned ×3" for numeric stacks, and ", 2 turns left" when the condition
- * carries a TTL (condition_ttls).
+ * carries a TTL (condition_ttls). A TTL of 0 means the current owner turn is
+ * the condition's last active one, rendered as ", last turn".
  */
 export function conditionLabel(
   key: string,
@@ -37,7 +38,8 @@ export function conditionLabel(
 ): string {
   let label = RESERVED_CONDITION_LABELS[key] ?? key.replace(/_/g, " ");
   if (typeof value === "number") label += ` ×${value}`;
-  if (ttl != null) label += `, ${ttl} turn${ttl === 1 ? "" : "s"} left`;
+  if (ttl === 0) label += ", last turn";
+  else if (ttl != null) label += `, ${ttl} turn${ttl === 1 ? "" : "s"} left`;
   return label;
 }
 

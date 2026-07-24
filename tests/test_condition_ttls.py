@@ -1,5 +1,7 @@
 """Condition TTLs (bead tr7.2): duration_turns on set_condition, ticked at the
-owner's turn start, expiring the condition (and its TTL entry) at 0.
+owner's turn start. The tick that reaches 0 keeps the condition active through
+that whole turn (its last); the NEXT tick removes it — so duration_turns=N is
+active for exactly N of the owner's turns and ON_TURN_START hooks see it N times.
 """
 
 from __future__ import annotations
@@ -84,8 +86,16 @@ class TestTick:
         st = tick_condition_ttls(st, "p1")
         assert st.get_player("p1").condition_ttls["poisoned"] == 1
 
-    def test_expiry_removes_condition_and_ttl_entry(self):
+    def test_final_tick_keeps_condition_active_at_ttl_zero(self):
         st = _set(_state(), "poisoned", duration=1)
+        st = tick_condition_ttls(st, "p1")
+        p1 = st.get_player("p1")
+        assert p1.conditions["poisoned"] is True
+        assert p1.condition_ttls == {"poisoned": 0}
+
+    def test_tick_past_zero_removes_condition_and_ttl_entry(self):
+        st = _set(_state(), "poisoned", duration=1)
+        st = tick_condition_ttls(st, "p1")
         st = tick_condition_ttls(st, "p1")
         p1 = st.get_player("p1")
         assert "poisoned" not in p1.conditions
@@ -104,6 +114,7 @@ class TestTick:
     def test_mixed_ttl_and_permanent_conditions(self):
         st = _set(_set(_state(), "cursed"), "poisoned", duration=1)
         st = tick_condition_ttls(st, "p1")
+        st = tick_condition_ttls(st, "p1")
         p1 = st.get_player("p1")
         assert p1.conditions == {"cursed": True}
         assert p1.condition_ttls == {}
@@ -118,16 +129,49 @@ class TestRunTurnIntegration:
         def play_fn(state: GameState, pid: str):
             return state, EffectProgram(ops=[AddPointsOp(amount=1)]), _ctx(pid)
 
-        st = _set(_state(turn_index=0), "poisoned", duration=2, target="id:p2")
+        st = _set(_state(turn_index=0, deck=[f"d{i}" for i in range(10)]), "poisoned", duration=2, target="id:p2")
         st = run_turn(st, play_fn, bus=SpyBus())  # p1's turn: p2's TTL untouched
         assert st.get_player("p2").condition_ttls["poisoned"] == 2
-        st = run_turn(st, play_fn, bus=SpyBus())  # p2's turn start ticks it
+        st = run_turn(st, play_fn, bus=SpyBus())  # p2's 1st turn ticks it, stays active
         assert st.get_player("p2").condition_ttls["poisoned"] == 1
         st = run_turn(st, play_fn, bus=SpyBus())  # p1 again: no tick for p2
         assert st.get_player("p2").condition_ttls["poisoned"] == 1
-        st = run_turn(st, play_fn, bus=SpyBus())  # p2's next turn start expires it
+        st = run_turn(st, play_fn, bus=SpyBus())  # p2's 2nd (last active) turn: ttl 0, still set
+        assert st.get_player("p2").conditions["poisoned"] is True
+        assert st.get_player("p2").condition_ttls["poisoned"] == 0
+        st = run_turn(st, play_fn, bus=SpyBus())  # p1 again
+        st = run_turn(st, play_fn, bus=SpyBus())  # p2's 3rd turn start removes it
         assert "poisoned" not in st.get_player("p2").conditions
         assert st.get_player("p2").condition_ttls == {}
+
+    def test_turn_start_hooks_see_condition_on_exactly_duration_turns(self):
+        class TurnStartSpyBus(EventBus):
+            def __init__(self):
+                super().__init__()
+                self.poisoned_starts = 0
+
+            def emit(self, event, state, ctx):
+                if event == GameEvent.ON_TURN_START and ctx.actor_id == "p2":
+                    if state.get_player("p2").conditions.get("poisoned"):
+                        self.poisoned_starts += 1
+                return state
+
+        def play_fn(state: GameState, pid: str):
+            return state, EffectProgram(ops=[AddPointsOp(amount=1)]), _ctx(pid)
+
+        for duration in (1, 2):
+            bus = TurnStartSpyBus()
+            st = _set(
+                _state(turn_index=0, deck=[f"d{i}" for i in range(10)]),
+                "poisoned",
+                duration=duration,
+                target="id:p2",
+            )
+            for _ in range(2 * duration + 4):
+                st = run_turn(st, play_fn, bus=bus)
+                if st.phase == "ended":
+                    break
+            assert bus.poisoned_starts == duration
 
 
 class TestRoomStartTurn:
@@ -135,11 +179,14 @@ class TestRoomStartTurn:
         room = Room("ABCDEF")
         room.add_player("p1", "Alice")
         room.add_player("p2", "Bob")
-        room.state = room.state.model_copy(update={"deck": ["c1", "c2", "c3"], "phase": "playing"})
+        room.state = room.state.model_copy(update={"deck": ["c1", "c2", "c3", "c4"], "phase": "playing"})
         room.state = room.state.with_condition("p1", "poisoned", True, ttl=2)
         room.connections.connect("p1", AsyncMock())
         asyncio.run(room._start_turn("p1"))
         assert room.state.get_player("p1").condition_ttls["poisoned"] == 1
+        assert room.state.get_player("p1").conditions["poisoned"] is True
+        asyncio.run(room._start_turn("p1"))
+        assert room.state.get_player("p1").condition_ttls["poisoned"] == 0
         assert room.state.get_player("p1").conditions["poisoned"] is True
         asyncio.run(room._start_turn("p1"))
         assert "poisoned" not in room.state.get_player("p1").conditions

@@ -68,6 +68,10 @@ describe("conditionLabel", () => {
     expect(conditionLabel("poisoned", true, 1)).toBe("poisoned, 1 turn left");
     expect(conditionLabel("poisoned", 3, 2)).toBe("poisoned ×3, 2 turns left");
   });
+
+  it("renders a TTL of 0 as the condition's last active turn", () => {
+    expect(conditionLabel("poisoned", true, 0)).toBe("poisoned, last turn");
+  });
 });
 
 describe("GameTable condition badges", () => {

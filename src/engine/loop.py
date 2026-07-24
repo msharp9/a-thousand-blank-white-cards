@@ -47,10 +47,16 @@ def register_skip_predicate(name: str, fn: Callable[..., bool]) -> None:
 def tick_condition_ttls(state: GameState, player_id: str) -> GameState:
     """Tick ``player_id``'s expiring conditions by one of their turn starts.
 
-    Each ``Player.condition_ttls`` entry decrements; at 0 the condition AND
-    its TTL entry are removed. Runs at the owner's turn start BEFORE
-    ON_TURN_START hooks fire, so hooks and ``has:<key>`` targets never see an
-    expired condition. Conditions without a TTL entry persist untouched.
+    Each ``Player.condition_ttls`` entry decrements at the owner's turn start,
+    BEFORE that turn's ON_TURN_START hooks fire. The turn that brings a TTL to
+    0 is the condition's LAST ACTIVE turn — the condition stays set (ttl 0)
+    through it, and the next tick removes it before hooks run. So
+    ``duration_turns=N`` is active for exactly N of the owner's turns, and
+    hooks / ``has:<key>`` targets never see an expired condition. Extra turns
+    re-run the full turn-start lifecycle (draw, ON_TURN_START hooks), so each
+    one ticks too, keeping TTLs in lockstep with hook activations even though
+    ``advance_turn`` freezes ``turn_number`` for them. Conditions without a
+    TTL entry persist untouched.
     """
     player = state.get_player(player_id)
     if not player.condition_ttls:
@@ -59,7 +65,7 @@ def tick_condition_ttls(state: GameState, player_id: str) -> GameState:
     ttls: dict[str, int] = {}
     for key, remaining in player.condition_ttls.items():
         remaining -= 1
-        if remaining <= 0:
+        if remaining < 0:
             conditions.pop(key, None)
         else:
             ttls[key] = remaining

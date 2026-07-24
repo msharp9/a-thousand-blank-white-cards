@@ -77,8 +77,9 @@ class Player(BaseModel):
     # Remaining lifetime (in this player's turn starts) for expiring
     # conditions, keyed like ``conditions``. Kept OUT of the conditions bag so
     # condition values stay shape-stable for "has:<key>" targets and hook
-    # snippets. Ticked by ``engine.loop.tick_condition_ttls``; a key here
-    # always has a live entry in ``conditions``.
+    # snippets. Ticked by ``engine.loop.tick_condition_ttls``; 0 means the
+    # condition is on its last active turn. A key here always has a live
+    # entry in ``conditions``.
     condition_ttls: dict[str, int] = Field(default_factory=dict)
     # Hand visibility (reveal_hand op). STRUCTURAL fields, not conditions: the
     # snapshot redactor must consult them reliably, and the conditions bag is
