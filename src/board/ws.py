@@ -15,6 +15,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from models.ws_messages import ClientMsg, JoinMsg
 from board.rooms.manager import room_manager
+from board.rooms.redaction import redact_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,12 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
     room.connections.connect(player_id, websocket)
     logger.info("player %s connected to room %s", player_id, code)
 
-    # Replay state (covers reconnect); each connection gets its own redacted view.
-    await room.connections.broadcast_state(room.snapshot_for)
+    # Replay state (covers reconnect); each connection gets its own redacted view
+    # of ONE snapshot — building per-connection snapshots would let state mutated
+    # by a task scheduled between sends (e.g. an interaction timeout) leak into
+    # later recipients of the same broadcast round.
+    snap = room.snapshot()
+    await room.connections.broadcast_state(lambda pid: redact_snapshot(snap, pid))
     await room.replay_pending_interaction(player_id)
 
     try:
