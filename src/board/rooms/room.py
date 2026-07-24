@@ -20,7 +20,11 @@ End game: there are TWO distinct end paths with distinct timing.
   ``_deck_exhausted`` latches. That player finishes their turn normally; only
   once their turn ends (``_advance_turn``) does the game end (Per the rules:
   the player who draws the last card completes their turn, then the game
-  ends).
+  ends). The same deferred timing applies when a play's EFFECT (not a draw)
+  empties the deck — e.g. milling or exiling the remaining cards:
+  ``_after_play_effects`` latches ``_deck_exhausted`` when the deck went from
+  non-empty to empty across the play, so emptying the deck never ends the game
+  mid-turn.
 - Explicit end / live win condition: a card's ``end_game`` op sets
   ``rules.end_condition``, and ``set_win_condition`` can make
   ``evaluate_win_condition`` (via ``win_condition_met``) become true mid-play

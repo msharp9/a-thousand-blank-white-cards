@@ -283,6 +283,9 @@ export type GameStateSnapshot = {
   // only for back-compat with older servers.
   deck_count?: number;
   discard: string[];
+  // Cards removed from the game entirely (the public exile zone). Optional
+  // only for back-compat with older servers.
+  exiled?: string[];
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
   hooks: HookSnapshot[];

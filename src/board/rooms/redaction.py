@@ -35,7 +35,7 @@ def _hand_visible(player: dict[str, Any], viewer_id: str | None) -> bool:
 def _visible_card_ids(snap: dict[str, Any], viewer_id: str | None) -> set[str]:
     """Card ids whose CONTENT ``viewer_id`` is entitled to see.
 
-    Public zones (in_play, discard, center), every hand visible to the viewer
+    Public zones (in_play, discard, center, exiled), every hand visible to the viewer
     (their own, plus revealed hands — see :func:`_hand_visible`), and the deck
     while it is the shared setup pool. Beyond zones, content that has already
     been revealed to the table stays visible: the card suspended in an open
@@ -49,6 +49,7 @@ def _visible_card_ids(snap: dict[str, Any], viewer_id: str | None) -> set[str]:
         if _hand_visible(player, viewer_id):
             visible.update(player.get("hand", []))
     visible.update(snap.get("discard", []))
+    visible.update(snap.get("exiled", []))
     visible.update(snap.get("house_rules", []))
     if snap.get("phase") in PUBLIC_DECK_PHASES:
         visible.update(snap.get("deck", []))
@@ -83,7 +84,8 @@ def redact_snapshot(snap: dict[str, Any], viewer_id: str | None) -> dict[str, An
     - The ``cards`` registry is filtered to :func:`_visible_card_ids` — the
       id lists above only say WHERE cards are; the registry is what carries
       their content, so hidden entries must be dropped, not just de-listed.
-    - ``discard``, ``in_play`` and the center zone are public and untouched.
+    - ``discard``, ``exiled``, ``in_play`` and the center zone are public and
+      untouched.
 
     The input dict is never mutated; only the copied containers this function
     rewrites are duplicated.

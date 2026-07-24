@@ -182,3 +182,42 @@ def test_move_card_requires_player_id_for_player_zone() -> None:
     state = GameState(room_code="AAAA", players=[Player(id="p1", name="A", hand=["c1"])])
     with pytest.raises(ValueError):
         state.move_card("c1", "hand", "center")
+
+
+def test_move_card_hand_to_exiled_is_immutable() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A", hand=["c1", "c2"])])
+    new = state.move_card("c1", "hand", "exiled", from_player_id="p1")
+    assert new.get_player("p1").hand == ["c2"]
+    assert new.exiled == ["c1"]
+    # Source untouched.
+    assert state.get_player("p1").hand == ["c1", "c2"]
+    assert state.exiled == []
+
+
+def test_move_card_deck_to_exiled() -> None:
+    state = GameState(room_code="AAAA", deck=["c1", "c2"])
+    new = state.move_card("c1", "deck", "exiled")
+    assert new.deck == ["c2"]
+    assert new.exiled == ["c1"]
+
+
+def test_move_card_discard_to_exiled() -> None:
+    state = GameState(room_code="AAAA", discard=["c1"])
+    new = state.move_card("c1", "discard", "exiled")
+    assert new.discard == []
+    assert new.exiled == ["c1"]
+
+
+def test_move_card_exiled_back_to_hand() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")], exiled=["c1"])
+    new = state.move_card("c1", "exiled", "hand", to_player_id="p1")
+    assert new.exiled == []
+    assert new.get_player("p1").hand == ["c1"]
+
+
+def test_exiled_serializes_and_round_trips() -> None:
+    state = GameState(room_code="AAAA", exiled=["c1", "c2"])
+    dump = state.model_dump()
+    assert dump["exiled"] == ["c1", "c2"]
+    assert GameState(**dump).exiled == ["c1", "c2"]
+    assert GameState(room_code="BBBB").exiled == []

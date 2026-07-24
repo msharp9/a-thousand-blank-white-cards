@@ -199,6 +199,9 @@ class GameState(BaseModel):
                             ``house_rules`` (kept for backward compat); use the
                             ``center_cards()`` accessor to read it by zone name.
     - ``discard``         — global discard pile, on ``GameState``.
+    - ``exiled``          — global removed-from-game pile, on ``GameState``.
+                            Public like ``discard``, but nothing brings a card
+                            back from it in normal play.
 
     Zone read/move helpers (``cards_in_play``, ``cards_in_play_for``,
     ``center_cards``, ``move_card``) exist for a future CardTarget resolver.
@@ -219,6 +222,7 @@ class GameState(BaseModel):
     # Card registry grows during play as new cards are invented
     deck: list[str] = Field(default_factory=list)  # card ids (ordered)
     discard: list[str] = Field(default_factory=list)  # card ids
+    exiled: list[str] = Field(default_factory=list)  # card ids removed from the game
     cards: dict[str, Any] = Field(default_factory=dict)  # card_id -> Card
 
     turn_index: int = 0  # index into players list
@@ -376,8 +380,8 @@ class GameState(BaseModel):
     def move_card(
         self,
         card_id: str,
-        from_zone: Literal["hand", "in_play", "center", "discard", "deck"],
-        to_zone: Literal["hand", "in_play", "center", "discard", "deck"],
+        from_zone: Literal["hand", "in_play", "center", "discard", "deck", "exiled"],
+        to_zone: Literal["hand", "in_play", "center", "discard", "deck", "exiled"],
         *,
         from_player_id: str | None = None,
         to_player_id: str | None = None,
@@ -385,8 +389,8 @@ class GameState(BaseModel):
         """Return a copy of this state with card_id moved between zones.
 
         Player-scoped zones (``hand``, ``in_play``) require the corresponding
-        ``*_player_id``; global zones (``center``, ``discard``, ``deck``) ignore
-        them. The card is removed from every occurrence in the source zone and
+        ``*_player_id``; global zones (``center``, ``discard``, ``deck``,
+        ``exiled``) ignore them. The card is removed from every occurrence in the source zone and
         appended to the destination zone. This is immutable: the source state,
         its players and its lists are never mutated.
         """
@@ -412,6 +416,8 @@ class GameState(BaseModel):
             update["discard"] = [c for c in self.discard if c != card_id]
         elif from_zone == "deck":
             update["deck"] = [c for c in self.deck if c != card_id]
+        elif from_zone == "exiled":
+            update["exiled"] = [c for c in self.exiled if c != card_id]
 
         # ── add to destination ──
         if to_zone in ("hand", "in_play"):
@@ -429,6 +435,9 @@ class GameState(BaseModel):
         elif to_zone == "deck":
             base = update.get("deck", list(self.deck))
             update["deck"] = [*base, card_id]
+        elif to_zone == "exiled":
+            base = update.get("exiled", list(self.exiled))
+            update["exiled"] = [*base, card_id]
 
         update["players"] = players
         return self.model_copy(update=update)

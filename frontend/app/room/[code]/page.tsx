@@ -18,6 +18,7 @@ import { DiscardPile } from "@/components/discard-pile";
 import { EffectLog } from "@/components/effect-log";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
 import { EpilogueView } from "@/components/epilogue";
+import { ExilePile } from "@/components/exile-pile";
 import { GameNavTabs } from "@/components/game-nav-tabs";
 import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
@@ -203,6 +204,13 @@ export default function RoomPage() {
   // The most recent discard, shown as the dock's discard indicator.
   const topDiscard: CardSnapshot | undefined = gameState
     ? gameState.cards[gameState.discard[gameState.discard.length - 1] ?? ""]
+    : undefined;
+
+  // The exile zone ("removed from game"); its dock pile only appears once a
+  // card has actually been exiled. `?? []` covers older servers without it.
+  const exiled = gameState?.exiled ?? [];
+  const topExiled: CardSnapshot | undefined = gameState
+    ? gameState.cards[exiled[exiled.length - 1] ?? ""]
     : undefined;
 
   // Draw-pile size for the deck dock: the server redacts deck contents during
@@ -527,6 +535,13 @@ export default function RoomPage() {
                     roomCode={code}
                     onClick={() => setHistoryOpen(true)}
                   />
+                  {exiled.length > 0 && (
+                    <ExilePile
+                      topCard={topExiled}
+                      count={exiled.length}
+                      roomCode={code}
+                    />
+                  )}
                 </div>
               </FeltDropZone>
 

@@ -16,6 +16,7 @@ There is no rule against negative scores, zero-point plays, or huge point swings
 == Drawing and the deck ==
 Players and effects draw from the top of the deck; drawing several cards at once is fine.
 Drawing (or being forced to draw) more cards than the deck holds draws every remaining card and ends the game after the current turn — never treat overdrawing as an error or refuse the card.
+Emptying the deck by an EFFECT rather than a draw (milling it away, exiling it, moving its last cards elsewhere) never ends the game mid-turn either: the player whose card emptied the deck finishes their turn, then the game ends — exactly the same timing as drawing the last card.
 NOT YET SUPPORTED: a mid-game deck shuffle, a shuffle of the discard pile back into the deck, looking at or reordering the top of the deck (scry, peek), milling the deck into the discard, or removing cards from the game entirely (exile). For these, apply the closest supported effect and say so in your comment.
 
 == Discarding ==
