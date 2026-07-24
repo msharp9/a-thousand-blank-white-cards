@@ -486,5 +486,20 @@
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    mine = state.roll_die(sides=20)\n    theirs = state.roll_die(sides=20)\n    if mine > theirs:\n        state.subtract_points(chosen, 6)\n        state.discard_random(chosen, 1)\n    elif theirs > mine:\n        state.subtract_points('self', 6)\n        state.discard_random('self', 1)\n    else:\n        state.note('Dice Duel: a tie -- both duelists walk away unscathed.')"
     }
+  },
+  {
+    "id": "hard-050",
+    "title": "Snail Mail",
+    "description": "Choose a player. They are Slowed for their next 2 turns and immediately lose 1 point for every card in their hand.",
+    "alt_text": "a snail carrying an envelope on its shell",
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    chosen = 'id:' + pid\n    state.set_condition(chosen, 'slowed', True, duration_turns=2)\n    penalty = state.hand_size(pid)\n    if penalty > 0:\n        state.subtract_points(chosen, penalty)"
+    }
   }
 ]

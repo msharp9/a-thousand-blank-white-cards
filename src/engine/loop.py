@@ -42,6 +42,41 @@ def register_skip_predicate(name: str, fn: Callable[..., bool]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Condition TTLs
+# ---------------------------------------------------------------------------
+def tick_condition_ttls(state: GameState, player_id: str) -> GameState:
+    """Tick ``player_id``'s expiring conditions by one of their turn starts.
+
+    Each ``Player.condition_ttls`` entry decrements at the owner's turn start,
+    BEFORE that turn's ON_TURN_START hooks fire. The turn that brings a TTL to
+    0 is the condition's LAST ACTIVE turn — the condition stays set (ttl 0)
+    through it, and the next tick removes it before hooks run. So
+    ``duration_turns=N`` is active for exactly N of the owner's turns, and
+    hooks / ``has:<key>`` targets never see an expired condition. Extra turns
+    re-run the full turn-start lifecycle (draw, ON_TURN_START hooks), so each
+    one ticks too, keeping TTLs in lockstep with hook activations even though
+    ``advance_turn`` freezes ``turn_number`` for them. Conditions without a
+    TTL entry persist untouched.
+    """
+    player = state.get_player(player_id)
+    if not player.condition_ttls:
+        return state
+    conditions = dict(player.conditions)
+    ttls: dict[str, int] = {}
+    for key, remaining in player.condition_ttls.items():
+        remaining -= 1
+        if remaining < 0:
+            conditions.pop(key, None)
+        else:
+            ttls[key] = remaining
+    players = [
+        p.model_copy(update={"conditions": conditions, "condition_ttls": ttls}) if p.id == player_id else p
+        for p in state.players
+    ]
+    return state.model_copy(update={"players": players})
+
+
+# ---------------------------------------------------------------------------
 # Draw step
 # ---------------------------------------------------------------------------
 def draw_step(state: GameState, player_id: str, *, bus: EventBus | None = None) -> GameState:
@@ -139,6 +174,7 @@ def run_turn(
     active_bus = bus or _bus
     player_id = state.active_player().id
 
+    state = tick_condition_ttls(state, player_id)
     start_ctx = HookContext(event=GameEvent.ON_TURN_START, actor_id=player_id)
     state = active_bus.emit(GameEvent.ON_TURN_START, state, start_ctx)
 
@@ -166,4 +202,4 @@ def run_turn(
     return advance_turn(state)
 
 
-__all__ = ["advance_turn", "draw_step", "register_skip_predicate", "run_turn"]
+__all__ = ["advance_turn", "draw_step", "register_skip_predicate", "run_turn", "tick_condition_ttls"]

@@ -18,6 +18,55 @@ interface GameTableProps {
   myPlayerId: string;
 }
 
+// Reserved keys the engine's turn loop consumes get friendly labels; any other
+// key is a card-invented status, shown with underscores humanized.
+const RESERVED_CONDITION_LABELS: Record<string, string> = {
+  skip_next: "skips next turn",
+  extra_turn: "extra turn",
+};
+
+/**
+ * Player-facing label for one condition: friendly names for reserved keys,
+ * "poisoned ×3" for numeric stacks, and ", 2 turns left" when the condition
+ * carries a TTL (condition_ttls). A TTL of 0 means the current owner turn is
+ * the condition's last active one, rendered as ", last turn".
+ */
+export function conditionLabel(
+  key: string,
+  value: unknown,
+  ttl?: number,
+): string {
+  let label = RESERVED_CONDITION_LABELS[key] ?? key.replace(/_/g, " ");
+  if (typeof value === "number") label += ` ×${value}`;
+  if (ttl === 0) label += ", last turn";
+  else if (ttl != null) label += `, ${ttl} turn${ttl === 1 ? "" : "s"} left`;
+  return label;
+}
+
+function ConditionBadges({ player }: { player: PlayerSnapshot }) {
+  // A falsy value means the condition is toggled off, not an active status.
+  const active = Object.entries(player.conditions ?? {}).filter(([, value]) =>
+    Boolean(value),
+  );
+  if (active.length === 0) return null;
+  return (
+    <div className="flex max-w-[240px] flex-wrap justify-center gap-1">
+      {active.map(([key, value]) => {
+        const label = conditionLabel(key, value, player.condition_ttls?.[key]);
+        return (
+          <span
+            key={key}
+            title={label}
+            className="max-w-[180px] truncate rounded-lg border-[1.5px] border-ink/50 bg-panel-paper px-1.5 py-0.5 font-hand text-[11px] leading-tight text-ink/80"
+          >
+            {label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * The opponents row at the top of the Play Table: one panel per non-self
  * player (all players when spectating), dashed-bordered in that player's
@@ -152,6 +201,7 @@ function OpponentPanel({
           </span>
         )}
       </div>
+      <ConditionBadges player={player} />
       {handCount > 0 &&
         (handRevealed && revealedHandCards.length > 0 ? (
           <div

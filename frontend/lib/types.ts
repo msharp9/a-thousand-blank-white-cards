@@ -163,6 +163,10 @@ export type PlayerSnapshot = {
   in_play: string[];
   connected: boolean;
   conditions: Record<string, unknown>;
+  // Remaining lifetime (in this player's turn starts) for expiring conditions,
+  // keyed like `conditions` (Player.condition_ttls on the backend). Optional
+  // for back-compat with servers that predate condition TTLs.
+  condition_ttls?: Record<string, number>;
   // Hand visibility (reveal_hand op). hand_public = this hand is played face
   // up: every viewer's snapshot carries its real ids (render it face-up with a
   // "revealed" badge). hand_revealed_to = player ids allowed to see the hand;

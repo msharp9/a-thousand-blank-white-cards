@@ -1832,6 +1832,85 @@
     }
   },
   {
+    "id": "seed-gold-090",
+    "title": "Three-Turn Curse",
+    "description": "Choose a player. They are Cursed for their next 3 turns, then the curse lifts on its own.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "chosen_player",
+            "key": "cursed",
+            "value": true,
+            "duration_turns": 3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'cursed', True, duration_turns=3)\n"
+    }
+  },
+  {
+    "id": "seed-gold-091",
+    "title": "Beginner's Luck",
+    "description": "You are Lucky until the end of your next turn.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "lucky",
+            "value": true,
+            "duration_turns": 1
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'lucky', True, duration_turns=1)\n"
+    }
+  },
+  {
+    "id": "seed-gold-092",
+    "title": "Sleeping Gas",
+    "description": "Everyone else is Drowsy for their next 2 turns. You gain 1 point for staying awake.",
+    "alt_text": "a green cloud drifting over a table of yawning stick figures",
+    "canonical": {
+      "target": "all_others",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "all_others",
+            "key": "drowsy",
+            "value": true,
+            "duration_turns": 2
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('all_others', 'drowsy', True, duration_turns=2)\n    state.add_points('self', 1)\n"
+    }
+  },
+  {
     "id": "seed-filler-000",
     "title": "Compliment Someone",
     "description": "Say something genuinely nice about another player right now. They gain 1 point if they believe you.",

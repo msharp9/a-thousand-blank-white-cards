@@ -50,7 +50,7 @@ from engine.compile import compile_card_plan
 from engine.events import EventBus, GameEvent, HookContext
 from engine.hooks import build_registry, collect_hook_errors
 from engine.history import append_history_event, fallback_counts, record_draw, record_game_end
-from engine.loop import advance_turn
+from engine.loop import advance_turn, tick_condition_ttls
 from engine.reducers import collect_hand_reveals
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.card import MAX_ROOM_ART_BYTES
@@ -642,8 +642,9 @@ class Room:
 
     # ── turn lifecycle (auto-draw → play → end turn → advance) ──
     async def _start_turn(self, player_id: str) -> None:
-        """Begin ``player_id``'s turn: reset per-turn bookkeeping, auto-draw
-        their ``rules.draw`` card(s), broadcast the fresh snapshot.
+        """Begin ``player_id``'s turn: tick their expiring condition TTLs,
+        reset per-turn bookkeeping, auto-draw their ``rules.draw`` card(s),
+        broadcast the fresh snapshot.
 
         Every turn — including the very first at the setup→playing transition —
         starts here, so the auto-draw is uniform. _start_turn is only ever
@@ -656,6 +657,7 @@ class Room:
         self._has_drawn = False
         self._plays_this_turn = 0
         self._last_run_metrics.clear()
+        self.state = tick_condition_ttls(self.state, player_id)
         await self._emit_hooks(GameEvent.ON_TURN_START, player_id)
         await self._auto_draw(player_id)
         await self._broadcast_state()

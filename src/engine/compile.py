@@ -240,10 +240,12 @@ def _compile_op(name: str, args: dict) -> Op | None:
         key = args.get("key")
         if not key:
             raise ValueError("set_condition missing 'key'")
+        duration = args.get("duration_turns")
         return SetConditionOp(
             target=_map_target(args.get("target", "self"), default="self", op_name=name),
             key=str(key),
             value=args.get("value"),
+            duration_turns=int(duration) if duration is not None else None,
         )
     if name == "set_card_attribute":
         key = args.get("key")

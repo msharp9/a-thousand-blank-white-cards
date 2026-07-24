@@ -176,7 +176,11 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
 - `transfer_card` — `{"card_target": ..., "to_target": <TARGET>}` (moves cards into one player's hand)
 - `set_win_condition` — `{"kind": "highest_points"|"lowest_points"|"first_to"|"empty_hand"|"last_standing"|"none", "threshold": <int|null>}`
 - `set_rule` — `{"path": <str>, "value": ...}`
-- `set_condition` — `{"target": <TARGET>, "key": <str>, "value": ...}`
+- `set_condition` — `{"target": <TARGET>, "key": <str>, "value": ..., "duration_turns": <int|null>}`
+  — `duration_turns` makes the status self-expire after N of the targeted
+  player's turns (active through the turn the counter hits 0); omit it for a
+  status that lasts until something removes it. A timed condition needs no
+  persistent card: placement stays `discard`.
 - `set_card_attribute` — `{"card_target": ..., "key": <str>, "value": ...}`
 - `create_card` — `{"title": ..., "description": ..., "ops": [...], "destination": ...}`
 - `register_hook` — `{"event": <GameEvent>, "scope": "center"|"player", "code": <sandbox code>}`
