@@ -3,12 +3,15 @@
     "board": {
       "cardsInCenter": ["Card1", "Card2"],  // Cards currently in play on the board
       "discardPile": ["Card3", "Card4"],  // Cards that have been played and are no longer in the game
-      "deck": ["Card5", "Card6"]  // Cards that are yet to be drawn
+      "deck": ["Card5", "Card6"],  // Cards that are yet to be drawn
+      "exiledPile": ["Card11"]  // Cards permanently removed from the game (e.g. scry/mill); public like discardPile, but nothing returns them to play in normal play
     },
     "rules": {
       "draw": 1,  // Number of cards a player must draw at the start of their turn
       "play": 1,  // Number of cards a player can play during their turn
       "cannotPlay": { "draw": 1 },  // If a player cannot play, they must draw 1 card
+      "handLimit": null,  // Maximum hand size; an over-limit active player discards down to it at end of turn (null = no limit)
+      "turnTimer": null,  // Seconds the active player has before the room ends their turn for them; pauses during interactions (null = no time limit)
       "endCondition": { "type": "deckEmpty" },  // The game ends when the deck is empty
       "winCondition": { "type": "maxPoints" }  // The player with the most points wins
     },
@@ -17,15 +20,24 @@
       "Player1": {
         "points": 2,  // Current points of Player1
         "cardsInHand": ["Card7", "Card8"],  // Cards currently in Player1's hand
-        "conditions": null  // Any special conditions affecting Player1
+        "conditions": null,  // Any special conditions affecting Player1
+        "eliminated": false,  // Knocked out of the game (eliminate_player op / last_standing win condition); takes no more turns, cannot win
+        "handPublic": false,  // Hand played face-up; visible to every viewer including spectators
+        "handRevealedTo": [],  // Player ids this hand has been persistently revealed to (reveal_hand op)
+        "conditionTtls": {}  // Remaining turns (ticked at this player's turn start) before a keyed condition in `conditions` expires
       },
       "Player2": {
         "points": 5,
         "cardsInHand": ["Card9", "Card10"],
-        "conditions": { "skipNextTurn": 1 } 
+        "conditions": { "skipNextTurn": 1 },
+        "eliminated": false,  // Knocked out of the game (eliminate_player op / last_standing win condition); takes no more turns, cannot win
+        "handPublic": false,  // Hand played face-up; visible to every viewer including spectators
+        "handRevealedTo": [],  // Player ids this hand has been persistently revealed to (reveal_hand op)
+        "conditionTtls": {}  // Remaining turns (ticked at this player's turn start) before a keyed condition in `conditions` expires
       }
     },
     "spectators": ["Person1", "Person2"],  // People watching the game but not participating
+    "ruleBindings": [{ "sourceCardId": "Card9", "path": "draw", "previousValue": 1 }],  // set_rule writes attributed to a source card; destroying the card reverts its most recent binding for that path
     "historyEvents": [ // Public mechanics only; never drawn-card ids or private responses
       {
         "sequence": 1,
@@ -42,6 +54,14 @@
         "targetPlayerIds": ["Player1"],
         "cardId": "Card7",
         "source": "resolved"
+      },
+      {
+        "sequence": 3,
+        "kind": "dice_roll",
+        "actorId": "Player1",
+        "targetPlayerIds": ["Player1"],
+        "source": "turn",
+        "data": { "sides": 6, "values": [4], "total": 4 }  // Kind-specific structured detail (privacy-safe); most kinds omit it
       }
     ],
     "log": [ // Human-readable presentation history; game logic never parses this

@@ -21,6 +21,15 @@ The generic interaction protocol (`docs/dynamic-card-resolution.md`,
 - **Confirm/decline prompts** — `confirm` steps.
 - **Reaction windows** — counterspell-type interrupts when another player
   plays a card (`ReactionWindow`, trigger `on_reaction`).
+- **Dice / coin-flip RNG widget** — `roll_die` rolls server-side with the
+  injected rng and can feed `add_points`/`subtract_points`/`draw_cards`/`none`
+  outcomes; the roll also pushes a `dice_roll` WS message the frontend plays
+  as a brief tumble-and-settle overlay (`DiceRollOverlay`) before landing on
+  the recorded `dice_roll` history event.
+- **Per-player modifier badges** — `Player.condition_ttls` plus a badge row
+  per avatar (`game-table.tsx`) render each condition, with friendly labels
+  and a "N turns left"/"last turn" suffix when it carries a TTL, directly on
+  the player — no more honor-system tracking.
 
 ## Still missing
 
@@ -36,10 +45,6 @@ The generic interaction protocol (`docs/dynamic-card-resolution.md`,
 - **Camera / photo proof** — remote games lose all `in_person` cards (152 of
   698). A capture-and-share step (photo or short clip riding the same
   out-of-band path as card art) would let many physical dares work over video.
-- **Dice / coin-flip RNG widget** — many cards want visible randomness
-  ("flip a coin: heads +500, tails -500"). Sandbox code is deliberately
-  deterministic (no random access), so chance needs a server-rolled, animated
-  RNG interaction step whose result lands in `ctx["interactions"]`.
 - **Chat / say-it-out-loud surfacing** — "tell the player to your right your
   views on X": a prompt overlay directed at a specific player (`player:<id>`
   audience exists; a display-only "do this now" toast variant does not — the
@@ -52,10 +57,6 @@ The generic interaction protocol (`docs/dynamic-card-resolution.md`,
   still react" indicator (server knows `eligible_ids`; deliberately not
   broadcast today for hand privacy — could show counts instead of names),
   and blanks playable as reactions (author-on-react).
-- **Per-player modifier badges** — `placement: "player"` cards render in the
-  in-play strip, but conditions written by `set_condition` (poisoned, cursed,
-  untargetable) have no visual; a badge row on the player avatar would make
-  "the player is poisoned"-type modifiers legible.
 - **Spectator participation votes** — spectators can watch but not act;
   audience-vote cards ("the table decides who wore it better") could
   optionally include them as tie-breakers.

@@ -78,7 +78,7 @@ top-level `config` / `logging_config` modules. Run the backend with
 | **`models`** | Pure data models, no game logic. `GameState`/`Player`/`WinCondition`; the runtime `ResolutionPlan`/step and `Op` discriminated unions + `EffectProgram` + `Target`/`CardTarget` + `map_authoring_target`; card authoring models; the client/server WebSocket envelopes. | `game_state.py`, `effects.py`, `card.py`, `cards.py`, `ws_messages.py` |
 | **`engine`** | The game "physics": pure reducers over `GameState`, the turn loop, scoring/win-condition, card compilation, the event bus + persistent hooks, and the untrusted-snippet execution sandbox. Never calls the LLM. | `facade.py` (`GameEngine`), `reducers.py` (`apply_op`), `apply.py` (`apply_effect`), `compile.py` (`compile_card`), `loop.py` (`advance_turn`, `draw_step`), `scoring.py`, `events.py`, `hooks.py`, `epilogue.py` (`tally_votes`), `sandbox/` |
 | **`agent`** | Card interpretation: a legacy single tool-calling agent and a three-stage LangGraph pipeline (intent → planner → coder) behind `Settings.interpret_pipeline_enabled`, plus the persona/stage prompts, the result contract, the LLM factory, the RAG pipeline, and the bound toolbox. Reaches down into `engine`/`models` but never up into `board`. | `runtime.py` (`run_agent` dispatcher, `build_agent`), `pipeline.py` (`run_pipeline`, `build_interpret_graph`), `stage_runner.py` (`run_stage`), `stage_prompts.py`, `contract.py` (`InterpretResult`, `CardIntent`, `MechanicsPlan`), `persona.py`, `llm.py` (`get_chat_model`), `rag/`, `tools/` |
-| **`board`** | The server surface: FastAPI app factory + REST routes, the WebSocket endpoint, and the room state machine (turn enforcement, deck building, epilogue voting, connection registry). The only layer that orchestrates engine + agent together. | `app.py` (`create_app`), `ws.py` (`ws_handler`), `rooms/` (`room.py`, `manager.py`, `connections.py`, `deck.py`, `epilogue.py`, `store.py`) |
+| **`board`** | The server surface: FastAPI app factory + REST routes, the WebSocket endpoint, and the room state machine (turn enforcement, deck building, epilogue voting, connection registry). The only layer that orchestrates engine + agent together. | `app.py` (`create_app`), `ws.py` (`ws_handler`), `rooms/` (`room.py`, `manager.py`, `connections.py`, `deck.py`, `epilogue.py`, `redaction.py`, `store.py`) |
 | **`evals`** | Offline evaluation of the interpretation pipeline: the production-faithful benchmark runner (per-run config, `enabled_tools` filtering, cost/latency instrumentation, persisted runs), an LLM-as-judge, scorers, and the legacy standalone harness. Not part of the serving path. | `runner.py`, `judge.py`, `scorers.py`, `harness.py`, `eval_core.py`, `store.py`, `analysis.py`, `viz.py`, `conclusions.py` |
 
 ---
@@ -209,6 +209,18 @@ On (re)connect the server immediately replays a full `state` snapshot, so a
 refresh restores the whole game (including `state.log`, which is why every
 effect line is persisted there and not only broadcast live).
 
+Snapshots are **redacted per viewer** before they leave the server
+(`board.rooms.redaction.redact_snapshot`): opponents' hand contents and —
+outside the setup phase, where the deck is the shared authoring pool — the
+deck's contents/order are stripped server-side, never merely hidden
+client-side. The exceptions are a hand played face-up (`reveal_hand` with
+`to: "all"`, `persistent: true` → `hand_public`) or a hand persistently
+revealed to that specific viewer (`hand_revealed_to`); a one-shot
+`reveal_hand` (`persistent: false`) instead pushes the hand's contents to the
+resolved audience once (`hand_revealed` message) without changing state. Every
+snapshot still carries `hand_count`/`deck_count` so the UI can render
+face-down piles and hand sizes.
+
 Snapshots expose the active data-driven game rather than a fixed board model:
 `turn_order`, `rules`, player `conditions`, card `attributes`, and registered
 hook metadata. The frontend mirrors the engine's active seat from `players[turn_index]` and
@@ -227,7 +239,7 @@ turn order. Spectators are rejected from all game-mutating message types.
 
 `ResolutionPlan` can interleave `ops`, `snippet`, and `interaction` steps.
 Interaction descriptors are versioned, bounded data for `choice`, `number`,
-`text`, `card_pick`, `confirm`, or normalized vector `drawing` input, addressed
+`text`, `card_pick`, `confirm`, `card_order`, or normalized vector `drawing` input, addressed
 to `active`, `all`, `all_others`, or `player:<id>`. The legacy
 `prompt_choice` target flow remains readable and operational.
 
@@ -362,15 +374,24 @@ A card resolves as a `ResolutionPlan`: an ordered sequence of `OpsStep` and
 list of `Op`s from the
 discriminated union in `models/effects.py` (`add_points`, `subtract_points`,
 `set_points`, `steal_points`, `skip_turn`, `extra_turn`, `reverse_order`,
-`scramble_order`, `change_draw_count`, `draw_cards`, `destroy_card`, `transfer_card`,
-`set_win_condition`, `set_rule`, `custom_note`, `end_game`). Each op addresses players via a `Target`
+`scramble_order`, `change_draw_count`, `draw_cards`, `roll_die`, `discard_random`,
+`destroy_card`, `transfer_card`, `move_cards`, `shuffle_deck`, `reveal_hand`,
+`eliminate_player`, `set_win_condition`, `set_rule`, `set_condition`,
+`set_card_attribute`, `create_card`, `register_hook`, `unregister_hook`,
+`custom_note`, `counter_play`, `end_game` — `models/effects.py` is the
+authoritative complete union). Each op addresses players via a `Target`
 (`self`, `left_neighbor`, `all_others`, `chooser`, `player_with_most_points`, …)
 and, for card manipulation, a `CardTarget` (`this`, `chosen_card`,
-`all_in_play`, `all_in_hand`).
+`all_in_play`, `all_in_hand`, `all_in_center`).
 
 Game rules are **data** (`GameState.rules`, per `docs/state-example.jsonc`):
 draw/play counts, the end condition (`deck_empty`/`empty_hand`/`points_reached`/`now`),
-the win condition, and an open `extra` bag for card-invented rules. `set_rule`
+the win condition, and an open `extra` bag for card-invented rules. Two further
+rule fields are enforced by the Room rather than a reducer: `hand_limit` caps
+hand size (an over-limit active player discards down to it at end of turn) and
+`turn_timer` runs a pausable per-turn clock — paused while the room is
+suspended on brewing, a reaction window, or an interaction barrier — that ends
+the turn for the active player if they don't act in time. `set_rule`
 writes any of these paths; `change_draw_count`/`set_win_condition` are
 specialized writers into the same structure; `end_game` sets
 `end_condition={type: "now"}`. The Room evaluates `evaluate_end_condition` /
@@ -420,6 +441,16 @@ a **new** `GameState`, never mutating the input:
   `draw`, `resolve_card`, `check_end_game`, `determine_winner`,
   `update_history`). Every method delegates to the underlying pure function and
   reimplements no logic; `resolve_card` is deterministic-only by design.
+
+Two lifecycle mechanics ride these reducers. `set_condition` accepts a
+`duration_turns` TTL (stored in `Player.condition_ttls`); `engine.loop`'s
+`tick_condition_ttls` ticks it down at the owning player's turn start and
+removes the condition at zero, so temporary statuses (poisoned, cursed, …)
+expire on their own. And `destroy_card` releases the destroyed card's own
+registrations: any persistent hooks it registered are unregistered, and any
+`set_rule` writes it made are reverted via its `RuleBinding` stack
+(`GameState.rule_bindings`) — the rule path falls back to the pre-write value,
+or to the next binding down if a later card already re-wrote the same path.
 
 ### Structured mechanics history
 
