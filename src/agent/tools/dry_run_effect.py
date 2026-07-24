@@ -15,6 +15,7 @@ from engine.sandbox.runner import execute_snippet
 from models.effects import EffectProgram, InteractionStep, OpsStep, ResolutionPlan, SnippetStep
 from models.game_state import GameState
 from models.interactions import (
+    CardOrderInteraction,
     CardPickInteraction,
     ChoiceInteraction,
     ConfirmInteraction,
@@ -141,7 +142,14 @@ def dry_run_resolution_plan(
                     options = request.options
                     value = [option.id for option in options[: request.min_selections]]
                 elif isinstance(request, CardPickInteraction):
-                    value = request.card_ids[0] if request.card_ids else None
+                    # Deck-top options are materialized by the room at send time;
+                    # the preview mirrors that from the cloned state's deck.
+                    if request.from_deck_top is not None:
+                        value = working.deck[0] if working.deck else None
+                    else:
+                        value = request.card_ids[0] if request.card_ids else None
+                elif isinstance(request, CardOrderInteraction):
+                    value = {"order": list(working.deck[: request.count]), "to_bottom": []}
                 elif isinstance(request, ConfirmInteraction):
                     value = False
                 elif isinstance(request, DrawingInteraction):
