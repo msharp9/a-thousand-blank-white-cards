@@ -129,9 +129,12 @@ def test_roll_die_full_args() -> None:
     assert prog.requires_choice is True
 
 
-def test_roll_die_pre_resolved_result() -> None:
+def test_roll_die_result_stripped() -> None:
+    # A `result` smuggled into persisted authoring ops (e.g. via create_card's
+    # raw op dicts) must not freeze the die — pre-resolved rolls are only for
+    # the transient sandbox-diff replay path, which bypasses _compile_op.
     prog = compile_card(_card([{"op": "roll_die", "args": {"count": 2, "result": [3, 5]}}]))
-    assert prog.ops[0].result == [3, 5]
+    assert prog.ops[0].result is None
 
 
 def test_roll_die_malformed_args_skipped() -> None:
