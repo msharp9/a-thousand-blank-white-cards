@@ -11,6 +11,7 @@ from models.effects import (
     ChangeDrawCountOp,
     CustomNoteOp,
     DestroyCardOp,
+    DiscardRandomOp,
     DrawCardsOp,
     EndGameOp,
     ExtraTurnOp,
@@ -316,6 +317,60 @@ class TestRollDie:
         score_event = next(e for e in new.history_events if e.kind == "score_change")
         assert score_event.amount == 5
         assert score_event.target_player_ids == ["p1"]
+
+
+class TestDiscardRandom:
+    def _discard_events(self, state):
+        return [e for e in state.history_events if e.kind == "discard"]
+
+    def test_picks_from_target_hand_only(self):
+        import random
+
+        base = make_state()
+        new = apply_op(base, DiscardRandomOp(target="id:p1", count=1), make_ctx("p1"), rng=random.Random(7))
+        (gone,) = [c for c in base.get_player("p1").hand if c not in new.get_player("p1").hand]
+        assert gone in {"c1", "c2"}
+        assert new.discard == [gone]
+        assert new.get_player("p2").hand == ["c3"]
+        assert base.get_player("p1").hand == ["c1", "c2"]  # original untouched
+
+    def test_injected_rng_is_deterministic(self):
+        import random
+
+        op = DiscardRandomOp(target="self", count=1)
+        first = apply_op(make_state(), op, make_ctx("p1"), rng=random.Random(42))
+        second = apply_op(make_state(), op, make_ctx("p1"), rng=random.Random(42))
+        assert first.discard == second.discard
+
+    def test_count_exceeding_hand_discards_whole_hand(self):
+        new = apply_op(make_state(), DiscardRandomOp(target="self", count=10), make_ctx("p1"))
+        assert new.get_player("p1").hand == []
+        assert set(new.discard) == {"c1", "c2"}
+        assert self._discard_events(new)[0].amount == 2
+
+    def test_multiple_targets_each_discard_from_own_hand(self):
+        new = apply_op(make_state(), DiscardRandomOp(target="all_others", count=1), make_ctx("p1"))
+        assert new.get_player("p1").hand == ["c1", "c2"]
+        assert new.get_player("p2").hand == []
+        assert new.discard == ["c3"]  # p3's hand was already empty
+        assert "[discard_random no-op] Carol has no cards to discard" in new.log
+
+    def test_history_entries_per_target(self):
+        new = apply_op(make_state(), DiscardRandomOp(target="id:p2", count=1), make_card_ctx("p1", card_id="src"))
+        (event,) = self._discard_events(new)
+        assert event.actor_id == "p1"
+        assert event.target_player_ids == ["p2"]
+        assert event.card_id == "src"
+        assert event.amount == 1
+        assert event.source == "discard_random"
+        assert event.data == {"card_ids": ["c3"]}
+        assert "Bob discards 1 random card" in new.log
+
+    def test_count_bounds(self):
+        with pytest.raises(ValueError):
+            DiscardRandomOp(count=0)
+        with pytest.raises(ValueError):
+            DiscardRandomOp(count=11)
 
 
 def make_card_ctx(actor_id="p1", card_id=None, chosen_card_id=None) -> HookContext:

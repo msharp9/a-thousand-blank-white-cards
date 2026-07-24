@@ -260,6 +260,18 @@ class SandboxGame:
         )
         return sum(values)
 
+    def discard_random(self, target: str = "self", count: int = 1) -> None:
+        """Discard `count` (1-10) random cards from each `target` player's hand.
+
+        Unlike roll_die, the picks are NOT resolved here: snippets cannot read
+        other players' hands, so the engine draws the cards at apply time (a
+        player holding fewer than `count` discards their whole hand). There is
+        no return value to branch on.
+        """
+        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 10:
+            raise ValueError(f"count must be an int in 1..10, got {count!r}")
+        self._ops.append({"op": "discard_random", "target": target, "count": count})
+
     def destroy_card(self, card_id: str | None = None, card_target: str | None = None) -> None:
         """Destroy cards by CardTarget address ('this', 'all_in_play', 'id:…', 'attr:k=v')."""
         legacy_targets = {"all_in_hand", "all_in_play", "chosen_card", "this"}

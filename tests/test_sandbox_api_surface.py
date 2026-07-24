@@ -346,3 +346,23 @@ class TestRollDie:
         with pytest.raises(ValueError):
             g.roll_die(sides=6, count=2, result=[3])
         assert g.ops() == []
+
+
+class TestDiscardRandom:
+    def test_records_unresolved_op(self):
+        g = make_game()
+        assert g.discard_random("all_others", 2) is None
+        assert g.ops() == [{"op": "discard_random", "target": "all_others", "count": 2}]
+
+    def test_defaults(self):
+        g = make_game()
+        g.discard_random()
+        assert g.ops() == [{"op": "discard_random", "target": "self", "count": 1}]
+
+    def test_rejects_bad_count(self):
+        g = make_game()
+        with pytest.raises(ValueError):
+            g.discard_random(count=0)
+        with pytest.raises(ValueError):
+            g.discard_random(count=11)
+        assert g.ops() == []

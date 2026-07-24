@@ -10,6 +10,7 @@ from models.effects import (
     ChangeDrawCountOp,
     CustomNoteOp,
     DestroyCardOp,
+    DiscardRandomOp,
     DrawCardsOp,
     EffectProgram,
     EndGameOp,
@@ -140,6 +141,27 @@ def test_roll_die_result_stripped() -> None:
 def test_roll_die_malformed_args_skipped() -> None:
     prog = compile_card(_card([{"op": "roll_die", "args": {"sides": 1}}]))
     assert prog is None  # invalid sides -> op skipped -> empty program
+
+
+def test_discard_random_defaults() -> None:
+    prog = compile_card(_card([{"op": "discard_random", "args": {}}]))
+    op = prog.ops[0]
+    assert isinstance(op, DiscardRandomOp)
+    assert (op.target, op.count) == ("self", 1)
+
+
+def test_discard_random_full_args() -> None:
+    prog = compile_card(_card([{"op": "discard_random", "args": {"target": "opponent", "count": 2}}]))
+    op = prog.ops[0]
+    assert isinstance(op, DiscardRandomOp)
+    assert op.count == 2
+    assert op.target == "chooser"  # authoring alias mapped
+    assert prog.requires_choice is True
+
+
+def test_discard_random_malformed_count_skipped() -> None:
+    prog = compile_card(_card([{"op": "discard_random", "args": {"count": 0}}]))
+    assert prog is None
 
 
 def test_set_win_condition() -> None:

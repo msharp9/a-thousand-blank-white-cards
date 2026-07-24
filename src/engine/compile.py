@@ -34,6 +34,7 @@ from models.effects import (
     CreateCardOp,
     CustomNoteOp,
     DestroyCardOp,
+    DiscardRandomOp,
     DrawCardsOp,
     EffectProgram,
     EndGameOp,
@@ -174,6 +175,11 @@ def _compile_op(name: str, args: dict) -> Op | None:
             count=int(args.get("count", 1)),
             target=_map_target(args.get("target", "self"), default="self", op_name=name),
             outcome=args.get("outcome", "none"),
+        )
+    if name == "discard_random":
+        return DiscardRandomOp(
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
+            count=int(args.get("count", 1)),
         )
     if name == "set_win_condition":
         if "kind" not in args or args["kind"] is None:

@@ -18,6 +18,7 @@ from models.effects import (
     ChangeDrawCountOp,
     CustomNoteOp,
     DestroyCardOp,
+    DiscardRandomOp,
     DrawCardsOp,
     EndGameOp,
     ExtraTurnOp,
@@ -271,6 +272,46 @@ def _reduce_roll_die(
         state = apply_op(state, SubtractPointsOp(target=op.target, amount=total), ctx)
     elif op.outcome == "draw_cards":
         state = apply_op(state, DrawCardsOp(target=op.target, amount=total), ctx)
+    return state
+
+
+def _reduce_discard_random(
+    state: GameState, op: DiscardRandomOp, ctx: HookContext, *, rng: random.Random | None = None
+) -> GameState:
+    """Discard ``op.count`` random cards from each resolved target's hand.
+
+    The picks happen HERE with the injected rng — never pre-resolved in the
+    sandbox, because snippets cannot read other players' hands or observe the
+    picks, so reduce-time resolution cannot desync a snippet branch. A player
+    holding fewer than ``op.count`` cards discards their whole hand. Each
+    target's discard is recorded as a "discard" history event (the discard
+    pile is public, so the picked card ids ride along in ``data``).
+    """
+    rng = rng or random.Random()
+    for pid in _resolve_targets(op.target, ctx, state):
+        player = state.get_player(pid)
+        if not player.hand:
+            state = state.with_log(f"[discard_random no-op] {player.name} has no cards to discard")
+            continue
+        picked = rng.sample(list(player.hand), min(op.count, len(player.hand)))
+        removed = set(picked)
+        new_players = [
+            p.model_copy(update={"hand": [c for c in p.hand if c not in removed]}) if p.id == pid else p
+            for p in state.players
+        ]
+        discard = list(state.discard)
+        discard.extend(cid for cid in picked if cid not in discard)
+        state = state.model_copy(update={"players": new_players, "discard": discard})
+        state = append_history_event(
+            state,
+            "discard",
+            actor_id=ctx.actor_id,
+            target_player_ids=[pid],
+            card_id=ctx.card_id,
+            amount=len(picked),
+            source="discard_random",
+            data={"card_ids": list(picked)},
+        ).with_log(f"{player.name} discards {len(picked)} random card{'s' if len(picked) != 1 else ''}")
     return state
 
 
@@ -555,9 +596,9 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
 def apply_op(state: GameState, op: Op, ctx: HookContext, *, rng: random.Random | None = None) -> GameState:
     """Dispatch a single op to its reducer, returning a new GameState.
 
-    ``rng`` is only consumed by ``scramble_order``, ``create_card`` and
-    ``roll_die`` (dependency-injectable for deterministic tests); every other
-    op ignores it.
+    ``rng`` is only consumed by ``scramble_order``, ``create_card``,
+    ``roll_die`` and ``discard_random`` (dependency-injectable for
+    deterministic tests); every other op ignores it.
     """
     before = state
     if op.op == "scramble_order":
@@ -566,6 +607,8 @@ def apply_op(state: GameState, op: Op, ctx: HookContext, *, rng: random.Random |
         state = _reduce_create_card(state, op, ctx, rng=rng)
     elif op.op == "roll_die":
         state = _reduce_roll_die(state, op, ctx, rng=rng)
+    elif op.op == "discard_random":
+        state = _reduce_discard_random(state, op, ctx, rng=rng)
     else:
         state = _REDUCERS[op.op](state, op, ctx)
 

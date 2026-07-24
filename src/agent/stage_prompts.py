@@ -101,8 +101,8 @@ intent: do not balance, nerf, buff, or censor it.
 """
 
 CREATIVITY_MANDATE = """\
-BE CREATIVE. When no single op expresses the mechanic ("target player discards a
-random card", "target player draws a card from the discard pile"), plan direct state
+BE CREATIVE. When no single op expresses the mechanic ("target player draws a
+card from the discard pile"), plan direct state
 manipulation through SandboxGame — zone moves are just pop-from-one-list/push-to-another
 via the move_card-backed reducers. Call read_engine_methods to see the exact API and
 targets before declaring anything infeasible. Only set feasible=false when the effect

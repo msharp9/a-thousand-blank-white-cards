@@ -62,7 +62,7 @@ OP_CATALOG_GUIDE = """\
   If it says "gain 100 points", it means 100 points.
 - Prefer composing the existing engine ops (add_points, subtract_points, set_points,
   skip_turn, extra_turn, reverse_order, scramble_order, change_draw_count, steal_points,
-  draw_cards, roll_die, destroy_card, transfer_card, set_win_condition, set_rule,
+  draw_cards, roll_die, discard_random, destroy_card, transfer_card, set_win_condition, set_rule,
   set_condition, set_card_attribute, create_card, custom_note, end_game) into an
   EffectProgram.
   * set_rule writes game rules as data (paths: draw, play, end_condition.type,
@@ -81,6 +81,11 @@ OP_CATALOG_GUIDE = """\
     simultaneously — followed by a snippet that destroys each picked card. To discard
     MORE than one per player ("everyone discards 2 cards") set the card_pick's
     max_picks=N: each player's collected value is then a LIST of card ids to iterate.
+  * discard_random discards AT RANDOM: "discard a random card" / "each opponent
+    discards 2 cards at random" = discard_random with target and count (1-10). The
+    ENGINE picks the cards at apply time — never pick them yourself, and never
+    build a pick prompt for a discard the card says is random. A player holding
+    fewer than count cards simply discards their whole hand.
   * roll_die rolls REAL dice in the engine: count dice (1-10) of sides sides (2-1000,
     default 1d6); the roll TOTAL feeds outcome "add_points" / "subtract_points" /
     "draw_cards" applied to target. "Roll a d6 and gain that many points" =

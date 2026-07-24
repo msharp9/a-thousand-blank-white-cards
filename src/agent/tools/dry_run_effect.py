@@ -27,7 +27,7 @@ from models.interactions import (
 
 # Ops whose outcome consumes rng. Previews run with a fixed seed, so their
 # results are illustrative only — the live play draws its own randomness.
-_RANDOM_OPS = frozenset({"roll_die", "scramble_order", "create_card"})
+_RANDOM_OPS = frozenset({"roll_die", "scramble_order", "create_card", "discard_random"})
 
 _RANDOM_NOTE = (
     "random results in this preview (dice rolls, shuffles, random picks) are "

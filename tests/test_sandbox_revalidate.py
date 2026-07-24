@@ -161,6 +161,20 @@ def test_sandbox_roll_die_return_value_matches_replayed_total() -> None:
     assert new.get_player("p1").score == total
 
 
+def test_discard_random_diff_resolves_at_reduce_time() -> None:
+    state = GameState(
+        room_code="AAAA",
+        players=[Player(id="p1", name="A", hand=["c1", "c2", "c3"])],
+    )
+    ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1")
+
+    new = apply_snippet_diff(state, [{"op": "discard_random", "target": "self", "count": 2}], ctx, rng=random.Random(5))
+
+    assert len(new.get_player("p1").hand) == 1
+    assert len(new.discard) == 2
+    assert state.get_player("p1").hand == ["c1", "c2", "c3"]
+
+
 def test_roll_die_diff_rejects_forged_result() -> None:
     with pytest.raises(DiffValidationError, match="outside 1..6"):
         parse_diff([{"op": "roll_die", "sides": 6, "count": 1, "result": [7]}])

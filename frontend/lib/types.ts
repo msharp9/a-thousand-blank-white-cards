@@ -212,7 +212,8 @@ export type HistoryEventKind =
   | "interaction"
   | "game_end"
   | "card_fallback"
-  | "dice_roll";
+  | "dice_roll"
+  | "discard";
 
 // One privacy-safe, append-only fact about completed game mechanics. Mirrors
 // models.game_state.HistoryEvent. The "Everything Played" history modal reads

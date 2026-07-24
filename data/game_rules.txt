@@ -21,7 +21,7 @@ NOT YET SUPPORTED: a mid-game deck shuffle, a shuffle of the discard pile back i
 == Discarding ==
 "Discard a card" of the player's choosing = destroy the chosen card (a pick prompt); "discard your hand" destroys every card in that hand.
 Discarding N cards uses a card-pick interaction with N picks; if a player must discard more cards than they hold, they simply discard their whole hand — no error, no refusal.
-NOT YET SUPPORTED: discarding a card at random in a single op (the roll_die primitive rolls numbers, not card picks). Fallback: let the target player choose which card to discard — or roll a bare die (roll_die outcome none) and discard the card at that position in a later snippet step — and note the substitution in your comment.
+Discarding at random IS supported in a single op: discard_random discards count (1-10) random cards from each target player's hand — the engine picks the cards, so never pick them yourself and never add a choose prompt for a discard the card says is random. A player holding fewer than count cards discards their whole hand.
 
 == Discard pile ==
 The discard pile is public; a specific named card can be moved from the discard pile into a player's hand.
@@ -29,7 +29,7 @@ NOT YET SUPPORTED: drawing blindly from the top of the discard pile, or moving a
 
 == Randomness and dice ==
 Dice rolls ARE supported: the roll_die op rolls 1-10 dice of any size from 2 to 1000 sides inside the engine, and its total can add points, subtract points, or draw that many cards for a target ("roll a d6, gain that many points" = roll_die with outcome add_points). A coin flip is a 2-sided die (say which side means what in your comment). A bare roll (outcome none) is also valid — the roll is shown to everyone and recorded in history.
-Feeding a roll into any OTHER effect IS supported through sandbox code: state.roll_die(...) rolls immediately and RETURNS the roll total, so a snippet can branch on it ("roll a die, skip that many turns" = roll, then apply that many skips). Hooks can roll too, so persistent random effects (a hook that rolls every turn) work. A random choice among players is a bare roll indexed into state.turn_order in a snippet.
+Feeding a roll into any OTHER effect IS supported through sandbox code: state.roll_die(...) rolls immediately and RETURNS the roll total, so a snippet can branch on it ("roll a die, skip that many turns" = roll, then apply that many skips). Hooks can roll too, so persistent random effects (a hook that rolls every turn) work. A random choice among players is a bare roll indexed into state.turn_order in a snippet; a random card discard is the discard_random op (see Discarding).
 Dry-run previews of random effects are illustrative only: the preview rolls placeholder dice; the live play rolls its own.
 
 == Conditions and statuses ==
