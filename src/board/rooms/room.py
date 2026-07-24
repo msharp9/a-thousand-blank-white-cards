@@ -51,6 +51,7 @@ from engine.events import EventBus, GameEvent, HookContext
 from engine.hooks import build_registry, collect_hook_errors
 from engine.history import append_history_event, fallback_counts, record_draw, record_game_end
 from engine.loop import advance_turn
+from engine.reducers import collect_hand_reveals
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.card import MAX_ROOM_ART_BYTES
 from models.effects import (
@@ -757,8 +758,9 @@ class Room:
         if not self._hook_registry.hooks_for_event(str(event)):
             return
         ctx = HookContext(event=event, actor_id=actor_id, card_id=card_id)
-        with collect_hook_errors() as errors:
+        with collect_hook_errors() as errors, collect_hand_reveals() as reveals:
             self.state = await asyncio.to_thread(bus.emit, event, self.state, ctx)
+        await self._push_hand_reveals(reveals)
         for err in errors:
             card = self.state.cards.get(err["card_id"]) or {"id": err["card_id"], "title": err["card_id"]}
             self._report_failure_for_triage(
@@ -1402,19 +1404,46 @@ class Room:
             "interactions": ctx.interactions,
             "interaction_refs": ctx.interaction_refs,
         }
-        for cursor, step in enumerate(plan.steps[start_cursor:], start=start_cursor):
-            if isinstance(step, InteractionStep):
-                raise PlanPaused(working, cursor, step)
-            bus = EventBus(build_registry(working), max_hooks=MAX_HOOKS_PER_EVENT)
-            if isinstance(step, OpsStep):
-                working = apply_effect(working, EffectProgram(ops=step.ops), ctx, bus=bus, rng=rng)
-                continue
-            if not get_settings().snippet_execution_enabled:
-                raise PlanExecutionError("snippet execution is disabled")
-            state_dict = json.loads(working.model_dump_json())
-            raw_ops = await asyncio.to_thread(execute_snippet, step.code, state_dict, ctx_dict)
-            working = apply_snippet_diff(working, raw_ops, ctx, origin="play", bus=bus, rng=rng)
+        # Reveals are pushed in the finally so a plan that pauses on an
+        # interaction barrier (or fails a later step) still delivers the
+        # one-shot reveals its earlier steps produced.
+        with collect_hand_reveals() as reveals:
+            try:
+                for cursor, step in enumerate(plan.steps[start_cursor:], start=start_cursor):
+                    if isinstance(step, InteractionStep):
+                        raise PlanPaused(working, cursor, step)
+                    bus = EventBus(build_registry(working), max_hooks=MAX_HOOKS_PER_EVENT)
+                    if isinstance(step, OpsStep):
+                        working = apply_effect(working, EffectProgram(ops=step.ops), ctx, bus=bus, rng=rng)
+                        continue
+                    if not get_settings().snippet_execution_enabled:
+                        raise PlanExecutionError("snippet execution is disabled")
+                    state_dict = json.loads(working.model_dump_json())
+                    raw_ops = await asyncio.to_thread(execute_snippet, step.code, state_dict, ctx_dict)
+                    working = apply_snippet_diff(working, raw_ops, ctx, origin="play", bus=bus, rng=rng)
+            finally:
+                await self._push_hand_reveals(reveals)
         return working
+
+    async def _push_hand_reveals(self, reveals: list[dict]) -> None:
+        """Deliver one-shot hand reveals to exactly their resolved audience.
+
+        Each entry (collected by ``engine.reducers.collect_hand_reveals``) is a
+        targeted ``hand_revealed`` push — modal, like the reaction window: not
+        state, so it is lost on reconnect (acceptable by design). The card
+        bodies ride the message because the audience's redacted snapshots never
+        carry hidden hand content.
+        """
+        for entry in reveals:
+            message = {
+                "type": "hand_revealed",
+                "player_id": entry["player_id"],
+                "player_name": self._name(entry["player_id"]),
+                "card_ids": list(entry["card_ids"]),
+                "cards": dict(entry["cards"]),
+            }
+            for viewer_id in entry["viewer_ids"]:
+                await self.connections.send(viewer_id, message)
 
     async def _handle_play(self, player_id: str, msg) -> None:
         """Resolve the played card to an EffectProgram, apply it, advance turn.
@@ -1545,7 +1574,7 @@ class Room:
         needs_player_choice = any(
             getattr(op, field, None) in ("chooser", "target_player")
             for op in ops
-            for field in ("target", "from_target", "to_target")
+            for field in ("target", "from_target", "to_target", "to")
         )
         needs_card_choice = any(getattr(op, "card_target", None) == "chosen_card" for op in ops)
 
@@ -2443,7 +2472,7 @@ class Room:
         needs_player_choice = any(
             getattr(op, field_name, None) in ("chooser", "target_player")
             for op in ops
-            for field_name in ("target", "from_target", "to_target")
+            for field_name in ("target", "from_target", "to_target", "to")
         )
         if needs_player_choice and chosen_player_id is None:
             # Same suspend/resume as a normal play: the follow-up play message
@@ -2543,26 +2572,28 @@ class Room:
             **ctx.extra,
         }
         mode: str | None = None
-        for step in plan.steps:
-            bus = EventBus(build_registry(working), max_hooks=MAX_HOOKS_PER_EVENT)
-            if isinstance(step, OpsStep):
-                side_ops = []
-                for op in step.ops:
-                    if isinstance(op, CounterPlayOp):
-                        mode = mode or op.mode
-                    else:
-                        side_ops.append(op)
-                if side_ops:
-                    working = apply_effect(working, EffectProgram(ops=side_ops), ctx, bus=bus, rng=rng)
-                continue
-            if not get_settings().snippet_execution_enabled:
-                raise PlanExecutionError("snippet execution is disabled")
-            state_dict = json.loads(working.model_dump_json())
-            raw_ops = await asyncio.to_thread(execute_snippet, step.code, state_dict, ctx_dict)
-            step_mode, side_raw = extract_counter(raw_ops)
-            mode = mode or step_mode
-            working = apply_snippet_diff(working, side_raw, ctx, origin="reaction", bus=bus, rng=rng)
+        with collect_hand_reveals() as reveals:
+            for step in plan.steps:
+                bus = EventBus(build_registry(working), max_hooks=MAX_HOOKS_PER_EVENT)
+                if isinstance(step, OpsStep):
+                    side_ops = []
+                    for op in step.ops:
+                        if isinstance(op, CounterPlayOp):
+                            mode = mode or op.mode
+                        else:
+                            side_ops.append(op)
+                    if side_ops:
+                        working = apply_effect(working, EffectProgram(ops=side_ops), ctx, bus=bus, rng=rng)
+                    continue
+                if not get_settings().snippet_execution_enabled:
+                    raise PlanExecutionError("snippet execution is disabled")
+                state_dict = json.loads(working.model_dump_json())
+                raw_ops = await asyncio.to_thread(execute_snippet, step.code, state_dict, ctx_dict)
+                step_mode, side_raw = extract_counter(raw_ops)
+                mode = mode or step_mode
+                working = apply_snippet_diff(working, side_raw, ctx, origin="reaction", bus=bus, rng=rng)
         self.state = working
+        await self._push_hand_reveals(reveals)
         deltas = {p.id: p.score - before.get(p.id, p.score) for p in self.state.players}
         line = f"{self._name(reactor_id)} reacts with {self._card_title(card)}"
         formatted = self._format_score_deltas(deltas)

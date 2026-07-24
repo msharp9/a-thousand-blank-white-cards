@@ -10,7 +10,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field, model_validator
 
-HistoryKind = Literal["draw", "play", "score_change", "rule_change", "interaction", "game_end", "card_fallback"]
+HistoryKind = Literal[
+    "draw", "play", "score_change", "rule_change", "interaction", "reveal", "game_end", "card_fallback"
+]
 
 
 class WinCondition(BaseModel):
@@ -72,6 +74,13 @@ class Player(BaseModel):
     # engine.loop.advance_turn; any other key is free-form status with no
     # engine-side meaning yet, surfaced as-is to the UI/agent via model_dump().
     conditions: dict[str, Any] = Field(default_factory=dict)
+    # Hand visibility (reveal_hand op). STRUCTURAL fields, not conditions: the
+    # snapshot redactor must consult them reliably, and the conditions bag is
+    # free-form state any card can clobber. ``hand_public`` = the hand is
+    # played face-up (everyone, spectators included, sees its contents);
+    # ``hand_revealed_to`` = player ids allowed to see the hand's contents.
+    hand_public: bool = False
+    hand_revealed_to: list[str] = Field(default_factory=list)
 
 
 class EpilogueCardOutcome(BaseModel):

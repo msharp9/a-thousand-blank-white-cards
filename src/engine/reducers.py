@@ -8,10 +8,13 @@ never mutate the state passed in. ``apply_op`` dispatches on ``op.op`` via the
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any
 
 from engine.events import HookContext
-from engine.history import record_op_history
+from engine.history import append_history_event, record_op_history
 from models.effects import (
     AddPointsOp,
     CardTarget,
@@ -22,6 +25,7 @@ from models.effects import (
     EndGameOp,
     ExtraTurnOp,
     Op,
+    RevealHandOp,
     ReverseOrderOp,
     ScrambleOrderOp,
     CreateCardOp,
@@ -41,6 +45,27 @@ from models.effects import (
 from pydantic import ValidationError as PydanticValidationError
 
 from models.game_state import EndCondition, GameState, HookSpec, Rules, WinCondition
+
+_hand_reveal_drain: ContextVar[list[dict[str, Any]] | None] = ContextVar("hand_reveal_drain", default=None)
+
+
+@contextmanager
+def collect_hand_reveals() -> Iterator[list[dict[str, Any]]]:
+    """Collect one-shot hand reveals for the duration of the block.
+
+    A ``reveal_hand`` with ``persistent=False`` changes no state, so the
+    reducer records the reveal here — ``{"player_id", "viewer_ids",
+    "card_ids", "cards"}`` per revealed hand — for the board layer to push to
+    the resolved audience, without the engine importing board. ContextVar
+    propagation makes this visible across ``asyncio.to_thread``. Outside a
+    collecting block, one-shot reveals are silently dropped.
+    """
+    reveals: list[dict[str, Any]] = []
+    token = _hand_reveal_drain.set(reveals)
+    try:
+        yield reveals
+    finally:
+        _hand_reveal_drain.reset(token)
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +343,67 @@ def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext
     )
 
 
+def _update_player_visibility(state: GameState, player_id: str, update: dict[str, Any]) -> GameState:
+    players = [p.model_copy(update=update) if p.id == player_id else p for p in state.players]
+    return state.model_copy(update={"players": players})
+
+
+def _reduce_reveal_hand(state: GameState, op: RevealHandOp, ctx: HookContext) -> GameState:
+    """Reveal or conceal hands (see :class:`~models.effects.RevealHandOp`).
+
+    Records its own "reveal" history event here (not in record_op_history)
+    because the one-shot form changes no state to diff — and the event carries
+    PLAYER ids only, never card ids, preserving the history privacy invariant.
+    One-shot reveals are handed to the board via ``collect_hand_reveals``.
+    """
+    owners = _resolve_targets(op.target, ctx, state)
+    if not owners:
+        return state.with_log(f"[reveal_hand no-op] resolved no players for target {op.target!r}")
+
+    if op.mode == "conceal":
+        for pid in owners:
+            if op.to == "all":
+                state = _update_player_visibility(state, pid, {"hand_public": False, "hand_revealed_to": []})
+            else:
+                removed = set(_resolve_targets(op.to, ctx, state))
+                remaining = [v for v in state.get_player(pid).hand_revealed_to if v not in removed]
+                state = _update_player_visibility(state, pid, {"hand_revealed_to": remaining})
+    elif op.persistent:
+        viewers = _resolve_targets(op.to, ctx, state)
+        for pid in owners:
+            if op.to == "all":
+                state = _update_player_visibility(state, pid, {"hand_public": True})
+            else:
+                current = state.get_player(pid).hand_revealed_to
+                added = [v for v in viewers if v != pid and v not in current]
+                state = _update_player_visibility(state, pid, {"hand_revealed_to": [*current, *added]})
+    else:
+        viewers = _resolve_targets(op.to, ctx, state)
+        drain = _hand_reveal_drain.get()
+        if drain is not None:
+            for pid in owners:
+                hand = list(state.get_player(pid).hand)
+                drain.append(
+                    {
+                        "player_id": pid,
+                        "viewer_ids": [v for v in viewers if v != pid],
+                        "card_ids": hand,
+                        # Card bodies captured NOW, from the working state: the
+                        # audience's redacted snapshots never carry hidden hand
+                        # content, so the push must be self-contained.
+                        "cards": {cid: state.cards[cid] for cid in hand if cid in state.cards},
+                    }
+                )
+
+    return append_history_event(
+        state,
+        "reveal",
+        actor_id=ctx.actor_id,
+        target_player_ids=owners,
+        source=op.mode,
+    )
+
+
 def _reduce_set_win_condition(state: GameState, op: SetWinConditionOp, ctx: HookContext) -> GameState:
     wc = WinCondition(kind=op.kind, threshold=op.threshold)
     return state.model_copy(update={"rules": state.rules.model_copy(update={"win_condition": wc})})
@@ -497,6 +583,7 @@ _REDUCERS: dict[str, Callable[[GameState, Op, HookContext], GameState]] = {
     "draw_cards": _reduce_draw_cards,
     "destroy_card": _reduce_destroy_card,
     "transfer_card": _reduce_transfer_card,
+    "reveal_hand": _reduce_reveal_hand,
     "set_win_condition": _reduce_set_win_condition,
     "custom_note": _reduce_custom_note,
     "counter_play": _reduce_counter_play,
@@ -527,4 +614,4 @@ def apply_op(state: GameState, op: Op, ctx: HookContext, *, rng: random.Random |
     return record_op_history(before, state, op, ctx)
 
 
-__all__ = ["apply_op"]
+__all__ = ["apply_op", "collect_hand_reveals"]

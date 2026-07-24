@@ -163,6 +163,12 @@ export type PlayerSnapshot = {
   in_play: string[];
   connected: boolean;
   conditions: Record<string, unknown>;
+  // Hand visibility (reveal_hand op). hand_public = this hand is played face
+  // up: every viewer's snapshot carries its real ids (render it face-up with a
+  // "revealed" badge). hand_revealed_to = player ids allowed to see the hand;
+  // the server only sends the real ids to those viewers, so check for MY id.
+  hand_public?: boolean;
+  hand_revealed_to?: string[];
 };
 
 export type MechanicalStatus =
@@ -212,7 +218,13 @@ export type SpectatorSnapshot = {
 
 // Mirrors models.game_state.HistoryKind.
 export type HistoryEventKind =
-  "draw" | "play" | "score_change" | "rule_change" | "interaction" | "game_end";
+  | "draw"
+  | "play"
+  | "score_change"
+  | "rule_change"
+  | "interaction"
+  | "reveal"
+  | "game_end";
 
 // One privacy-safe, append-only fact about completed game mechanics. Mirrors
 // models.game_state.HistoryEvent. The "Everything Played" history modal reads
@@ -417,6 +429,18 @@ export type InteractionProgressMsg = {
   progress: InteractionProgress;
 };
 
+// Targeted push: a one-shot reveal_hand showed player_id's hand to ME (sent
+// only to the reveal's resolved audience). Modal like the reaction window —
+// not state, lost on reconnect. cards carries the revealed bodies because
+// redacted snapshots never include hidden hand content.
+export type HandRevealedMsg = {
+  type: "hand_revealed";
+  player_id: string;
+  player_name?: string;
+  card_ids: string[];
+  cards: Record<string, CardSnapshot>;
+};
+
 // A play opened a reaction window: the pending card is in the state snapshot
 // (pending_play); this push carries the deadline for the countdown.
 export type ReactionWindowMsg = {
@@ -447,5 +471,6 @@ export type ServerMsg =
   | BrewingMsg
   | InteractionRequestMsg
   | InteractionProgressMsg
+  | HandRevealedMsg
   | ReactionWindowMsg
   | ReactionResultMsg;

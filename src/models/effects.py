@@ -275,6 +275,25 @@ class TransferCardOp(BaseModel):
     to_target: Target = "self"
 
 
+class RevealHandOp(BaseModel):
+    """Reveal (or conceal) a hand: ``target`` = whose hand, ``to`` = who may see it.
+
+    ``persistent=False`` is a one-shot peek: no state change — the Room pushes
+    the hand's contents to the resolved audience once (lost on reconnect).
+    ``persistent=True`` writes the structural Player visibility fields:
+    ``to="all"`` sets ``hand_public`` (face-up play); any other audience adds
+    the resolved viewers to ``hand_revealed_to``. ``mode="conceal"`` reverses a
+    persistent reveal: ``to="all"`` clears both fields, a narrower audience is
+    removed from ``hand_revealed_to``.
+    """
+
+    op: Literal["reveal_hand"] = "reveal_hand"
+    target: Target = "self"  # whose hand
+    to: Target = "all"  # who may see it
+    persistent: bool = False  # False = one-shot reveal
+    mode: Literal["reveal", "conceal"] = "reveal"  # conceal = un-reveal
+
+
 class SetWinConditionOp(BaseModel):
     op: Literal["set_win_condition"] = "set_win_condition"
     kind: Literal["highest_points", "lowest_points", "first_to", "empty_hand", "last_standing", "none"]
@@ -434,6 +453,7 @@ Op = Annotated[
         DrawCardsOp,
         DestroyCardOp,
         TransferCardOp,
+        RevealHandOp,
         SetWinConditionOp,
         SetRuleOp,
         RegisterHookOp,
@@ -453,7 +473,7 @@ Op = Annotated[
 _CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
 
 # Op fields that hold a player Target address.
-_TARGET_FIELDS: tuple[str, ...] = ("target", "from_target", "to_target", "winner")
+_TARGET_FIELDS: tuple[str, ...] = ("target", "from_target", "to_target", "to", "winner")
 
 
 def op_requires_choice(op: Op) -> bool:

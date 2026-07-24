@@ -22,6 +22,12 @@ interface HandProps {
   brewing?: string | null;
   send: (msg: ClientMsg) => void;
   roomCode?: string;
+  /**
+   * Human-readable reveal status for THIS hand ("face up to everyone",
+   * "revealed to Bob"), or null when private. Set from the player's
+   * hand_public / hand_revealed_to snapshot fields (reveal_hand op).
+   */
+  revealedBadge?: string | null;
 }
 
 export function Hand({
@@ -30,6 +36,7 @@ export function Hand({
   brewing = null,
   send,
   roomCode,
+  revealedBadge = null,
 }: HandProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [blankDialogOpen, setBlankDialogOpen] = useState(false);
@@ -68,8 +75,13 @@ export function Hand({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="font-hand text-sm uppercase tracking-wide text-muted-foreground">
+      <p className="flex items-center gap-2 font-hand text-sm uppercase tracking-wide text-muted-foreground">
         Your hand
+        {revealedBadge && (
+          <span className="rounded-lg border-[1.5px] border-ink bg-panel-paper px-1.5 py-0.5 font-hand text-xs normal-case tracking-normal text-ink">
+            👀 {revealedBadge}
+          </span>
+        )}
       </p>
       {cards.length === 0 ? (
         <p className="font-hand text-sm italic text-muted-foreground">

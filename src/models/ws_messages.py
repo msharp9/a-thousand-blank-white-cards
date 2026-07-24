@@ -266,6 +266,22 @@ class BrewingMsg(BaseModel):
     card_id: str
 
 
+class HandRevealedMsg(BaseModel):
+    """Targeted push: a one-shot ``reveal_hand`` showed ``player_id``'s hand.
+
+    Sent ONLY to the reveal's resolved audience — never broadcast. Modal like
+    the reaction window: not state, so it is lost on reconnect (acceptable by
+    design). ``cards`` carries the revealed card bodies because the audience's
+    redacted snapshots never include hidden hand content.
+    """
+
+    type: Literal["hand_revealed"] = "hand_revealed"
+    player_id: str
+    player_name: str = ""
+    card_ids: list[str]
+    cards: dict[str, dict] = Field(default_factory=dict)  # card_id -> card snapshot
+
+
 class ReactionWindowMsg(BaseModel):
     """Broadcast when a play opens a reaction window. Public info only — each
     client decides its own eligibility from the hand canonicals it already has
@@ -302,6 +318,7 @@ ServerMsg = Union[
     EpilogueMsg,
     ErrorMsg,
     BrewingMsg,
+    HandRevealedMsg,
     ReactionWindowMsg,
     ReactionResultMsg,
 ]

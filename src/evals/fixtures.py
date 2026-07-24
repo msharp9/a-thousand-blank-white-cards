@@ -191,7 +191,7 @@ def normalise_ops(raw_ops: list[dict[str, Any]], ctx: dict[str, Any], state: dic
         if not isinstance(raw, dict) or raw.get("op") in _NON_MECHANICAL_OPS:
             continue
         entry = dict(raw)
-        for key in ("target", "from_target", "to_target", "winner"):
+        for key in ("target", "from_target", "to_target", "to", "winner"):
             if entry.get(key) in _CHOICE_TARGETS:
                 entry[key] = chosen
         for atom in _expand_target(entry, resolve):

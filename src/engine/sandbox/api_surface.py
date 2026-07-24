@@ -242,6 +242,21 @@ class SandboxGame:
         """Move selected cards from their current zone into one player's hand."""
         self._ops.append({"op": "transfer_card", "card_target": card_target, "to_target": to_target})
 
+    def reveal_hand(
+        self, target: str = "self", to: str = "all", persistent: bool = False, mode: str = "reveal"
+    ) -> None:
+        """Reveal a hand (`target` = whose, `to` = who may see it) or conceal it again.
+
+        persistent=False is a one-shot peek; persistent=True keeps the hand
+        face-up (to="all") or visible to the resolved players until
+        mode="conceal" hides it again.
+        """
+        if mode not in ("reveal", "conceal"):
+            raise ValueError(f"reveal_hand mode must be reveal/conceal, got {mode!r}")
+        self._ops.append(
+            {"op": "reveal_hand", "target": target, "to": to, "persistent": bool(persistent), "mode": mode}
+        )
+
     def set_win_condition(self, kind: str, threshold: int | None = None) -> None:
         self._ops.append({"op": "set_win_condition", "kind": kind, "threshold": threshold})
 

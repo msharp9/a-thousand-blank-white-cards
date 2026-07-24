@@ -18,20 +18,35 @@ from typing import Any
 PUBLIC_DECK_PHASES = frozenset({"lobby", "setup"})
 
 
+def _hand_visible(player: dict[str, Any], viewer_id: str | None) -> bool:
+    """True when ``viewer_id`` may see this player's hand CONTENT.
+
+    Their own hand, a hand played face-up (``hand_public``, visible to every
+    viewer including spectators), or a hand persistently revealed to this
+    specific viewer (``hand_revealed_to`` — reveal_hand op, bead 7hd.2).
+    """
+    if player.get("id") == viewer_id:
+        return True
+    if player.get("hand_public"):
+        return True
+    return viewer_id is not None and viewer_id in (player.get("hand_revealed_to") or [])
+
+
 def _visible_card_ids(snap: dict[str, Any], viewer_id: str | None) -> set[str]:
     """Card ids whose CONTENT ``viewer_id`` is entitled to see.
 
-    Public zones (in_play, discard, center), the viewer's own hand, and the
-    deck while it is the shared setup pool. Beyond zones, content that has
-    already been revealed to the table stays visible: the card suspended in an
-    open reaction window (``pending_play``), every card a history event names
+    Public zones (in_play, discard, center), every hand visible to the viewer
+    (their own, plus revealed hands — see :func:`_hand_visible`), and the deck
+    while it is the shared setup pool. Beyond zones, content that has already
+    been revealed to the table stays visible: the card suspended in an open
+    reaction window (``pending_play``), every card a history event names
     (played cards remain readable even if they later move to a hidden zone),
     and the epilogue vote outcomes.
     """
     visible: set[str] = set()
     for player in snap.get("players", []):
         visible.update(player.get("in_play", []))
-        if player.get("id") == viewer_id:
+        if _hand_visible(player, viewer_id):
             visible.update(player.get("hand", []))
     visible.update(snap.get("discard", []))
     visible.update(snap.get("house_rules", []))
@@ -54,10 +69,11 @@ def _visible_card_ids(snap: dict[str, Any], viewer_id: str | None) -> set[str]:
 def redact_snapshot(snap: dict[str, Any], viewer_id: str | None) -> dict[str, Any]:
     """Return a copy of ``snap`` redacted for ``viewer_id``.
 
-    - Every player entry gains ``hand_count``; any player OTHER than the
-      viewer has their ``hand`` emptied. A ``viewer_id`` of None — or a
-      spectator id, which never matches a player — yields the fully-hidden
-      view (all hands redacted).
+    - Every player entry gains ``hand_count``; any hand the viewer may not
+      see (:func:`_hand_visible` — not their own, not face-up via
+      ``hand_public``, not revealed to them via ``hand_revealed_to``) is
+      emptied. A ``viewer_id`` of None — or a spectator id, which never
+      matches a player — keeps only the face-up (``hand_public``) hands.
     - ``deck_count`` is always added; ``deck`` is emptied outside
       :data:`PUBLIC_DECK_PHASES`.
     - The ``cards`` registry is filtered to :func:`_visible_card_ids` — the
@@ -73,7 +89,7 @@ def redact_snapshot(snap: dict[str, Any], viewer_id: str | None) -> dict[str, An
     for player in snap.get("players", []):
         entry = dict(player)
         entry["hand_count"] = len(entry.get("hand", []))
-        if entry.get("id") != viewer_id:
+        if not _hand_visible(entry, viewer_id):
             entry["hand"] = []
         players.append(entry)
     redacted["players"] = players
