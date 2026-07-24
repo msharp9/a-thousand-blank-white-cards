@@ -1703,6 +1703,122 @@
     }
   },
   {
+    "id": "seed-gold-070",
+    "title": "The Ejector Seat",
+    "description": "Choose a player. They are out of the game: their hand is discarded and they take no more turns. Any cards they have in play stay in effect.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "eliminate_player",
+          "args": {
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.eliminate_player('id:' + pid)\n"
+    }
+  },
+  {
+    "id": "seed-gold-071",
+    "title": "Battle Royale",
+    "description": "New rule: the last player standing wins. The moment only one player remains in the game, they win immediately.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "last_standing"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('last_standing')\n"
+    }
+  },
+  {
+    "id": "seed-gold-072",
+    "title": "Landmine",
+    "description": "This card plays itself the moment it is drawn — it costs no action. Whoever drew it loses 3 points. Watch your step.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "play_on_draw",
+            "value": true
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": -3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'play_on_draw', True)\n    state.subtract_points('self', 3)\n"
+    }
+  },
+  {
+    "id": "seed-gold-073",
+    "title": "Marie Kondo Visits",
+    "description": "New house rule: maximum hand size is 5. At the end of each turn, anyone over the limit discards down to it. Keep only what sparks joy.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "hand_limit",
+            "value": 5
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('hand_limit', 5)\n"
+    }
+  },
+  {
+    "id": "seed-gold-074",
+    "title": "Shot Clock",
+    "description": "New house rule: each player has 30 seconds per turn. When the clock runs out, their turn ends automatically.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "turn_timer",
+            "value": 30
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('turn_timer', 30)\n"
+    }
+  },
+  {
     "id": "seed-filler-000",
     "title": "Compliment Someone",
     "description": "Say something genuinely nice about another player right now. They gain 1 point if they believe you.",
