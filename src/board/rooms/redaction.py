@@ -74,6 +74,10 @@ def redact_snapshot(snap: dict[str, Any], viewer_id: str | None) -> dict[str, An
       ``hand_public``, not revealed to them via ``hand_revealed_to``) is
       emptied. A ``viewer_id`` of None — or a spectator id, which never
       matches a player — keeps only the face-up (``hand_public``) hands.
+    - ``hand_revealed_to`` is itself secret: WHO a hand was quietly revealed
+      to must not leak to the rest of the table. The owner keeps the full
+      list (they know who is peeking); every other viewer keeps at most
+      their own id — just enough for the client's "revealed to you" badge.
     - ``deck_count`` is always added; ``deck`` is emptied outside
       :data:`PUBLIC_DECK_PHASES`.
     - The ``cards`` registry is filtered to :func:`_visible_card_ids` — the
@@ -91,6 +95,9 @@ def redact_snapshot(snap: dict[str, Any], viewer_id: str | None) -> dict[str, An
         entry["hand_count"] = len(entry.get("hand", []))
         if not _hand_visible(entry, viewer_id):
             entry["hand"] = []
+        if entry.get("id") != viewer_id:
+            revealed_to = entry.get("hand_revealed_to") or []
+            entry["hand_revealed_to"] = [viewer_id] if viewer_id in revealed_to else []
         players.append(entry)
     redacted["players"] = players
     redacted["deck_count"] = len(snap.get("deck", []))

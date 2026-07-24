@@ -213,6 +213,25 @@ def test_redactor_serves_revealed_hand_only_to_permitted_viewer() -> None:
     assert {p["id"]: p["hand"] for p in view_anon["players"]}["p1"] == []
 
 
+def test_redactor_scrubs_reveal_audience_from_unauthorized_viewers() -> None:
+    snap = _snapshot(hand_revealed_to=["p2"])
+    for viewer in ("p3", "spec-1", None):
+        view = redact_snapshot(snap, viewer)
+        assert {p["id"]: p["hand_revealed_to"] for p in view["players"]}["p1"] == []
+
+
+def test_redactor_keeps_full_reveal_audience_for_the_owner() -> None:
+    snap = _snapshot(hand_revealed_to=["p2", "p3"])
+    view = redact_snapshot(snap, "p1")
+    assert {p["id"]: p["hand_revealed_to"] for p in view["players"]}["p1"] == ["p2", "p3"]
+
+
+def test_redactor_shows_permitted_viewer_only_their_own_audience_membership() -> None:
+    snap = _snapshot(hand_revealed_to=["p2", "p3"])
+    view = redact_snapshot(snap, "p2")
+    assert {p["id"]: p["hand_revealed_to"] for p in view["players"]}["p1"] == ["p2"]
+
+
 def test_redactor_still_counts_revealed_hands() -> None:
     view = redact_snapshot(_snapshot(hand_public=True), "p2")
     counts = {p["id"]: p["hand_count"] for p in view["players"]}
