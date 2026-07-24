@@ -58,7 +58,7 @@ def _is_placeholder(url: str) -> bool:
 
 def test_gold_count_in_range() -> None:
     cards = _load(GOLD)
-    assert 30 <= len(cards) <= 50
+    assert 30 <= len(cards) <= 60
 
 
 def test_gold_has_no_image_url() -> None:
@@ -308,8 +308,8 @@ def _has_interaction_steps(hc: dict) -> bool:
 class TestHardEvalCards:
     """The hard set is sandbox/steps-only by design: every ops slot is null."""
 
-    def test_exactly_27_cards(self) -> None:
-        assert len(_load(HARD)) == 27
+    def test_exactly_29_cards(self) -> None:
+        assert len(_load(HARD)) == 29
 
     def test_ids_and_titles_unique(self) -> None:
         cards = _load(HARD)

@@ -1310,5 +1310,104 @@
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all', mode='conceal')"
     }
+  },
+  {
+    "id": "eval-060",
+    "title": "Voted Off the Island",
+    "description": "Choose a player. They are eliminated from the game: their hand goes to the discard pile and they take no more turns.",
+    "alt_text": "a torch being snuffed out at a tribal council",
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "eliminate_player",
+          "args": {
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.eliminate_player('id:' + pid)"
+    }
+  },
+  {
+    "id": "eval-061",
+    "title": "Tripwire",
+    "description": "This card goes off the moment it is drawn: the drawer plays it immediately, and it does not count as their play for the turn. They lose 2 points.",
+    "alt_text": "a taut wire stretched across a doorway",
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "play_on_draw",
+            "value": true
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": -2
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'play_on_draw', True)\n    state.subtract_points('self', 2)"
+    }
+  },
+  {
+    "id": "eval-062",
+    "title": "Declutter Ordinance",
+    "description": "New rule: nobody may hold more than 4 cards. At the end of each turn, anyone over the limit discards down to 4.",
+    "alt_text": "a tidy shelf with exactly four boxes on it",
+    "human_canonical": {
+      "target": "none",
+      "placement": "center",
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "hand_limit",
+            "value": 4
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('hand_limit', 4)"
+    }
+  },
+  {
+    "id": "eval-063",
+    "title": "Speed Round",
+    "description": "New rule: turns are timed. Each player gets 20 seconds; when the clock hits zero their turn ends on the spot.",
+    "alt_text": "a stopwatch with a cracked face",
+    "human_canonical": {
+      "target": "none",
+      "placement": "center",
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "turn_timer",
+            "value": 20
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('turn_timer', 20)"
+    }
   }
 ]
