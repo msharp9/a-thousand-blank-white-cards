@@ -38,6 +38,7 @@ and the agent must dry-run the complete plan before it can be committed.
 | End with every player tied for the most draws | `Most Cards Drawn Wins` | `tests/test_structured_history.py::test_most_cards_drawn_snippet_sets_all_tied_winner_overrides` |
 | Sealed auction, charge winner, transfer played card, deterministic ties | `Going Once, Going Twice` | `tests/test_room_interactions.py::test_sealed_auction_pauses_atomically_and_resumes_once`, `::test_auction_tie_uses_effective_turn_order` |
 | Draw cats, reveal after the barrier, vote, award tied winners | `Cat Show` | `tests/test_room_interactions.py::test_drawing_then_vote_materializes_sealed_submissions_and_tied_winners` |
+| Look at the deck top, secretly reorder/bury, keep the arrangement hidden | `Crystal Ball` (scry via `card_order`) / `Window Shopping` (draw-N-keep-1 via `card_pick` `from_deck_top`) | `tests/test_scry_interactions.py` |
 | Resume safely after reconnect/restart | every generic interaction | `tests/test_room_interactions.py::test_pending_resolution_persists_and_request_replays_without_values`, `::test_pending_resolution_persists_turn_bookkeeping`, `::test_restored_timeout_runs_at_manager_start_without_reconnect` |
 | Keep sandbox and op APIs aligned | all generated snippets and hooks | `tests/test_sandbox_api_surface.py::TestWideFacade::test_mutators_record_full_op_parity`, `::test_canonical_mutators_match_op_names_and_parameters` |
 
@@ -53,8 +54,8 @@ The server sends `interaction_request` with schema version 1, a unique
 interaction id, a typed descriptor, an authoritative deadline, and safe
 progress. The client answers once with `interaction_response`, repeating the
 schema version and id and supplying a payload discriminated by kind. Supported
-kinds are `choice`, `number`, `text`, `card_pick`, `confirm`, and normalized
-vector `drawing`.
+kinds are `choice`, `number`, `text`, `card_pick`, `confirm`, `card_order`, and
+normalized vector `drawing`.
 
 Responses are authenticated against the resolved audience. Sealed values stay
 private until the barrier completes; shared snapshots and progress contain only
