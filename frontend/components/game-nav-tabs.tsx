@@ -17,6 +17,7 @@ const TABS: { id: Tab; label: string }[] = [
 interface GameNavTabsProps {
   gameState: GameStateSnapshot;
   roomCode: string;
+  className?: string;
 }
 
 /**
@@ -28,7 +29,11 @@ interface GameNavTabsProps {
  * switching tabs never interrupts live game state — the overlays just read
  * straight from the same gameState this component already re-renders on.
  */
-export function GameNavTabs({ gameState, roomCode }: GameNavTabsProps) {
+export function GameNavTabs({
+  gameState,
+  roomCode,
+  className,
+}: GameNavTabsProps) {
   const [tab, setTab] = useState<Tab>("table");
 
   useEffect(() => {
@@ -42,7 +47,10 @@ export function GameNavTabs({ gameState, roomCode }: GameNavTabsProps) {
 
   return (
     <>
-      <nav className="flex items-center gap-1.5" aria-label="Game views">
+      <nav
+        className={cn("flex items-center gap-1.5", className)}
+        aria-label="Game views"
+      >
         {TABS.map(({ id, label }) => (
           <button
             key={id}
@@ -50,7 +58,7 @@ export function GameNavTabs({ gameState, roomCode }: GameNavTabsProps) {
             aria-pressed={tab === id}
             onClick={() => setTab(id)}
             className={cn(
-              "rounded-lg border-[1.5px] border-ink px-2.5 py-1 font-hand text-[15px] transition-colors",
+              "min-h-11 flex-1 rounded-lg border-[1.5px] border-ink px-2.5 py-1 font-hand text-[15px] transition-colors sm:min-h-0 sm:flex-none",
               tab === id
                 ? "bg-ink text-background"
                 : "bg-card text-foreground hover:bg-muted",

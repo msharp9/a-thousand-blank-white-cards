@@ -218,6 +218,8 @@ models/
 # Frontend (Next.js) build/deps safety net
 frontend/node_modules/
 frontend/.next/
+frontend/playwright-report/
+frontend/test-results/
 
 # dmux worktree orchestration artifacts (local tooling, not project code)
 .dmux/

@@ -189,6 +189,14 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     }
 
     function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+      const active = e.currentTarget.ownerDocument.activeElement;
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement
+      ) {
+        active.blur();
+      }
+      e.currentTarget.focus({ preventScroll: true });
       e.preventDefault();
       const p = canvasPos(e);
       if (armedStamp) {
@@ -240,8 +248,11 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     const canvasEmpty = strokeCount === 0;
 
     return (
-      <div className="flex flex-wrap items-start justify-center gap-4">
-        <div className="flex flex-row flex-wrap items-center gap-2 rounded-2xl border-[2.5px] border-ink bg-card p-2.5 panel-shadow sm:flex-col sm:items-stretch">
+      <div
+        data-card-creator
+        className="grid min-w-0 items-start justify-center gap-3 md:grid-cols-[auto_minmax(0,400px)_190px] md:gap-4"
+      >
+        <div className="flex max-w-full flex-row items-center gap-2 overflow-x-auto rounded-2xl border-[2.5px] border-ink bg-card p-2 panel-shadow md:flex-col md:items-stretch md:overflow-visible md:p-2.5">
           <div className="font-marker text-center text-xs">Ink</div>
           {INKS.map((pen) => (
             <button
@@ -254,7 +265,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
                 setArmedStamp(null);
               }}
               className={cn(
-                "size-8 cursor-pointer rounded-full border-2 border-ink",
+                "size-11 shrink-0 cursor-pointer rounded-full border-2 border-ink md:size-8",
                 ink === pen.color &&
                   !armedStamp &&
                   "ring-[3px] ring-ring ring-offset-1",
@@ -262,7 +273,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
               style={{ background: pen.color }}
             />
           ))}
-          <div className="mx-0.5 h-6 w-0.5 bg-muted sm:mx-0 sm:my-0.5 sm:h-0.5 sm:w-auto" />
+          <div className="mx-0.5 h-8 w-0.5 shrink-0 bg-muted md:mx-0 md:my-0.5 md:h-0.5 md:w-auto" />
           <div className="font-marker text-center text-xs">Nib</div>
           {NIBS.map((n) => (
             <button
@@ -275,7 +286,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
                 setArmedStamp(null);
               }}
               className={cn(
-                "flex size-8 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-card",
+                "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-card md:size-8",
                 nib === n.size && "ring-[3px] ring-ring ring-offset-1",
               )}
             >
@@ -285,11 +296,11 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
               />
             </button>
           ))}
-          <div className="mx-0.5 h-6 w-0.5 bg-muted sm:mx-0 sm:my-0.5 sm:h-0.5 sm:w-auto" />
+          <div className="mx-0.5 h-8 w-0.5 shrink-0 bg-muted md:mx-0 md:my-0.5 md:h-0.5 md:w-auto" />
           <Button
             type="button"
             variant="outline"
-            size="icon-sm"
+            size="icon"
             title="Undo"
             onClick={undo}
           >
@@ -298,7 +309,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
           <Button
             type="button"
             variant="outline"
-            size="icon-sm"
+            size="icon"
             title="Clear"
             onClick={clear}
           >
@@ -309,12 +320,13 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
         <div className="flex min-w-0 flex-col items-center gap-2">
           {/* The card being authored is a physical paper artifact: its face
               stays white and its ink tokens stay dark in both themes. */}
-          <div className="paper-scope bg-card-face relative w-full max-w-[400px] rounded-xl border-[2.5px] border-ink p-4 shadow-[0_12px_30px_rgba(20,18,14,0.22)]">
+          <div className="card-creator-card paper-scope bg-card-face relative w-full max-w-[400px] rounded-xl border-[2.5px] border-ink p-3 shadow-[0_12px_30px_rgba(20,18,14,0.22)] sm:p-4">
             <div className="bg-tape absolute -top-2.5 left-[20%] h-5 w-20 rotate-[-6deg]" />
             <div className="bg-tape absolute -top-2.5 right-[20%] h-5 w-20 rotate-[5deg]" />
             <div className="pointer-events-none absolute inset-2 rounded-lg border border-dashed border-ink/25" />
 
             <input
+              aria-label="Card title"
               value={title}
               onChange={(e) => onTitleChange(e.target.value)}
               placeholder="Card title…"
@@ -325,12 +337,14 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
             <div className="relative my-3 overflow-hidden rounded-md border-[1.5px] border-ink bg-card-face">
               <canvas
                 ref={canvasRef}
+                tabIndex={0}
+                aria-label="Card drawing canvas"
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={endStroke}
                 onPointerCancel={endStroke}
                 onPointerLeave={endStroke}
-                className="block h-[300px] w-full cursor-crosshair touch-none"
+                className="block aspect-[6/5] h-auto w-full cursor-crosshair touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               {canvasEmpty && (
                 <div className="font-hand pointer-events-none absolute inset-0 flex items-center justify-center text-xl text-ink/25">
@@ -340,6 +354,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
             </div>
 
             <textarea
+              aria-label="Card rules"
               value={description}
               onChange={(e) => onDescriptionChange(e.target.value)}
               placeholder="What does this card DO?"
@@ -355,12 +370,12 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
           )}
         </div>
 
-        <div className="w-full max-w-[400px] rounded-2xl border-[2.5px] border-ink bg-card p-3 panel-shadow sm:w-[190px]">
+        <div className="w-full max-w-[400px] rounded-2xl border-[2.5px] border-ink bg-card p-3 panel-shadow md:w-[190px]">
           <div className="font-marker mb-1 text-sm">Stamps</div>
           <div className="mb-2 text-[11px] font-bold text-muted-foreground">
             Tap one, then tap the card to stamp it.
           </div>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 md:grid md:grid-cols-5 md:overflow-visible md:pb-0">
             {STAMPS.map((emoji) => (
               <button
                 key={emoji}
@@ -370,7 +385,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
                   setArmedStamp((cur) => (cur === emoji ? null : emoji))
                 }
                 className={cn(
-                  "flex aspect-square cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-card text-lg",
+                  "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-card text-lg md:size-auto md:aspect-square",
                   armedStamp === emoji && "border-2 border-ring bg-accent",
                 )}
               >

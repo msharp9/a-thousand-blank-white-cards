@@ -37,12 +37,12 @@ export function StandingRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-card px-4 py-3.5 panel-shadow",
+        "flex min-w-0 items-center gap-2 rounded-2xl border-[2.5px] border-ink bg-card px-3 py-2 panel-shadow sm:gap-4 sm:px-4 sm:py-3.5",
         rank % 2 ? "rotate-[0.5deg]" : "-rotate-[0.5deg]",
       )}
     >
       <span
-        className="w-11 shrink-0 text-center font-marker text-3xl"
+        className="w-8 shrink-0 text-center font-marker text-[22px] sm:w-11 sm:text-3xl"
         style={{
           color: rank === 0 ? "var(--color-amber)" : "var(--muted-foreground)",
         }}
@@ -51,12 +51,12 @@ export function StandingRow({
       </span>
       <PlayerAvatar name={name} color={color} size={avatarSize} />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-hand text-2xl leading-[0.95]">
+        <p className="truncate font-hand text-xl leading-[0.95] sm:text-2xl">
           {name}
           {nameSuffix}
         </p>
         {caption}
-        <div className="mt-1.5 h-2.5 overflow-hidden rounded-full border-[1.5px] border-ink bg-muted">
+        <div className="mt-1 h-2 overflow-hidden rounded-full border-[1.5px] border-ink bg-muted sm:mt-1.5 sm:h-2.5">
           <div
             className="h-full"
             style={{
@@ -67,7 +67,7 @@ export function StandingRow({
         </div>
       </div>
       <span
-        className="shrink-0 font-marker text-[34px] tabular-nums"
+        className="shrink-0 font-marker text-[26px] tabular-nums sm:text-[34px]"
         style={{ color }}
       >
         {score}

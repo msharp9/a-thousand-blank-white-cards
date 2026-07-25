@@ -84,11 +84,14 @@ export function CreateCardDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-3xl">
+        <DialogHeader className="pr-10">
           <DialogTitle>{card ? "Revise card" : "Create a card"}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+        <div
+          data-authoring-scroll
+          className="flex min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain px-1"
+        >
           <CardCreator
             ref={creatorRef}
             title={title}
@@ -139,7 +142,7 @@ export function CreateCardDialog({
             </div>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button
             variant="outline"
             onClick={handlePreview}

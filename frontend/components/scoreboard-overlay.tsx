@@ -4,6 +4,7 @@ import { OverlayShell } from "@/components/overlay-shell";
 import { MEDALS, StandingRow } from "@/components/standing-row";
 import { playerColor } from "@/lib/players";
 import type { PlayerSnapshot } from "@/lib/types";
+import { useCompactViewport } from "@/lib/use-compact-viewport";
 
 interface ScoreboardOverlayProps {
   players: PlayerSnapshot[];
@@ -21,6 +22,7 @@ export function ScoreboardOverlay({
   players,
   onClose,
 }: ScoreboardOverlayProps) {
+  const compactViewport = useCompactViewport();
   const standings = players
     .map((player, index) => ({ player, color: playerColor(index) }))
     .sort((a, b) => b.player.score - a.player.score);
@@ -35,7 +37,10 @@ export function ScoreboardOverlay({
       onClose={onClose}
       panelClassName="max-w-[720px]"
     >
-      <div className="flex flex-col gap-3.5">
+      <div
+        data-scoreboard-list
+        className="short-landscape-grid grid grid-cols-1 gap-2 sm:gap-3.5"
+      >
         {standings.map(({ player, color }, rank) => (
           <StandingRow
             key={player.id}
@@ -44,7 +49,7 @@ export function ScoreboardOverlay({
             color={color}
             rank={rank}
             maxScore={maxScore}
-            avatarSize={46}
+            avatarSize={compactViewport ? 34 : 46}
             nameSuffix={` ${MEDALS[rank] ?? ""}`}
             caption={
               <p className="font-hand text-sm text-muted-foreground">

@@ -7,6 +7,7 @@ import { PlayBlankDialog } from "@/components/play-blank-dialog";
 import { SketchCard } from "@/components/sketch-card";
 import { getCardArtUrl } from "@/lib/art";
 import type { CardSnapshot, ClientMsg } from "@/lib/types";
+import { useCompactViewport } from "@/lib/use-compact-viewport";
 import { cn } from "@/lib/utils";
 
 interface HandProps {
@@ -40,6 +41,7 @@ export function Hand({
 }: HandProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [blankDialogOpen, setBlankDialogOpen] = useState(false);
+  const compactViewport = useCompactViewport();
 
   const playable = canPlay && !brewing;
   const selectedCard = cards.find((c) => c.id === selectedId) ?? null;
@@ -88,47 +90,55 @@ export function Hand({
           No cards in hand.
         </p>
       ) : (
-        <div className="flex items-end px-2 pb-2 pt-10">
-          {cards.map((card, i) => {
-            const isSelected = selectedId === card.id;
-            // Reaction cards are only playable during another player's play
-            // (the reaction window) — never on your own turn. The server
-            // rejects them anyway; greying them out here explains why.
-            const isReaction = card.canonical?.trigger === "on_reaction";
-            return (
-              <DraggableHandCard
-                key={card.id}
-                cardId={card.id}
-                // Draggability gates exactly on selectability: dragging is
-                // just another way to play. Blanks ARE draggable — dropping
-                // one opens the author-on-play dialog (see PlayDndContext).
-                canDrag={playable && !isReaction}
-                className={cn(
-                  "relative",
-                  i > 0 && "-ml-[34px]",
-                  "hover:z-30",
-                  isSelected && "z-30",
-                  selectedId && !isSelected && "opacity-55",
-                )}
-              >
-                <SketchCard
-                  card={card}
-                  w={130}
-                  rot={(i - (cards.length - 1) / 2) * 3}
-                  selectable={playable && !isReaction}
-                  selected={isSelected}
-                  onClick={() => {
-                    if (!isReaction) setSelectedId(card.id);
-                  }}
-                  brewing={brewing === card.id}
-                  artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
+        <div
+          data-hand-rail
+          className="-mx-3 overflow-x-auto overscroll-x-contain px-3 pb-2 pt-8 touch-pan-x sm:mx-0 sm:px-2 sm:pt-10"
+        >
+          <div className="flex w-max min-w-full items-end pr-8">
+            {cards.map((card, i) => {
+              const isSelected = selectedId === card.id;
+              // Reaction cards are only playable during another player's play
+              // (the reaction window) — never on your own turn. The server
+              // rejects them anyway; greying them out here explains why.
+              const isReaction = card.canonical?.trigger === "on_reaction";
+              return (
+                <DraggableHandCard
+                  key={card.id}
+                  cardId={card.id}
+                  // Draggability gates exactly on selectability: dragging is
+                  // just another way to play. Blanks ARE draggable — dropping
+                  // one opens the author-on-play dialog (see PlayDndContext).
+                  canDrag={playable && !isReaction}
                   className={cn(
-                    isReaction && playable && "opacity-70 saturate-50",
+                    "relative",
+                    i > 0 && (compactViewport ? "-ml-[28px]" : "-ml-[34px]"),
+                    "hover:z-30",
+                    isSelected && "z-30",
+                    selectedId && !isSelected && "opacity-55",
                   )}
-                />
-              </DraggableHandCard>
-            );
-          })}
+                >
+                  <SketchCard
+                    card={card}
+                    w={compactViewport ? 112 : 130}
+                    rot={
+                      (i - (cards.length - 1) / 2) *
+                      Math.min(3, 18 / Math.max(1, cards.length - 1))
+                    }
+                    selectable={playable && !isReaction}
+                    selected={isSelected}
+                    onClick={() => {
+                      if (!isReaction) setSelectedId(card.id);
+                    }}
+                    brewing={brewing === card.id}
+                    artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
+                    className={cn(
+                      isReaction && playable && "opacity-70 saturate-50",
+                    )}
+                  />
+                </DraggableHandCard>
+              );
+            })}
+          </div>
         </div>
       )}
 

@@ -79,21 +79,26 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
     : undefined;
 
   return (
-    <div className="flex flex-col gap-2 px-5 pt-5 pb-1.5">
-      <div className="flex flex-wrap justify-center gap-6">
-        {players.map((player, index) =>
-          player.id === myPlayerId ? null : (
-            <OpponentPanel
-              key={player.id}
-              player={player}
-              color={playerColor(index)}
-              cards={cards}
-              roomCode={gameState.room_code}
-              isActive={player.id === activePlayerId}
-              myPlayerId={myPlayerId}
-            />
-          ),
-        )}
+    <div className="flex min-w-0 flex-col gap-2 px-3 pt-3 pb-1.5 sm:px-5 sm:pt-5">
+      <div
+        data-opponent-rail
+        className="-mx-3 overflow-x-auto overscroll-x-contain px-3 snap-x snap-mandatory sm:mx-0 sm:overflow-visible sm:px-0"
+      >
+        <div className="flex w-max justify-start gap-3 sm:w-auto sm:flex-wrap sm:justify-center sm:gap-6">
+          {players.map((player, index) =>
+            player.id === myPlayerId ? null : (
+              <OpponentPanel
+                key={player.id}
+                player={player}
+                color={playerColor(index)}
+                cards={cards}
+                roomCode={gameState.room_code}
+                isActive={player.id === activePlayerId}
+                myPlayerId={myPlayerId}
+              />
+            ),
+          )}
+        </div>
       </div>
       {spectators.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-2 font-hand text-sm text-muted-foreground">
@@ -162,7 +167,7 @@ function OpponentPanel({
       ref={setNodeRef}
       data-seat-drop={player.id}
       className={cn(
-        "flex flex-col items-center gap-1.5 rounded-[14px] bg-card/60 px-3 py-2",
+        "flex max-w-[280px] shrink-0 snap-center flex-col items-center gap-1.5 overflow-hidden rounded-[14px] bg-card/60 px-3 py-2 sm:max-w-none",
         "transition-[box-shadow,transform] duration-150",
         isOver && "scale-[1.03]",
         (!player.connected || player.eliminated) && "opacity-50",

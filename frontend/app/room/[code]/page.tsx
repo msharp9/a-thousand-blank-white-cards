@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { DiceRollOverlay } from "@/components/dice-roll-overlay";
 import { DiscardPile } from "@/components/discard-pile";
 import { EffectLog } from "@/components/effect-log";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
@@ -33,9 +31,11 @@ import { ResultsScreen } from "@/components/results-screen";
 import { SetupPhase } from "@/components/setup-phase";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
 import { TurnTimerChip } from "@/components/turn-timer";
+import { ViewportNoticeHost } from "@/components/viewport-notice";
 import { getCardArtUrl } from "@/lib/art";
 import { interactionResponseMessage } from "@/lib/interactions";
 import { playerColor } from "@/lib/players";
+import { useCompactViewport } from "@/lib/use-compact-viewport";
 import type {
   CardSnapshot,
   GameStateSnapshot,
@@ -86,6 +86,7 @@ export default function RoomPage() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const compactViewport = useCompactViewport();
 
   // Once the stored name hydrates in, adopt it and skip the name gate.
   // Adjusting state during render is React's recommended alternative to a
@@ -132,18 +133,17 @@ export default function RoomPage() {
     brewing,
     previewResult,
     fatalError,
-    transientError,
-    clearTransientError,
+    topNotices,
+    arbiterNotices,
+    dismissNotice,
     connected,
     promptChoice,
     clearPromptChoice,
     epilogueCards,
     interactionRequest,
     interactionProgress,
-    reactionResult,
     handReveal,
     clearHandReveal,
-    diceRoll,
     turnTimer,
     send,
   } = useGameSocket(nameSet ? code : "", name);
@@ -248,23 +248,6 @@ export default function RoomPage() {
     return names.length ? `revealed to ${names.join(", ")}` : null;
   }, [gameState, me]);
 
-  const reactionResultText = useMemo(() => {
-    if (!reactionResult || reactionResult.outcome === "resolved") return null;
-    const reactor =
-      gameState?.players.find((p) => p.id === reactionResult.reactor_id)
-        ?.name ?? "Someone";
-    switch (reactionResult.outcome) {
-      case "countered":
-        return `💥 Countered by ${reactor}!`;
-      case "stolen":
-        return `🫳 ${reactor} stole the card!`;
-      case "redirected":
-        return `↩️ ${reactor} redirected it!`;
-      default:
-        return null;
-    }
-  }, [reactionResult, gameState]);
-
   // ── name gate ──
   if (!nameSet) {
     return (
@@ -323,27 +306,7 @@ export default function RoomPage() {
   }
 
   return (
-    <main className="flex h-dvh flex-col">
-      {/* Recoverable, message-level errors (e.g. "Not your turn") show as a
-          dismissible banner over the live game — the table stays mounted and
-          interactive. Auto-clears from the socket layer. */}
-      {transientError && (
-        <div
-          role="alert"
-          className="fixed inset-x-0 top-3 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] -rotate-[0.5deg] items-center gap-3 rounded-xl border-2 border-ink bg-card px-3 py-2 font-hand text-base text-destructive sticker-shadow-sm"
-        >
-          <span>{transientError}</span>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="text-destructive hover:bg-destructive/10"
-            onClick={clearTransientError}
-          >
-            <XIcon />
-            <span className="sr-only">Dismiss</span>
-          </Button>
-        </div>
-      )}
+    <main className="flex h-dvh w-full max-w-full flex-col overflow-hidden">
       <InteractionPanel
         pending={gameState?.pending_interaction}
         request={interactionRequest}
@@ -365,21 +328,10 @@ export default function RoomPage() {
           roomCode={code}
         />
       )}
-      {reactionResultText && (
-        <div className="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit rotate-[0.4deg] rounded-xl border-2 border-ink bg-card px-4 py-2 font-hand text-lg sticker-shadow-sm">
-          {reactionResultText}
-        </div>
-      )}
-      {diceRoll && (
-        <DiceRollOverlay
-          roll={diceRoll}
-          actorName={
-            gameState?.players.find((p) => p.id === diceRoll.actor_id)?.name ??
-            "Someone"
-          }
-        />
-      )}
-      <header className="sticky top-0 z-40 flex items-center gap-3.5 border-b-[2.5px] border-ink bg-card px-5 py-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)]">
+      <header
+        data-game-header
+        className="sticky top-0 z-40 flex flex-wrap items-center gap-x-2 gap-y-2 border-b-[2.5px] border-ink bg-card px-[max(0.75rem,env(safe-area-inset-left))] pt-[max(0.625rem,env(safe-area-inset-top))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)] sm:flex-nowrap sm:gap-3.5 sm:px-5 sm:py-2.5"
+      >
         <Link
           href="/"
           className="shrink-0 font-marker text-xl leading-[0.95] !text-ink"
@@ -388,7 +340,7 @@ export default function RoomPage() {
         </Link>
         <span className="h-6 w-0.5 bg-ink/20" />
         <span className="font-mono text-sm text-muted-foreground">{code}</span>
-        <span className="font-hand text-[17px] text-muted-foreground">
+        <span className="hidden font-hand text-[17px] text-muted-foreground sm:inline">
           {PHASE_LABELS[phase]}
         </span>
         {phase === "playing" && gameState && (
@@ -397,7 +349,6 @@ export default function RoomPage() {
               Turn {gameState.turn_number}
             </span>
             <TurnTimerChip timer={turnTimer} />
-            <GameNavTabs gameState={gameState} roomCode={code} />
           </>
         )}
         {isSpectator && (
@@ -415,11 +366,33 @@ export default function RoomPage() {
               connected ? "bg-marker-green" : "animate-pulse bg-amber",
             )}
           />
-          {connected ? "connected" : "reconnecting…"}
+          <span className="sr-only sm:not-sr-only">
+            {connected ? "connected" : "reconnecting…"}
+          </span>
         </span>
+        {phase === "playing" && gameState && (
+          <GameNavTabs
+            gameState={gameState}
+            roomCode={code}
+            className="order-last w-full sm:order-none sm:w-auto"
+          />
+        )}
       </header>
 
-      <div className={cn("flex-1 overflow-auto", phase !== "playing" && "p-4")}>
+      <ViewportNoticeHost
+        topNotices={topNotices}
+        arbiterNotices={arbiterNotices}
+        players={gameState?.players ?? []}
+        onDismiss={dismissNotice}
+      />
+
+      <div
+        data-game-scroll
+        className={cn(
+          "min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain",
+          phase !== "playing" && "p-4",
+        )}
+      >
         {!gameState && (
           <p className="p-4 font-hand text-lg text-muted-foreground">
             Waiting for game state…
@@ -488,43 +461,43 @@ export default function RoomPage() {
              play) or an opponent seat (targeted play). Click-to-select + Play
              keeps working unchanged inside <Hand>. */
           <PlayDndContext cards={gameState.cards} roomCode={code} send={send}>
-            <div className="flex min-h-full flex-col">
+            <div className="flex min-h-full min-w-0 flex-col">
               <GameTable gameState={gameState} myPlayerId={myPlayerId ?? ""} />
 
               {/* felt table: center zone + deck/action dock */}
-              <FeltDropZone className="mx-4 my-2.5 flex min-h-[380px] flex-1 items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)]">
+              <FeltDropZone className="mx-2 my-2.5 flex min-h-[320px] min-w-0 flex-1 flex-col items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)] sm:mx-4 sm:min-h-[380px] sm:flex-row">
                 <HouseRulesZone
                   centerCards={houseRuleCards}
                   brewingCardId={brewing}
                   roomCode={code}
                 />
-                <div className="flex shrink-0 flex-col items-center justify-center gap-3.5 border-l-2 border-dashed border-white/30 bg-black/15 px-5 py-4">
+                <div className="flex shrink-0 flex-row items-center justify-center gap-3.5 overflow-x-auto border-t-2 border-dashed border-white/30 bg-black/15 px-3 py-2 sm:flex-col sm:overflow-visible sm:border-t-0 sm:border-l-2 sm:px-5 sm:py-4">
                   <div className="text-center">
                     {deckCount > 0 ? (
-                      <div className="relative mx-auto h-32 w-[92px]">
+                      <div className="relative mx-auto h-[104px] w-[74px] sm:h-32 sm:w-[92px]">
                         <SketchCard
                           faceDown
                           showTape={false}
-                          w={92}
+                          w={compactViewport ? 74 : 92}
                           rot={3}
                           className="absolute top-1 left-1"
                         />
                         <SketchCard
                           faceDown
                           showTape={false}
-                          w={92}
+                          w={compactViewport ? 74 : 92}
                           rot={-2}
                           className="absolute top-0.5 left-0.5"
                         />
                         <SketchCard
                           faceDown
                           showTape={false}
-                          w={92}
+                          w={compactViewport ? 74 : 92}
                           className="absolute top-0 left-0"
                         />
                       </div>
                     ) : (
-                      <div className="mx-auto flex h-32 w-[92px] items-center justify-center rounded-[7px] border-2 border-dashed border-white/40 font-hand text-sm text-white/70">
+                      <div className="mx-auto flex h-[104px] w-[74px] items-center justify-center rounded-[7px] border-2 border-dashed border-white/40 font-hand text-sm text-white/70 sm:h-32 sm:w-[92px]">
                         empty
                       </div>
                     )}
@@ -557,7 +530,7 @@ export default function RoomPage() {
                   </p>
                 </div>
               ) : (
-                <div className="border-t-[2.5px] border-ink bg-card px-5 pt-3 pb-4">
+                <div className="min-w-0 border-t-[2.5px] border-ink bg-card px-3 pt-3 pb-4 sm:px-5">
                   <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2.5">
                     <div className="flex items-center gap-2.5">
                       {me && (

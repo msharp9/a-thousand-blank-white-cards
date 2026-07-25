@@ -14,6 +14,9 @@ if (missing.length > 0) {
 }
 
 const nextConfig: NextConfig = {
+  // The development badge can cover phone-sized top-right controls (notably
+  // overlay close buttons). Compile/runtime errors still use Next's error UI.
+  devIndicators: false,
   // No rewrites for /ws — the browser connects directly to the backend wss:// URL
   // (Vercel cannot proxy WebSocket upgrades on the free tier).
 };

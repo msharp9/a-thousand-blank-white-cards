@@ -4,23 +4,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CardSnapshot,
   ClientMsg,
-  DiceRollMsg,
   GameStateSnapshot,
   HandRevealedMsg,
   InteractionProgressMsg,
   InteractionRequestMsg,
   PreviewResult,
   PromptChoiceMsg,
-  ReactionResultMsg,
   ServerMsg,
   TurnTimerSnapshot,
 } from "./types";
+import {
+  dismissNotice as removeNotice,
+  enqueueNotice,
+  parseArbiterLogEntry,
+  type ViewportNotice,
+} from "./notices";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
-
-// How long a transient (message-level) error banner stays up before it
-// auto-dismisses. Kept short so a stale validation notice never lingers.
-const TRANSIENT_ERROR_MS = 4500;
 
 // Player identity is scoped per-room AND per-tab.
 //
@@ -62,12 +62,11 @@ export interface GameSocketState {
   // Retrying can never fix it, so the room page tears down to a "back to lobby"
   // screen. Cleared only when a fresh socket opens successfully.
   fatalError: string | null;
-  // A recoverable, message-level error from the server ({type:'error'}), e.g.
-  // "Not your turn". The game stays mounted; the UI shows a
-  // dismissible banner. Auto-clears after a few seconds or on the next state
-  // update, and can be dismissed manually via clearTransientError.
-  transientError: string | null;
-  clearTransientError: () => void;
+  // Live-only transient events. Each lane is FIFO; the viewport notice host
+  // renders and times only its first item, so bursts are never overwritten.
+  topNotices: ViewportNotice[];
+  arbiterNotices: ViewportNotice[];
+  dismissNotice: (id: string) => void;
   connected: boolean;
   // Set when the server needs the active player to pick a target for a card
   // they just played (the play is held pending server-side). The UI shows a
@@ -81,32 +80,17 @@ export interface GameSocketState {
   epilogueCards: CardSnapshot[];
   interactionRequest: InteractionRequestMsg | null;
   interactionProgress: InteractionProgressMsg | null;
-  // The last reaction window outcome ("countered!", "stolen", …), kept briefly
-  // so the UI can flash it. The open window itself is NOT stored here — it is
-  // driven by gameState.pending_play (the reconnect-safe source of truth).
-  // Cleared automatically after a few seconds or when a new window opens.
-  reactionResult: ReactionResultMsg | null;
   // A one-shot hand reveal targeted at THIS client (hand_revealed push).
   // Deliberately transient — not part of the state snapshot, lost on
   // reconnect — and dismissed via clearHandReveal.
   handReveal: HandRevealedMsg | null;
   clearHandReveal: () => void;
-  // The most recent dice roll push, kept briefly so the dice overlay can play
-  // its animation. Cleared automatically after a few seconds; a newer roll
-  // replaces it (and restarts the countdown).
-  diceRoll: DiceRollMsg | null;
   // The live pausable turn clock (rules.turn_timer), or null when no clock is
   // armed. Re-synced from every turn_timer push AND every state snapshot, so
   // it survives reconnects like the reaction window's deadline.
   turnTimer: TurnTimerSnapshot | null;
   send: (msg: ClientMsg) => void;
 }
-
-// How long the reaction outcome flash ("Countered!") stays up.
-const REACTION_RESULT_MS = 4000;
-
-// How long the dice roll overlay stays up (animation + read time).
-const DICE_ROLL_MS = 5000;
 
 export function useGameSocket(code: string, name: string): GameSocketState {
   const wsRef = useRef<WebSocket | null>(null);
@@ -116,7 +100,8 @@ export function useGameSocket(code: string, name: string): GameSocketState {
   const [previewResult, setPreviewResult] =
     useState<GameSocketState["previewResult"]>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
-  const [transientError, setTransientError] = useState<string | null>(null);
+  const [topNotices, setTopNotices] = useState<ViewportNotice[]>([]);
+  const [arbiterNotices, setArbiterNotices] = useState<ViewportNotice[]>([]);
   const [connected, setConnected] = useState(false);
   const [promptChoice, setPromptChoice] = useState<PromptChoiceMsg | null>(
     null,
@@ -126,35 +111,38 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     useState<InteractionRequestMsg | null>(null);
   const [interactionProgress, setInteractionProgress] =
     useState<InteractionProgressMsg | null>(null);
-  const [reactionResult, setReactionResult] =
-    useState<ReactionResultMsg | null>(null);
   const [handReveal, setHandReveal] = useState<HandRevealedMsg | null>(null);
   const [turnTimer, setTurnTimer] = useState<TurnTimerSnapshot | null>(null);
-  const reactionResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const [diceRoll, setDiceRoll] = useState<DiceRollMsg | null>(null);
-  const diceRollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Pending auto-dismiss timer for the current transient error, so a newer
-  // error resets the countdown instead of being cut short by an older one.
-  const transientTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const noticeSequenceRef = useRef(0);
   // The most recent server `error` message. A hard rejection (close code >=
   // 4000) is preceded by a matching `error` payload from the server (see
   // src/board/ws.py); onclose adopts it so the fatal screen shows the server's
   // specific reason instead of the generic close-code fallback.
   const lastServerErrorRef = useRef<string | null>(null);
 
-  const clearTransientError = useCallback(() => {
-    if (transientTimeoutRef.current) {
-      clearTimeout(transientTimeoutRef.current);
-      transientTimeoutRef.current = null;
-    }
-    lastServerErrorRef.current = null;
-    setTransientError(null);
+  const dismissNotice = useCallback((id: string) => {
+    setTopNotices((queue) => {
+      const next = removeNotice(queue, id);
+      if (
+        lastServerErrorRef.current &&
+        !next.some(
+          (notice) =>
+            notice.kind === "error" &&
+            notice.message === lastServerErrorRef.current,
+        )
+      ) {
+        lastServerErrorRef.current = null;
+      }
+      return next;
+    });
+    setArbiterNotices((queue) => removeNotice(queue, id));
   }, []);
+
+  const nextNoticeId = useCallback(
+    (kind: ViewportNotice["kind"]) =>
+      `${kind}-${Date.now()}-${noticeSequenceRef.current++}`,
+    [],
+  );
 
   const send = useCallback((msg: ClientMsg) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -235,13 +223,24 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             // normal flow) — clearing here rescues a reconnect that missed the
             // clearing push, which would otherwise soft-lock the hand.
             setBrewing(null);
-            // A fresh authoritative state means whatever the last transient
-            // error complained about has been superseded — clear it early.
-            clearTransientError();
             break;
           case "effect_applied":
             setLog((prev) => [...prev, msg.log_entry]);
             setBrewing(null);
+            {
+              const comment = parseArbiterLogEntry(msg.log_entry);
+              if (comment) {
+                setArbiterNotices((queue) =>
+                  enqueueNotice(queue, {
+                    id: nextNoticeId("arbiter"),
+                    lane: "arbiter",
+                    kind: "arbiter",
+                    message: comment,
+                    timeoutMs: 7000,
+                  }),
+                );
+              }
+            }
             break;
           case "brewing":
             setBrewing(msg.card_id);
@@ -294,53 +293,46 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             );
             break;
           case "reaction_window":
-            // The window UI is driven by the state snapshot's pending_play
-            // (broadcast right after this push); just clear any stale outcome.
-            if (reactionResultTimeoutRef.current) {
-              clearTimeout(reactionResultTimeoutRef.current);
-              reactionResultTimeoutRef.current = null;
-            }
-            setReactionResult(null);
+            // The window UI is driven by the state snapshot's pending_play.
             break;
           case "reaction_result":
-            setReactionResult(msg);
-            if (reactionResultTimeoutRef.current) {
-              clearTimeout(reactionResultTimeoutRef.current);
+            if (msg.outcome !== "resolved") {
+              setTopNotices((queue) =>
+                enqueueNotice(queue, {
+                  id: nextNoticeId("reaction"),
+                  lane: "top",
+                  kind: "reaction",
+                  result: msg,
+                  timeoutMs: 4000,
+                }),
+              );
             }
-            reactionResultTimeoutRef.current = setTimeout(() => {
-              reactionResultTimeoutRef.current = null;
-              setReactionResult(null);
-            }, REACTION_RESULT_MS);
             break;
           case "dice_roll":
-            setDiceRoll(msg);
-            if (diceRollTimeoutRef.current) {
-              clearTimeout(diceRollTimeoutRef.current);
-            }
-            diceRollTimeoutRef.current = setTimeout(() => {
-              diceRollTimeoutRef.current = null;
-              setDiceRoll(null);
-            }, DICE_ROLL_MS);
+            setTopNotices((queue) =>
+              enqueueNotice(queue, {
+                id: nextNoticeId("dice"),
+                lane: "top",
+                kind: "dice",
+                roll: msg,
+                timeoutMs: 5000,
+              }),
+            );
             break;
           case "epilogue":
             setEpilogueCards(msg.cards);
             break;
           case "error":
-            // Message-level errors are recoverable gameplay/validation notices
-            // (e.g. "Not your turn"). Surface them as a
-            // transient banner — never tear down the game — and auto-dismiss
-            // after a short delay. Reset any pending timer so a newer error
-            // gets the full window.
             lastServerErrorRef.current = msg.message;
-            if (transientTimeoutRef.current) {
-              clearTimeout(transientTimeoutRef.current);
-            }
-            setTransientError(msg.message);
-            transientTimeoutRef.current = setTimeout(() => {
-              transientTimeoutRef.current = null;
-              lastServerErrorRef.current = null;
-              setTransientError(null);
-            }, TRANSIENT_ERROR_MS);
+            setTopNotices((queue) =>
+              enqueueNotice(queue, {
+                id: nextNoticeId("error"),
+                lane: "top",
+                kind: "error",
+                message: msg.message,
+                timeoutMs: 4500,
+              }),
+            );
             break;
           default:
             break;
@@ -362,11 +354,9 @@ export function useGameSocket(code: string, name: string): GameSocketState {
           // payload just before these closes — prefer it, and fall back to a
           // code-specific message. Promote it out of the transient banner so
           // it isn't shown twice.
-          if (transientTimeoutRef.current) {
-            clearTimeout(transientTimeoutRef.current);
-            transientTimeoutRef.current = null;
-          }
-          setTransientError(null);
+          setTopNotices((queue) =>
+            queue.filter((notice) => notice.kind !== "error"),
+          );
           setFatalError(
             lastServerErrorRef.current ?? closeCodeMessage(evt.code),
           );
@@ -387,21 +377,9 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     return () => {
       cancelled = true;
       clearTimeout(retryTimeout);
-      if (transientTimeoutRef.current) {
-        clearTimeout(transientTimeoutRef.current);
-        transientTimeoutRef.current = null;
-      }
-      if (reactionResultTimeoutRef.current) {
-        clearTimeout(reactionResultTimeoutRef.current);
-        reactionResultTimeoutRef.current = null;
-      }
-      if (diceRollTimeoutRef.current) {
-        clearTimeout(diceRollTimeoutRef.current);
-        diceRollTimeoutRef.current = null;
-      }
       wsRef.current?.close();
     };
-  }, [code, name, clearTransientError]);
+  }, [code, name, nextNoticeId]);
 
   return {
     gameState,
@@ -409,18 +387,17 @@ export function useGameSocket(code: string, name: string): GameSocketState {
     brewing,
     previewResult,
     fatalError,
-    transientError,
-    clearTransientError,
+    topNotices,
+    arbiterNotices,
+    dismissNotice,
     connected,
     promptChoice,
     clearPromptChoice,
     epilogueCards,
     interactionRequest,
     interactionProgress,
-    reactionResult,
     handReveal,
     clearHandReveal,
-    diceRoll,
     turnTimer,
     send,
   };

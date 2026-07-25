@@ -59,23 +59,28 @@ export function PlayBlankDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-3xl">
+        <DialogHeader className="pr-10">
           <DialogTitle>Fill in your blank card</DialogTitle>
           <DialogDescription>
             Write the card you want to play. The arbiter interprets it and plays
             it this turn.
           </DialogDescription>
         </DialogHeader>
-        <CardCreator
-          ref={creatorRef}
-          title={title}
-          description={description}
-          onTitleChange={setTitle}
-          onDescriptionChange={setDescription}
-          caption="This card is played this turn."
-        />
-        <DialogFooter>
+        <div
+          data-authoring-scroll
+          className="min-h-0 overflow-y-auto overscroll-contain px-1"
+        >
+          <CardCreator
+            ref={creatorRef}
+            title={title}
+            description={description}
+            onTitleChange={setTitle}
+            onDescriptionChange={setDescription}
+            caption="This card is played this turn."
+          />
+        </div>
+        <DialogFooter className="shrink-0">
           <Button
             onClick={handlePlay}
             disabled={!title.trim() || !description.trim()}

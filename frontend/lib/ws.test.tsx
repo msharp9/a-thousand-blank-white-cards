@@ -88,4 +88,70 @@ describe("useGameSocket brewing lifecycle", () => {
     act(() => ws.emit({ type: "card_interpreted", card_id: "c1" }));
     expect(result.current.brewing).toBeNull();
   });
+
+  it("queues live arbiter comments without replaying hydrated log entries", () => {
+    const { result } = renderHook(() => useGameSocket("ABCD", "Alice"));
+    const ws = MockWebSocket.instances[0];
+
+    act(() => ws.onopen?.());
+    act(() =>
+      ws.emit({
+        type: "state",
+        state: baseState({ log: ["🤖 An old reconnect comment"] }),
+      }),
+    );
+    expect(result.current.arbiterNotices).toEqual([]);
+
+    act(() =>
+      ws.emit({
+        type: "effect_applied",
+        log_entry: "🤖 A fresh live comment",
+      }),
+    );
+    expect(result.current.log).toContain("🤖 A fresh live comment");
+    expect(result.current.arbiterNotices[0]).toMatchObject({
+      kind: "arbiter",
+      message: "A fresh live comment",
+    });
+
+    act(() =>
+      ws.emit({
+        type: "effect_applied",
+        log_entry: "Alice gains 2 points",
+      }),
+    );
+    expect(result.current.arbiterNotices).toHaveLength(1);
+  });
+
+  it("preserves every dice result in FIFO order", () => {
+    const { result } = renderHook(() => useGameSocket("ABCD", "Alice"));
+    const ws = MockWebSocket.instances[0];
+    const roll = {
+      type: "dice_roll",
+      actor_id: "p1",
+      sides: 6,
+      values: [3],
+      total: 3,
+      card_id: "c1",
+    };
+
+    act(() => ws.onopen?.());
+    act(() => {
+      ws.emit(roll);
+      ws.emit({ ...roll, values: [5], total: 5 });
+    });
+
+    expect(result.current.topNotices).toHaveLength(2);
+    expect(result.current.topNotices.map((notice) => notice.kind)).toEqual([
+      "dice",
+      "dice",
+    ]);
+    const firstId = result.current.topNotices[0].id;
+    act(() => result.current.dismissNotice(firstId));
+    expect(result.current.topNotices).toHaveLength(1);
+    expect(result.current.topNotices[0]).toMatchObject({
+      kind: "dice",
+      roll: { total: 5 },
+    });
+  });
 });

@@ -16,7 +16,7 @@ interface DiceRollOverlayProps {
 }
 
 /**
- * A brief dice-roll animation over the table: the dice tumble through random
+ * Dice-roll content for the viewport notice: the dice tumble through random
  * faces, then settle on the server-rolled values with the total. Purely
  * presentational — the authoritative roll arrived in the dice_roll push and
  * is also recorded as a dice_roll history event in the state snapshot.
@@ -47,10 +47,7 @@ export function DiceRollOverlay({ roll, actorName }: DiceRollOverlayProps) {
   }, [roll]);
 
   return (
-    <div
-      role="status"
-      className="fixed inset-x-0 top-16 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] -rotate-[0.6deg] animate-popin flex-col items-center gap-2 rounded-2xl border-[2.5px] border-ink bg-card px-5 py-3 panel-shadow"
-    >
+    <div className="flex flex-col items-center gap-2">
       <p className="font-hand text-lg">
         🎲 {actorName} rolls {roll.values.length}d{roll.sides}
       </p>
@@ -58,6 +55,7 @@ export function DiceRollOverlay({ roll, actorName }: DiceRollOverlayProps) {
         {faces.map((value, i) => (
           <span
             key={i}
+            aria-hidden={rolling}
             className={cn(
               "flex size-11 items-center justify-center rounded-lg border-2 border-ink bg-panel-paper font-marker text-2xl tabular-nums sticker-shadow-sm",
               rolling && "animate-wig",

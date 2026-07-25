@@ -231,12 +231,12 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans w-full max-w-full overflow-x-clip;
     background-image: radial-gradient(var(--dot-grid) 1px, transparent 1px);
     background-size: 22px 22px;
   }
   html {
-    @apply font-sans;
+    @apply font-sans w-full max-w-full overflow-x-clip;
   }
   a {
     color: var(--link);
@@ -255,4 +255,29 @@
     background: color-mix(in oklab, var(--ink) 25%, transparent);
     border-radius: 6px;
   }
+}
+
+@media (max-height: 500px) and (pointer: coarse) {
+  .card-creator-card {
+    max-width: 280px;
+  }
+
+  .short-landscape-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body:has([aria-modal="true"]) [data-theme-toggle] {
+  visibility: hidden;
 }
