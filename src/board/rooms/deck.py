@@ -142,7 +142,7 @@ def _normalise_card(raw: dict, index: int) -> dict:
     return card
 
 
-def venue_allowed(card_venue: str, mode: str) -> bool:
+def venue_allowed(card_venue: str | None, mode: str) -> bool:
     """Return whether a card of ``card_venue`` may appear in a ``mode`` game.
 
     Room ``mode`` is one of {"online", "in_person", "both"}; card ``venue`` is
@@ -152,15 +152,13 @@ def venue_allowed(card_venue: str, mode: str) -> bool:
       * mode "online"    — allows venue in {"all", "online"}; drops "in_person".
       * mode "in_person" — allows venue in {"all", "in_person"}; drops "online".
 
-    An unknown/missing venue defaults to "all" (always allowed), so blank cards
-    are never filtered out. Filler cards now carry explicit venues: the physical
-    dares (dance, mime, high-five, write-your-name) are tagged "in_person" and
-    drop out of online games.
+    Filtered modes fail closed for unknown/missing venues: an online game admits
+    only explicit "all"/"online" cards, and an in-person game admits only
+    explicit "all"/"in_person" cards. This prevents stale or malformed RAG
+    payloads from bypassing the venue filter. Mode "both" remains permissive.
     """
     if mode == "both":
         return True
-    if card_venue not in ("all", "in_person", "online"):
-        card_venue = "all"
     if mode == "online":
         return card_venue in ("all", "online")
     if mode == "in_person":
@@ -187,7 +185,7 @@ def collect_cards(card_source: CardSource | None = None, venue_mode: str = "both
     seen: set[str] = set()
     for index, raw in enumerate(raw_cards):
         card = _normalise_card(raw, index)
-        if not venue_allowed(card.get("venue", "all"), venue_mode):
+        if not venue_allowed(card.get("venue"), venue_mode):
             continue
         if card["id"] in seen:
             continue

@@ -69,3 +69,9 @@ class TestCombinedFile:
         for d in _load("seed_cards.json"):
             card = parse_seed_card(d)
             assert card.title
+
+    def test_every_card_has_an_explicit_valid_venue(self) -> None:
+        allowed = {"all", "in_person", "online"}
+        for card in _load("seed_cards.json"):
+            venue = card.get("canonical", {}).get("venue")
+            assert venue in allowed, f"Invalid or missing venue for {card['id']}: {venue!r}"

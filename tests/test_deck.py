@@ -203,10 +203,11 @@ def test_venue_allowed_truth_table(card_venue: str, mode: str, expected: bool) -
     assert venue_allowed(card_venue, mode) is expected
 
 
-def test_venue_allowed_unknown_venue_defaults_to_all() -> None:
-    # An unrecognised venue is treated as "all" (always allowed).
-    assert venue_allowed("teleport", "online") is True
-    assert venue_allowed("", "in_person") is True
+def test_venue_allowed_filtered_modes_reject_unknown_or_missing_venue() -> None:
+    for venue in ("teleport", "", None):
+        assert venue_allowed(venue, "online") is False
+        assert venue_allowed(venue, "in_person") is False
+        assert venue_allowed(venue, "both") is True
 
 
 def _mixed_venue_source():
@@ -226,12 +227,12 @@ def _mixed_venue_source():
 
 def test_collect_cards_venue_mode_online_drops_in_person() -> None:
     ids = [c["id"] for c in collect_cards(_mixed_venue_source(), venue_mode="online")]
-    assert ids == ["a", "o", "f"]  # in_person dropped
+    assert ids == ["a", "o"]  # in_person and venue-less cards dropped
 
 
 def test_collect_cards_venue_mode_in_person_drops_online() -> None:
     ids = [c["id"] for c in collect_cards(_mixed_venue_source(), venue_mode="in_person")]
-    assert ids == ["a", "p", "f"]  # online dropped
+    assert ids == ["a", "p"]  # online and venue-less cards dropped
 
 
 def test_collect_cards_venue_mode_both_keeps_all() -> None:
@@ -255,14 +256,13 @@ def test_build_deck_online_contains_no_in_person_cards() -> None:
     assert all(c.get("venue", "all") != "in_person" for c in cards.values())
 
 
-def test_venue_less_card_is_always_kept() -> None:
-    # Filler/blank-shaped card without a venue survives even a filtered mode.
+def test_venue_less_card_is_rejected_by_filtered_modes() -> None:
     def source() -> list[dict]:
         return [{"id": "nv", "title": "NoVenue", "description": "d"}]
 
-    for mode in ("online", "in_person", "both"):
-        (card,) = collect_cards(source, venue_mode=mode)
-        assert card["id"] == "nv"
+    assert collect_cards(source, venue_mode="online") == []
+    assert collect_cards(source, venue_mode="in_person") == []
+    assert collect_cards(source, venue_mode="both")[0]["id"] == "nv"
 
 
 def test_seed_data_has_an_in_person_card() -> None:
@@ -274,6 +274,22 @@ def test_seed_data_has_an_in_person_card() -> None:
     seed = json.loads(Path("data/seed_cards.json").read_text())
     venues = [c.get("canonical", {}).get("venue") for c in seed]
     assert "in_person" in venues
+
+
+def test_online_premade_pool_from_full_seed_corpus_has_only_allowed_venues() -> None:
+    import json
+    from pathlib import Path
+
+    seed = json.loads(Path("data/seed_cards.json").read_text())
+    cards, pool = build_premade_pool(
+        count=PREMADE_POOL_SIZE,
+        card_source=lambda: seed,
+        rng=random.Random(0),
+        venue_mode="online",
+    )
+
+    assert len(pool) == PREMADE_POOL_SIZE
+    assert {cards[card_id]["venue"] for card_id in pool} <= {"all", "online"}
 
 
 def test_default_source_prefers_rag_when_populated() -> None:
