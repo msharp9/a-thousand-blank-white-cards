@@ -55,6 +55,26 @@ def test_lobby_start_enters_setup_and_seeds_premade_pool() -> None:
         assert p.hand == []
 
 
+def test_lobby_start_uses_full_database_source() -> None:
+    room = _room_two_players()
+    rag_cards = [
+        {
+            "card_id": f"db-{i}",
+            "title": f"Database card {i}",
+            "description": "From the full corpus.",
+            "source": "player" if i == 39 else "seed",
+        }
+        for i in range(40)
+    ]
+
+    with patch("agent.rag.store.list_all_cards", return_value=rag_cards):
+        asyncio.run(room.handle_action("p1", StartMsg()))
+
+    assert room.state.phase == "setup"
+    assert len(room.state.deck) == PREMADE_POOL_SIZE
+    assert all(card_id.startswith("db-") for card_id in room.state.deck)
+
+
 def test_setup_snapshot_reports_progress_and_cards_to_author() -> None:
     room = _room_two_players()
     asyncio.run(room.handle_action("p1", StartMsg()))
@@ -179,6 +199,9 @@ def test_full_flow_two_players_reaches_playing_with_dealt_hands() -> None:
     assert len(room.state.get_player(first_id).hand) == STARTING_HAND_SIZE + room.state.draw_count
     assert len(room.state.get_player(other_id).hand) == STARTING_HAND_SIZE
     assert room.state.deck  # deck is non-empty after dealing
+    blank_ids = [cid for cid, card in room.state.cards.items() if card.get("blank")]
+    assert blank_ids
+    assert all(cid.startswith(f"blank-{room.code}-") for cid in blank_ids)
 
 
 def test_auto_start_when_last_player_finishes_authoring() -> None:

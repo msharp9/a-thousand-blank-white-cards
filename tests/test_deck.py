@@ -292,19 +292,37 @@ def test_default_source_prefers_rag_when_populated() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_build_premade_pool_simple_has_30_cards_no_blanks() -> None:
-    # The simple (point-only) seed deck yields exactly PREMADE_POOL_SIZE pool ids
-    # with no blank cards, and every id resolves in the registry.
-    cards, pool = build_premade_pool(count=30, simple=True, rng=random.Random(0))
+def test_build_premade_pool_samples_30_cards_from_full_source() -> None:
+    cards, pool = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(0))
     assert len(pool) == PREMADE_POOL_SIZE == 30
-    assert not any("blank" in cid for cid in pool)
+    assert len(set(pool)) == 30
     assert all(cid in cards for cid in pool)
+    # Membership comes from the whole source, not only the first 30 entries.
+    assert any(int(cid.removeprefix("c")) >= 30 for cid in pool)
 
 
 def test_build_premade_pool_is_deterministic_with_seeded_rng() -> None:
-    p1 = build_premade_pool(count=30, simple=True, rng=random.Random(3))[1]
-    p2 = build_premade_pool(count=30, simple=True, rng=random.Random(3))[1]
+    p1 = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(3))[1]
+    p2 = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(3))[1]
     assert p1 == p2
+
+
+def test_build_premade_pool_different_rng_changes_membership() -> None:
+    p1 = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(1))[1]
+    p2 = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(2))[1]
+    assert set(p1) != set(p2)
+
+
+def test_build_premade_pool_treats_simple_cards_like_other_cards() -> None:
+    def source() -> list[dict]:
+        return [
+            {"id": "seed-simple-001", "title": "Simple", "description": "Gain 1 point."},
+            {"id": "seed-gold-001", "title": "Gold", "description": "Reverse order."},
+        ]
+
+    cards, pool = build_premade_pool(count=2, card_source=source, rng=random.Random(0))
+    assert set(pool) == {"seed-simple-001", "seed-gold-001"}
+    assert set(cards) == set(pool)
 
 
 def test_build_premade_pool_pads_small_source_with_copies() -> None:
@@ -361,3 +379,23 @@ def test_build_blanks_returns_distinct_blank_ids() -> None:
         assert card["blank"] is True
         assert card["title"] == ""
         assert card["description"] == ""
+
+
+def test_build_blanks_namespace_prevents_cross_game_id_collisions() -> None:
+    first = build_blanks(5, namespace="ROOM01")
+    second = build_blanks(5, namespace="ROOM02")
+    assert set(first).isdisjoint(second)
+    assert set(first) == {f"blank-ROOM01-{i}" for i in range(5)}
+
+
+def test_finalize_deck_uses_blank_namespace() -> None:
+    blanks, deck = finalize_deck(
+        ["premade"],
+        ["authored"],
+        1,
+        blanks_per_player=1,
+        blank_namespace="ROOM01",
+        rng=random.Random(0),
+    )
+    assert set(blanks) == {"blank-ROOM01-0"}
+    assert "blank-ROOM01-0" in deck

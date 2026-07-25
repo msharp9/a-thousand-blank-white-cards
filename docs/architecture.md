@@ -786,7 +786,9 @@ without phrasing tips, which read as patronizing. Settings:
 `consolation_point_enabled`, `consolation_points`, `struggling_author_threshold`.
 
 Kept cards from the epilogue vote are upserted back into the store
-with `source="player"`, so the corpus grows across games.
+with `source="player"`, so the corpus grows across games. Each new room samples
+30 venue-eligible cards uniformly without replacement from that full corpus
+(falling back to the combined seed file when the store is unavailable).
 
 ---
 

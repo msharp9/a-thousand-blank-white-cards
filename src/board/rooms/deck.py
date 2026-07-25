@@ -22,7 +22,6 @@ import json
 import logging
 import random
 from collections.abc import Callable
-from pathlib import Path
 
 from models.card import normalise_canonical
 
@@ -42,17 +41,19 @@ BLANK_CARD_RATIO = 1 / 3
 CardSource = Callable[[], list[dict]]
 
 
-def _make_blank_card(n: int) -> dict:
-    """Return a blank card dict (id ``blank-<n>``).
+def _make_blank_card(n: int, *, namespace: str | None = None) -> dict:
+    """Return a blank card dict with an optional game-unique namespace.
 
     A blank enters the hand as blank (empty title/description, ``blank`` flag
     set) and is authored on play: Room._handle_play fills in the title and
     description, sets ``creator_id`` to the player, and clears the ``blank`` flag
     before interpreting. ``creator_id`` starts as ``"blank"`` so an un-played
-    blank is attributable to no player.
+    blank is attributable to no player. Production rooms namespace blanks by
+    room code so epilogue-kept cards from different games never share an id.
     """
+    card_id = f"blank-{namespace}-{n}" if namespace else f"blank-{n}"
     return {
-        "id": f"blank-{n}",
+        "id": card_id,
         "title": "",
         "description": "",
         "blank": True,
@@ -219,16 +220,6 @@ PREMADE_POOL_SIZE = 30
 # finalisation, and how many cards each player authors / is dealt.
 BLANKS_PER_PLAYER = 5
 
-# Deterministic simple deck of point-only cards — used for a no-AI basic game.
-SIMPLE_SEED_PATH = Path("data/seed_cards_simple.json")
-
-
-def _simple_card_source() -> list[dict]:
-    """Card source for the deterministic simple game: the point-only seed deck."""
-    from agent.rag.seed import read_seed_cards
-
-    return read_seed_cards(SIMPLE_SEED_PATH)
-
 
 def build_deck(
     *,
@@ -300,7 +291,6 @@ def build_premade_pool(
     card_source: CardSource | None = None,
     rng: random.Random | None = None,
     venue_mode: str = "both",
-    simple: bool = False,
 ) -> tuple[dict[str, dict], list[str]]:
     """Build the shared PRE-MADE card pool shown during setup (NO blanks).
 
@@ -310,9 +300,10 @@ def build_premade_pool(
     build synergies), before their created cards and blanks join the deck at
     :func:`finalize_deck`.
 
-    - ``simple=True`` draws from the deterministic point-only simple deck
-      (``data/seed_cards_simple.json``) for a no-AI game; otherwise the default
-      source (RAG corpus, falling back to the full offline seed file) is used.
+    - The default source is the full RAG corpus (seed + epilogue-kept cards),
+      falling back to the combined offline seed file.
+    - When at least ``count`` cards are eligible, membership is sampled uniformly
+      without replacement from the entire venue-filtered corpus.
     - ``venue_mode`` filters out venue-incompatible cards (see
       :func:`venue_allowed`).
     - If the (venue-filtered) source yields fewer than ``count`` distinct cards,
@@ -322,17 +313,14 @@ def build_premade_pool(
     Raises ValueError if the source yields no cards at all.
     """
     rng = rng or random.Random()
-    source = card_source or (_simple_card_source if simple else None)
-    collected = collect_cards(source, venue_mode)
+    collected = collect_cards(card_source, venue_mode)
     if not collected:
         raise ValueError("no cards available to build the pre-made pool (empty card source)")
 
     cards: dict[str, dict] = {}
     pool: list[str] = []
-    # Take up to `count` distinct real cards first.
-    for card in collected:
-        if len(pool) >= count:
-            break
+    selected = rng.sample(collected, count) if len(collected) >= count else collected
+    for card in selected:
         cards[card["id"]] = card
         pool.append(card["id"])
 
@@ -348,13 +336,13 @@ def build_premade_pool(
         copy_index += 1
 
     rng.shuffle(pool)
-    logger.info("built pre-made pool of %d cards (simple=%s, venue_mode=%s)", len(pool), simple, venue_mode)
+    logger.info("built pre-made pool of %d cards (eligible=%d, venue_mode=%s)", len(pool), len(collected), venue_mode)
     return cards, pool
 
 
-def build_blanks(count: int, *, start: int = 0) -> dict[str, dict]:
-    """Return ``count`` blank card dicts keyed by id (``blank-<start>`` …)."""
-    return {(b := _make_blank_card(n))["id"]: b for n in range(start, start + count)}
+def build_blanks(count: int, *, start: int = 0, namespace: str | None = None) -> dict[str, dict]:
+    """Return ``count`` blank card dicts, optionally namespaced for one game."""
+    return {(b := _make_blank_card(n, namespace=namespace))["id"]: b for n in range(start, start + count)}
 
 
 def finalize_deck(
@@ -364,6 +352,7 @@ def finalize_deck(
     *,
     blanks_per_player: int = BLANKS_PER_PLAYER,
     additional_blanks: int = 0,
+    blank_namespace: str | None = None,
     rng: random.Random | None = None,
 ) -> tuple[dict[str, dict], list[str]]:
     """Assemble the final draw deck at the end of setup and shuffle it.
@@ -381,7 +370,7 @@ def finalize_deck(
     """
     rng = rng or random.Random()
     num_blanks = blanks_per_player * num_players + additional_blanks
-    blank_cards = build_blanks(num_blanks)
+    blank_cards = build_blanks(num_blanks, namespace=blank_namespace)
     deck = [*premade_ids, *authored_ids, *blank_cards.keys()]
     rng.shuffle(deck)
     logger.info(

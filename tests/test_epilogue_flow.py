@@ -7,6 +7,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 from models.ws_messages import EpilogueDoneMsg, EpilogueFinalizeMsg, EpilogueVoteMsg
+from board.rooms.deck import build_premade_pool
 from board.rooms.epilogue import EpilogueManager
 from board.rooms.room import Room
 
@@ -59,6 +60,32 @@ def test_tally_and_persist_upserts_kept_cards() -> None:
     _, kwargs = mock_upsert.call_args
     assert kwargs["card_id"] == "c1"
     assert kwargs["source"] == "player"
+
+
+def test_kept_card_is_eligible_for_next_games_premade_pool() -> None:
+    fake_vector = [0.1] * 1536
+    with patch("agent.rag.store.embed_text_cached", return_value=fake_vector):
+        from agent.rag.store import init_store, upsert_card
+
+        init_store()
+        upsert_card("seed-1", "Seed One", "First seed.", "{}", "seed")
+        upsert_card("seed-2", "Seed Two", "Second seed.", "{}", "seed")
+
+        mgr = EpilogueManager(player_ids=["p1"])
+
+        async def keep_authored_card() -> None:
+            await mgr.start(
+                [{"id": "authored-1", "title": "A Keeper", "description": "Keep this card.", "canonical": {}}],
+                AsyncMock(),
+            )
+            mgr.record_vote("p1", "authored-1", keep=True)
+            await mgr.tally_and_persist()
+
+        asyncio.run(keep_authored_card())
+        cards, pool = build_premade_pool(count=3)
+
+    assert set(pool) == {"seed-1", "seed-2", "authored-1"}
+    assert cards["authored-1"]["origin"] == "authored"
 
 
 def test_room_epilogue_vote_without_start_errors() -> None:

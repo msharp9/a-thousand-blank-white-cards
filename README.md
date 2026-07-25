@@ -20,7 +20,8 @@ A game runs in these steps:
    the host.
 2. **Start the game.** The host starts it once everyone's in.
 3. **Build the deck.** The deck is assembled from three sources:
-   - **30 pre-made cards** are shuffled in.
+   - **30 pre-made cards** are sampled from the shared card corpus, which starts
+     with the seed cards and gains cards kept in earlier games' epilogues.
    - **Each player writes 5 cards** — title and description
      (e.g. *"Gain 5 points"*, *"Everyone else loses 2"*).
    - **5 blank cards per player** are shuffled in, to be written later.

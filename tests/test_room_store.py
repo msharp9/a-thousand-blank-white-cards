@@ -136,6 +136,19 @@ class TestFileRoomStore:
         assert isinstance(reloaded.created_at, datetime)
         assert reloaded.created_at.tzinfo is not None
 
+    def test_legacy_simple_deck_field_is_ignored(self, tmp_path) -> None:
+        store = FileRoomStore(tmp_path)
+        room = Room("ABCDEF")
+        store.put("ABCDEF", room)
+        path = tmp_path / "ABCDEF.json"
+        data = json.loads(path.read_text())
+        data["simple"] = True
+        path.write_text(json.dumps(data))
+
+        reloaded = FileRoomStore(tmp_path).get("ABCDEF")
+        assert reloaded is not None
+        assert reloaded.code == "ABCDEF"
+
     def _write_room_aged(self, tmp_path, code: str, age: timedelta) -> None:
         """Persist a room whose created_at is ``age`` in the past."""
         store = FileRoomStore(tmp_path)

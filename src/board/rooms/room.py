@@ -311,7 +311,6 @@ class Room:
         code: str,
         mode: str = "both",
         *,
-        simple: bool = True,
         turn_timer: int | None = None,
         on_change: Callable[[Room], None] | None = None,
     ) -> None:
@@ -341,10 +340,6 @@ class Room:
         # Persistence callback fired after every serialized mutation; None keeps
         # the room ephemeral (the default, and the only behaviour in production).
         self.on_change = on_change
-        # Whether to seed the pre-made pool from the deterministic point-only
-        # simple deck (the basic no-AI game). Kept as an attribute so tests and
-        # future modes can flip it; defaults True for the basic game.
-        self._simple = simple
         # Per-turn bookkeeping for the auto-draw→play→end model. Reset at the
         # start of every turn (see _start_turn). ``_has_drawn`` records the
         # turn's auto-draw for the client snapshot; ``_deck_exhausted`` latches
@@ -748,7 +743,6 @@ class Room:
             build_premade_pool,
             count=PREMADE_POOL_SIZE,
             venue_mode=self.state.mode,
-            simple=self._simple,
         )
         # Pre-made cards live in the registry AND (as ids) in the deck so the
         # setup UI can render "the deck so far". They're re-shuffled with the
@@ -814,6 +808,7 @@ class Room:
             len(dealt_to),
             blanks_per_player=BLANKS_PER_PLAYER,
             additional_blanks=additional_blanks,
+            blank_namespace=self.code,
         )
 
         # Deal starting hands off the top of the shuffled deck.

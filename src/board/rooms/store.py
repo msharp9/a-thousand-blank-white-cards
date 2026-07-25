@@ -189,7 +189,6 @@ def _parse_created_at(raw: object) -> datetime | None:
 def _room_to_dict(room: Room) -> dict:
     data = {
         "code": room.code,
-        "simple": room._simple,
         "created_at": room.created_at.isoformat(),
         "state": room.state.model_dump(mode="json"),
         "turn_state": {
@@ -206,7 +205,9 @@ def _room_to_dict(room: Room) -> dict:
 
 
 def _room_from_dict(data: dict) -> Room:
-    room = Room(data["code"], mode=data["state"]["mode"], simple=data["simple"])
+    # ``simple`` was persisted by an obsolete test-only deck mode. Ignore it
+    # when loading legacy room files; all new games use the full card corpus.
+    room = Room(data["code"], mode=data["state"]["mode"])
     created_at = data.get("created_at")
     if created_at is not None:
         room.created_at = datetime.fromisoformat(created_at)
