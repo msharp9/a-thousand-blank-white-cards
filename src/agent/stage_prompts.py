@@ -28,6 +28,7 @@ from agent.persona import (
     EFFECT_OUTPUT_KEYS,
     OP_CATALOG_GUIDE,
     OUTPUT_CONTRACT_PREAMBLE,
+    PLACEMENT_GUIDANCE,
     PERSONA_DECISION_LOGIC,
     PERSONA_OUTPUT_KEYS,
     PERSONA_PREAMBLE,
@@ -68,13 +69,12 @@ intent — do NOT design mechanics, pick engine ops, or write code; later stages
     witty and deserved — and STILL choose a plausible substitute effect through
     the normal branches (chaos_monkey etc.): the mockery is IN ADDITION to
     chosen effects, never instead of them.
-  * placement: where the played card lives afterwards. "center" for a
-    persistent global rule — it sits visibly on the board as a reminder and can
-    be targeted/destroyed later to remove the effect. "player" for a persistent
-    single-player boon/curse/modifier — it sits in front of that player.
-    "discard" for one-shot effects. Cohere with persistence: "persistent"
-    usually implies center or player.
+  * placement: apply the semantic physical-card rules below. Placement is not
+    redundant with persistence: an inert owned pet belongs before a player, and
+    an immediate global state change can remain in the center as its reminder.
 """
+
+INTENT_JOB += "\n" + PLACEMENT_GUIDANCE
 
 INTENT_OUTPUT_CONTRACT = f"""{OUTPUT_CONTRACT_PREAMBLE}
   {{

@@ -153,6 +153,7 @@ def _stub_run_agent(monkeypatch, verdict="ok"):
         return InterpretResult(
             program=EffectProgram(ops=[AddPointsOp(op="add_points", target="self", amount=5)]),
             verdict=verdict,
+            placement="discard",
             comment="stub",
         )
 
@@ -190,6 +191,9 @@ class TestRunBenchmark:
         agg = run.aggregate()
         assert agg["cases"] == 6
         assert agg["unique_cards"] == 2
+        assert agg["placement_missing_rate"] == 0.0
+        assert agg["placement_recall"]["discard"] == 1.0
+        assert agg["placement_balanced_accuracy"] == 1.0
         assert "consistency" in agg
 
     def test_concurrency_preserves_row_order_and_results(self, monkeypatch) -> None:

@@ -50,7 +50,16 @@ from models.effects import (
 )
 from pydantic import ValidationError as PydanticValidationError
 
-from models.game_state import EndCondition, GameState, HookSpec, RuleBinding, Rules, WinCondition
+from models.game_state import (
+    ConditionBinding,
+    EndCondition,
+    GameState,
+    HookSpec,
+    RuleBinding,
+    Rules,
+    TurnOrderBinding,
+    WinCondition,
+)
 
 _hand_reveal_drain: ContextVar[list[dict[str, Any]] | None] = ContextVar("hand_reveal_drain", default=None)
 
@@ -238,7 +247,9 @@ def _reduce_reverse_order(state: GameState, op: ReverseOrderOp, ctx: HookContext
     (a pointer into ``players``, untouched here), so the active player stays
     exactly who it was.
     """
-    return state.model_copy(update={"turn_order": list(reversed(state.effective_turn_order()))})
+    previous = list(state.effective_turn_order())
+    state = state.model_copy(update={"turn_order": list(reversed(previous))})
+    return _bind_turn_order(state, _board_source_card_id(state, ctx), previous)
 
 
 def _reduce_scramble_order(
@@ -252,12 +263,14 @@ def _reduce_scramble_order(
     """
     rng = rng or random.Random()
     order = list(state.effective_turn_order())
+    previous = list(order)
     rng.shuffle(order)
-    return state.model_copy(update={"turn_order": order})
+    state = state.model_copy(update={"turn_order": order})
+    return _bind_turn_order(state, _board_source_card_id(state, ctx), previous)
 
 
 def _reduce_change_draw_count(state: GameState, op: ChangeDrawCountOp, ctx: HookContext) -> GameState:
-    return state.model_copy(update={"rules": state.rules.model_copy(update={"draw": op.amount})})
+    return _reduce_set_rule(state, SetRuleOp(path="draw", value=op.amount), ctx)
 
 
 # ---------------------------------------------------------------------------
@@ -414,13 +427,8 @@ def _reduce_destroy_card(state: GameState, op: DestroyCardOp, ctx: HookContext) 
     for cid in card_ids:
         if cid not in discard:
             discard.append(cid)
-    hooks = [h for h in state.hooks if h.source_card_id not in targets]
-    new_state = state.model_copy(
-        update={"players": new_players, "house_rules": house_rules, "discard": discard, "hooks": hooks}
-    )
-    for source in dict.fromkeys(h.source_card_id for h in state.hooks if h.source_card_id in targets):
-        new_state = new_state.with_log(f"[hook] unregistered {source} (card destroyed)")
-    return _release_rule_bindings(new_state, targets)
+    new_state = state.model_copy(update={"players": new_players, "house_rules": house_rules, "discard": discard})
+    return _retire_board_sources(new_state, targets, reason="card destroyed")
 
 
 def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext) -> GameState:
@@ -464,6 +472,7 @@ def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext
         assignments = [(card_id, recipients[0]) for card_id in known]
 
     targets = {card_id for card_id, _ in assignments}
+    departed = {card_id for card_id in targets if _locate_card_zone(state, card_id)[0] in {"center", "in_play"}}
     by_recipient: dict[str, list[str]] = {}
     for card_id, recipient in assignments:
         by_recipient.setdefault(recipient, []).append(card_id)
@@ -473,7 +482,7 @@ def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext
         in_play = [card for card in player.in_play if card not in targets]
         hand.extend(card for card in by_recipient.get(player.id, ()) if card not in hand)
         players.append(player.model_copy(update={"hand": hand, "in_play": in_play}))
-    return state.model_copy(
+    state = state.model_copy(
         update={
             "players": players,
             "house_rules": [card for card in state.house_rules if card not in targets],
@@ -481,6 +490,7 @@ def _reduce_transfer_card(state: GameState, op: TransferCardOp, ctx: HookContext
             "deck": [card for card in state.deck if card not in targets],
         }
     )
+    return _retire_board_sources(state, departed, reason="card left play")
 
 
 # Op-level zone name -> GameState.move_card zone literal ("exile" is the only
@@ -523,6 +533,14 @@ def _locate_card_zone(state: GameState, card_id: str) -> tuple[str | None, str |
         if card_id in player.in_play:
             return "in_play", player.id
     return None, None
+
+
+def _board_source_card_id(state: GameState, ctx: HookContext) -> str | None:
+    source = ctx.source_card_id or ctx.card_id
+    if source is None:
+        return None
+    zone, _ = _locate_card_zone(state, source)
+    return source if zone in {"center", "in_play"} else None
 
 
 # Zones whose contents are public (see board.rooms.redaction): a card sitting
@@ -669,13 +687,8 @@ def _reduce_move_cards(
 
     if op.to_zone not in ("center", "in_play"):
         departed = {cid for cid, zone, _ in moves if zone in ("center", "in_play")}
-        retired = list(dict.fromkeys(h.source_card_id for h in state.hooks if h.source_card_id in departed))
-        if retired:
-            state = state.model_copy(update={"hooks": [h for h in state.hooks if h.source_card_id not in departed]})
-            for source in retired:
-                state = state.with_log(f"[hook] unregistered {source} (card left play)")
         if departed:
-            state = _release_rule_bindings(state, departed)
+            state = _retire_board_sources(state, departed, reason="card left play")
 
     count = len(moves)
     if owner_routing:
@@ -803,7 +816,7 @@ def _reduce_eliminate_player(state: GameState, op: EliminatePlayerOp, ctx: HookC
 
 def _reduce_set_win_condition(state: GameState, op: SetWinConditionOp, ctx: HookContext) -> GameState:
     wc = WinCondition(kind=op.kind, threshold=op.threshold)
-    return state.model_copy(update={"rules": state.rules.model_copy(update={"win_condition": wc})})
+    return _reduce_set_rule(state, SetRuleOp(path="win_condition", value=wc.model_dump()), ctx)
 
 
 def _reduce_custom_note(state: GameState, op: CustomNoteOp, ctx: HookContext) -> GameState:
@@ -813,8 +826,13 @@ def _reduce_custom_note(state: GameState, op: CustomNoteOp, ctx: HookContext) ->
 def _reduce_set_condition(state: GameState, op: SetConditionOp, ctx: HookContext) -> GameState:
     for pid in _resolve_targets(op.target, ctx, state):
         if op.value is None:
-            state = state.without_condition(pid, op.key)
+            state = clear_condition(state, pid, op.key)
         else:
+            source = _board_source_card_id(state, ctx)
+            if source is None:
+                state = _supersede_condition_bindings(state, pid, op.key)
+            else:
+                state = _bind_condition(state, source, pid, op.key)
             state = state.with_condition(pid, op.key, op.value, ttl=op.duration_turns)
     return state
 
@@ -979,10 +997,12 @@ def _reduce_set_rule(state: GameState, op: SetRuleOp, ctx: HookContext) -> GameS
     except PydanticValidationError as exc:
         raise ValueError(f"set_rule: invalid value for {op.path!r}: {exc}") from exc
     update: dict = {"rules": new_rules}
-    source = ctx.source_card_id or ctx.card_id
+    source = _board_source_card_id(state, ctx)
     if source is not None:
-        binding = RuleBinding(source_card_id=source, path=op.path, previous_value=previous)
-        update["rule_bindings"] = [*state.rule_bindings, binding]
+        top = next((binding for binding in reversed(state.rule_bindings) if binding.path == op.path), None)
+        if top is None or top.source_card_id != source:
+            binding = RuleBinding(source_card_id=source, path=op.path, previous_value=previous)
+            update["rule_bindings"] = [*state.rule_bindings, binding]
     return state.model_copy(update=update)
 
 
@@ -1015,6 +1035,174 @@ def _release_rule_bindings(state: GameState, destroyed: set[str]) -> GameState:
         for path in carried:
             new_state = new_state.with_log(f"[rule] reverted {path} (card destroyed)")
     return new_state
+
+
+def _bind_turn_order(state: GameState, source: str | None, previous: list[str]) -> GameState:
+    if source is None:
+        return state
+    if state.turn_order_bindings and state.turn_order_bindings[-1].source_card_id == source:
+        return state
+    binding = TurnOrderBinding(source_card_id=source, previous_order=previous)
+    return state.model_copy(update={"turn_order_bindings": [*state.turn_order_bindings, binding]})
+
+
+def _release_turn_order_bindings(state: GameState, departed: set[str]) -> GameState:
+    if not any(binding.source_card_id in departed for binding in state.turn_order_bindings):
+        return state
+    remaining: list[TurnOrderBinding] = []
+    carried: list[str] | None = None
+    for binding in state.turn_order_bindings:
+        if binding.source_card_id in departed:
+            if carried is None:
+                carried = binding.previous_order
+        elif carried is not None:
+            remaining.append(binding.model_copy(update={"previous_order": carried}))
+            carried = None
+        else:
+            remaining.append(binding)
+    update: dict[str, Any] = {"turn_order_bindings": remaining}
+    if carried is not None:
+        update["turn_order"] = carried
+    return state.model_copy(update=update)
+
+
+def _bind_condition(state: GameState, source: str, player_id: str, key: str) -> GameState:
+    top = next(
+        (
+            binding
+            for binding in reversed(state.condition_bindings)
+            if binding.player_id == player_id and binding.key == key
+        ),
+        None,
+    )
+    if top is not None and top.source_card_id == source:
+        return state
+    player = state.get_player(player_id)
+    binding = ConditionBinding(
+        source_card_id=source,
+        player_id=player_id,
+        key=key,
+        had_previous=key in player.conditions,
+        previous_value=player.conditions.get(key),
+        previous_ttl=player.condition_ttls.get(key),
+    )
+    return state.model_copy(update={"condition_bindings": [*state.condition_bindings, binding]})
+
+
+def _release_condition_bindings(
+    state: GameState,
+    departed: set[str],
+    *,
+    paths: set[tuple[str, str]] | None = None,
+) -> GameState:
+    def selected(binding: ConditionBinding) -> bool:
+        path = (binding.player_id, binding.key)
+        return binding.source_card_id in departed and (paths is None or path in paths)
+
+    if not any(selected(binding) for binding in state.condition_bindings):
+        return state
+
+    remaining: list[ConditionBinding] = []
+    carried: dict[tuple[str, str], tuple[bool, Any, int | None]] = {}
+    for binding in state.condition_bindings:
+        path = (binding.player_id, binding.key)
+        if selected(binding):
+            carried.setdefault(
+                path,
+                (binding.had_previous, binding.previous_value, binding.previous_ttl),
+            )
+        elif path in carried:
+            had_previous, previous_value, previous_ttl = carried.pop(path)
+            remaining.append(
+                binding.model_copy(
+                    update={
+                        "had_previous": had_previous,
+                        "previous_value": previous_value,
+                        "previous_ttl": previous_ttl,
+                    }
+                )
+            )
+        else:
+            remaining.append(binding)
+
+    state = state.model_copy(update={"condition_bindings": remaining})
+    for (player_id, key), (had_previous, previous_value, previous_ttl) in carried.items():
+        if had_previous:
+            state = state.with_condition(player_id, key, previous_value, ttl=previous_ttl)
+        else:
+            state = state.without_condition(player_id, key)
+    return state
+
+
+def _discard_condition_sources(state: GameState, sources: set[str], *, reason: str) -> GameState:
+    live_sources = {binding.source_card_id for binding in state.condition_bindings}
+    retiring = sources - live_sources
+    departed: set[str] = set()
+    for source in retiring:
+        zone, owner = _locate_card_zone(state, source)
+        if zone not in {"center", "in_play"}:
+            continue
+        state = state.move_card(
+            source,
+            zone,
+            "discard",
+            from_player_id=owner,
+        ).with_log(f"[condition] {source} {reason}; source card discarded")
+        departed.add(source)
+    return _retire_board_sources(state, departed, reason=reason)
+
+
+def _supersede_condition_bindings(state: GameState, player_id: str, key: str) -> GameState:
+    sources = {
+        binding.source_card_id
+        for binding in state.condition_bindings
+        if binding.player_id == player_id and binding.key == key
+    }
+    if not sources:
+        return state
+    bindings = [
+        binding for binding in state.condition_bindings if not (binding.player_id == player_id and binding.key == key)
+    ]
+    state = state.model_copy(update={"condition_bindings": bindings})
+    return _discard_condition_sources(state, sources, reason="condition superseded")
+
+
+def clear_condition(state: GameState, player_id: str, key: str) -> GameState:
+    """Clear a condition and retire visible cards whose status it represented."""
+    state = _supersede_condition_bindings(state, player_id, key)
+    return state.without_condition(player_id, key)
+
+
+def expire_condition(state: GameState, player_id: str, key: str) -> GameState:
+    """Expire the active condition layer and discard its source when fully spent."""
+    top = next(
+        (
+            binding
+            for binding in reversed(state.condition_bindings)
+            if binding.player_id == player_id and binding.key == key
+        ),
+        None,
+    )
+    if top is None:
+        return state.without_condition(player_id, key)
+    source = top.source_card_id
+    state = _release_condition_bindings(state, {source}, paths={(player_id, key)})
+    return _discard_condition_sources(state, {source}, reason="condition expired")
+
+
+def _retire_board_sources(state: GameState, departed: set[str], *, reason: str) -> GameState:
+    if not departed:
+        return state
+    retired_hooks = {hook.source_card_id for hook in state.hooks if hook.source_card_id in departed}
+    if retired_hooks:
+        state = state.model_copy(
+            update={"hooks": [hook for hook in state.hooks if hook.source_card_id not in departed]}
+        )
+        for source in retired_hooks:
+            state = state.with_log(f"[hook] unregistered {source} ({reason})")
+    state = _release_rule_bindings(state, departed)
+    state = _release_turn_order_bindings(state, departed)
+    return _release_condition_bindings(state, departed)
 
 
 def _reduce_counter_play(state: GameState, op: Op, ctx: HookContext) -> GameState:

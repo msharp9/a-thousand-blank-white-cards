@@ -349,6 +349,7 @@ def _aggregate(run: EvalRunResult) -> dict[str, Any]:
     for name in run.scorer_names:
         vals = [r.scores[name] for r in rows if r.scores.get(name) is not None]
         summary[name] = fmean(vals) if vals else None
+    _add_placement_breakdown(rows, summary)
 
     summary["sandbox_interaction_skipped"] = sum(
         1 for r in rows if "interaction" in (r.score_meta.get("sandbox_behavior", {}) or {}).get("skipped", "")
@@ -359,6 +360,32 @@ def _aggregate(run: EvalRunResult) -> dict[str, Any]:
     if run.config.n_samples > 1:
         summary["consistency"] = _consistency(run)
     return summary
+
+
+def _add_placement_breakdown(rows: tuple[CardResult, ...], summary: dict[str, Any]) -> None:
+    zones = ("discard", "center", "player")
+    confusion = {expected: {predicted: 0 for predicted in (*zones, "missing")} for expected in zones}
+    recalls: dict[str, float | None] = {}
+    labeled = 0
+    missing = 0
+    for row in rows:
+        meta = row.score_meta.get("placement_accuracy", {})
+        expected = meta.get("expected")
+        if expected not in zones:
+            continue
+        labeled += 1
+        predicted = meta.get("predicted")
+        bucket = predicted if predicted in zones else "missing"
+        missing += int(bucket == "missing")
+        confusion[expected][bucket] += 1
+    for zone in zones:
+        total = sum(confusion[zone].values())
+        recalls[zone] = confusion[zone][zone] / total if total else None
+    present = [value for value in recalls.values() if value is not None]
+    summary["placement_recall"] = recalls
+    summary["placement_balanced_accuracy"] = fmean(present) if present else None
+    summary["placement_missing_rate"] = missing / labeled if labeled else None
+    summary["placement_confusion"] = confusion
 
 
 def _add_ceilings(run: EvalRunResult, summary: dict[str, Any]) -> None:

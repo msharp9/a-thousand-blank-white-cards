@@ -170,6 +170,24 @@ class RuleBinding(BaseModel):
     previous_value: Any = None
 
 
+class ConditionBinding(BaseModel):
+    """One board card's write to a player's open condition map."""
+
+    source_card_id: str
+    player_id: str
+    key: str
+    had_previous: bool = False
+    previous_value: Any = None
+    previous_ttl: int | None = None
+
+
+class TurnOrderBinding(BaseModel):
+    """A board card's reversible write to the explicit turn-order list."""
+
+    source_card_id: str
+    previous_order: list[str]
+
+
 class HistoryEvent(BaseModel):
     """One privacy-safe, append-only fact about completed game mechanics."""
 
@@ -283,6 +301,11 @@ class GameState(BaseModel):
     # set_rule writes attributed to a source card, oldest first — per-path
     # stacks consumed when the card is destroyed (see RuleBinding).
     rule_bindings: list[RuleBinding] = Field(default_factory=list)
+
+    # Persistent condition and turn-order writes attributed to visible source
+    # cards. They mirror rule_bindings so removing a reminder removes its effect.
+    condition_bindings: list[ConditionBinding] = Field(default_factory=list)
+    turn_order_bindings: list[TurnOrderBinding] = Field(default_factory=list)
 
     # Machine-readable history for game logic and reconnects. Unlike ``log``,
     # events never contain private hand contents or generated prose.

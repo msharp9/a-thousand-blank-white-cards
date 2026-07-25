@@ -1297,7 +1297,7 @@
           }
         }
       ],
-      "sandbox": null
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card(\"id:\" + (ctx.get(\"chosen_card_id\") or \"\"), 'self')"
     }
   },
   {
@@ -1349,7 +1349,7 @@
           }
         }
       ],
-      "sandbox": null
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.transfer_card(\"id:\" + (ctx.get(\"chosen_card_id\") or \"\"), 'self')\n    state.subtract_points(chosen, 3)"
     }
   },
   {
@@ -1838,7 +1838,7 @@
     "alt_text": null,
     "canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "trigger": null,
       "ops": [
@@ -1862,7 +1862,7 @@
     "alt_text": null,
     "canonical": {
       "target": "self",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "trigger": null,
       "ops": [
@@ -1886,7 +1886,7 @@
     "alt_text": "a green cloud drifting over a table of yawning stick figures",
     "canonical": {
       "target": "all_others",
-      "placement": "discard",
+      "placement": "center",
       "venue": "all",
       "trigger": null,
       "ops": [
@@ -2226,6 +2226,27 @@
         }
       ],
       "sandbox": "def apply(state, ctx):\n    state.destroy_card(card_target='last_played')\n    state.draw_cards('self', 1)"
+    }
+  },
+  {
+    "id": "seed-gold-112",
+    "title": "Companion Pebble",
+    "description": "This tiny pebble is your loyal companion now. Keep it in front of you. It does nothing, faithfully.",
+    "alt_text": "a smiling pebble sitting beside its new owner",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "The player owns a magnificently loyal pebble."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('The player owns a magnificently loyal pebble.')"
     }
   }
 ]

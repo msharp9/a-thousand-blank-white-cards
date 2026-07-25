@@ -18,6 +18,7 @@ from evals.scorers import (
     intent_match_judge,
     magnitude_sign,
     magnitude_value,
+    placement_accuracy,
     persistence_accuracy,
     reset_run_caches,
     sandbox_behavior,
@@ -35,7 +36,7 @@ def _ops_plan(*ops: dict) -> dict:
 
 
 def test_all_scorers_count() -> None:
-    assert len(ALL_SCORERS) == 9
+    assert len(ALL_SCORERS) == 10
     assert set(ALL_SCORERS) == set(JUDGE_SCORERS) | set(DETERMINISTIC_SCORERS)
     for scorer in (
         sandbox_behavior,
@@ -44,10 +45,32 @@ def test_all_scorers_count() -> None:
         persistence_accuracy,
         magnitude_sign,
         magnitude_value,
+        placement_accuracy,
         executability,
         did_something,
     ):
         assert scorer in ALL_SCORERS
+
+
+class TestPlacementAccuracy:
+    def test_exact_match_scores_one(self):
+        score = placement_accuracy.evaluate(_ctx({"placement": "player"}, {"placement": "player"}))
+        assert score.score == 1.0
+        assert score.metadata["expected"] == "player"
+
+    def test_mismatch_scores_zero(self):
+        score = placement_accuracy.evaluate(_ctx({"placement": "discard"}, {"placement": "center"}))
+        assert score.score == 0.0
+        assert score.metadata["reason"] == "placement mismatch"
+
+    def test_missing_or_invalid_prediction_scores_zero(self):
+        assert placement_accuracy.evaluate(_ctx({}, {"placement": "center"})).score == 0.0
+        assert placement_accuracy.evaluate(_ctx({"placement": "CENTER"}, {"placement": "center"})).score == 0.0
+
+    def test_missing_expected_abstains(self):
+        score = placement_accuracy.evaluate(_ctx({"placement": "center"}, {}))
+        assert score.score is None
+        assert "skipped" in score.metadata
 
 
 class TestJudgeScorers:

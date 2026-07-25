@@ -28,11 +28,17 @@ from evals.scorers import ALL_SCORERS
 # real_cards.json is the larger raw photo transcription, not a scored suite.
 DEFAULT_DATA = find_repo_root(Path(__file__)) / "data" / "eval" / "eval_cards.json"
 DEFAULT_HARD_DATA = find_repo_root(Path(__file__)) / "data" / "eval" / "eval_cards_hard.json"
+DEFAULT_PLACEMENT_DATA = find_repo_root(Path(__file__)) / "data" / "eval" / "eval_cards_placement.json"
 
 SUITES: dict[str, list[tuple[Path, str]]] = {
     "gold": [(DEFAULT_DATA, "real_card")],
     "hard": [(DEFAULT_HARD_DATA, "hard_card")],
-    "all": [(DEFAULT_DATA, "real_card"), (DEFAULT_HARD_DATA, "hard_card")],
+    "placement": [(DEFAULT_PLACEMENT_DATA, "placement_card")],
+    "all": [
+        (DEFAULT_DATA, "real_card"),
+        (DEFAULT_HARD_DATA, "hard_card"),
+        (DEFAULT_PLACEMENT_DATA, "placement_card"),
+    ],
 }
 
 
@@ -137,6 +143,7 @@ def normalise_agent_output(result: Any) -> dict[str, Any]:
     """
     out: dict[str, Any] = {
         "verdict": getattr(result, "verdict", None),
+        "placement": getattr(result, "placement", None),
         "comment": getattr(result, "comment", ""),
         "persona_action": getattr(result, "persona_action", "none"),
         "agent_error": bool(getattr(result, "agent_error", False)),

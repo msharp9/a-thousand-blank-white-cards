@@ -928,6 +928,52 @@ class TestRuleBindings:
         assert [b.source_card_id for b in fired.rule_bindings] == ["hr1"]
 
 
+class TestTurnOrderBindings:
+    def _state(self) -> GameState:
+        return GameState(
+            room_code="TEST",
+            players=[
+                Player(id="p1", name="Alice"),
+                Player(id="p2", name="Bob"),
+                Player(id="p3", name="Carol"),
+            ],
+            turn_order=["p1", "p2", "p3"],
+            house_rules=["r1", "r2"],
+        )
+
+    def test_destroying_reversal_restores_previous_order(self):
+        state = apply_op(self._state(), ReverseOrderOp(), make_card_ctx("p1", card_id="r1"))
+        assert state.turn_order == ["p3", "p2", "p1"]
+        assert [binding.source_card_id for binding in state.turn_order_bindings] == ["r1"]
+        restored = apply_op(state, DestroyCardOp(card_id="r1"), make_card_ctx("p1"))
+        assert restored.turn_order == ["p1", "p2", "p3"]
+        assert restored.turn_order_bindings == []
+
+    def test_buried_reversal_splices_without_changing_live_order(self):
+        state = apply_op(self._state(), ReverseOrderOp(), make_card_ctx("p1", card_id="r1"))
+        state = apply_op(state, ReverseOrderOp(), make_card_ctx("p1", card_id="r2"))
+        after_oldest = apply_op(state, DestroyCardOp(card_id="r1"), make_card_ctx("p1"))
+        assert after_oldest.turn_order == ["p1", "p2", "p3"]
+        after_both = apply_op(after_oldest, DestroyCardOp(card_id="r2"), make_card_ctx("p1"))
+        assert after_both.turn_order == ["p1", "p2", "p3"]
+
+    def test_specialized_rule_ops_bind_when_source_is_on_board(self):
+        state = apply_op(self._state(), ChangeDrawCountOp(amount=4), make_card_ctx("p1", card_id="r1"))
+        state = apply_op(
+            state,
+            SetWinConditionOp(kind="lowest_points"),
+            make_card_ctx("p1", card_id="r2"),
+        )
+        assert {(binding.source_card_id, binding.path) for binding in state.rule_bindings} == {
+            ("r1", "draw"),
+            ("r2", "win_condition"),
+        }
+        state = apply_op(state, DestroyCardOp(card_id="r2"), make_card_ctx("p1"))
+        assert state.rules.win_condition.kind == "highest_points"
+        state = apply_op(state, DestroyCardOp(card_id="r1"), make_card_ctx("p1"))
+        assert state.rules.draw == 1
+
+
 class TestOpenTargets:
     def test_id_target_resolves_to_that_player(self):
         state = make_state()
@@ -968,6 +1014,60 @@ class TestSetCondition:
         state = make_state().with_condition("p1", "poisoned", 1)
         new = apply_op(state, SetConditionOp(target="self", key="poisoned", value=None), make_ctx("p1"))
         assert new.get_player("p1").conditions == {}
+
+    def _bound_state(self, *sources: str) -> GameState:
+        players = [
+            Player(id="p1", name="Alice"),
+            Player(id="p2", name="Bob", in_play=list(sources)),
+        ]
+        cards = {source: {"id": source, "title": source} for source in sources}
+        return GameState(room_code="TEST", players=players, cards=cards)
+
+    def test_board_condition_is_bound_and_destroying_source_clears_it(self):
+        state = self._bound_state("curse")
+        state = apply_op(
+            state,
+            SetConditionOp(target="id:p2", key="cursed", value=True),
+            make_card_ctx("p1", card_id="curse"),
+        )
+        assert state.get_player("p2").conditions == {"cursed": True}
+        assert [binding.source_card_id for binding in state.condition_bindings] == ["curse"]
+        state = apply_op(state, DestroyCardOp(card_id="curse"), make_card_ctx("p1"))
+        assert state.get_player("p2").conditions == {}
+        assert state.condition_bindings == []
+
+    def test_stacked_condition_restores_previous_source(self):
+        state = self._bound_state("mild", "severe")
+        state = apply_op(
+            state,
+            SetConditionOp(target="id:p2", key="poisoned", value=1),
+            make_card_ctx("p1", card_id="mild"),
+        )
+        state = apply_op(
+            state,
+            SetConditionOp(target="id:p2", key="poisoned", value=3),
+            make_card_ctx("p1", card_id="severe"),
+        )
+        state = apply_op(state, DestroyCardOp(card_id="severe"), make_card_ctx("p1"))
+        assert state.get_player("p2").conditions["poisoned"] == 1
+        state = apply_op(state, DestroyCardOp(card_id="mild"), make_card_ctx("p1"))
+        assert "poisoned" not in state.get_player("p2").conditions
+
+    def test_transfering_source_off_board_retires_condition(self):
+        state = self._bound_state("curse")
+        state = apply_op(
+            state,
+            SetConditionOp(target="id:p2", key="cursed", value=True),
+            make_card_ctx("p1", card_id="curse"),
+        )
+        state = apply_op(
+            state,
+            TransferCardOp(card_target="id:curse", to_target="self"),
+            make_card_ctx("p1"),
+        )
+        assert "curse" in state.get_player("p1").hand
+        assert "cursed" not in state.get_player("p2").conditions
+        assert state.condition_bindings == []
 
 
 class TestSetCardAttribute:

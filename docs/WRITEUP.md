@@ -301,7 +301,7 @@ A **35-card hand-annotated gold set** ([`data/eval/eval_cards.json`](../data/eva
 Each card carries a structured `human_canonical` label (timing, target, placement,
 trigger_event, ops, magnitude_sign) that spot-checks as correct and consistent with the
 engine's op vocabulary. It is small (n=35) — good for a directional baseline, too small
-for tight confidence intervals. It is joined by a 25-card compositional [`eval_hard` suite](../data/eval/eval_cards_hard.json) that tests for complex mechanics, as well as a large 700 card dataset created from [real cards](../data/eval/real_cards.json), and the 131-card seed corpus as additional benchmarks (`config.EVAL_BENCHMARKS`).
+for tight confidence intervals. It is joined by a 34-card compositional [`eval_hard` suite](../data/eval/eval_cards_hard.json), a balanced 24-card placement suite, a large 698-card dataset created from [real cards](../data/eval/real_cards.json), and the 159-card seed corpus as additional benchmarks (`config.EVAL_BENCHMARKS`).
 
 ### Harness and scorers
 

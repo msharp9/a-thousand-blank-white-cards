@@ -45,8 +45,15 @@ def _effect_summary(output: dict[str, Any]) -> str:
     so an effect-less interpretation (e.g. verdict="invalid") still gets scored."""
     plan = output.get("resolution_plan")
     if plan:
-        return json.dumps(plan, default=str)
-    return json.dumps({"verdict": output.get("verdict"), "comment": output.get("comment")}, default=str)
+        return json.dumps({"placement": output.get("placement"), "resolution_plan": plan}, default=str)
+    return json.dumps(
+        {
+            "placement": output.get("placement"),
+            "verdict": output.get("verdict"),
+            "comment": output.get("comment"),
+        },
+        default=str,
+    )
 
 
 def _run_judge(context: ScorerContext) -> Verdict:
@@ -125,6 +132,39 @@ magnitude_value = create_scorer(
     name="magnitude_value",
     description="LLM judge: is the numeric amount of the effect correct? (N/A scores 1.0)",
     scorer=_magnitude_value_scorer,
+)
+
+
+_PLACEMENTS = frozenset({"discard", "center", "player"})
+
+
+def _placement_accuracy_scorer(context: ScorerContext) -> Score:
+    expected = (context.expected or {}).get("placement")
+    predicted = (context.output or {}).get("placement")
+    if expected not in _PLACEMENTS:
+        return Score(
+            score=None,
+            metadata={"expected": expected, "predicted": predicted, "skipped": "expected placement is absent/invalid"},
+        )
+    if predicted not in _PLACEMENTS:
+        return Score(
+            score=0.0,
+            metadata={"expected": expected, "predicted": predicted, "reason": "predicted placement is absent/invalid"},
+        )
+    return Score(
+        score=float(predicted == expected),
+        metadata={
+            "expected": expected,
+            "predicted": predicted,
+            "reason": "exact match" if predicted == expected else "placement mismatch",
+        },
+    )
+
+
+placement_accuracy = create_scorer(
+    name="placement_accuracy",
+    description="Deterministic: exact center/player/discard match with no aliases or defaults.",
+    scorer=_placement_accuracy_scorer,
 )
 
 
@@ -375,5 +415,5 @@ sandbox_behavior = create_scorer(
 # Split by cost: JUDGE_SCORERS make LLM calls (one shared call per card);
 # DETERMINISTIC_SCORERS are free and offline.
 JUDGE_SCORERS = [intent_match_judge, target_accuracy, persistence_accuracy, magnitude_sign, magnitude_value]
-DETERMINISTIC_SCORERS = [dsl_validity, sandbox_behavior, executability, did_something]
+DETERMINISTIC_SCORERS = [placement_accuracy, dsl_validity, sandbox_behavior, executability, did_something]
 ALL_SCORERS = [*JUDGE_SCORERS, *DETERMINISTIC_SCORERS]

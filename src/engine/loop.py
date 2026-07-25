@@ -22,6 +22,7 @@ from collections.abc import Callable
 from engine.apply import apply_effect
 from engine.events import EventBus, GameEvent, HookContext
 from engine.history import append_history_event, record_game_end
+from engine.reducers import expire_condition
 from models.effects import DrawCardsOp, EffectProgram
 from models.game_state import GameState
 
@@ -61,19 +62,21 @@ def tick_condition_ttls(state: GameState, player_id: str) -> GameState:
     player = state.get_player(player_id)
     if not player.condition_ttls:
         return state
-    conditions = dict(player.conditions)
-    ttls: dict[str, int] = {}
-    for key, remaining in player.condition_ttls.items():
-        remaining -= 1
+    for key in tuple(player.condition_ttls):
+        current = state.get_player(player_id)
+        if key not in current.condition_ttls:
+            continue
+        remaining = current.condition_ttls[key] - 1
         if remaining < 0:
-            conditions.pop(key, None)
-        else:
-            ttls[key] = remaining
-    players = [
-        p.model_copy(update={"conditions": conditions, "condition_ttls": ttls}) if p.id == player_id else p
-        for p in state.players
-    ]
-    return state.model_copy(update={"players": players})
+            state = expire_condition(state, player_id, key)
+            continue
+        ttls = {**current.condition_ttls, key: remaining}
+        players = [
+            candidate.model_copy(update={"condition_ttls": ttls}) if candidate.id == player_id else candidate
+            for candidate in state.players
+        ]
+        state = state.model_copy(update={"players": players})
+    return state
 
 
 # ---------------------------------------------------------------------------

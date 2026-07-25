@@ -88,6 +88,7 @@ INTENT_PAYLOAD = {
     "effects": ["add 5 points to the actor"],
     "targets": "the actor",
     "persistence": "immediate",
+    "placement": "discard",
     "resolved_references": [],
     "ambiguity": "clear",
     "complexity": "standard",
@@ -197,15 +198,6 @@ def test_happy_path_threads_intent_placement_and_venue():
     assert result.verdict == "ok"
     assert result.placement == "center"
     assert result.venue == "in_person"
-
-
-def test_legacy_intent_payload_defaults_placement_to_discard():
-    fake = ToolAwareFake(messages=_messages(INTENT_JSON, PLAN_JSON, CODER_JSON))
-
-    result = run_pipeline("Gain 5 points", "You gain 5 points.", model=fake)
-
-    assert result.placement == "discard"
-    assert result.venue == "all"
 
 
 # ---------------------------------------------------------------------------

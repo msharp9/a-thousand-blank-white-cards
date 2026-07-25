@@ -43,6 +43,15 @@ def test_scorer_can_return_float() -> None:
     assert report.summary()["half"] == 0.5
 
 
+def test_summary_skips_abstentions_and_handles_all_abstain() -> None:
+    items = [EvalItem(id="a", input=1, expected=1), EvalItem(id="b", input=2, expected=2)]
+    mixed = create_scorer("mixed", "d", lambda ctx: Score(None if ctx.input == 1 else 1.0))
+    absent = create_scorer("absent", "d", lambda ctx: Score(None))
+    report = run_eval("abstain", data=items, task=lambda x: x, scorers=[mixed, absent])
+    assert report.summary()["mixed"] == 1.0
+    assert report.summary()["absent"] is None
+
+
 def test_compare_reports_orders_by_score() -> None:
     items = [EvalItem(id="a", input=1, expected=1)]
     good = run_eval("good", data=items, task=lambda x: x, scorers=[_exact_scorer()])

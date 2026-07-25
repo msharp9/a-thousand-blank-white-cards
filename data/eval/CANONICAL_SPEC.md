@@ -55,14 +55,13 @@ for player input; those cards teach through their `steps` instead.
 
 ### PLACEMENT — where the card physically goes after being played
 
-- `discard` — the effect resolves once and the card goes to the discard pile.
-  All one-shot/immediate cards, including physical dares and reactions.
-- `center` — the card stays in the shared table center as a game-wide modifier
-  (changes the draw amount, the win condition, a global ongoing rule).
-- `player` — the card stays **in front of one player** as a modifier attached to
-  that player (their points count double, they can't be targeted, they are
-  poisoned). The affected player may be the actor or a chosen player — `target`
-  says who.
+- `discard` — the card has no continuing physical identity after its one-shot
+  action or reaction resolves.
+- `center` — the card is a shared rule, enduring global state reminder,
+  table-wide condition, or shared table object.
+- `player` — the card is an owned pet/item or a boon, curse, or status attached
+  to one player. The affected player may be the actor or a chosen player —
+  `target` says who.
 
 To be fair, every card *could* just go to the discard; center/player placement
 exists so persistent effects stay visible as reminders and are targetable
@@ -72,8 +71,10 @@ There is no `self` placement (v1 legacy — see mapping appendix) and no
 `destroy` placement (a card that removes itself from the game encodes that with
 a `destroy_card {card_target: "this"}` op and placement `discard`).
 
-Invariant: placement `discard` ⇔ one-shot; `center`/`player` ⇔ persistent
-modifier. (The old `timing` field is gone — it was fully redundant with this.)
+Classify semantic identity, not casual author wording about "the center" or
+"in front": players are not expected to know engine zone names. A cute inert
+pet belongs to its owner; a "New Rule" belongs in the center even when its
+state mutation happens immediately. Placement is independent of `trigger`.
 
 ### TARGET — who/what the effect primarily affects
 
@@ -113,8 +114,8 @@ impression, answer trivia) are `all`, not `in_person` — a camera is enough.
 Values are the engine's `GameEvent` strings (`src/engine/events.py`) plus
 `on_reaction`:
 
-- `null` — one-shot: the effect fires when played, done. **All placement
-  `discard` cards except reactions.**
+- `null` — no event hook. This includes one-shots and visible cards whose
+  ongoing state/reminder needs no repeated hook.
 - `on_play`, `on_validate_play`, `on_score_change`, `on_turn_start`,
   `on_turn_end`, `on_draw_step`, `on_win_check`, `on_game_end` — for persistent
   modifiers (`center`/`player` placement): the event that re-fires the card's
@@ -201,8 +202,9 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
 - `set_condition` — `{"target": <TARGET>, "key": <str>, "value": ..., "duration_turns": <int|null>}`
   — `duration_turns` makes the status self-expire after N of the targeted
   player's turns (active through the turn the counter hits 0); omit it for a
-  status that lasts until something removes it. A timed condition needs no
-  persistent card: placement stays `discard`.
+  status that lasts until something removes it. A personal timed status uses
+  `player`; a shared multi-player status uses `center`. Its source card is
+  discarded when the last linked status expires.
 - `set_card_attribute` — `{"card_target": ..., "key": <str>, "value": ...}`
 - `create_card` — `{"title": ..., "description": ..., "ops": [...], "destination": ...}`
 - `register_hook` — `{"event": <GameEvent>, "scope": "center"|"player", "code": <sandbox code>}`

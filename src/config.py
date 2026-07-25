@@ -217,7 +217,7 @@ EVAL_MODEL_PRICES: dict[str, dict[str, float]] = {
 
 
 # --- Eval benchmarks ------------------------------------------------------- #
-# The four scored datasets, each a distinct benchmark. ``canonical_key`` names
+# The benchmark datasets, each with a distinct purpose. ``canonical_key`` names
 # the per-card label field (seed cards use "canonical"; eval/real use
 # "human_canonical"). ``path`` is repo-root-relative. ``scored`` marks whether
 # every card carries a usable label — "real" cards are mostly unlabeled, so
@@ -226,6 +226,11 @@ EVAL_BENCHMARKS: dict[str, dict[str, object]] = {
     "seed": {"path": "data/seed_cards.json", "canonical_key": "canonical", "scored": True},
     "eval": {"path": "data/eval/eval_cards.json", "canonical_key": "human_canonical", "scored": True},
     "eval_hard": {"path": "data/eval/eval_cards_hard.json", "canonical_key": "human_canonical", "scored": True},
+    "placement": {
+        "path": "data/eval/eval_cards_placement.json",
+        "canonical_key": "human_canonical",
+        "scored": True,
+    },
     "real": {"path": "data/eval/real_cards.json", "canonical_key": "human_canonical", "scored": False},
 }
 

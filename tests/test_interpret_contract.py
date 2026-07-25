@@ -10,6 +10,9 @@ from __future__ import annotations
 
 from typing import get_args
 
+import pytest
+from pydantic import ValidationError
+
 from agent.contract import CardIntent, InterpretResult, MechanicsPlan, PlanStep, SnippetEffect
 from models.effects import CustomNoteOp, EffectProgram
 
@@ -56,15 +59,16 @@ def test_interpret_result_validate_and_round_trip():
     assert restored.snippet.code == snippet.code
 
 
-def test_card_intent_minimal_payload():
-    intent = CardIntent(summary="x")
+def test_card_intent_minimal_payload_requires_placement():
+    with pytest.raises(ValidationError):
+        CardIntent(summary="x")
+    intent = CardIntent(summary="x", placement="discard")
     assert intent.effects == []
     assert intent.targets == ""
     assert intent.persistence == "immediate"
     assert intent.ambiguity == "clear"
     assert intent.complexity == "standard"
     assert intent.persona_action == "none"
-    # Old payloads without venue/placement keep parsing via these defaults.
     assert intent.venue == "all"
     assert intent.placement == "discard"
 

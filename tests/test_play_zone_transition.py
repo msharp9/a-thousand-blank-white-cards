@@ -16,7 +16,7 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 from agent.contract import InterpretResult
-from models.effects import AddPointsOp, EffectProgram
+from models.effects import AddPointsOp, CustomNoteOp, EffectProgram
 from models.ws_messages import PlayMsg
 from board.rooms.room import Room
 
@@ -162,9 +162,7 @@ def test_live_interpreted_player_placement_goes_to_in_play() -> None:
     assert canonical["venue"] == "in_person"
 
 
-def test_live_interpreted_legacy_result_still_discards() -> None:
-    # A legacy single-agent result (placement/venue None) leaves the canonical
-    # placement-free and the card lands in discard, unchanged.
+def test_live_interpreted_missing_placement_is_inferred_and_persisted() -> None:
     card = {"id": "c8", "title": "Gain 5", "description": "Gain 5 points."}
     room = _room_with_card(card)
     _play_with_result(room, "c8", _OK_PROGRAM)
@@ -173,8 +171,37 @@ def test_live_interpreted_legacy_result_still_discards() -> None:
     assert "c8" not in room.state.center_cards()
     assert "c8" not in room.state.cards_in_play()
     canonical = room.state.cards["c8"]["canonical"]
-    assert "placement" not in canonical
+    assert canonical["placement"] == "discard"
     assert "venue" not in canonical
+
+
+def test_missing_placement_infers_owned_cat_to_player() -> None:
+    card = {
+        "id": "cat",
+        "title": "Cat",
+        "description": "Put this card in the center for people to look at. It doesn't do anything, but it's cute.",
+    }
+    room = _room_with_card(card)
+    result = InterpretResult(
+        program=EffectProgram(ops=[CustomNoteOp(note="The player owns a cat.")]),
+        verdict="ok",
+        comment="A cat has selected its staff.",
+    )
+    _play_with_result(room, "cat", result)
+    assert "cat" in room.state.cards_in_play_for("p1")
+    assert room.state.cards["cat"]["canonical"]["placement"] == "player"
+
+
+def test_missing_placement_infers_new_rule_to_center() -> None:
+    card = {
+        "id": "testing",
+        "title": "Testing",
+        "description": "New Rule: Double the points players get. Put this card in the center.",
+    }
+    room = _room_with_card(card)
+    _play_with_result(room, "testing", _OK_PROGRAM)
+    assert "testing" in room.state.center_cards()
+    assert room.state.cards["testing"]["canonical"]["placement"] == "center"
 
 
 def test_failed_interpretation_never_persists_on_the_board() -> None:

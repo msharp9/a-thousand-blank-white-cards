@@ -209,6 +209,22 @@ OP_CATALOG_GUIDE = """\
   complex ones.
 """
 
+PLACEMENT_GUIDANCE = """\
+PLACEMENT is the physical identity of the played card after it resolves, independent
+of whether its mechanics use a hook:
+- "discard": a one-shot action, reaction, completed score/card movement, or anything
+  with no continuing physical identity.
+- "center": a shared rule, enduring global game-state change, table-wide condition,
+  shared reminder, or shared table object. "New Rule" cards belong here even when
+  their state mutation happens immediately.
+- "player": an owned pet, companion, item, boon, curse, or personal status. Put it
+  before the chosen player when there is one, otherwise before the actor. An inert
+  named pet or personal object still belongs to its owner.
+Classify by semantic role, not by casual player wording about "the center", "in front",
+or "discard"; players are not expected to know the engine's zone vocabulary. A card
+with a failed/invalid interpretation is discarded.
+"""
+
 SANDBOX_RULES = """\
 - Sandbox code calls the exact op-named methods documented by `read_engine_methods`.
   It receives SandboxGame, not GameEngine: `state.draw_cards('self', 2)` is valid;
@@ -273,6 +289,7 @@ effect for the game engine, given the live game state.
 
 """
     + OP_CATALOG_GUIDE
+    + PLACEMENT_GUIDANCE
     + SANDBOX_RULES
     + DRY_RUN_MANDATE
     + TOOL_GUIDANCE
@@ -348,7 +365,13 @@ PERSONA_OUTPUT_KEYS = """\
     "persona_action": "none" | "do_nothing" | "punish_author" | "chaos_monkey" | "random_solution"\
 """
 
-OUTPUT_CONTRACT = f"{OUTPUT_CONTRACT_PREAMBLE}\n  {{\n{EFFECT_OUTPUT_KEYS},\n{PERSONA_OUTPUT_KEYS}\n  }}\n"
+PLACEMENT_OUTPUT_KEY = """\
+    "placement":      "discard" | "center" | "player" (ALWAYS present; use the semantic placement rules)\
+"""
+
+OUTPUT_CONTRACT = (
+    f"{OUTPUT_CONTRACT_PREAMBLE}\n  {{\n{EFFECT_OUTPUT_KEYS},\n{PLACEMENT_OUTPUT_KEY},\n{PERSONA_OUTPUT_KEYS}\n  }}\n"
+)
 
 
 def describe_state(state: Any | None, actor_id: str | None) -> str:

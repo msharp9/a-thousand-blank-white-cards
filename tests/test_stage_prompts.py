@@ -22,6 +22,7 @@ INTENT = CardIntent(
     summary="Everyone with a hat gains 3 points.",
     effects=["award 3 points to each hat-wearer"],
     targets="all players wearing hats",
+    placement="discard",
 )
 
 PLAN = MechanicsPlan(
@@ -58,9 +59,10 @@ def test_intent_prompt_carries_venue_and_placement_guidance():
     assert "physical presence" in prompt
     assert "MOCK the" in prompt
     assert "IN ADDITION to" in prompt
-    # placement guidance: the three zones and the persistence coherence rule.
-    assert "persistent global rule" in prompt
-    assert "boon/curse" in prompt
+    # placement guidance: semantic physical identity, not casual zone wording.
+    assert "shared rule" in prompt
+    assert "owned pet" in prompt
+    assert "semantic role" in prompt
     assert "one-shot" in prompt
     # The state summary tells the agent which venue it is judging against.
     assert "Game mode: online." in prompt

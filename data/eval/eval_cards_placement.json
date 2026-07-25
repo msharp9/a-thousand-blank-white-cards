@@ -1,0 +1,556 @@
+[
+  {
+    "id": "placement-000",
+    "title": "Quick Five",
+    "description": "Gain 5 points right now.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 5
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"
+    }
+  },
+  {
+    "id": "placement-001",
+    "title": "Parking Fine",
+    "description": "Lose 4 points.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": -4
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 4)"
+    }
+  },
+  {
+    "id": "placement-002",
+    "title": "Two More Cards",
+    "description": "Draw 2 cards, then this is finished.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 2
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 2)"
+    }
+  },
+  {
+    "id": "placement-003",
+    "title": "Instant Tax",
+    "description": "Every player immediately loses 3 points.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "all",
+            "amount": -3
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('all', 3)"
+    }
+  },
+  {
+    "id": "placement-004",
+    "title": "One-Time Gift",
+    "description": "Choose a player. They gain 6 points.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "chosen_player",
+            "amount": 6
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    state.add_points(chosen, 6)"
+    }
+  },
+  {
+    "id": "placement-005",
+    "title": "Millstone",
+    "description": "Put the top 2 cards of the deck into the discard pile.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "deck",
+            "selector": "top",
+            "count": 2,
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='deck', selector='top', count=2, to_zone='discard')"
+    }
+  },
+  {
+    "id": "placement-006",
+    "title": "Shuffle Up",
+    "description": "Shuffle the deck once.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "shuffle_deck",
+          "args": {}
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "sandbox": "def apply(state, ctx):\n    state.shuffle_deck()"
+    }
+  },
+  {
+    "id": "placement-007",
+    "title": "Skip It",
+    "description": "The next player loses their next turn. This card has resolved.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "skip_turn",
+          "args": {
+            "target": "next_player",
+            "count": 1
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "sandbox": "def apply(state, ctx):\n    state.skip_turn('right_neighbor')"
+    }
+  },
+  {
+    "id": "placement-008",
+    "title": "Testing",
+    "description": "New Rule: Double the points players get. Put this card in the center.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.points_multiplier",
+            "value": 2
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.points_multiplier', 2)"
+    }
+  },
+  {
+    "id": "placement-009",
+    "title": "Backwards Forever",
+    "description": "New rule: reverse the direction of play until this card is destroyed.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reverse_order",
+          "args": {}
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "sandbox": "def apply(state, ctx):\n    state.reverse_order()"
+    }
+  },
+  {
+    "id": "placement-010",
+    "title": "Generous Draw Rule",
+    "description": "New Rule: everyone draws 3 cards at the start of a turn.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "change_draw_count",
+          "args": {
+            "amount": 3
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(3)"
+    }
+  },
+  {
+    "id": "placement-011",
+    "title": "The Golden Idol",
+    "description": "Place this shared idol on the table. It belongs to everyone and does nothing.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "The shared Golden Idol watches the table."
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "sandbox": "def apply(state, ctx):\n    state.note('The shared Golden Idol watches the table.')"
+    }
+  },
+  {
+    "id": "placement-012",
+    "title": "Lowest Score Wins",
+    "description": "New Rule: the player with the lowest score wins.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "lowest_points"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('lowest_points')"
+    }
+  },
+  {
+    "id": "placement-013",
+    "title": "Quiet Table",
+    "description": "House Rule: nobody may shout while this card remains.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "in_person",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.no_shouting",
+            "value": true
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.no_shouting', True)"
+    }
+  },
+  {
+    "id": "placement-014",
+    "title": "Sleeping Fog",
+    "description": "Everyone else is Drowsy for their next 2 turns. Keep this shared fog visible until it clears.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all_others",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "all_others",
+            "key": "drowsy",
+            "value": true,
+            "duration_turns": 2
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('all_others', 'drowsy', True, duration_turns=2)"
+    }
+  },
+  {
+    "id": "placement-015",
+    "title": "The Moon Is Law",
+    "description": "New Rule: moon-themed cards are worth double while this reminder is in the center.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.moon_card_multiplier",
+            "value": 2
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.moon_card_multiplier', 2)"
+    }
+  },
+  {
+    "id": "placement-016",
+    "title": "Cat",
+    "description": "Put this card in the center for people to look at. It doesn't do anything, but it's cute.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "The player now owns this cute cat."
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "sandbox": "def apply(state, ctx):\n    state.note('The player now owns this cute cat.')"
+    }
+  },
+  {
+    "id": "placement-017",
+    "title": "Frog Spell",
+    "description": "Choose a player. They are a Frog for their next 3 turns, then the spell wears off.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "chosen_player",
+            "key": "frog",
+            "value": true,
+            "duration_turns": 3
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    state.set_condition(chosen, 'frog', True, duration_turns=3)"
+    }
+  },
+  {
+    "id": "placement-018",
+    "title": "Lucky Socks",
+    "description": "These are your lucky socks. You are Lucky for your next 2 turns.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "lucky",
+            "value": true,
+            "duration_turns": 2
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'lucky', True, duration_turns=2)"
+    }
+  },
+  {
+    "id": "placement-019",
+    "title": "Pet Rock",
+    "description": "This is your pet rock now. Keep it in front of you. It does absolutely nothing.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "The player owns a magnificently useless rock."
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "sandbox": "def apply(state, ctx):\n    state.note('The player owns a magnificently useless rock.')"
+    }
+  },
+  {
+    "id": "placement-020",
+    "title": "The Long Curse",
+    "description": "Choose a player. They are Cursed until this card is destroyed.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "chosen_player",
+            "key": "cursed",
+            "value": true
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    state.set_condition(chosen, 'cursed', True)"
+    }
+  },
+  {
+    "id": "placement-021",
+    "title": "Tin Crown",
+    "description": "You own the Tin Crown. Keep this card in front of you as proof.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "tin_crown",
+            "value": true
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'tin_crown', True)"
+    }
+  },
+  {
+    "id": "placement-022",
+    "title": "Personal Raincloud",
+    "description": "A raincloud follows you for 2 turns. Keep it in front of you until the weather clears.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "raincloud",
+            "value": true,
+            "duration_turns": 2
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'raincloud', True, duration_turns=2)"
+    }
+  },
+  {
+    "id": "placement-023",
+    "title": "Target's Shield",
+    "description": "Choose a player. They own this shield and are Shielded until it is destroyed.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "chosen_player",
+            "key": "shielded",
+            "value": true
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    state.set_condition(chosen, 'shielded', True)"
+    }
+  }
+]

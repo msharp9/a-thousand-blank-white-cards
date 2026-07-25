@@ -108,13 +108,18 @@ class EvalRunReport:
     scorers: tuple[Scorer, ...]
     rows: tuple[EvalRunRow, ...]
 
-    def summary(self) -> dict[str, float | int | str]:
+    def summary(self) -> dict[str, Any]:
         if not self.rows:
             raise ValueError("Cannot summarize an empty report.")
+        score_summary: dict[str, float | None] = {}
+        for scorer in self.scorers:
+            values = [row.score(scorer.name).score for row in self.rows]
+            present = [value for value in values if value is not None]
+            score_summary[scorer.name] = fmean(present) if present else None
         return {
             "evaluation": self.name,
             "cases": len(self.rows),
-            **{s.name: fmean(row.score(s.name).score for row in self.rows) for s in self.scorers},
+            **score_summary,
             "mean_task_latency_ms": fmean(r.task_latency_ms for r in self.rows),
             "mean_scoring_latency_ms": fmean(r.scoring_latency_ms for r in self.rows),
         }

@@ -119,6 +119,46 @@ class TestTick:
         assert p1.conditions == {"cursed": True}
         assert p1.condition_ttls == {}
 
+    def test_bound_condition_expiry_discards_its_source_card(self):
+        players = [
+            Player(id="p1", name="Alice", in_play=["luck"]),
+            Player(id="p2", name="Bob"),
+        ]
+        st = _state(players=players)
+        ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1", card_id="luck")
+        st = apply_op(
+            st,
+            SetConditionOp(target="self", key="lucky", value=True, duration_turns=1),
+            ctx,
+        )
+        st = tick_condition_ttls(st, "p1")
+        st = tick_condition_ttls(st, "p1")
+        assert "lucky" not in st.get_player("p1").conditions
+        assert "luck" not in st.get_player("p1").in_play
+        assert "luck" in st.discard
+        assert st.condition_bindings == []
+
+    def test_shared_source_waits_for_last_target_to_expire(self):
+        players = [
+            Player(id="p1", name="Alice"),
+            Player(id="p2", name="Bob"),
+            Player(id="p3", name="Carol"),
+        ]
+        st = _state(players=players, house_rules=["fog"])
+        ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1", card_id="fog")
+        st = apply_op(
+            st,
+            SetConditionOp(target="all_others", key="drowsy", value=True, duration_turns=1),
+            ctx,
+        )
+        st = tick_condition_ttls(tick_condition_ttls(st, "p2"), "p2")
+        assert "fog" in st.house_rules
+        assert "drowsy" not in st.get_player("p2").conditions
+        assert st.get_player("p3").conditions["drowsy"] is True
+        st = tick_condition_ttls(tick_condition_ttls(st, "p3"), "p3")
+        assert "fog" not in st.house_rules
+        assert "fog" in st.discard
+
 
 class TestRunTurnIntegration:
     def test_ttl_ticks_at_owner_turn_start_not_others(self):

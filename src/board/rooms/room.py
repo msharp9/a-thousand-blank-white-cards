@@ -918,7 +918,7 @@ class Room:
                 plan = result.to_plan()
                 merged = {
                     **current,
-                    **self._canonicalize_interpretation(result),
+                    **self._canonicalize_interpretation(result, title=title, description=description),
                     "verdict": result.verdict,
                     "agent_comment": result.comment,
                 }
@@ -1856,9 +1856,9 @@ class Room:
     def _play_destination(self, card) -> str:
         """Return the zone a played card lands in: "center" | "in_play" | "discard".
 
-        Schema v2 (data/eval/CANONICAL_SPEC.md): placement "center" = game-wide
-        modifier on the shared table; "player" = modifier that stays in front of
-        the affected player (in_play); "discard" = one-shot. Legacy v1 canonicals
+        Schema v2 (data/eval/CANONICAL_SPEC.md): placement "center" = a shared
+        rule/reminder/object; "player" = an owned or attached card in front of
+        the affected player; "discard" = no continuing physical identity. Legacy v1 canonicals
         (placement "self" + timing "modifier") persist in old room state and RAG
         payloads, so the v1 branch stays.
         """
@@ -1870,7 +1870,7 @@ class Room:
         timing = canonical.get("timing") if isinstance(canonical, dict) else getattr(canonical, "timing", None)
         if placement == "center":
             return "center"
-        if placement == "player" and timing != "immediate":
+        if placement == "player":
             return "in_play"
         if placement == "self" and timing == "modifier":  # legacy v1
             return "in_play"
@@ -1967,7 +1967,7 @@ class Room:
 
         await self._log_agent_comment(card_id, result.comment)
 
-        canonical = self._canonicalize_interpretation(result)
+        canonical = self._canonicalize_interpretation(result, title=title, description=description)
         if (
             canonical
             and isinstance(self.state.cards.get(card_id), dict)
@@ -1998,7 +1998,41 @@ class Room:
         )
         return ResolutionPlan(steps=[OpsStep(ops=self._consolation_ops(card, card_id))])
 
-    def _canonicalize_interpretation(self, result) -> dict:
+    @staticmethod
+    def _infer_interpretation_placement(result, *, title: str = "", description: str = "") -> str:
+        """Infer a safe physical zone when an otherwise-valid result omitted one."""
+        operations = result.to_plan().operations()
+        names = {getattr(op, "op", "") for op in operations}
+        if names & {
+            "set_rule",
+            "change_draw_count",
+            "set_win_condition",
+            "reverse_order",
+            "scramble_order",
+        }:
+            return "center"
+        for op in operations:
+            if getattr(op, "op", "") == "register_hook":
+                return "center" if getattr(op, "scope", "center") == "center" else "player"
+        for op in operations:
+            if getattr(op, "op", "") == "set_condition":
+                target = str(getattr(op, "target", ""))
+                return "center" if target in {"all", "all_others"} else "player"
+            if getattr(op, "op", "") == "reveal_hand" and getattr(op, "persistent", False):
+                target = str(getattr(op, "target", ""))
+                return "center" if target in {"all", "all_others"} else "player"
+
+        text = f"{title}\n{description}".lower()
+        if re.search(r"\bnew rule\b|\bhouse rule\b|\beveryone\b.*\b(?:now|must|cannot|can't)\b", text):
+            return "center"
+        if re.search(
+            r"\b(cat|dog|pet|puppy|kitten|companion|familiar|owned|owner|yours|your item|your hat)\b",
+            text,
+        ):
+            return "player"
+        return "discard"
+
+    def _canonicalize_interpretation(self, result, *, title: str = "", description: str = "") -> dict:
         """Build the structured ``canonical`` payload for an interpreted card.
 
         Programs serialize their live ops; a triggered snippet becomes a
@@ -2015,10 +2049,10 @@ class Room:
         ``attributes`` key merged by the caller), so the card auto-plays on
         future draws even if this play never executes (countered/failed).
 
-        The agent's ``placement``/``venue`` (pipeline results; None on legacy
-        single-agent results) are recorded so ``_play_destination`` can zone the
-        card. No ``timing`` key is written: placement "player" must not carry
-        timing "immediate" or ``_play_destination`` demotes it to discard.
+        The agent's ``placement``/``venue`` are recorded so
+        ``_play_destination`` can zone the card. Missing placement on an
+        otherwise-successful legacy result is inferred and persisted; failed
+        interpretations always discard. No ``timing`` key is written.
         """
         plan = result.to_plan()
         canonical: dict = {}
@@ -2031,12 +2065,12 @@ class Room:
         if trigger is not None:
             canonical["trigger"] = trigger
         placement = getattr(result, "placement", None)
-        if placement is not None:
-            # A failed interpretation has no ongoing rule to be reminded of, so
-            # only a verdict-ok card may persist on the board; failures discard.
-            if result.verdict != "ok" and placement in ("center", "player"):
-                placement = "discard"
-            canonical["placement"] = placement
+        if result.verdict != "ok":
+            placement = "discard"
+        elif placement is None:
+            placement = self._infer_interpretation_placement(result, title=title, description=description)
+            logger.warning("successful interpretation omitted placement; inferred %s for %r", placement, title)
+        canonical["placement"] = placement
         venue = getattr(result, "venue", None)
         if venue is not None:
             canonical["venue"] = venue

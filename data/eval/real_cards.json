@@ -160,7 +160,7 @@
     "alt_text": "drawing of a sparkling gem",
     "human_canonical": {
       "target": "self",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "trigger": null,
@@ -516,7 +516,7 @@
     "alt_text": "drawing of an electric fan plugged in",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -1255,7 +1255,7 @@
     "alt_text": "drawing of three figures",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "ops": [
@@ -1369,7 +1369,7 @@
     "alt_text": "drawing of a book",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "negative",
       "ops": [
@@ -1757,7 +1757,7 @@
     "alt_text": "drawing of a pencil",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -1872,7 +1872,7 @@
     "alt_text": "drawing of a leaf and a scribble with text \"'mmm! tasty!\"",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "trigger": null,
@@ -2191,7 +2191,7 @@
     "alt_text": "drawing of a nose",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "negative",
       "ops": [
@@ -2382,7 +2382,7 @@
     "alt_text": "drawing of a large stick figure next to a small one",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "ops": [
@@ -2615,7 +2615,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "all",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "neutral",
       "trigger": null,
@@ -2763,7 +2763,7 @@
     "alt_text": "drawing of a small creature with big eyes",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -2966,7 +2966,7 @@
     "alt_text": "drawing of a cup spilled on its side",
     "human_canonical": {
       "target": "all",
-      "placement": "discard",
+      "placement": "center",
       "venue": "in_person",
       "magnitude_sign": "neutral",
       "trigger": null,
@@ -3238,7 +3238,7 @@
     "alt_text": "drawing of a house elf figure with large ears",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -3291,7 +3291,7 @@
     "alt_text": "drawing of open trousers with something dangling",
     "human_canonical": {
       "target": "self",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "negative",
       "trigger": null,
@@ -3458,7 +3458,7 @@
     "alt_text": "drawing of an angry man's face",
     "human_canonical": {
       "target": "self",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "ops": [
@@ -4907,7 +4907,7 @@
     "alt_text": "drawing of a submarine periscope in water",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -5213,7 +5213,7 @@
     "alt_text": "drawing of a tornado, hurricane swirls, and earthquake cracks",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -5243,7 +5243,7 @@
     "alt_text": "drawing of a glass of wine",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -5327,7 +5327,7 @@
     "alt_text": "drawing of three stick figures with masks and sacks of loot",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "center",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -5574,7 +5574,7 @@
     "alt_text": "drawing of a stick figure against a wall",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -6271,7 +6271,7 @@
     "alt_text": "drawing of a stick figure sitting backwards on a chair",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -6953,7 +6953,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "center",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "negative",
       "trigger": "on_turn_start",
@@ -7690,7 +7690,7 @@
     "alt_text": "drawing of a hand holding the elbow skin of an arm",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -7954,7 +7954,7 @@
     "alt_text": "framed drawing of a skeletal figure",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "ops": [
@@ -8008,7 +8008,7 @@
     "alt_text": "drawing of a stick figure wearing a deerstalker cap",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "trigger": null,
@@ -8031,7 +8031,7 @@
     "alt_text": "drawing of an angry face wearing a cap, with a hand pointing at it",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -8085,7 +8085,7 @@
     "alt_text": "scribbled drawing of a face",
     "human_canonical": {
       "target": "self",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -8468,7 +8468,7 @@
     "alt_text": "drawing of a deli storefront labeled DELI with a door numbered 1",
     "human_canonical": {
       "target": "all_cards",
-      "placement": "discard",
+      "placement": "center",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -9390,7 +9390,7 @@
     "alt_text": "drawing of two knives",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -9468,7 +9468,7 @@
     "alt_text": "drawing of a face with a banana",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -9606,7 +9606,7 @@
     "alt_text": "drawing of a face with raised eyebrows",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -9636,7 +9636,7 @@
     "alt_text": "small circled drawing",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -10568,7 +10568,7 @@
     "alt_text": "drawing of a light switch in a shaded/dark area",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "neutral",
       "trigger": null,
@@ -11004,7 +11004,7 @@
     "alt_text": "drawing of a face with a bucket on its head, speech bubble saying \"Shred.\"",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -11372,7 +11372,7 @@
     "alt_text": "drawing of an arrow",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "negative",
       "ops": [
@@ -11504,7 +11504,7 @@
     "alt_text": "drawing of a hot air balloon",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -11819,7 +11819,7 @@
     "alt_text": "drawing of a pretzel",
     "human_canonical": {
       "target": "all",
-      "placement": "discard",
+      "placement": "center",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -12112,7 +12112,7 @@
     "alt_text": "drawing of tater tots",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "negative",
       "ops": [
@@ -12440,7 +12440,7 @@
     "alt_text": "drawing of a cross-eyed figure with a pipe",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "ops": [
@@ -12940,7 +12940,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -13113,7 +13113,7 @@
     "alt_text": "drawing of a landmass labeled NOT AUSTRALIA",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -13325,7 +13325,7 @@
     "alt_text": "drawing of a corkscrew spiral arrow",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "neutral",
       "ops": [
@@ -13904,7 +13904,7 @@
     "alt_text": "drawing of an ice cream cone with a face and arms",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "ops": [
@@ -14125,7 +14125,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -14596,7 +14596,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "self",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -14779,7 +14779,7 @@
     "alt_text": "drawing of a frog crossing a road with cars",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -14809,7 +14809,7 @@
     "alt_text": "drawing of a hand",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -14863,7 +14863,7 @@
     "alt_text": "drawing of an egg",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "negative",
       "ops": [
@@ -14969,7 +14969,7 @@
     "alt_text": "drawing of stick figures around a table",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -15023,7 +15023,7 @@
     "alt_text": "drawing of a man holding a cup of tea",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -15440,7 +15440,7 @@
     "alt_text": "drawing of a dog with an arrow pointing up at it",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "negative",
       "ops": [
@@ -17103,7 +17103,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -17210,7 +17210,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "negative",
       "ops": [
@@ -17240,7 +17240,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "ops": [
@@ -17526,7 +17526,7 @@
     "alt_text": "drawing of a pig",
     "human_canonical": {
       "target": "player",
-      "placement": "center",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "negative",
       "trigger": "on_score_change",
@@ -18242,7 +18242,7 @@
     "alt_text": "drawing of a tea bag and a steaming mug",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "neutral",
       "ops": [
@@ -18349,7 +18349,7 @@
     "alt_text": "drawing of a glass of water",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "in_person",
       "magnitude_sign": "positive",
       "ops": [
@@ -18481,7 +18481,7 @@
     "alt_text": "drawing of a girl with ponytail",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [
@@ -18791,7 +18791,7 @@
     "alt_text": "drawing of scribbles and a hand making a symbol",
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "magnitude_sign": "positive",
       "ops": [

@@ -85,6 +85,7 @@ CardTrigger = Literal[
     "on_game_end",
     "on_reaction",
 ]
+CardPlacement = Literal["discard", "center", "player"]
 
 # v1 → v2 trigger value remaps (spec appendix, data/eval/CANONICAL_SPEC.md).
 _TRIGGER_REMAP = {
@@ -97,7 +98,7 @@ _TRIGGER_REMAP = {
 # notes/set_rule ops, not a trigger.
 _DROPPED_TRIGGERS = {"on_physical_action"}
 
-_V2_PLACEMENTS = {"discard", "center", "player"}
+_V2_PLACEMENTS = frozenset({"discard", "center", "player"})
 _V2_TARGETS = {"self", "player", "all", "all_others", "card", "all_cards", "none"}
 
 
@@ -173,11 +174,11 @@ class CardCanonical(BaseModel):
     target: Literal["self", "player", "all", "all_others", "card", "all_cards", "none"] = Field(
         description="Who or what the card's primary effect targets."
     )
-    placement: Literal["discard", "center", "player"] = Field(
+    placement: CardPlacement = Field(
         description=(
-            "Where the card goes after play: 'discard' = one-shot, resolves and is done; "
-            "'center' = stays on the table as a game-wide modifier; 'player' = stays in "
-            "front of one player as a modifier attached to them."
+            "Where the physical card goes after play: 'discard' when it has no continuing "
+            "identity; 'center' for a shared rule, reminder, or table-wide object; "
+            "'player' for an owned pet/item or personal boon, curse, or status."
         )
     )
     venue: Literal["all", "in_person", "online"] = Field(

@@ -75,7 +75,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -86,7 +86,7 @@
         }
       ],
       "magnitude_sign": "negative",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.subtract_points('all', 10)"
     }
@@ -98,7 +98,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -109,7 +109,7 @@
         }
       ],
       "magnitude_sign": "positive",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.add_points('all', 7)"
     }
@@ -121,7 +121,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "player",
+      "placement": "discard",
       "ops": [
         {
           "op": "skip_turn",
@@ -131,7 +131,7 @@
         }
       ],
       "magnitude_sign": "neutral",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.skip_turn(chosen)"
     }
@@ -173,7 +173,7 @@
         }
       ],
       "magnitude_sign": "neutral",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.reverse_order()"
     }
@@ -208,7 +208,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "player",
+      "placement": "discard",
       "ops": [
         {
           "op": "steal_points",
@@ -220,7 +220,7 @@
         }
       ],
       "magnitude_sign": "positive",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 8)"
     }
@@ -232,7 +232,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "player",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -250,7 +250,7 @@
         }
       ],
       "magnitude_sign": "neutral",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.subtract_points('self', 10)\n    state.add_points(chosen, 10)"
     }
@@ -715,9 +715,9 @@
     "alt_text": null,
     "human_canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "magnitude_sign": "negative",
-      "trigger": "on_play",
+      "trigger": null,
       "ops": [
         {
           "op": "custom_note",
@@ -737,7 +737,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "player",
+      "placement": "discard",
       "ops": [
         {
           "op": "steal_points",
@@ -749,7 +749,7 @@
         }
       ],
       "magnitude_sign": "positive",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 15)"
     }
@@ -766,14 +766,14 @@
         {
           "op": "change_draw_count",
           "args": {
-            "amount": -1
+            "amount": 0
           }
         }
       ],
       "magnitude_sign": "neutral",
-      "trigger": "on_turn_start",
+      "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(-1)"
+      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(0)"
     }
   },
   {
@@ -1415,7 +1415,7 @@
     "alt_text": "a stick figure with flames for hair, grinning",
     "human_canonical": {
       "target": "self",
-      "placement": "discard",
+      "placement": "player",
       "ops": [
         {
           "op": "set_condition",
@@ -1440,7 +1440,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "discard",
+      "placement": "player",
       "ops": [
         {
           "op": "set_condition",

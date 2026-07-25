@@ -959,7 +959,7 @@
     "alt_text": null,
     "canonical": {
       "target": "self",
-      "placement": "discard",
+      "placement": "player",
       "venue": "all",
       "trigger": null,
       "ops": [

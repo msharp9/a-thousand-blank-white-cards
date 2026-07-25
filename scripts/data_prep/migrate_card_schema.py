@@ -39,6 +39,7 @@ DATASETS: tuple[tuple[Path, str, str], ...] = (
     (ROOT / "data" / "seed_cards_simple.json", "canonical", "seed-simple"),
     (ROOT / "data" / "eval" / "eval_cards.json", "human_canonical", "eval"),
     (ROOT / "data" / "eval" / "eval_cards_hard.json", "human_canonical", "hard"),
+    (ROOT / "data" / "eval" / "eval_cards_placement.json", "human_canonical", "placement"),
     (ROOT / "data" / "eval" / "real_cards.json", "human_canonical", "real"),
 )
 
@@ -176,7 +177,11 @@ def ops_to_sandbox(ops: list[dict]) -> str | None:
                     raise _Unmappable(f"destroy_card target {card_target!r}")
             elif name == "transfer_card":
                 dst = _target_expr(args.get("to_target", "self"), uses_chosen=uses_chosen)
-                lines.append(f"    state.transfer_card({args.get('card_target', 'this')!r}, {dst})")
+                card_target = args.get("card_target", "this")
+                if card_target in ("card", "chosen_card"):
+                    lines.append(f'    state.transfer_card("id:" + (ctx.get("chosen_card_id") or ""), {dst})')
+                else:
+                    lines.append(f"    state.transfer_card({card_target!r}, {dst})")
             elif name == "counter_play":
                 lines.append(f"    state.counter_play({args.get('mode', 'negate')!r})")
             elif name == "end_game":

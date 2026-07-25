@@ -75,10 +75,11 @@ Rules of thumb:
 - Sandbox style: runtime target strings (`"self"`, `"chooser"`, `"all"`,
   `"id:<player_id>"`); `state.subtract_points` for losses; `state.note(...)`
   for the table-adjudicated part of dares; defensive `ctx.get(...)` reads.
-- One-shot cards: `placement: "discard"`, `trigger: null`. Persistent
-  modifiers: `center` (game-wide) or `player` (attached to one player), with
-  `trigger` naming the event that re-fires them. Reactions: `discard` +
-  `"on_reaction"`.
+- Placement describes the physical card's semantic identity, not merely
+  whether an event hook repeats. One-shots use `discard`; shared rules,
+  reminders, and global state use `center`; owned pets/items and personal
+  boons/curses/statuses use `player`. A center/player card may have
+  `trigger: null`. Reactions remain `discard` + `"on_reaction"`.
 
 ## Note-only cards vs interaction-steps upgrades
 

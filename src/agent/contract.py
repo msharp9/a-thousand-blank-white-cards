@@ -15,6 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from models.card import CardPlacement
 from models.effects import EffectProgram, OpsStep, RegisterHookOp, ResolutionPlan, SnippetStep
 
 
@@ -102,12 +103,12 @@ class InterpretResult(BaseModel):
             "unparseable final message), not a genuine judgment of the card."
         ),
     )
-    placement: str | None = Field(
+    placement: CardPlacement | None = Field(
         default=None,
         description=(
             "Where the played card lives afterwards ('discard', 'center', or 'player'), "
-            "copied from the intent stage. None = legacy single-agent result: the room "
-            "keeps its default placement behavior."
+            "predicted from the card's semantic role. Successful production interpretations "
+            "supply this; bounded runtime failures may leave it unset."
         ),
     )
     venue: str | None = Field(
@@ -180,13 +181,11 @@ class CardIntent(BaseModel):
             "sense in an online game."
         ),
     )
-    placement: Literal["discard", "center", "player"] = Field(
-        default="discard",
+    placement: CardPlacement = Field(
         description=(
-            "Where the played card lives afterwards: 'discard' for one-shot effects; "
-            "'center' for a persistent global rule (sits visibly on the board, can be "
-            "destroyed later to remove the effect); 'player' for a persistent boon/curse "
-            "that sits in front of one player."
+            "Where the physical card lives afterwards: discard when it has no continuing "
+            "identity; center for a shared rule/reminder/object; player for an owned "
+            "pet/item or personal boon/curse/status. Semantic role wins over casual zone wording."
         ),
     )
     resolved_references: list[str] = Field(

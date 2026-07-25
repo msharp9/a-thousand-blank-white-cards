@@ -127,6 +127,9 @@ def test_build_system_prompt_contains_key_sections():
     assert "do_nothing" in prompt
     assert "punish_author" in prompt
     assert "comment" in prompt
+    assert '"placement"' in prompt
+    assert "semantic role" in prompt
+    assert "owned pet" in prompt
     # actor IS author -> the authorship note reflects that
     assert "IS the author" in prompt
 
