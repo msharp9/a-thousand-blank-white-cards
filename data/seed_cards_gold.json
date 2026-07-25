@@ -186,7 +186,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "draw_cards",
@@ -627,7 +627,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -724,7 +724,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "scramble_order",
@@ -751,7 +751,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "steps": [
         {
           "kind": "interaction",
@@ -784,7 +784,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "steps": [
         {
           "kind": "interaction",
@@ -870,7 +870,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "venue": "all",
       "trigger": null,
       "ops": [
