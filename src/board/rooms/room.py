@@ -2,10 +2,11 @@
 
 Room owns an immutable GameState (replaced on each mutation) and serialises all
 handle_action calls with an asyncio.Lock so concurrent WebSocket messages cannot
-corrupt turn order. Play/pass require the active player's turn. Card authoring
-(create_card/preview_card) is SETUP-ONLY; the only mid-game authoring is filling
-in a blank as it is played (author-on-play, see _handle_play). Play runs the
-agent interpretation graph via asyncio.to_thread (with a "brewing" broadcast),
+corrupt turn order. Play/pass require the active player's turn. Setup card
+creation/revision and preview are SETUP-ONLY; submitted setup cards are drafted
+off-lock immediately, while the only mid-game authoring is filling in a blank
+as it is played (author-on-play, see _handle_play). Play runs the agent
+interpretation graph via asyncio.to_thread when no compiled plan exists,
 applying resulting effects through the engine.
 
 Turn model (auto-draw → play → end turn): drawing is AUTOMATIC. When a turn
@@ -63,6 +64,7 @@ from engine.scoring import evaluate_end_condition, evaluate_win_condition, resol
 from models.card import MAX_ROOM_ART_BYTES
 from models.effects import (
     AddPointsOp,
+    CounterPlayOp,
     CustomNoteOp,
     DestroyCardOp,
     DrawCardsOp,
@@ -96,7 +98,6 @@ from models.interactions import (
     TextInteraction,
     TextResponse,
 )
-from models.ws_messages import CreateCardMsg
 from board.rooms.interactions import PendingResolution
 from board.rooms.connections import ConnectionManager
 from board.rooms.deck import (
@@ -142,6 +143,10 @@ HAND_LIMIT_TIMEOUT_SECONDS = 60
 # chain may auto-play (a pod card drawing pod cards drawing pod cards…). Once
 # hit, further pod cards stay in hand until a later turn's scan.
 MAX_AUTO_PLAYS_PER_TURN = 3
+
+# Setup authoring stays responsive while interpretation runs. Bound per-room
+# concurrency so a table cannot fan out an unbounded number of LLM calls.
+CARD_DRAFT_CONCURRENCY = 2
 
 
 class TurnTimer:
@@ -394,6 +399,14 @@ class Room:
         # deferred because its auto-play chain suspended on a reaction window
         # or interaction; the chain's completion runs the decision.
         self._advance_after_auto_play: bool = False
+        # Setup-authored cards are interpreted off-lock. Each task captures the
+        # card revision/correlation id and applies its result under the room lock,
+        # so a stale completion can never overwrite a retry.
+        self._card_draft_tasks: dict[str, asyncio.Task] = {}
+        self._card_draft_semaphore = asyncio.Semaphore(CARD_DRAFT_CONCURRENCY)
+        # Suppresses normal auto-start while the DEV skip-setup endpoint waits
+        # for already-submitted drafts and fills the remaining slots with blanks.
+        self._dev_skip_in_progress = False
 
     # ── player management ──
     def add_player(self, player_id: str, name: str) -> None:
@@ -495,6 +508,7 @@ class Room:
             "play",
             "pass_reaction",
             "create_card",
+            "redraft_card",
             "preview_card",
             "interaction_response",
         }:
@@ -503,7 +517,7 @@ class Room:
         # Authoring gate: create_card/preview_card exist ONLY during setup
         # (each player writes their quota). The one mid-game authoring path is
         # playing a blank, which rides the `play` message (author-on-play).
-        if mtype in {"create_card", "preview_card"} and self.state.phase != "setup":
+        if mtype in {"create_card", "redraft_card", "preview_card"} and self.state.phase != "setup":
             await self.connections.send(
                 player_id, {"type": "error", "message": "Card authoring is only available during setup"}
             )
@@ -554,6 +568,12 @@ class Room:
                 {"type": "error", "message": "Waiting for the current card interaction to finish"},
             )
             return
+        if self._dev_skip_in_progress and mtype in {"start", "create_card", "redraft_card", "preview_card"}:
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "Development skip-setup is already finishing this setup"},
+            )
+            return
         if mtype == "start":
             await self._handle_start(player_id)
         elif mtype in ("pass", "end_turn"):
@@ -596,6 +616,8 @@ class Room:
                 await self._maybe_resume_turn_timer()
         elif mtype == "create_card":
             await self._handle_create_card(player_id, msg)
+        elif mtype == "redraft_card":
+            await self._handle_redraft_card(player_id, msg)
         elif mtype == "preview_card":
             await self._handle_preview_card(player_id, msg)
         elif mtype == "interaction_response":
@@ -612,17 +634,44 @@ class Room:
             await self.connections.send(player_id, {"type": "error", "message": f"Unknown message type: {mtype}"})
 
     # ── setup helpers ──
+    def _setup_cards_for(self, player_id: str) -> list[tuple[str, dict]]:
+        return [
+            (cid, card)
+            for cid, card in self.state.cards.items()
+            if isinstance(card, dict)
+            and card.get("origin") == "authored"
+            and card.get("creator_id") == player_id
+            and card.get("draft_status") is not None
+        ]
+
+    @staticmethod
+    def _draft_ready(card: dict) -> bool:
+        plan = compile_card_plan(card)
+        return card.get("draft_status") == "ready" and plan is not None and bool(plan.steps)
+
     def _authored_count(self, player_id: str) -> int:
-        """Number of cards ``player_id`` has authored this game (setup step 3)."""
-        return sum(
-            1
-            for c in self.state.cards.values()
-            if (c.get("creator_id") if isinstance(c, dict) else getattr(c, "creator_id", None)) == player_id
-        )
+        """Number of executable setup cards authored by ``player_id``."""
+        return sum(1 for _, card in self._setup_cards_for(player_id) if self._draft_ready(card))
+
+    def _setup_slot_count(self, player_id: str) -> int:
+        """Number of stable setup-authoring slots used by ``player_id``."""
+        return len(self._setup_cards_for(player_id))
 
     def _setup_progress(self) -> dict[str, int]:
-        """Map non-spectator player id -> authored-card count, for the client."""
+        """Map non-spectator player id -> ready-card count, for compatibility."""
         return {p.id: self._authored_count(p.id) for p in self.state.turn_players()}
+
+    def _setup_draft_progress(self) -> dict[str, dict[str, int]]:
+        progress: dict[str, dict[str, int]] = {}
+        for player in self.state.turn_players():
+            cards = [card for _, card in self._setup_cards_for(player.id)]
+            progress[player.id] = {
+                "ready": sum(self._draft_ready(card) for card in cards),
+                "drafting": sum(card.get("draft_status") == "drafting" for card in cards),
+                "failed": sum(card.get("draft_status") == "failed" for card in cards),
+                "total": len(cards),
+            }
+        return progress
 
     def _store_card_art(self, card_id: str, art: str) -> bool:
         """Store ``art`` in the out-of-band registry, enforcing the room budget.
@@ -636,6 +685,15 @@ class Room:
             return False
         self.card_art[card_id] = art
         self._card_art_bytes += len(art)
+        return True
+
+    def _replace_card_art(self, card_id: str, art: str) -> bool:
+        previous = self.card_art.get(card_id)
+        previous_size = len(previous) if previous else 0
+        if self._card_art_bytes - previous_size + len(art) > MAX_ROOM_ART_BYTES:
+            return False
+        self.card_art[card_id] = art
+        self._card_art_bytes = self._card_art_bytes - previous_size + len(art)
         return True
 
     def _absorb_card_art(self, cards: dict[str, dict]) -> dict[str, dict]:
@@ -661,15 +719,16 @@ class Room:
           and enter ``phase="setup"``. Nothing is dealt yet. The pool is visible
           in the snapshot so every player can see the pre-made cards while
           authoring their own (step 3 of the game — build synergies).
-        - From **setup**: gate on every non-spectator having authored
-          ``CARDS_TO_AUTHOR`` cards; then finalise the deck (pre-made + authored
-          + ``BLANKS_PER_PLAYER`` blanks per player), shuffle, deal
+        - From **setup**: gate on every non-spectator having
+          ``CARDS_TO_AUTHOR`` executable card drafts; then finalise the deck
+          (pre-made + authored + ``BLANKS_PER_PLAYER`` blanks per player), shuffle, deal
           ``STARTING_HAND_SIZE`` to each real player, enter ``phase="playing"``
           and begin the first turn.
 
         The setup→playing transition normally happens AUTOMATICALLY once every
-        player finishes authoring (see ``_handle_create_card``); this manual
-        entry is kept as a safety/fallback path (and still owns lobby→setup). A
+        player's final draft becomes ready (see ``_run_card_draft``); this
+        manual entry is kept as a safety/fallback path (and still owns
+        lobby→setup). A
         manual ``start`` that arrives after auto-start already fired lands in the
         ``else`` branch below as a harmless "Game already started" no-op.
 
@@ -700,7 +759,14 @@ class Room:
         self.state = self.state.model_copy(update={"phase": "setup", "cards": merged_cards, "deck": list(pool)})
         await self._broadcast_state()
 
-    async def _start_playing(self, player_id: str | None = None, *, rng: random.Random | None = None) -> None:
+    async def _start_playing(
+        self,
+        player_id: str | None = None,
+        *,
+        rng: random.Random | None = None,
+        additional_blanks: int = 0,
+        bypass_setup_gate: bool = False,
+    ) -> None:
         """setup → playing: gate on authoring, finalise deck, deal, begin play.
 
         ``player_id`` is the player who requested the manual start; it is used
@@ -717,7 +783,7 @@ class Room:
         dealt_to = players
 
         # Gate: every real player must have authored the required number of cards.
-        behind = [p for p in dealt_to if self._authored_count(p.id) < CARDS_TO_AUTHOR]
+        behind = [] if bypass_setup_gate else [p for p in dealt_to if self._authored_count(p.id) < CARDS_TO_AUTHOR]
         if behind:
             names = ", ".join(self._name(p.id) for p in behind)
             if player_id is not None:
@@ -736,6 +802,7 @@ class Room:
             for cid, c in self.state.cards.items()
             if cid not in premade_set
             and not (c.get("blank") if isinstance(c, dict) else getattr(c, "blank", False))
+            and (not isinstance(c, dict) or self._draft_ready(c))
             and (c.get("creator_id") if isinstance(c, dict) else getattr(c, "creator_id", None))
             in {p.id for p in dealt_to}
         ]
@@ -746,6 +813,7 @@ class Room:
             authored_ids,
             len(dealt_to),
             blanks_per_player=BLANKS_PER_PLAYER,
+            additional_blanks=additional_blanks,
         )
 
         # Deal starting hands off the top of the shuffled deck.
@@ -785,33 +853,214 @@ class Room:
             await self._start_turn(self.state.active_player().id)
         await self._broadcast_state()
 
+    def _schedule_card_draft(self, card_id: str) -> None:
+        existing = self._card_draft_tasks.get(card_id)
+        if existing is not None and not existing.done():
+            return
+        task = asyncio.create_task(self._run_card_draft(card_id))
+        self._card_draft_tasks[card_id] = task
+
+        def discard(done: asyncio.Task) -> None:
+            if self._card_draft_tasks.get(card_id) is done:
+                self._card_draft_tasks.pop(card_id, None)
+
+        task.add_done_callback(discard)
+
+    def _draft_interpretation_state(self, card_id: str, actor_id: str) -> GameState:
+        state = self.state.model_copy(deep=True)
+        players = [
+            player.model_copy(update={"hand": [*player.hand, card_id]})
+            if player.id == actor_id and card_id not in player.hand
+            else player
+            for player in state.players
+        ]
+        return state.model_copy(update={"players": players})
+
+    async def _run_card_draft(self, card_id: str) -> None:
+        async with self._card_draft_semaphore:
+            async with self._lock:
+                card = self.state.cards.get(card_id)
+                if self.state.phase != "setup" or not isinstance(card, dict) or card.get("draft_status") != "drafting":
+                    return
+                revision = int(card.get("draft_revision", 1))
+                correlation_id = str(card.get("draft_correlation_id") or uuid.uuid4())
+                actor_id = str(card.get("creator_id"))
+                title = str(card.get("title") or "")
+                description = str(card.get("description") or "")
+                art = self.card_art.get(card_id)
+                draft_state = self._draft_interpretation_state(card_id, actor_id)
+
+            from agent.contract import InterpretResult
+            from agent.runtime import run_agent
+
+            try:
+                result: InterpretResult = await asyncio.to_thread(
+                    run_agent,
+                    title,
+                    description,
+                    draft_state,
+                    actor_id,
+                    creator_id=actor_id,
+                    card_id=card_id,
+                    card_art=art,
+                    draft_mode=True,
+                )
+            except Exception:
+                logger.exception("setup card draft failed unexpectedly for %s", card_id)
+                result = InterpretResult(verdict="invalid", agent_error=True)
+
+            async with self._lock:
+                current = self.state.cards.get(card_id)
+                if (
+                    self.state.phase != "setup"
+                    or not isinstance(current, dict)
+                    or current.get("draft_status") != "drafting"
+                    or int(current.get("draft_revision", 1)) != revision
+                    or current.get("draft_correlation_id") != correlation_id
+                ):
+                    return
+
+                plan = result.to_plan()
+                merged = {
+                    **current,
+                    **self._canonicalize_interpretation(result),
+                    "verdict": result.verdict,
+                    "agent_comment": result.comment,
+                }
+                compiled = compile_card_plan(merged)
+                ready = result.verdict == "ok" and bool(plan.steps) and compiled is not None and bool(compiled.steps)
+                if ready:
+                    merged["draft_status"] = "ready"
+                    merged["draft_reason"] = None
+                else:
+                    for key in ("canonical", "ops", "sandbox", "attributes", "agent_comment"):
+                        merged.pop(key, None)
+                    merged["draft_status"] = "failed"
+                    merged["draft_reason"] = (
+                        "The drafting service failed; retry this card."
+                        if result.agent_error
+                        else "The arbiter could not build executable mechanics; revise or retry this card."
+                    )
+
+                self.state = self.state.model_copy(update={"cards": {**self.state.cards, card_id: merged}})
+                self._notify_change()
+                # This revision is terminal before we broadcast it. Remove the
+                # current task from the slot now so a client that immediately
+                # retries a freshly-failed card can schedule the next revision;
+                # the old task's done callback is identity-guarded and cannot
+                # remove that replacement.
+                current_task = asyncio.current_task()
+                if self._card_draft_tasks.get(card_id) is current_task:
+                    self._card_draft_tasks.pop(card_id, None)
+
+                everyone_ready = bool(self.state.turn_players()) and all(
+                    self._authored_count(player.id) >= CARDS_TO_AUTHOR for player in self.state.turn_players()
+                )
+                if ready and everyone_ready and not self._dev_skip_in_progress:
+                    await self._start_playing()
+                else:
+                    await self._broadcast_state()
+                    if not ready:
+                        await self.connections.send(
+                            actor_id,
+                            {
+                                "type": "error",
+                                "message": f"{title} needs revision before it can join the deck.",
+                            },
+                        )
+
+    async def wait_for_card_drafts(self) -> None:
+        """Wait until every currently scheduled setup draft reaches a terminal state."""
+        while True:
+            tasks = [task for task in self._card_draft_tasks.values() if not task.done()]
+            if not tasks:
+                return
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    def ensure_card_drafts(self) -> None:
+        """Resume persisted setup cards that were drafting across a dev reload."""
+        if self.state.phase != "setup":
+            return
+        player_ids = {player.id for player in self.state.turn_players()}
+        deck_ids = set(self.state.deck)
+        cards = dict(self.state.cards)
+        changed = False
+        to_schedule: list[str] = []
+        for card_id, original in self.state.cards.items():
+            if (
+                not isinstance(original, dict)
+                or original.get("origin") != "authored"
+                or original.get("creator_id") not in player_ids
+                or card_id in deck_ids
+            ):
+                continue
+            card = dict(original)
+            status = card.get("draft_status")
+            if status is None:
+                plan = compile_card_plan(card)
+                card["draft_status"] = "ready" if plan is not None and plan.steps else "drafting"
+                card["draft_revision"] = 1
+                card["draft_correlation_id"] = str(uuid.uuid4())
+                status = card["draft_status"]
+                cards[card_id] = card
+                changed = True
+            if status == "drafting":
+                to_schedule.append(card_id)
+        if changed:
+            self.state = self.state.model_copy(update={"cards": cards})
+            self._notify_change()
+        for card_id in to_schedule:
+            self._schedule_card_draft(card_id)
+
+    async def cancel_card_drafts(self) -> None:
+        tasks = list(self._card_draft_tasks.values())
+        self._card_draft_tasks.clear()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def dev_autofill_authoring(self) -> None:
-        """DEV shortcut: fast-forward lobby/setup straight to ``phase="playing"``.
-
-        Enters setup if still in the lobby, then authors placeholder cards for every
-        non-spectator until each has met ``CARDS_TO_AUTHOR`` — the last authored card
-        trips the existing auto-start into playing. Raises ``ValueError`` if the game
-        has already started (the endpoint maps that to a 409).
-
-        We take ``self._lock`` ourselves and call the internal (already-unlocked)
-        handlers directly: this is invoked from a REST endpoint, not through
-        ``handle_action``, so we must reproduce its single-lock serialization guarantee
-        without re-entering the lock via ``handle_action``.
-        """
+        """DEV shortcut: wait for submitted drafts, then fill missing slots with blanks."""
         async with self._lock:
             if self.state.phase not in ("lobby", "setup"):
                 raise ValueError("game already started")
+            if self._dev_skip_in_progress:
+                raise ValueError("skip setup already in progress")
+            self._dev_skip_in_progress = True
             if self.state.phase == "lobby":
                 await self._enter_setup()
-            for player in self.state.turn_players():
-                pid = player.id
-                i = 0
-                while self._authored_count(pid) < CARDS_TO_AUTHOR:
-                    await self._handle_create_card(
-                        pid, CreateCardMsg(title=f"dev-{pid}-{i}", description="gain 1 point")
-                    )
-                    i += 1
             self._notify_change()
+
+        try:
+            await self.wait_for_card_drafts()
+            async with self._lock:
+                if self.state.phase != "setup":
+                    return
+                missing = sum(
+                    max(0, CARDS_TO_AUTHOR - self._authored_count(player.id)) for player in self.state.turn_players()
+                )
+                unusable_ids = [
+                    card_id
+                    for player in self.state.turn_players()
+                    for card_id, card in self._setup_cards_for(player.id)
+                    if not self._draft_ready(card)
+                ]
+                if unusable_ids:
+                    cards = {cid: card for cid, card in self.state.cards.items() if cid not in unusable_ids}
+                    self.state = self.state.model_copy(update={"cards": cards})
+                    for card_id in unusable_ids:
+                        art = self.card_art.pop(card_id, None)
+                        if art:
+                            self._card_art_bytes -= len(art)
+                await self._start_playing(
+                    additional_blanks=missing,
+                    bypass_setup_gate=True,
+                )
+                self._notify_change()
+        finally:
+            self._dev_skip_in_progress = False
 
     # ── turn lifecycle (auto-draw → play → end turn → advance) ──
     async def _start_turn(self, player_id: str) -> None:
@@ -1656,6 +1905,8 @@ class Room:
 
         compiled = compile_card_plan(card if isinstance(card, dict) else card.model_dump())
         if compiled is not None and compiled.steps:
+            if isinstance(card, dict):
+                await self._log_agent_comment(card_id, str(card.get("agent_comment") or ""))
             return compiled
 
         from agent.contract import InterpretResult
@@ -1777,8 +2028,13 @@ class Room:
         plan = result.to_plan()
         canonical: dict = {}
         snippet = getattr(result, "snippet", None)
-        if snippet is not None and getattr(snippet, "trigger", None) == str(GameEvent.ON_REACTION):
-            canonical["trigger"] = str(GameEvent.ON_REACTION)
+        trigger = getattr(result, "trigger", None) or (
+            getattr(snippet, "trigger", None) if snippet is not None else None
+        )
+        if trigger is None and any(isinstance(op, CounterPlayOp) for op in plan.operations()):
+            trigger = str(GameEvent.ON_REACTION)
+        if trigger is not None:
+            canonical["trigger"] = trigger
         placement = getattr(result, "placement", None)
         if placement is not None:
             # A failed interpretation has no ongoing rule to be reminded of, so
@@ -1799,11 +2055,15 @@ class Room:
         if len(snippets) == 1 and isinstance(plan.steps[-1], SnippetStep):
             canonical["sandbox"] = snippets[0].code
         merged: dict = {"canonical": canonical}
-        if any(
-            isinstance(op, SetCardAttributeOp) and op.card_target == "this" and op.key == "play_on_draw" and op.value
+        static_attributes = {
+            op.key: op.value
             for op in plan.operations()
-        ):
-            merged["attributes"] = {"play_on_draw": True}
+            if isinstance(op, SetCardAttributeOp)
+            and op.card_target == "this"
+            and op.key in {"play_on_draw", "uncounterable"}
+        }
+        if static_attributes:
+            merged["attributes"] = static_attributes
         return merged
 
     async def _execute_plan(
@@ -3490,33 +3750,21 @@ class Room:
         return mode
 
     async def _handle_create_card(self, player_id: str, msg) -> None:
-        """Author a new card during SETUP — the only create_card path
-        (``_dispatch`` rejects the message in every other phase; mid-game
-        authoring happens only by playing a blank, see ``_handle_play``).
-
-        Authoring never calls the LLM: authored cards are interpreted
-        deterministically (via ``compile_card``) or best-effort at play time, so
-        setup authoring stays fast and never depends on a live service. The card
-        is simply registered with its ``creator_id`` (which drives
-        ``setup_progress`` and the start gate) and broadcast.
-
-        Authoring is capped at ``CARDS_TO_AUTHOR`` per player: the start gate
-        only enforces a LOWER bound, so without this cap a player could author
-        unlimited cards before the game starts.
-
-        Once this card completes the LAST player's authoring quota, the game
-        AUTO-STARTS (setup→playing) — no manual "start" is required.
-        """
-        # Upper bound: reject (targeted, not broadcast) once the player has
-        # authored the required number of cards, BEFORE any card is created.
-        if self._authored_count(player_id) >= CARDS_TO_AUTHOR:
+        """Register one stable setup slot and draft its mechanics off-lock."""
+        if self._setup_slot_count(player_id) >= CARDS_TO_AUTHOR:
             await self.connections.send(
                 player_id,
-                {"type": "error", "message": f"You've already authored the maximum of {CARDS_TO_AUTHOR} cards."},
+                {
+                    "type": "error",
+                    "message": (
+                        f"You already have {CARDS_TO_AUTHOR} setup card slots. Revise or retry any failed card."
+                    ),
+                },
             )
             return
 
         card_id = str(uuid.uuid4())
+        correlation_id = str(uuid.uuid4())
         art = msg.art
         if art and not self._store_card_art(card_id, art):
             art = None
@@ -3535,23 +3783,59 @@ class Room:
                 "has_art": bool(art),
                 "mechanical_status": "pending",
                 "mechanical_reason": None,
-                "correlation_id": str(uuid.uuid4()),
+                "correlation_id": correlation_id,
+                "draft_status": "drafting",
+                "draft_reason": None,
+                "draft_revision": 1,
+                "draft_correlation_id": correlation_id,
             },
         }
         self.state = self.state.model_copy(update={"cards": new_cards})
+        self._schedule_card_draft(card_id)
+        await self._broadcast_state()
 
-        # Auto-start: once every non-spectator has authored the required
-        # number of cards, transition straight to playing — no manual
-        # "start" needed. Guard the degenerate zero-players case so we never
-        # auto-start an empty table. ``_start_playing`` broadcasts the new
-        # (playing) state itself, so we don't also broadcast the pre-start
-        # setup state on this path.
-        real_players = self.state.turn_players()
-        everyone_done = bool(real_players) and all(self._authored_count(p.id) >= CARDS_TO_AUTHOR for p in real_players)
-        if everyone_done:
-            await self._start_playing()
-        else:
-            await self._broadcast_state()
+    async def _handle_redraft_card(self, player_id: str, msg) -> None:
+        card = self.state.cards.get(msg.card_id)
+        if not isinstance(card, dict) or card.get("creator_id") != player_id:
+            await self.connections.send(player_id, {"type": "error", "message": "That setup card is not yours"})
+            return
+        if card.get("draft_status") != "failed":
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "Only a failed setup card can be revised or retried"},
+            )
+            return
+
+        art = msg.art
+        has_art = bool(card.get("has_art"))
+        if art is not None:
+            if self._replace_card_art(msg.card_id, art):
+                has_art = True
+            else:
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": "This room's art storage is full — keeping the previous art"},
+                )
+
+        revision = int(card.get("draft_revision", 1)) + 1
+        correlation_id = str(uuid.uuid4())
+        updated = {
+            **card,
+            "title": msg.title,
+            "description": msg.description,
+            "has_art": has_art,
+            "verdict": None,
+            "draft_status": "drafting",
+            "draft_reason": None,
+            "draft_revision": revision,
+            "draft_correlation_id": correlation_id,
+            "correlation_id": correlation_id,
+        }
+        for key in ("canonical", "ops", "sandbox", "attributes", "agent_comment"):
+            updated.pop(key, None)
+        self.state = self.state.model_copy(update={"cards": {**self.state.cards, msg.card_id: updated}})
+        self._schedule_card_draft(msg.card_id)
+        await self._broadcast_state()
 
     async def _handle_preview_card(self, player_id: str, msg) -> None:
         """Interpret and execute against a clone, returning diagnostics only.
@@ -3770,6 +4054,7 @@ class Room:
         active_id = self.state.active_player().id if self.state.players else None
         snap["can_pass"] = self._can_pass(active_id) if active_id is not None else False
         snap["setup_progress"] = self._setup_progress()
+        snap["setup_draft_progress"] = self._setup_draft_progress()
         snap["cards_to_author"] = CARDS_TO_AUTHOR
         pending = self._pending_resolution
         snap["pending_interaction"] = (

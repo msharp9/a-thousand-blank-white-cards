@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import type { ClientMsg, PreviewResult } from "@/lib/types";
+import type { CardSnapshot, ClientMsg, PreviewResult } from "@/lib/types";
 
 interface CreateCardDialogProps {
   open: boolean;
@@ -20,6 +20,7 @@ interface CreateCardDialogProps {
   send: (msg: ClientMsg) => void;
   previewResult: PreviewResult | null;
   caption?: string;
+  card?: CardSnapshot | null;
 }
 
 export function CreateCardDialog({
@@ -28,9 +29,10 @@ export function CreateCardDialog({
   send,
   previewResult,
   caption = "This card joins the shared deck.",
+  card,
 }: CreateCardDialogProps) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(card?.title ?? "");
+  const [description, setDescription] = useState(card?.description ?? "");
   const [previewing, setPreviewing] = useState(false);
   const [lastResult, setLastResult] = useState(previewResult);
   const creatorRef = useRef<CardCreatorHandle>(null);
@@ -57,12 +59,23 @@ export function CreateCardDialog({
 
   function handleSubmit() {
     if (!title.trim() || !description.trim()) return;
-    send({
-      type: "create_card",
-      title: title.trim(),
-      description: description.trim(),
-      art: creatorRef.current?.getArt() ?? undefined,
-    });
+    const art = creatorRef.current?.getArt() ?? undefined;
+    send(
+      card
+        ? {
+            type: "redraft_card",
+            card_id: card.id,
+            title: title.trim(),
+            description: description.trim(),
+            art,
+          }
+        : {
+            type: "create_card",
+            title: title.trim(),
+            description: description.trim(),
+            art,
+          },
+    );
     setTitle("");
     setDescription("");
     creatorRef.current?.reset();
@@ -73,7 +86,7 @@ export function CreateCardDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Create a card</DialogTitle>
+          <DialogTitle>{card ? "Revise card" : "Create a card"}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <CardCreator

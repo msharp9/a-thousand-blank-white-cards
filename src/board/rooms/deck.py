@@ -363,13 +363,16 @@ def finalize_deck(
     num_players: int,
     *,
     blanks_per_player: int = BLANKS_PER_PLAYER,
+    additional_blanks: int = 0,
     rng: random.Random | None = None,
 ) -> tuple[dict[str, dict], list[str]]:
     """Assemble the final draw deck at the end of setup and shuffle it.
 
     Composition (per the rules): the pre-made pool + every player-authored card
-    + ``blanks_per_player`` blank cards PER player, all shuffled together. With
-    30 pre-made cards this yields 30 + 5·players authored + 5·players blanks
+    + ``blanks_per_player`` blank cards PER player + any explicit
+    ``additional_blanks``, all shuffled together. The extra count is used only
+    by the development skip-setup shortcut to replace missing authored slots.
+    With 30 pre-made cards this yields 30 + 5·players authored + 5·players blanks
     (e.g. 2 players → 30+10+10 = 50; 6 players → 30+30+30 = 90).
 
     Returns ``(blank_cards, deck_ids)`` — the newly-created blank card dicts (to
@@ -377,7 +380,7 @@ def finalize_deck(
     the shuffled deck of all ids. Deterministic given ``rng``.
     """
     rng = rng or random.Random()
-    num_blanks = blanks_per_player * num_players
+    num_blanks = blanks_per_player * num_players + additional_blanks
     blank_cards = build_blanks(num_blanks)
     deck = [*premade_ids, *authored_ids, *blank_cards.keys()]
     rng.shuffle(deck)

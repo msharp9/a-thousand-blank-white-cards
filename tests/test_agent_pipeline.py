@@ -750,6 +750,7 @@ def test_flag_on_run_agent_dispatches_to_pipeline_unchanged(monkeypatch):
         "max_tool_calls": 3,
         "forced_call_timeout": 1.0,
         "allow_persistent_tools": False,
+        "draft_mode": False,
         "config": {"callbacks": []},
     }
 

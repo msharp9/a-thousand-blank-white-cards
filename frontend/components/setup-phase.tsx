@@ -31,6 +31,7 @@ export function SetupPhase({
   isSpectator,
 }: SetupPhaseProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingCard, setEditingCard] = useState<CardSnapshot | null>(null);
 
   // How many cards each player must author, from the backend (fall back to the
   // historical default if an older snapshot omits it).
@@ -47,7 +48,8 @@ export function SetupPhase({
   // tally of authored cards if setup_progress is missing.
   const myAuthoredCount =
     gameState.setup_progress?.[myPlayerId] ?? myAuthored.length;
-  const remaining = Math.max(0, target - myAuthoredCount);
+  const remainingSlots = Math.max(0, target - myAuthored.length);
+  const myDraftProgress = gameState.setup_draft_progress?.[myPlayerId];
 
   // The 30 pre-made pool cards: during setup the backend parks the premade pool
   // in state.deck, so resolving those ids gives exactly the pool to show for
@@ -79,7 +81,13 @@ export function SetupPhase({
           Setup — Author your cards
         </h2>
         <p className="mt-1 font-hand text-lg text-muted-foreground">
-          Write {target} cards to seed the deck. {remaining} to go.
+          Write {target} cards to seed the deck. {myAuthoredCount}/{target}{" "}
+          ready
+          {myDraftProgress?.drafting
+            ? ` · ${myDraftProgress.drafting} drafting`
+            : ""}
+          {myDraftProgress?.failed ? ` · ${myDraftProgress.failed} failed` : ""}
+          .
         </p>
         {gameState.setup_progress && gameState.players.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
@@ -88,7 +96,11 @@ export function SetupPhase({
                 key={p.id}
                 className="rounded-[10px] border-[1.5px] border-ink bg-card px-2.5 py-0.5 font-hand text-sm"
               >
-                {p.name} {gameState.setup_progress[p.id] ?? 0}/{target}
+                {p.name} {gameState.setup_progress[p.id] ?? 0}/{target} ready
+                {(gameState.setup_draft_progress?.[p.id]?.drafting ?? 0) > 0 &&
+                  ` · ${gameState.setup_draft_progress?.[p.id]?.drafting} drafting`}
+                {(gameState.setup_draft_progress?.[p.id]?.failed ?? 0) > 0 &&
+                  ` · ${gameState.setup_draft_progress?.[p.id]?.failed} failed`}
               </span>
             ))}
           </div>
@@ -102,10 +114,13 @@ export function SetupPhase({
           </p>
           <Button
             size="sm"
-            onClick={() => setDialogOpen(true)}
-            disabled={remaining === 0}
+            onClick={() => {
+              setEditingCard(null);
+              setDialogOpen(true);
+            }}
+            disabled={remainingSlots === 0}
           >
-            {remaining === 0 ? "All cards authored" : "Author a card"}
+            {remainingSlots === 0 ? "All card slots filled" : "Author a card"}
           </Button>
         </div>
         {myAuthored.length === 0 ? (
@@ -116,12 +131,44 @@ export function SetupPhase({
           <ScrollArea className="max-h-[28rem] w-full">
             <div className="flex flex-wrap gap-3 px-1 pb-3 pt-2">
               {myAuthored.map((card) => (
-                <SketchCard
+                <div
                   key={card.id}
-                  card={card}
-                  w={130}
-                  artUrl={getCardArtUrl(gameState.room_code, card)}
-                />
+                  className="flex flex-col items-center gap-1.5"
+                >
+                  <SketchCard
+                    card={card}
+                    w={130}
+                    brewing={card.draft_status === "drafting"}
+                    artUrl={getCardArtUrl(gameState.room_code, card)}
+                  />
+                  {card.draft_status === "failed" && (
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          send({
+                            type: "redraft_card",
+                            card_id: card.id,
+                            title: card.title,
+                            description: card.description,
+                          })
+                        }
+                      >
+                        Retry
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setEditingCard(card);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        Revise
+                      </Button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </ScrollArea>
@@ -172,14 +219,17 @@ export function SetupPhase({
       )}
 
       <p className="font-hand text-sm italic text-muted-foreground">
-        The game starts automatically once everyone has authored their cards.
+        The game starts automatically once everyone&apos;s card drafts are
+        ready.
       </p>
 
       <CreateCardDialog
+        key={`${editingCard?.id ?? "new"}:${editingCard?.draft_revision ?? 0}:${dialogOpen ? "open" : "closed"}`}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         send={send}
         previewResult={previewResult}
+        card={editingCard}
       />
     </div>
   );

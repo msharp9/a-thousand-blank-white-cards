@@ -161,7 +161,8 @@ Rooms are created and joined over REST (`board.app.create_app`):
 - `GET /health` → liveness.
 - `POST /rooms/{code}/dev/skip-setup`, `POST /rooms/{code}/dev/end-game` →
   dev-loop shortcuts, active only when `DEV_MODE` is set (they 404 otherwise).
-  Skip-setup auto-authors each player's cards and fast-forwards to `playing`;
+  Skip-setup waits for submitted setup drafts, preserves successful cards,
+  replaces missing/failed authoring slots with blanks, and fast-forwards to `playing`;
   end-game forces the current game through the real `_end_game` path so
   end-game triggers, scoring, and the epilogue can be exercised on demand.
 
@@ -187,7 +188,8 @@ discriminated union (`ClientMsg`, keyed on `type`) validated by a single
 `TypeAdapter`; outbound messages are the `ServerMsg` set.
 
 - **Client → server**: `join`, `start`, `play`, `pass` / `end_turn`,
-  `create_card`, `preview_card`, `interaction_response`, `epilogue_vote`. There
+  `create_card`, `redraft_card`, `preview_card`, `interaction_response`,
+  `epilogue_vote`. There
   is no client `draw` message: drawing is auto-triggered server-side at the
   start of each turn (see `_start_turn` in `board/rooms/room.py`).
 - **Server → client**: `state`, `brewing`, `card_interpreted`, `effect_applied`,
@@ -228,6 +230,12 @@ renders these values in a generic dynamic-state panel; there is no legacy
 direction flag. Cards also retain a bounded mechanical diagnostic (`pending`,
 `applied`, `fallback`, or `rejected`), a public reason, and a correlation id, so
 failures remain visible after reconnect and can be matched to server logs.
+During setup, submitted cards additionally carry `draft_status`
+(`drafting`/`ready`/`failed`), a revision, and a safe failure reason. Drafting
+runs outside the room lock; completion is applied under the lock only when its
+revision still matches. A failed slot stays visible to its author for
+`redraft_card`, while game start requires every setup slot to have a compiled
+plan. Blank cards remain the sole author-on-play path.
 
 ### Anatomy of an action
 
@@ -327,8 +335,9 @@ PNG data-URL, and it deliberately never rides `GameState` or any WebSocket
 broadcast — a few sketches would otherwise multiply every `state` snapshot sent
 to every client on every action.
 
-- **Inbound** (`models/ws_messages.py` → `models/card.py`): `create_card` and
-  `play` (author-on-play) accept an optional `art` field, validated at the
+- **Inbound** (`models/ws_messages.py` → `models/card.py`): `create_card`,
+  `redraft_card`, and `play` (author-on-play) accept an optional `art` field,
+  validated at the
   message boundary — `data:image/png;base64,` prefix, ≤ `MAX_CARD_ART_BYTES`
   (128 KiB) for the whole data-URL, and a base64-decode + PNG magic-byte check
   (`decode_card_art`, the single decode path), so a prefix claim alone never
@@ -342,9 +351,9 @@ to every client on every action.
 - **Serving** (`board/app.py`): clients fetch
   `GET /rooms/{code}/cards/{card_id}/art`, which decodes the registry entry and
   returns raw `image/png` with `X-Content-Type-Options: nosniff` and
-  `Cache-Control: public, max-age=31536000, immutable` — card ids are immutable
-  and art is written once at authoring time, so the browser cache does all
-  repeat work (the frontend uses a plain `<img src>`, `lib/art.ts`).
+  `Cache-Control: public, max-age=31536000, immutable`. The frontend appends a
+  setup draft revision to the art URL, so revising a failed card safely
+  invalidates its prior drawing while stable cards remain cacheable.
 - **RAG carry** (`board/rooms/epilogue.py`, `board/rooms/deck.py`): a kept
   card's data-URL rides its Qdrant payload at the epilogue upsert, and a
   prior-game card re-entering a new deck surfaces it as a transient `art` key
@@ -867,6 +876,7 @@ studio — title input, freehand pointer-drawn canvas (vector strokes redrawn at
 device pixel ratio), ink/nib pickers, undo/clear, and an emoji stamp grid.
 `getArt()` exports a PNG data-URL, retrying at smaller scales until it fits the
 backend's 128 KiB art cap. It is a pure authoring surface with no WS knowledge;
-`CreateCardDialog` (setup-only authoring; the server rejects `create_card`
-outside the setup phase) and `PlayBlankDialog` (author-on-play of a blank, the
-only mid-game authoring path) own submission and pass a flow-specific caption.
+`CreateCardDialog` (setup-only creation plus revision/retry of failed drafts;
+the server rejects these messages outside setup) and `PlayBlankDialog`
+(author-on-play of a blank, the only mid-game authoring path) own submission and
+pass a flow-specific caption.

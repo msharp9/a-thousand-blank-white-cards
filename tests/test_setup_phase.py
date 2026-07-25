@@ -1,9 +1,8 @@
-"""Tests for the two-step game-start SETUP phase (beads 70n.8 + 70n.9).
+"""Tests for setup authoring and background card drafting.
 
 The start flow is: lobby -> (StartMsg) -> setup (build a 30-card pre-made pool,
-each non-spectator authors CARDS_TO_AUTHOR cards) -> (StartMsg) -> playing
-(finalise the deck, deal starting hands). During setup, authoring a card does
-NOT call the LLM.
+each non-spectator authors CARDS_TO_AUTHOR cards) -> playing (finalise the deck,
+deal starting hands) once every authored card has an executable draft.
 """
 
 from __future__ import annotations
@@ -11,9 +10,11 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-from conftest import drive_to_playing
+from conftest import drive_to_playing, ready_card_result
 
-from models.ws_messages import CreateCardMsg, StartMsg
+from agent.contract import InterpretResult
+from models.effects import AddPointsOp, CounterPlayOp, EffectProgram, SetCardAttributeOp
+from models.ws_messages import CreateCardMsg, RedraftCardMsg, StartMsg
 from board.rooms.room import CARDS_TO_AUTHOR, PREMADE_POOL_SIZE, STARTING_HAND_SIZE, Room
 
 
@@ -24,6 +25,19 @@ def _room_two_players() -> Room:
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
     return room
+
+
+async def _author_cards(room: Room, player_id: str, count: int, *, prefix: str = "c") -> None:
+    for i in range(count):
+        await room.handle_action(
+            player_id,
+            CreateCardMsg(title=f"{prefix}{i}", description="gain 1 point"),
+        )
+
+
+def _run_ready(coro) -> None:
+    with patch("agent.runtime.run_agent", return_value=ready_card_result()):
+        asyncio.run(coro)
 
 
 def test_lobby_start_enters_setup_and_seeds_premade_pool() -> None:
@@ -50,30 +64,40 @@ def test_setup_snapshot_reports_progress_and_cards_to_author() -> None:
     assert snap["setup_progress"] == {"p1": 0, "p2": 0}
 
 
-def test_authoring_during_setup_increments_progress_and_skips_llm() -> None:
+def test_authoring_during_setup_drafts_and_persists_executable_mechanics() -> None:
     room = _room_two_players()
-    asyncio.run(room.handle_action("p1", StartMsg()))
 
-    with patch("agent.runtime.run_agent") as mock_interp:
-        asyncio.run(room.handle_action("p1", CreateCardMsg(title="Mine", description="gain 1 point")))
-        asyncio.run(room.handle_action("p1", CreateCardMsg(title="Mine2", description="gain 1 point")))
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await room.handle_action("p1", CreateCardMsg(title="Mine", description="gain 1 point"))
+        await room.handle_action("p1", CreateCardMsg(title="Mine2", description="gain 1 point"))
+        await room.wait_for_card_drafts()
 
-    # The agent is never called during setup authoring.
-    mock_interp.assert_not_called()
-    # p1's authored count advanced; p2 untouched.
+    with patch("agent.runtime.run_agent", return_value=ready_card_result()) as mock_interp:
+        asyncio.run(scenario())
+
+    assert mock_interp.call_count == 2
     assert room.snapshot()["setup_progress"] == {"p1": 2, "p2": 0}
-    # The authored cards carry the creator id and were registered.
     authored = [c for c in room.state.cards.values() if c.get("creator_id") == "p1"]
     assert len(authored) == 2
+    assert all(c["draft_status"] == "ready" for c in authored)
+    assert all(c.get("canonical") for c in authored)
+    assert all(call.kwargs["draft_mode"] is True for call in mock_interp.call_args_list)
+    for call in mock_interp.call_args_list:
+        draft_state = call.args[2]
+        draft_card_id = call.kwargs["card_id"]
+        assert draft_card_id in draft_state.get_player("p1").hand
 
 
 def test_authoring_up_to_the_limit_during_setup_is_allowed() -> None:
     room = _room_two_players()
-    asyncio.run(room.handle_action("p1", StartMsg()))
 
-    for i in range(CARDS_TO_AUTHOR):
-        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"c{i}", description="gain 1 point")))
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await _author_cards(room, "p1", CARDS_TO_AUTHOR)
+        await room.wait_for_card_drafts()
 
+    _run_ready(scenario())
     assert room.snapshot()["setup_progress"]["p1"] == CARDS_TO_AUTHOR
     authored = [c for c in room.state.cards.values() if c.get("creator_id") == "p1"]
     assert len(authored) == CARDS_TO_AUTHOR
@@ -85,15 +109,15 @@ def test_authoring_over_the_limit_during_setup_is_rejected() -> None:
     room = _room_two_players()
     ws1 = AsyncMock()
     room.connections.connect("p1", ws1)
-    asyncio.run(room.handle_action("p1", StartMsg()))  # -> setup
 
-    # Author up to the cap.
-    for i in range(CARDS_TO_AUTHOR):
-        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"c{i}", description="gain 1 point")))
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await _author_cards(room, "p1", CARDS_TO_AUTHOR)
+        ws1.reset_mock()
+        await room.handle_action("p1", CreateCardMsg(title="extra", description="gain 1 point"))
+        await room.wait_for_card_drafts()
 
-    ws1.reset_mock()
-    # The (CARDS_TO_AUTHOR + 1)th create must be rejected and add no card.
-    asyncio.run(room.handle_action("p1", CreateCardMsg(title="extra", description="gain 1 point")))
+    _run_ready(scenario())
 
     sent_types = [json.loads(c.args[0])["type"] for c in ws1.send_text.call_args_list]
     assert "error" in sent_types
@@ -126,14 +150,15 @@ def test_start_during_setup_with_players_behind_errors_and_stays_in_setup() -> N
     room = _room_two_players()
     ws1 = AsyncMock()
     room.connections.connect("p1", ws1)
-    asyncio.run(room.handle_action("p1", StartMsg()))  # -> setup
 
-    # Only p1 authors the required cards; p2 is behind.
-    for i in range(CARDS_TO_AUTHOR):
-        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"c{i}", description="gain 1 point")))
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await _author_cards(room, "p1", CARDS_TO_AUTHOR)
+        await room.wait_for_card_drafts()
+        ws1.reset_mock()
+        await room.handle_action("p1", StartMsg())
 
-    ws1.reset_mock()
-    asyncio.run(room.handle_action("p1", StartMsg()))  # gate should block
+    _run_ready(scenario())
 
     import json
 
@@ -160,21 +185,19 @@ def test_auto_start_when_last_player_finishes_authoring() -> None:
     # No {type:"start"} is ever sent for the setup->playing transition: it fires
     # automatically once the final player authors their last required card.
     room = _room_two_players()
-    asyncio.run(room.handle_action("p1", StartMsg()))  # lobby -> setup
 
-    # p1 authors all their cards first — game must NOT start yet (p2 behind).
-    for i in range(CARDS_TO_AUTHOR):
-        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"a{i}", description="gain 1 point")))
-    assert room.state.phase == "setup"
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await _author_cards(room, "p1", CARDS_TO_AUTHOR, prefix="a")
+        await room.wait_for_card_drafts()
+        assert room.state.phase == "setup"
+        await _author_cards(room, "p2", CARDS_TO_AUTHOR - 1, prefix="b")
+        await room.wait_for_card_drafts()
+        assert room.state.phase == "setup"
+        await room.handle_action("p2", CreateCardMsg(title="b-last", description="gain 1 point"))
+        await room.wait_for_card_drafts()
 
-    # p2 authors all but the last — still setup.
-    for i in range(CARDS_TO_AUTHOR - 1):
-        asyncio.run(room.handle_action("p2", CreateCardMsg(title=f"b{i}", description="gain 1 point")))
-    assert room.state.phase == "setup"
-
-    # p2 authors the FINAL required card — the game auto-transitions to playing
-    # WITHOUT any StartMsg, with hands dealt and the first turn begun.
-    asyncio.run(room.handle_action("p2", CreateCardMsg(title="b-last", description="gain 1 point")))
+    _run_ready(scenario())
     assert room.state.phase == "playing"
     # First turn begun: the shuffled turn_order's first player was auto-drawn
     # to — turn order is randomized, not host-first.
@@ -187,13 +210,13 @@ def test_auto_start_when_last_player_finishes_authoring() -> None:
 
 def test_authoring_while_players_behind_does_not_auto_start() -> None:
     room = _room_two_players()
-    asyncio.run(room.handle_action("p1", StartMsg()))  # lobby -> setup
 
-    # Only p1 authors the full quota; p2 has authored nothing.
-    for i in range(CARDS_TO_AUTHOR):
-        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"c{i}", description="gain 1 point")))
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await _author_cards(room, "p1", CARDS_TO_AUTHOR)
+        await room.wait_for_card_drafts()
 
-    # p2 is still behind, so the game must remain in setup.
+    _run_ready(scenario())
     assert room.state.phase == "setup"
     for p in room.state.players:
         assert p.hand == []
@@ -203,15 +226,17 @@ def test_single_player_game_auto_starts() -> None:
     room = Room("SOLO01")
     room.add_player("p1", "Solo")
     room.connections.connect("p1", AsyncMock())
-    asyncio.run(room.handle_action("p1", StartMsg()))  # lobby -> setup
-    assert room.state.phase == "setup"
 
-    for i in range(CARDS_TO_AUTHOR - 1):
-        asyncio.run(room.handle_action("p1", CreateCardMsg(title=f"s{i}", description="gain 1 point")))
-    assert room.state.phase == "setup"
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        assert room.state.phase == "setup"
+        await _author_cards(room, "p1", CARDS_TO_AUTHOR - 1, prefix="s")
+        await room.wait_for_card_drafts()
+        assert room.state.phase == "setup"
+        await room.handle_action("p1", CreateCardMsg(title="s-last", description="gain 1 point"))
+        await room.wait_for_card_drafts()
 
-    # The final required card triggers the auto-start for the lone player.
-    asyncio.run(room.handle_action("p1", CreateCardMsg(title="s-last", description="gain 1 point")))
+    _run_ready(scenario())
     assert room.state.phase == "playing"
     assert len(room.state.get_player("p1").hand) == STARTING_HAND_SIZE + room.state.draw_count
 
@@ -226,3 +251,83 @@ def test_finalized_deck_size_for_two_players() -> None:
     assert total_hands == 2 * STARTING_HAND_SIZE + room.state.draw_count
     assert len(room.state.deck) + total_hands == 50
     assert len(room.state.deck) == 39
+
+
+def test_failed_draft_does_not_count_and_can_be_revised() -> None:
+    room = _room_two_players()
+
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await room.handle_action("p1", CreateCardMsg(title="Broken", description="???"))
+        await room.wait_for_card_drafts()
+        (card_id,) = [cid for cid, c in room.state.cards.items() if c.get("creator_id") == "p1"]
+        assert room.state.cards[card_id]["draft_status"] == "failed"
+        assert room.snapshot()["setup_progress"]["p1"] == 0
+
+        with patch("agent.runtime.run_agent", return_value=ready_card_result()):
+            await room.handle_action(
+                "p1",
+                RedraftCardMsg(card_id=card_id, title="Fixed", description="gain 1 point"),
+            )
+            await room.wait_for_card_drafts()
+
+        card = room.state.cards[card_id]
+        assert card["title"] == "Fixed"
+        assert card["draft_status"] == "ready"
+        assert card["draft_revision"] == 2
+        assert room.snapshot()["setup_progress"]["p1"] == 1
+
+    with patch("agent.runtime.run_agent", return_value=InterpretResult(verdict="invalid")):
+        asyncio.run(scenario())
+
+
+def test_setup_draft_persists_play_on_draw_metadata_before_dealing() -> None:
+    room = _room_two_players()
+    result = InterpretResult(
+        program=EffectProgram(
+            ops=[
+                SetCardAttributeOp(card_target="this", key="play_on_draw", value=True),
+                AddPointsOp(target="self", amount=2),
+            ]
+        ),
+        verdict="ok",
+    )
+
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await room.handle_action(
+            "p1",
+            CreateCardMsg(title="Immediate Gratification", description="Play immediately when drawn; gain 2."),
+        )
+        await room.wait_for_card_drafts()
+
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(scenario())
+
+    (card,) = [card for card in room.state.cards.values() if card.get("creator_id") == "p1"]
+    assert card["draft_status"] == "ready"
+    assert card["attributes"]["play_on_draw"] is True
+    assert card["canonical"]["steps"]
+
+
+def test_setup_draft_persists_reaction_trigger_before_play() -> None:
+    room = _room_two_players()
+    result = InterpretResult(
+        program=EffectProgram(ops=[CounterPlayOp(mode="negate")]),
+        verdict="ok",
+    )
+
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await room.handle_action(
+            "p1",
+            CreateCardMsg(title="Nope", description="Counter the card being played."),
+        )
+        await room.wait_for_card_drafts()
+
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(scenario())
+
+    (card,) = [card for card in room.state.cards.values() if card.get("creator_id") == "p1"]
+    assert card["draft_status"] == "ready"
+    assert card["canonical"]["trigger"] == "on_reaction"

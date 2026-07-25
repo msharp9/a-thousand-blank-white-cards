@@ -6,7 +6,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
-from conftest import drive_to_playing
+from conftest import drive_to_playing, ready_card_result
 
 from models.ws_messages import CreateCardMsg, PassMsg, PlayMsg, Placement
 from board.rooms.connections import ConnectionManager
@@ -141,7 +141,13 @@ class TestRoomTurnEnforcement:
         room = _room_two_players()
         room.state = room.state.model_copy(update={"phase": "setup"})
         room.connections.connect("p2", AsyncMock())  # setup has no turn gate
-        asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="do stuff")))
+
+        async def scenario() -> None:
+            await room.handle_action("p2", CreateCardMsg(title="Wild", description="do stuff"))
+            await room.wait_for_card_drafts()
+
+        with patch("agent.runtime.run_agent", return_value=ready_card_result()):
+            asyncio.run(scenario())
         assert len(room.state.cards) == 1
         card = next(iter(room.state.cards.values()))
         assert card["title"] == "Wild"

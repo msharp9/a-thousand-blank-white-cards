@@ -141,6 +141,35 @@ def test_create_card_over_description_limit_rejected() -> None:
         ta.validate_python({"type": "create_card", "title": "ok", "description": "y" * (MAX_CARD_DESCRIPTION + 1)})
 
 
+def test_client_msg_discriminates_redraft_card() -> None:
+    from models.ws_messages import RedraftCardMsg
+
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python(
+        {
+            "type": "redraft_card",
+            "card_id": "draft-1",
+            "title": "Revised",
+            "description": "Gain 2 points.",
+        }
+    )
+    assert isinstance(msg, RedraftCardMsg)
+    assert msg.card_id == "draft-1"
+
+
+def test_redraft_card_enforces_text_limits() -> None:
+    ta = TypeAdapter(ClientMsg)
+    with pytest.raises(ValidationError):
+        ta.validate_python(
+            {
+                "type": "redraft_card",
+                "card_id": "draft-1",
+                "title": "x" * (MAX_CARD_TITLE + 1),
+                "description": "ok",
+            }
+        )
+
+
 def test_preview_card_over_limit_rejected() -> None:
     ta = TypeAdapter(ClientMsg)
     with pytest.raises(ValidationError):

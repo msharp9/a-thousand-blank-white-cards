@@ -117,6 +117,13 @@ class InterpretResult(BaseModel):
             "'online'), copied from the intent stage. None = legacy single-agent result."
         ),
     )
+    trigger: str | None = Field(
+        default=None,
+        description=(
+            "Static trigger metadata for the card. In particular, 'on_reaction' "
+            "must be available before the card is played so the room can open a reaction window."
+        ),
+    )
 
     def to_plan(self) -> ResolutionPlan:
         if self.plan is not None:

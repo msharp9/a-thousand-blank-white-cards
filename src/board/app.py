@@ -60,10 +60,11 @@ finishes their turn, then the game ends).
 | type | fields | purpose |
 | --- | --- | --- |
 | `join` | `player_id` (null on first join), `name` | Authenticate the socket into the room; must be the first message. |
-| `start` | — | Build/shuffle the deck, deal starting hands, begin play (the first player is auto-drawn to immediately). |
+| `start` | — | From the lobby, build the shared premade pool and enter setup. A setup start is accepted only after every required card has a successful executable draft; setup normally auto-starts at that point. |
 | `play` | `card_id`, `placement` (`zone`, `target_player_id`), `chosen_player_id?`, `chosen_card_id?`, `title?`, `description?`, `art?` | Play a card; the AI arbiter interprets it and applies the effect (active player only). Ends the turn. For a BLANK card, the first play carries the authored `title`+`description` (the card is filled in and persisted before interpretation) and optionally `art` (a PNG data-URL, stored out-of-band and served via `GET /rooms/{code}/cards/{card_id}/art`); a prompt_choice follow-up re-sends only `card_id`+the choice. |
 | `pass` / `end_turn` | — | End your turn without playing a card (active player only). `end_turn` is an accepted alias for `pass`, handled identically. |
-| `create_card` | `title`, `description`, `art?` | Author a new card during the SETUP phase (each player writes their quota; the game auto-starts when the last player finishes). Rejected in any other phase — the only mid-game authoring is playing a blank (see `play`). No LLM call: authored cards are interpreted at play time. `art` is an optional PNG data-URL; cards carry only a `has_art` flag in state and the image is served via `GET /rooms/{code}/cards/{card_id}/art`. |
+| `create_card` | `title`, `description`, `art?` | Fill one stable card slot during SETUP. The server immediately drafts executable mechanics in the background; only successful drafts count toward readiness. Rejected in any other phase — the only mid-game authoring is playing a blank (see `play`). |
+| `redraft_card` | `card_id`, `title`, `description`, `art?` | Retry or revise one of the sender's failed setup drafts without consuming another card slot. Omitted art preserves the existing drawing. |
 | `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state (setup phase only, like `create_card`). |
 | `interaction_response` | `schema_version`, `interaction_id`, typed `payload` | Submit one authenticated response to the active generic interaction. |
 | `epilogue_vote` | `card_id`, `keep` | Vote to keep/discard a card during the epilogue phase. |
@@ -175,6 +176,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     if _settings.dev_mode:
         logger.warning("DEV_MODE enabled — room persistence and /dev endpoints are ACTIVE (do not use in production)")
     yield
+    await room_manager.cancel_background_tasks()
     # shutdown
     from agent.triage import get_scheduler
 
@@ -286,9 +288,9 @@ def create_app() -> FastAPI:
 
         Art never rides the GameState snapshot (cards carry only ``has_art``);
         clients fetch the image here instead. Card ids are immutable and art is
-        written once at authoring time, so the response is served with
-        long-lived immutable cache headers. 404 when the room does not exist or
-        the card has no art.
+        keyed by card id plus setup revision on the client, so the response is
+        served with long-lived immutable cache headers. 404 when the room does
+        not exist or the card has no art.
         """
         room = room_manager.get(code)
         if room is None:
@@ -310,10 +312,11 @@ def create_app() -> FastAPI:
     async def dev_skip_setup(code: str) -> dict:
         """DEV-ONLY shortcut: fast-forward a room to ``phase="playing"``.
 
-        Enters setup (if needed) and auto-authors each non-spectator's required
-        cards so the play phase can be exercised instantly. Returns the resulting
-        UNREDACTED state snapshot (dev tooling wants hands/deck; the endpoint
-        does not exist in production). Only active when ``dev_mode`` is set.
+        Enters setup (if needed), waits for already-submitted card drafts, keeps
+        successful ones, and fills every missing/failed authoring slot with a
+        blank card so play can begin without fake mechanics. Returns the resulting
+        UNREDACTED state snapshot (dev tooling wants hands/deck; the endpoint does
+        not exist in production). Only active when ``dev_mode`` is set.
         """
         # 404 (not 403) when dev mode is off so the endpoint's very existence
         # stays hidden in production.

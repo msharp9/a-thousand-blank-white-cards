@@ -6,10 +6,13 @@ import asyncio
 
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
+from conftest import ready_card_result
 from config import get_settings
+from models.ws_messages import CreateCardMsg, StartMsg
 from board.app import create_app
-from board.rooms.room import CARDS_TO_AUTHOR, STARTING_HAND_SIZE, Room
+from board.rooms.room import STARTING_HAND_SIZE, Room
 
 
 @pytest.fixture
@@ -155,6 +158,10 @@ def test_dev_skip_setup_fast_forwards_to_playing(dev_client: TestClient) -> None
         expected = STARTING_HAND_SIZE + (draw_count if p["id"] == active_id else 0)
         assert len(p["hand"]) == expected
     assert data["deck"]
+    blanks = [card for card in data["cards"].values() if card.get("blank")]
+    assert len(blanks) == 20
+    assert len(data["deck"]) + sum(len(p["hand"]) for p in data["players"]) == 50
+    assert not any(card.get("origin") == "authored" for card in data["cards"].values())
 
 
 def test_dev_skip_setup_hidden_when_dev_mode_off(client: TestClient) -> None:
@@ -201,7 +208,7 @@ def test_dev_end_game_hidden_when_dev_mode_off(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
-def test_dev_autofill_authoring_deals_hands() -> None:
+def test_dev_skip_setup_fills_missing_authoring_slots_with_blanks() -> None:
     room = Room("DEVFF1")
     room.add_player("p1", "Alice")
     room.add_player("p2", "Bob")
@@ -215,4 +222,33 @@ def test_dev_autofill_authoring_deals_hands() -> None:
     other_id = "p2" if first_id == "p1" else "p1"
     assert len(room.state.get_player(first_id).hand) == STARTING_HAND_SIZE + room.state.draw_count
     assert len(room.state.get_player(other_id).hand) == STARTING_HAND_SIZE
-    assert all(room._authored_count(pid) >= CARDS_TO_AUTHOR for pid in ("p1", "p2"))
+    assert all(room._authored_count(pid) == 0 for pid in ("p1", "p2"))
+    blanks = [card for card in room.state.cards.values() if card.get("blank")]
+    assert len(blanks) == 20
+    total_hands = sum(len(player.hand) for player in room.state.players)
+    assert len(room.state.deck) + total_hands == 50
+
+
+def test_dev_skip_setup_waits_for_and_preserves_submitted_draft() -> None:
+    room = Room("DEVDR1")
+    room.add_player("p1", "Alice")
+    room.add_player("p2", "Bob")
+
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        await room.handle_action(
+            "p1",
+            CreateCardMsg(title="Keep Me", description="gain 1 point"),
+        )
+        await room.dev_autofill_authoring()
+
+    with patch("agent.runtime.run_agent", return_value=ready_card_result()) as spy:
+        asyncio.run(scenario())
+
+    spy.assert_called_once()
+    authored = [card for card in room.state.cards.values() if card.get("origin") == "authored"]
+    assert [card["title"] for card in authored] == ["Keep Me"]
+    assert authored[0]["draft_status"] == "ready"
+    assert len([card for card in room.state.cards.values() if card.get("blank")]) == 19
+    total_hands = sum(len(player.hand) for player in room.state.players)
+    assert len(room.state.deck) + total_hands == 50

@@ -85,6 +85,12 @@ class RoomManager:
         """Restore persisted room timers once an application event loop exists."""
         for room in self._store.values():
             room.ensure_pending_timeout()
+            room.ensure_card_drafts()
+
+    async def cancel_background_tasks(self) -> None:
+        """Cancel transient per-room setup drafting tasks during shutdown."""
+        for room in self._store.values():
+            await room.cancel_card_drafts()
 
     def join(self, code: str, name: str) -> tuple[str, str, bool] | None:
         """Add a player to the room. Returns (room_code, player_id, spectator) or None.

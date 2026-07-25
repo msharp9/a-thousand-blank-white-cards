@@ -7,7 +7,7 @@ import json
 import random
 from unittest.mock import AsyncMock, patch
 
-from conftest import drive_to_playing
+from conftest import drive_to_playing, ready_card_result
 
 from agent.contract import InterpretResult
 from models.effects import AddPointsOp, DestroyCardOp, EffectProgram
@@ -214,32 +214,38 @@ def test_turn_order_shuffle_is_seedable_and_need_not_start_the_host() -> None:
     # can — and here does — put someone else first, proving the game no longer
     # always opens on the host.
     room = _room_three_players()
-    asyncio.run(room.handle_action("p1", StartMsg()))  # lobby -> setup
-    for pid in ("p1", "p2"):
-        for i in range(CARDS_TO_AUTHOR):
-            asyncio.run(room.handle_action(pid, CreateCardMsg(title=f"{pid}-{i}", description="gain 1 point")))
-    # p3 authors one card short of the threshold via the normal path so the
-    # last card doesn't trip auto-start (which always calls _start_playing
-    # unseeded); the final card is injected directly so we can drive the
-    # setup -> playing transition ourselves with a pinned rng.
-    for i in range(CARDS_TO_AUTHOR - 1):
-        asyncio.run(room.handle_action("p3", CreateCardMsg(title=f"p3-{i}", description="gain 1 point")))
-    room.state = room.state.model_copy(
-        update={
-            "cards": {
-                **room.state.cards,
-                "p3-last": {
-                    "id": "p3-last",
-                    "title": "p3-last",
-                    "description": "gain 1 point",
-                    "creator_id": "p3",
-                    "origin": "authored",
-                },
-            }
-        }
-    )
 
-    asyncio.run(room._start_playing(rng=random.Random(1)))
+    async def scenario() -> None:
+        await room.handle_action("p1", StartMsg())
+        for pid in ("p1", "p2"):
+            for i in range(CARDS_TO_AUTHOR):
+                await room.handle_action(pid, CreateCardMsg(title=f"{pid}-{i}", description="gain 1 point"))
+        for i in range(CARDS_TO_AUTHOR - 1):
+            await room.handle_action("p3", CreateCardMsg(title=f"p3-{i}", description="gain 1 point"))
+        await room.wait_for_card_drafts()
+
+        canonical = room._canonicalize_interpretation(ready_card_result())
+        room.state = room.state.model_copy(
+            update={
+                "cards": {
+                    **room.state.cards,
+                    "p3-last": {
+                        "id": "p3-last",
+                        "title": "p3-last",
+                        "description": "gain 1 point",
+                        "creator_id": "p3",
+                        "origin": "authored",
+                        "draft_status": "ready",
+                        "draft_revision": 1,
+                        **canonical,
+                    },
+                }
+            }
+        )
+        await room._start_playing(rng=random.Random(1))
+
+    with patch("agent.runtime.run_agent", return_value=ready_card_result()):
+        asyncio.run(scenario())
 
     assert room.state.phase == "playing"
     # Contract, not the exact Random(1) byte sequence: the order is a permutation

@@ -54,6 +54,14 @@ export type CreateCardMsg = {
   // Optional card art: same PNG data-URL contract as PlayMsg.art.
   art?: string;
 };
+export type RedraftCardMsg = {
+  type: "redraft_card";
+  card_id: string;
+  title: string;
+  description: string;
+  // Omitted preserves the failed card's existing art.
+  art?: string;
+};
 export type PreviewCardMsg = {
   type: "preview_card";
   title: string;
@@ -107,6 +115,7 @@ export type ClientMsg =
   | PlayMsg
   | PassReactionMsg
   | CreateCardMsg
+  | RedraftCardMsg
   | PreviewCardMsg
   | EpilogueStartMsg
   | EpilogueVoteMsg
@@ -129,6 +138,9 @@ export type CardSnapshot = {
   mechanical_status?: MechanicalStatus;
   mechanical_reason?: string | null;
   correlation_id?: string | null;
+  draft_status?: "drafting" | "ready" | "failed";
+  draft_reason?: string | null;
+  draft_revision?: number;
   // True while this is an un-authored blank card (empty title/description). The
   // game seeds blanks into the deck; a blank sits in hand as blank and is
   // authored when played. Cleared once the player fills it in on play.
@@ -324,6 +336,10 @@ export type GameStateSnapshot = {
   can_pass: boolean;
   // During setup: {player_id: number of cards authored so far}.
   setup_progress: Record<string, number>;
+  setup_draft_progress?: Record<
+    string,
+    { ready: number; drafting: number; failed: number; total: number }
+  >;
   // How many cards each player must author during setup (currently 5).
   cards_to_author: number;
   // Winning player ids (empty = no winner, multiple = tie). Set when the deck is

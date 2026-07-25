@@ -53,6 +53,10 @@ def _visible_card_ids(snap: dict[str, Any], viewer_id: str | None) -> set[str]:
     visible.update(snap.get("house_rules", []))
     if snap.get("phase") in PUBLIC_DECK_PHASES:
         visible.update(snap.get("deck", []))
+    if snap.get("phase") == "setup" and viewer_id is not None:
+        for card_id, card in (snap.get("cards") or {}).items():
+            if isinstance(card, dict) and card.get("origin") == "authored" and card.get("creator_id") == viewer_id:
+                visible.add(card_id)
     interaction_visibility = snap.get("interaction_card_visibility")
     if interaction_visibility is not None and viewer_id in (interaction_visibility.get("viewer_ids") or []):
         visible.update(interaction_visibility.get("card_ids", []))

@@ -15,34 +15,46 @@ just stop the *file* from bleeding in. See bd a-thousand-blank-white-cards-9n4.
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
 
+from agent.contract import InterpretResult
 from config import Settings, get_settings
+from models.effects import AddPointsOp, EffectProgram
 from models.ws_messages import CreateCardMsg, StartMsg
+
+
+def ready_card_result() -> InterpretResult:
+    """Return a small, executable interpretation for setup-flow tests."""
+    return InterpretResult(
+        program=EffectProgram(ops=[AddPointsOp(target="self", amount=1)]),
+        verdict="ok",
+    )
 
 
 def drive_to_playing(room, player_ids, cards_each: int = 5) -> None:
     """Drive a room through the two-step start flow to ``phase="playing"``.
 
-    The new start flow is: lobby -> (StartMsg) -> setup, where each
-    non-spectator authors ``cards_each`` cards, then -> (StartMsg) -> playing.
+    The start flow is: lobby -> (StartMsg) -> setup, where each non-spectator
+    authors ``cards_each`` cards. Each card is drafted in the background and
+    the room auto-starts after every required draft is executable.
     Only the ``player_ids`` passed in author cards (pass real, non-spectator
     ids). The first id acts as the host that sends both StartMsgs.
     """
-    # lobby -> setup
-    asyncio.run(room.handle_action(player_ids[0], StartMsg()))
-    # each player authors the required number of cards during setup
-    for pid in player_ids:
-        for i in range(cards_each):
-            asyncio.run(
-                room.handle_action(
+
+    async def scenario() -> None:
+        await room.handle_action(player_ids[0], StartMsg())
+        for pid in player_ids:
+            for i in range(cards_each):
+                await room.handle_action(
                     pid,
                     CreateCardMsg(title=f"{pid}-card-{i}", description="gain 1 point"),
                 )
-            )
-    # host starts again -> playing
-    asyncio.run(room.handle_action(player_ids[0], StartMsg()))
+        await room.wait_for_card_drafts()
+
+    with patch("agent.runtime.run_agent", return_value=ready_card_result()):
+        asyncio.run(scenario())
 
 
 @pytest.fixture(autouse=True)

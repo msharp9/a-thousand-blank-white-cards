@@ -125,6 +125,17 @@ class CreateCardMsg(BaseModel):
     art: CardArt | None = None
 
 
+class RedraftCardMsg(BaseModel):
+    """Retry or revise a failed setup-time card draft."""
+
+    type: Literal["redraft_card"] = "redraft_card"
+    card_id: str
+    title: CardTitle
+    description: CardDescription
+    # Omitted preserves the existing art; supplied replaces it for this revision.
+    art: CardArt | None = None
+
+
 class PreviewCardMsg(BaseModel):
     type: Literal["preview_card"] = "preview_card"
     title: CardTitle
@@ -173,6 +184,7 @@ ClientMsg = Annotated[
         PlayMsg,
         PassReactionMsg,
         CreateCardMsg,
+        RedraftCardMsg,
         PreviewCardMsg,
         EpilogueStartMsg,
         EpilogueVoteMsg,

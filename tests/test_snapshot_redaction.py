@@ -91,6 +91,33 @@ def test_cards_registry_keeps_deck_content_during_lobby_and_setup() -> None:
         assert "b1" not in view["cards"]
 
 
+def test_setup_author_sees_own_off_zone_draft_only() -> None:
+    snap = _snapshot("setup")
+    snap["cards"]["draft-a"] = {
+        **_card("draft-a"),
+        "origin": "authored",
+        "creator_id": "p1",
+        "draft_status": "failed",
+    }
+    snap["cards"]["draft-b"] = {
+        **_card("draft-b"),
+        "origin": "authored",
+        "creator_id": "p2",
+        "draft_status": "drafting",
+    }
+
+    alice = redact_snapshot(snap, "p1")
+    bob = redact_snapshot(snap, "p2")
+    spectator = redact_snapshot(snap, None)
+
+    assert "draft-a" in alice["cards"]
+    assert "draft-b" not in alice["cards"]
+    assert "draft-b" in bob["cards"]
+    assert "draft-a" not in bob["cards"]
+    assert "draft-a" not in spectator["cards"]
+    assert "draft-b" not in spectator["cards"]
+
+
 def test_cards_registry_spectator_sees_only_public_zones() -> None:
     for viewer in (None, "spec-1"):
         view = redact_snapshot(_snapshot(), viewer)

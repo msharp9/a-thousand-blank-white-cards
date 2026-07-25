@@ -62,9 +62,14 @@ export function SketchCard({
   const verdict = card?.verdict;
   const mechanicalStatus = card?.mechanical_status;
   const diagnosticLabel =
-    mechanicalStatus ?? (verdict && verdict !== "ok" ? verdict : undefined);
+    card?.draft_status === "failed"
+      ? "failed"
+      : card?.draft_status
+        ? undefined
+        : (mechanicalStatus ??
+          (verdict && verdict !== "ok" ? verdict : undefined));
   const diagnosticTitle = [
-    card?.mechanical_reason,
+    card?.draft_reason ?? card?.mechanical_reason,
     card?.correlation_id ? `Reference: ${card.correlation_id}` : null,
   ]
     .filter(Boolean)

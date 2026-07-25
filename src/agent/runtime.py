@@ -81,6 +81,14 @@ _IMAGE_REJECTION_SIGNALS = (
     "image_url",
 )
 
+_DRAFT_MODE_NOTE = """\
+SETUP DRAFT MODE: this card has been written but not yet dealt or played. The
+supplied actor_id is only a provisional dry-run actor. Generate reusable mechanics
+for whoever eventually plays the card: use symbolic targets such as self/chooser
+and runtime ctx.actor_id, and do not bake the provisional actor, current scores,
+hands, turn, or card location into the effect unless the card explicitly names
+that concrete player or state."""
+
 
 def _is_image_rejection(exc: BaseException) -> bool:
     """Whether ``exc`` looks like the model rejecting the attached image input.
@@ -396,6 +404,7 @@ def run_agent(
     max_tool_calls: int | None = None,
     forced_call_timeout: float | None = None,
     allow_persistent_tools: bool = True,
+    draft_mode: bool = False,
     config: dict[str, Any] | None = None,
 ) -> InterpretResult:
     """Interpret one card into an :class:`InterpretResult`. Never hangs, never raises.
@@ -435,6 +444,9 @@ def run_agent(
             :data:`FORCED_FINAL_CALL_TIMEOUT_SECONDS`).
         allow_persistent_tools: Whether tools that write decision memory or
             capability telemetry may be bound. Preview callers disable them.
+        draft_mode: Interpret mechanics before the game starts. The prompt
+            treats the supplied actor and state as provisional examples so the
+            generated plan remains valid for whoever eventually plays the card.
         config: Extra keys merged into the LangGraph run config passed to
             ``agent.stream`` (e.g. ``{"callbacks": [...]}`` for eval usage
             instrumentation). ``recursion_limit`` is always set from
@@ -467,6 +479,7 @@ def run_agent(
             max_tool_calls=max_tool_calls,
             forced_call_timeout=forced_call_timeout,
             allow_persistent_tools=allow_persistent_tools,
+            draft_mode=draft_mode,
             config=config,
         )
     return _run_single_agent(
@@ -483,6 +496,7 @@ def run_agent(
         max_tool_calls=max_tool_calls,
         forced_call_timeout=forced_call_timeout,
         allow_persistent_tools=allow_persistent_tools,
+        draft_mode=draft_mode,
         config=config,
     )
 
@@ -502,6 +516,7 @@ def _run_single_agent(
     max_tool_calls: int | None = None,
     forced_call_timeout: float | None = None,
     allow_persistent_tools: bool = True,
+    draft_mode: bool = False,
     config: dict[str, Any] | None = None,
 ) -> InterpretResult:
     """The legacy single tool-calling agent — :func:`run_agent`'s flag-off body.
@@ -538,6 +553,8 @@ def _run_single_agent(
         struggling_author=struggling_author,
         author_fallbacks=author_fallbacks,
     )
+    if draft_mode:
+        system_prompt = f"{_DRAFT_MODE_NOTE}\n\n{system_prompt}"
 
     # An explicit tool list is authoritative — the caller already decided the
     # toolbox (e.g. the eval runner's enabled_tools filter). Only assemble the
@@ -606,6 +623,7 @@ def _run_single_agent(
                 max_tool_calls=max_tool_calls,
                 forced_call_timeout=forced_call_timeout,
                 allow_persistent_tools=allow_persistent_tools,
+                draft_mode=draft_mode,
                 config=config,
             )
         logger.exception("agent invoke failed; returning bounded fallback")

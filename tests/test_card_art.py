@@ -19,6 +19,8 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter, ValidationError
 
+from conftest import ready_card_result
+
 from agent.contract import InterpretResult
 from models.card import CARD_ART_PREFIX, MAX_CARD_ART_BYTES, decode_card_art
 from models.ws_messages import ClientMsg, CreateCardMsg, PlayMsg
@@ -101,9 +103,19 @@ def _setup_room() -> Room:
     return room
 
 
+def _submit_setup_cards(room: Room, *messages: CreateCardMsg) -> None:
+    async def scenario() -> None:
+        for message in messages:
+            await room.handle_action("p1", message)
+        await room.wait_for_card_drafts()
+
+    with patch("agent.runtime.run_agent", return_value=ready_card_result()):
+        asyncio.run(scenario())
+
+
 def test_create_card_with_art_stores_out_of_band() -> None:
     room = _setup_room()
-    asyncio.run(room.handle_action("p1", CreateCardMsg(title="Doodle", description="gain 1 point", art=ART)))
+    _submit_setup_cards(room, CreateCardMsg(title="Doodle", description="gain 1 point", art=ART))
     (card_id,) = [cid for cid, c in room.state.cards.items() if c.get("creator_id") == "p1"]
     assert room.card_art[card_id] == ART
     card = room.state.cards[card_id]
@@ -113,7 +125,7 @@ def test_create_card_with_art_stores_out_of_band() -> None:
 
 def test_create_card_without_art_flags_false() -> None:
     room = _setup_room()
-    asyncio.run(room.handle_action("p1", CreateCardMsg(title="Plain", description="gain 1 point")))
+    _submit_setup_cards(room, CreateCardMsg(title="Plain", description="gain 1 point"))
     (card,) = [c for c in room.state.cards.values() if c.get("creator_id") == "p1"]
     assert card["has_art"] is False
     assert room.card_art == {}
@@ -152,7 +164,7 @@ def test_author_on_play_without_art_flags_false() -> None:
 
 def test_snapshot_carries_has_art_but_never_the_data_url() -> None:
     room = _setup_room()
-    asyncio.run(room.handle_action("p1", CreateCardMsg(title="Doodle", description="gain 1 point", art=ART)))
+    _submit_setup_cards(room, CreateCardMsg(title="Doodle", description="gain 1 point", art=ART))
     snap = json.dumps(room.snapshot())
     assert '"has_art": true' in snap
     assert ART not in snap
@@ -180,8 +192,11 @@ def test_create_card_art_dropped_once_budget_hit(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("board.rooms.room.MAX_ROOM_ART_BYTES", len(ART))
     room = _setup_room()
     ws = room.connections._connections["p1"]
-    asyncio.run(room.handle_action("p1", CreateCardMsg(title="First", description="fits", art=ART)))
-    asyncio.run(room.handle_action("p1", CreateCardMsg(title="Second", description="dropped", art=ART)))
+    _submit_setup_cards(
+        room,
+        CreateCardMsg(title="First", description="fits", art=ART),
+        CreateCardMsg(title="Second", description="dropped", art=ART),
+    )
     by_title = {c["title"]: c for c in room.state.cards.values() if c.get("creator_id") == "p1"}
     assert by_title["First"]["has_art"] is True
     assert by_title["Second"]["has_art"] is False

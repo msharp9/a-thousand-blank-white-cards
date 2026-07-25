@@ -114,6 +114,7 @@ class PipelineState(TypedDict, total=False):
     card_id: str | None
     game_state: Any
     allow_persistent_tools: bool
+    draft_mode: bool
     model: Any
     config: dict[str, Any] | None
     tools: list[Any] | None
@@ -129,6 +130,12 @@ class PipelineState(TypedDict, total=False):
 
     deadline: float
     stage_errors: Annotated[list[str], operator.add]
+
+
+def _with_draft_note(prompt: str, state: PipelineState) -> str:
+    if not state.get("draft_mode"):
+        return prompt
+    return f"{runtime._DRAFT_MODE_NOTE}\n\n{prompt}"
 
 
 def _stage_budgets(timeout: float | None, max_tool_calls: int | None, forced_call_timeout: float) -> dict[str, Any]:
@@ -327,15 +334,18 @@ def _intent_node(state: PipelineState) -> dict[str, Any]:
         budget, max_steps = _node_budget(state, "intent")
         if budget <= 0:
             return None, None
-        prompt = build_intent_prompt(
-            title,
-            state.get("description", ""),
-            state=state.get("game_state"),
-            actor_id=state.get("actor_id"),
-            creator_id=state.get("creator_id"),
-            has_art=art is not None,
-            struggling_author=state.get("struggling_author", False),
-            author_fallbacks=state.get("author_fallbacks", 0),
+        prompt = _with_draft_note(
+            build_intent_prompt(
+                title,
+                state.get("description", ""),
+                state=state.get("game_state"),
+                actor_id=state.get("actor_id"),
+                creator_id=state.get("creator_id"),
+                has_art=art is not None,
+                struggling_author=state.get("struggling_author", False),
+                author_fallbacks=state.get("author_fallbacks", 0),
+            ),
+            state,
         )
         failure: list[BaseException | None] = [None]
 
@@ -384,11 +394,14 @@ def _planner_node(state: PipelineState) -> dict[str, Any]:
     intent = _working_intent(state)
     if intent.complexity == "trivial":
         max_steps = min(max_steps, TRIVIAL_PLANNER_MAX_STEPS)
-    prompt = build_planner_prompt(
-        intent,
-        state=state.get("game_state"),
-        actor_id=state.get("actor_id"),
-        creator_id=state.get("creator_id"),
+    prompt = _with_draft_note(
+        build_planner_prompt(
+            intent,
+            state=state.get("game_state"),
+            actor_id=state.get("actor_id"),
+            creator_id=state.get("creator_id"),
+        ),
+        state,
     )
     plan = run_stage(
         prompt,
@@ -417,7 +430,10 @@ def _coder_node(state: PipelineState) -> dict[str, Any]:
     """Run the effect-coding stage; a missing plan degrades to a stub plan."""
     intent = _working_intent(state)
     plan = state.get("plan") or MechanicsPlan(strategy=intent.summary)
-    prompt = build_coder_prompt(intent, plan, state=state.get("game_state"), actor_id=state.get("actor_id"))
+    prompt = _with_draft_note(
+        build_coder_prompt(intent, plan, state=state.get("game_state"), actor_id=state.get("actor_id")),
+        state,
+    )
     budget, max_steps = _node_budget(state, "coder")
     if budget <= 0:
         return {"coder_prompt": prompt, "stage_errors": ["coder: pipeline deadline exhausted"]}
@@ -511,6 +527,7 @@ def _finalize_node(state: PipelineState) -> dict[str, Any]:
         "persona_action": intent.persona_action,
         "placement": intent.placement,
         "venue": intent.venue,
+        "trigger": state.get("plan").trigger if state.get("plan") is not None else None,
     }
 
     if intent.ambiguity == "undecipherable" and intent.persona_action == "do_nothing":
@@ -589,6 +606,7 @@ def run_pipeline(
     max_tool_calls: int | None = None,
     forced_call_timeout: float | None = None,
     allow_persistent_tools: bool = False,
+    draft_mode: bool = False,
     config: dict[str, Any] | None = None,
 ) -> InterpretResult:
     """Interpret one card through the three-agent pipeline. Never hangs, never raises.
@@ -634,6 +652,7 @@ def run_pipeline(
         "card_id": card_id,
         "game_state": state,
         "allow_persistent_tools": allow_persistent_tools,
+        "draft_mode": draft_mode,
         "model": model,
         "config": config,
         "tools": tools,
