@@ -67,7 +67,13 @@ finishes their turn, then the game ends).
 | `redraft_card` | `card_id`, `title`, `description`, `art?` | Retry or revise one of the sender's failed setup drafts without consuming another card slot. Omitted art preserves the existing drawing. |
 | `preview_card` | `title`, `description` | Dry-run interpretation preview without changing state (setup phase only, like `create_card`). |
 | `interaction_response` | `schema_version`, `interaction_id`, typed `payload` | Submit one authenticated response to the active generic interaction. |
+| `admin_propose` | `actions` | Host-only: propose an atomic, typed correction bundle during play or results. Gameplay pauses while every other seated player votes. |
+| `admin_vote` | `proposal_id`, `accept` | Accept or reject the current host correction. One rejection or the 60-second deadline cancels it; unanimous acceptance applies it. |
+| `admin_cancel` | `proposal_id` | Host-only: cancel the current correction proposal. |
+| `epilogue_start` | — | Host-only: advance from results into the epilogue vote. |
 | `epilogue_vote` | `card_id`, `keep` | Vote to keep/discard a card during the epilogue phase. |
+| `epilogue_done` | — | Mark the player done voting; omitted cards count as abstentions. |
+| `epilogue_finalize` | — | Host-only: finalize the epilogue immediately. |
 
 ### Server → client messages
 
@@ -81,6 +87,7 @@ finishes their turn, then the game ends).
 | `prompt_choice` | `card_id`, `prompt`, `choices` | Server asks the active player to pick a target. |
 | `interaction_request` | `schema_version`, `interaction_id`, `descriptor`, `deadline_at`, safe `progress` | Versioned request delivered to one resolved audience member; replayed on reconnect. |
 | `interaction_progress` | `schema_version`, `interaction_id`, `deadline_at`, safe `progress` | Counts-only barrier progress; never includes sealed response values. |
+| `admin_proposal_result` | `proposal_id`, `outcome`, `reason?` | Reports whether a correction was applied, rejected, cancelled, or timed out. |
 | `epilogue` | `cards` | Epilogue phase opened with the cards created this game. |
 | `error` | `message` | An error (bad message, not your turn, room not found, …). |
 

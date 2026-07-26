@@ -11,6 +11,7 @@ function makeGameState(
 ): GameStateSnapshot {
   return {
     room_code: "ABCD",
+    mode: "online",
     phase: "playing",
     players: [
       {

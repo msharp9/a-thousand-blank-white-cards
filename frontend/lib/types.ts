@@ -81,6 +81,46 @@ export type EpilogueFinalizeMsg = { type: "epilogue_finalize" };
 // vote. Only valid while phase === "results".
 export type EpilogueStartMsg = { type: "epilogue_start" };
 
+export type AdminAction =
+  | { kind: "set_score"; player_id: string; score: number }
+  | {
+      kind: "move_card";
+      source_zone: "deck" | "discard" | "center" | "exile" | "in_play";
+      card_id?: string;
+      source_player_id?: string;
+      selector?: "top" | "bottom";
+      to_zone: "deck" | "discard" | "center" | "exile" | "in_play" | "hand";
+      to_player_id?: string;
+      deck_position?: "top" | "bottom" | "shuffle";
+    }
+  | { kind: "shuffle_deck"; include_discard: boolean }
+  | {
+      kind: "set_condition";
+      player_id: string;
+      key: string;
+      value: string | number | boolean;
+      duration_turns?: number;
+    }
+  | { kind: "remove_condition"; player_id: string; key: string }
+  | { kind: "remove_hook"; hook_id: string }
+  | { kind: "eliminate_players"; player_ids: string[] }
+  | { kind: "end_game"; winner_ids?: string[] }
+  | { kind: "set_result_winners"; winner_ids: string[] };
+
+export type AdminProposeMsg = {
+  type: "admin_propose";
+  actions: AdminAction[];
+};
+export type AdminVoteMsg = {
+  type: "admin_vote";
+  proposal_id: string;
+  accept: boolean;
+};
+export type AdminCancelMsg = {
+  type: "admin_cancel";
+  proposal_id: string;
+};
+
 export type DrawingPoint = { x: number; y: number };
 export type DrawingStroke = {
   color: string;
@@ -121,6 +161,9 @@ export type ClientMsg =
   | EpilogueVoteMsg
   | EpilogueDoneMsg
   | EpilogueFinalizeMsg
+  | AdminProposeMsg
+  | AdminVoteMsg
+  | AdminCancelMsg
   | InteractionResponseMsg;
 
 // ─── server → client ──────────────────────────────────────────────────────
@@ -263,7 +306,8 @@ export type HistoryEventKind =
   | "game_end"
   | "card_fallback"
   | "dice_roll"
-  | "discard";
+  | "discard"
+  | "admin_change";
 
 // One privacy-safe, append-only fact about completed game mechanics. Mirrors
 // models.game_state.HistoryEvent. The "Everything Played" history modal reads
@@ -298,6 +342,7 @@ export type EpilogueResultSummary = {
 
 export type GameStateSnapshot = {
   room_code: string;
+  mode: Mode;
   phase: "lobby" | "setup" | "playing" | "results" | "epilogue" | "ended";
   players: PlayerSnapshot[];
   spectators: SpectatorSnapshot[];
@@ -364,6 +409,26 @@ export type GameStateSnapshot = {
   // The live turn clock (null when no clock is armed). Reconnect-safe source
   // of truth; the turn_timer push is the immediacy signal.
   turn_timer?: TurnTimerSnapshot | null;
+  pending_admin_proposal?: PendingAdminProposalSnapshot | null;
+};
+
+export type AdminProposalPreviewItem = {
+  kind: string;
+  title: string;
+  detail: string;
+};
+
+export type PendingAdminProposalSnapshot = {
+  proposal_id: string;
+  proposer_id: string;
+  phase: "playing" | "results";
+  deadline_at: string;
+  preview: AdminProposalPreviewItem[];
+  warnings: string[];
+  voters: {
+    player_id: string;
+    status: "waiting" | "approved";
+  }[];
 };
 
 export type PendingPlaySnapshot = {
@@ -538,6 +603,13 @@ export type ReactionResultMsg = {
   reaction_card_id?: string | null;
 };
 
+export type AdminProposalResultMsg = {
+  type: "admin_proposal_result";
+  proposal_id: string;
+  outcome: "applied" | "rejected" | "expired" | "cancelled";
+  message: string;
+};
+
 export type ServerMsg =
   | StateMsg
   | EffectAppliedMsg
@@ -553,4 +625,5 @@ export type ServerMsg =
   | HandRevealedMsg
   | ReactionWindowMsg
   | ReactionResultMsg
-  | TurnTimerMsg;
+  | TurnTimerMsg
+  | AdminProposalResultMsg;

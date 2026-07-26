@@ -61,6 +61,7 @@ from engine.history import append_history_event, fallback_counts, record_draw, r
 from engine.loop import advance_turn, tick_condition_ttls
 from engine.reducers import collect_hand_reveals
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
+from models.admin import PendingAdminProposal
 from models.card import MAX_ROOM_ART_BYTES
 from models.effects import (
     AddPointsOp,
@@ -99,6 +100,7 @@ from models.interactions import (
     TextResponse,
 )
 from board.rooms.interactions import PendingResolution
+from board.rooms.admin import apply_admin_actions
 from board.rooms.connections import ConnectionManager
 from board.rooms.deck import (
     BLANKS_PER_PLAYER,
@@ -138,6 +140,9 @@ REACTION_WINDOW_SECONDS = 15.0
 # hand tail is discarded for them.
 HAND_LIMIT_RESULT_KEY = "hand_limit_discards"
 HAND_LIMIT_TIMEOUT_SECONDS = 60
+
+# A host correction needs unanimous consent from every other seated player.
+ADMIN_PROPOSAL_TIMEOUT_SECONDS = 60
 
 # Recursion guard for play_on_draw auto-plays: the most cards a single turn's
 # chain may auto-play (a pod card drawing pod cards drawing pod cards…). Once
@@ -372,6 +377,8 @@ class Room:
         self._last_run_metrics: dict[str, dict] = {}
         self._pending_resolution: PendingResolution | None = None
         self._interaction_timer: asyncio.Task | None = None
+        self._pending_admin: PendingAdminProposal | None = None
+        self._admin_timer: asyncio.Task | None = None
         # The pausable per-turn clock (rules.turn_timer). Transient like the
         # reaction/interaction timers: a restart re-arms a fresh full clock
         # (see ensure_pending_timeout) rather than persisting the remainder.
@@ -458,7 +465,7 @@ class Room:
     # reaction sent mid-brew already bounces off the window machinery
     # ("The reaction window has closed" / claimed_by), and the exemption keeps
     # a reaction from racing the window-open broadcast at the tail of a play.
-    FROZEN_WHILE_RESOLVING = frozenset({"start", "pass", "end_turn", "play", "create_card"})
+    FROZEN_WHILE_RESOLVING = frozenset({"start", "pass", "end_turn", "play", "create_card", "admin_propose"})
 
     async def handle_action(self, player_id: str, msg) -> None:
         """Serialised entry point for all client messages.
@@ -506,8 +513,26 @@ class Room:
             "redraft_card",
             "preview_card",
             "interaction_response",
+            "admin_propose",
+            "admin_vote",
+            "admin_cancel",
         }:
             await self.connections.send(player_id, {"type": "error", "message": "Spectators cannot take game actions"})
+            return
+        if self._pending_admin is not None and mtype not in {"admin_vote", "admin_cancel"}:
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "Waiting for the table to vote on the host's proposal"},
+            )
+            return
+        if mtype == "admin_propose":
+            await self._handle_admin_propose(player_id, msg)
+            return
+        if mtype == "admin_vote":
+            await self._handle_admin_vote(player_id, msg)
+            return
+        if mtype == "admin_cancel":
+            await self._handle_admin_cancel(player_id, msg)
             return
         # Authoring gate: create_card/preview_card exist ONLY during setup
         # (each player writes their quota). The one mid-game authoring path is
@@ -1015,6 +1040,8 @@ class Room:
                 task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        if self._admin_timer is not None and not self._admin_timer.done():
+            self._admin_timer.cancel()
 
     async def dev_autofill_authoring(self) -> None:
         """DEV shortcut: wait for submitted drafts, then fill missing slots with blanks."""
@@ -1249,7 +1276,12 @@ class Room:
         """
         if not self._turn_timer.paused:
             return
-        if self._resolving_play is not None or self._pending is not None or self._pending_resolution is not None:
+        if (
+            self._resolving_play is not None
+            or self._pending is not None
+            or self._pending_resolution is not None
+            or self._pending_admin is not None
+        ):
             return
         if self.state.rules.turn_timer is None:
             self._turn_timer.cancel()
@@ -1283,6 +1315,7 @@ class Room:
                 or self._resolving_play is not None
                 or self._pending is not None
                 or self._pending_resolution is not None
+                or self._pending_admin is not None
             ):
                 return
             await self._log_and_broadcast(f"{self._name(player_id)} ran out of time — the turn ends")
@@ -1546,7 +1579,7 @@ class Room:
         await self._log_and_broadcast(f"{self._name(player_id)} passed")
         await self._advance_turn()
 
-    async def _end_game(self) -> None:
+    async def _end_game(self, *, emit_hooks: bool = True) -> None:
         """Resolve end-of-game scoring, compute winners, then show results.
 
         Sequence (the deck was exhausted and the drawer finished their turn):
@@ -1569,7 +1602,8 @@ class Room:
         if self._turn_timer.running or self._turn_timer.paused:
             self._turn_timer.cancel()
             await self._broadcast_turn_timer()
-        await self._emit_hooks(GameEvent.ON_GAME_END, actor)
+        if emit_hooks:
+            await self._emit_hooks(GameEvent.ON_GAME_END, actor)
         self.state, applications = resolve_end_of_game(self.state)
         for application in applications:
             line = f"Game end: {application.holder_name}'s '{application.card_title}'"
@@ -3112,6 +3146,8 @@ class Room:
         """
         if self._pending_resolution is not None:
             self._schedule_interaction_timeout()
+        if self._pending_admin is not None:
+            self._schedule_admin_timeout()
         if (
             self.state.phase == "playing"
             and self.state.players
@@ -3120,6 +3156,7 @@ class Room:
             and not self._turn_timer.paused
             and self._pending_resolution is None
             and self._pending is None
+            and self._pending_admin is None
         ):
             self._turn_timer.start(self.state.rules.turn_timer, self.state.active_player().id)
 
@@ -3972,6 +4009,208 @@ class Room:
             },
         )
 
+    # ── voted host corrections ──
+
+    async def _handle_admin_propose(self, player_id: str, msg) -> None:
+        if not self._is_host(player_id):
+            await self.connections.send(player_id, {"type": "error", "message": "Only the host can propose changes"})
+            return
+        if self.state.phase not in {"playing", "results"}:
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "Host corrections are only available during play or results"},
+            )
+            return
+        if (
+            self._pending_admin is not None
+            or self._pending is not None
+            or self._pending_resolution is not None
+            or self._pending_auto_play is not None
+            or self._resolving_play is not None
+        ):
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "Wait for the current table action to finish"},
+            )
+            return
+
+        rng_seed = random.SystemRandom().randrange(2**63)
+        try:
+            application = apply_admin_actions(
+                self.state,
+                list(msg.actions),
+                player_id,
+                rng_seed=rng_seed,
+            )
+        except (KeyError, ValueError) as exc:
+            await self.connections.send(player_id, {"type": "error", "message": str(exc)})
+            return
+
+        required = [player.id for player in self.state.players if player.id != player_id]
+        proposal = PendingAdminProposal(
+            proposal_id=uuid.uuid4().hex,
+            proposer_id=player_id,
+            phase=self.state.phase,
+            actions=list(msg.actions),
+            required_voter_ids=required,
+            deadline_at=datetime.now(UTC) + timedelta(seconds=ADMIN_PROPOSAL_TIMEOUT_SECONDS),
+            rng_seed=rng_seed,
+            preview=application.preview,
+            warnings=application.warnings,
+        )
+        self._pending_admin = proposal
+        await self._pause_turn_timer()
+        if not required:
+            await self._apply_admin_proposal()
+            return
+        self._schedule_admin_timeout()
+        await self._broadcast_state()
+
+    async def _handle_admin_vote(self, player_id: str, msg) -> None:
+        proposal = self._pending_admin
+        if proposal is None or msg.proposal_id != proposal.proposal_id:
+            await self.connections.send(player_id, {"type": "error", "message": "Proposal is no longer active"})
+            return
+        if player_id not in proposal.required_voter_ids:
+            await self.connections.send(player_id, {"type": "error", "message": "You are not a voter on this proposal"})
+            return
+        if player_id in proposal.approvals:
+            await self.connections.send(player_id, {"type": "error", "message": "Your vote is already locked in"})
+            return
+        if datetime.now(UTC) >= proposal.deadline_at:
+            await self._finish_admin_proposal("expired", "The host proposal expired without unanimous approval.")
+            return
+        if not msg.accept:
+            await self._finish_admin_proposal("rejected", "The table rejected the host proposal.")
+            return
+        approvals = [*proposal.approvals, player_id]
+        self._pending_admin = proposal.model_copy(update={"approvals": approvals})
+        if len(approvals) == len(proposal.required_voter_ids):
+            await self._apply_admin_proposal()
+        else:
+            await self._broadcast_state()
+
+    async def _handle_admin_cancel(self, player_id: str, msg) -> None:
+        proposal = self._pending_admin
+        if proposal is None or msg.proposal_id != proposal.proposal_id:
+            await self.connections.send(player_id, {"type": "error", "message": "Proposal is no longer active"})
+            return
+        if not self._is_host(player_id) or proposal.proposer_id != player_id:
+            await self.connections.send(
+                player_id, {"type": "error", "message": "Only the host can cancel this proposal"}
+            )
+            return
+        await self._finish_admin_proposal("cancelled", "The host cancelled the proposal.")
+
+    def _cancel_admin_timer(self) -> None:
+        if (
+            self._admin_timer is not None
+            and self._admin_timer is not asyncio.current_task()
+            and not self._admin_timer.done()
+        ):
+            self._admin_timer.cancel()
+        self._admin_timer = None
+
+    def _schedule_admin_timeout(self) -> None:
+        proposal = self._pending_admin
+        if proposal is None:
+            return
+        self._cancel_admin_timer()
+        delay = max(0.0, (proposal.deadline_at - datetime.now(UTC)).total_seconds())
+        self._admin_timer = asyncio.create_task(self._admin_timeout(proposal.proposal_id, delay))
+
+    async def _admin_timeout(self, proposal_id: str, delay: float) -> None:
+        await asyncio.sleep(delay)
+        async with self._lock:
+            proposal = self._pending_admin
+            if proposal is None or proposal.proposal_id != proposal_id:
+                return
+            await self._finish_admin_proposal("expired", "The host proposal expired without unanimous approval.")
+            self._notify_change()
+
+    def _record_admin_audit(self, proposal: PendingAdminProposal, outcome: str) -> None:
+        self.state = append_history_event(
+            self.state,
+            "admin_change",
+            actor_id=proposal.proposer_id,
+            target_player_ids=list(proposal.required_voter_ids),
+            source=outcome,
+            data={
+                "proposal_id": proposal.proposal_id,
+                "outcome": outcome,
+                "actions": [
+                    {"kind": item.kind, "title": item.title, "detail": item.detail} for item in proposal.preview
+                ],
+            },
+        )
+
+    async def _broadcast_admin_result(
+        self,
+        proposal: PendingAdminProposal,
+        outcome: str,
+        message: str,
+    ) -> None:
+        await self.connections.broadcast(
+            {
+                "type": "admin_proposal_result",
+                "proposal_id": proposal.proposal_id,
+                "outcome": outcome,
+                "message": message,
+            }
+        )
+
+    async def _finish_admin_proposal(self, outcome: str, message: str) -> None:
+        proposal = self._pending_admin
+        if proposal is None:
+            return
+        self._cancel_admin_timer()
+        self._pending_admin = None
+        self._record_admin_audit(proposal, outcome)
+        await self._log_and_broadcast(message)
+        await self._broadcast_admin_result(proposal, outcome, message)
+        await self._broadcast_state()
+        await self._maybe_resume_turn_timer()
+
+    async def _apply_admin_proposal(self) -> None:
+        proposal = self._pending_admin
+        if proposal is None:
+            return
+        self._cancel_admin_timer()
+        try:
+            application = apply_admin_actions(
+                self.state,
+                proposal.actions,
+                proposal.proposer_id,
+                rng_seed=proposal.rng_seed,
+            )
+        except KeyError, ValueError:
+            await self._finish_admin_proposal(
+                "cancelled",
+                "The host proposal was no longer valid and was cancelled.",
+            )
+            return
+
+        self.state = application.state
+        self._pending_admin = None
+        self._deck_exhausted = self.state.phase == "playing" and not self.state.deck
+        self._record_admin_audit(proposal, "applied")
+        message = "The table unanimously approved the host proposal."
+
+        if application.ends_game:
+            await self._end_game(emit_hooks=False)
+        elif application.active_player_eliminated and self.state.phase == "playing":
+            if self._deck_exhausted or self._end_now() or win_condition_met(self.state):
+                await self._end_game()
+            else:
+                self.state = advance_turn(self.state)
+                await self._start_turn(self.state.active_player().id)
+        else:
+            await self._broadcast_state()
+            await self._maybe_resume_turn_timer()
+
+        await self._log_and_broadcast(message)
+        await self._broadcast_admin_result(proposal, "applied", message)
+
     async def start_epilogue(self) -> None:
         """Begin the epilogue phase: gather authored cards and open voting.
 
@@ -4126,6 +4365,26 @@ class Room:
         # Live turn clock (reconnect-safe source of truth; the turn_timer push
         # is the immediacy signal). Null when no clock is armed.
         snap["turn_timer"] = self._turn_timer_snapshot()
+        pending_admin = self._pending_admin
+        snap["pending_admin_proposal"] = (
+            {
+                "proposal_id": pending_admin.proposal_id,
+                "proposer_id": pending_admin.proposer_id,
+                "phase": pending_admin.phase,
+                "deadline_at": pending_admin.deadline_at.isoformat(),
+                "preview": [item.model_dump() for item in pending_admin.preview],
+                "warnings": list(pending_admin.warnings),
+                "voters": [
+                    {
+                        "player_id": voter_id,
+                        "status": "approved" if voter_id in pending_admin.approvals else "waiting",
+                    }
+                    for voter_id in pending_admin.required_voter_ids
+                ],
+            }
+            if pending_admin is not None
+            else None
+        )
         return snap
 
     def snapshot_for(self, viewer_id: str | None) -> dict:

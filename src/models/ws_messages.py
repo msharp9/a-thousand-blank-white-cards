@@ -11,6 +11,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import AfterValidator, BaseModel, Field
 
+from models.admin import AdminAction
 from models.card import CARD_ART_PREFIX, MAX_CARD_ART_BYTES, MAX_CARD_DESCRIPTION, MAX_CARD_TITLE, decode_card_art
 from models.interactions import (
     Identifier,
@@ -175,6 +176,22 @@ class InteractionResponseMsg(BaseModel):
     payload: InteractionResponsePayload
 
 
+class AdminProposeMsg(BaseModel):
+    type: Literal["admin_propose"] = "admin_propose"
+    actions: list[AdminAction] = Field(min_length=1, max_length=20)
+
+
+class AdminVoteMsg(BaseModel):
+    type: Literal["admin_vote"] = "admin_vote"
+    proposal_id: str = Field(min_length=1, max_length=80)
+    accept: bool
+
+
+class AdminCancelMsg(BaseModel):
+    type: Literal["admin_cancel"] = "admin_cancel"
+    proposal_id: str = Field(min_length=1, max_length=80)
+
+
 ClientMsg = Annotated[
     Union[
         JoinMsg,
@@ -191,6 +208,9 @@ ClientMsg = Annotated[
         EpilogueDoneMsg,
         EpilogueFinalizeMsg,
         InteractionResponseMsg,
+        AdminProposeMsg,
+        AdminVoteMsg,
+        AdminCancelMsg,
     ],
     Field(discriminator="type"),
 ]
@@ -350,6 +370,13 @@ class ReactionResultMsg(BaseModel):
     reaction_card_id: str | None = None
 
 
+class AdminProposalResultMsg(BaseModel):
+    type: Literal["admin_proposal_result"] = "admin_proposal_result"
+    proposal_id: str
+    outcome: Literal["applied", "rejected", "expired", "cancelled"]
+    message: str
+
+
 ServerMsg = Union[
     StateMsg,
     EffectAppliedMsg,
@@ -366,4 +393,5 @@ ServerMsg = Union[
     ReactionWindowMsg,
     ReactionResultMsg,
     TurnTimerMsg,
+    AdminProposalResultMsg,
 ]

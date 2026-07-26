@@ -46,6 +46,7 @@ function gameState(): GameStateSnapshot {
 
   return {
     room_code: ROOM,
+    mode: "in_person",
     phase: "playing",
     players: [
       player("p1", "Alice", 999, hand),
@@ -502,6 +503,41 @@ test("mobile overlays and blank-card authoring remain compact and reachable", as
     });
   expect(scoreBounds).toBe(true);
   await page.getByRole("button", { name: "Close scoreboard" }).click();
+
+  await page.getByRole("button", { name: "Host" }).click();
+  const hostDialog = page.getByRole("dialog", { name: "Host controls" });
+  await expect(hostDialog).toBeVisible();
+  const hostBounds = await hostDialog.evaluate((dialog) => {
+    const box = dialog.getBoundingClientRect();
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    return {
+      left: box.left,
+      top: box.top,
+      right: box.right,
+      bottom: box.bottom,
+      viewportWidth,
+      viewportHeight,
+    };
+  });
+  expect(hostBounds.left).toBeGreaterThanOrEqual(-1);
+  expect(hostBounds.top).toBeGreaterThanOrEqual(-1);
+  expect(hostBounds.right).toBeLessThanOrEqual(hostBounds.viewportWidth + 1);
+  expect(hostBounds.bottom).toBeLessThanOrEqual(hostBounds.viewportHeight + 1);
+  await page
+    .getByRole("button", {
+      name: "Add one point to Bartholomew With A Very Long Name",
+    })
+    .click();
+  await page.getByRole("button", { name: "Review proposal (1)" }).click();
+  await page.getByRole("button", { name: "Propose changes" }).click();
+  await expect
+    .poll(() =>
+      room.clientMessages.find((message) => message.type === "admin_propose"),
+    )
+    .toMatchObject({
+      actions: [{ kind: "set_score", player_id: "p2", score: -9 }],
+    });
 
   await page.getByRole("button", { name: /Blank/ }).click();
   await page

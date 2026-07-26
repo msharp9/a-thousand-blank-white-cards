@@ -32,6 +32,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from models.admin import PendingAdminProposal
 from models.game_state import GameState
 from board.rooms.epilogue import EpilogueManager
 from board.rooms.interactions import PendingResolution
@@ -201,6 +202,8 @@ def _room_to_dict(room: Room) -> dict:
         data["epilogue"] = room._epilogue.to_dict()
     if room._pending_resolution is not None:
         data["pending_resolution"] = room._pending_resolution.model_dump(mode="json")
+    if room._pending_admin is not None:
+        data["pending_admin_proposal"] = room._pending_admin.model_dump(mode="json")
     return data
 
 
@@ -242,4 +245,7 @@ def _room_from_dict(data: dict) -> Room:
     pending_data = data.get("pending_resolution")
     if pending_data is not None:
         room._pending_resolution = PendingResolution.model_validate(pending_data)
+    pending_admin_data = data.get("pending_admin_proposal")
+    if pending_admin_data is not None:
+        room._pending_admin = PendingAdminProposal.model_validate(pending_admin_data)
     return room

@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { GalleryOverlay } from "@/components/gallery-overlay";
+import { HostControlOverlay } from "@/components/host-control-overlay";
 import { ScoreboardOverlay } from "@/components/scoreboard-overlay";
-import type { GameStateSnapshot } from "@/lib/types";
+import type { ClientMsg, GameStateSnapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "table" | "gallery" | "scores";
+type Tab = "table" | "gallery" | "scores" | "host";
 
-const TABS: { id: Tab; label: string }[] = [
+const PLAYER_TABS: { id: Tab; label: string }[] = [
   { id: "table", label: "Table" },
   { id: "gallery", label: "Gallery" },
   { id: "scores", label: "Scores" },
@@ -17,6 +18,8 @@ const TABS: { id: Tab; label: string }[] = [
 interface GameNavTabsProps {
   gameState: GameStateSnapshot;
   roomCode: string;
+  isHost: boolean;
+  send: (message: ClientMsg) => void;
   className?: string;
 }
 
@@ -32,9 +35,14 @@ interface GameNavTabsProps {
 export function GameNavTabs({
   gameState,
   roomCode,
+  isHost,
+  send,
   className,
 }: GameNavTabsProps) {
   const [tab, setTab] = useState<Tab>("table");
+  const tabs = isHost
+    ? [...PLAYER_TABS, { id: "host" as const, label: "Host" }]
+    : PLAYER_TABS;
 
   useEffect(() => {
     if (tab === "table") return;
@@ -51,7 +59,7 @@ export function GameNavTabs({
         className={cn("flex items-center gap-1.5", className)}
         aria-label="Game views"
       >
-        {TABS.map(({ id, label }) => (
+        {tabs.map(({ id, label }) => (
           <button
             key={id}
             type="button"
@@ -78,6 +86,13 @@ export function GameNavTabs({
       {tab === "scores" && (
         <ScoreboardOverlay
           players={gameState.players}
+          onClose={() => setTab("table")}
+        />
+      )}
+      {tab === "host" && (
+        <HostControlOverlay
+          gameState={gameState}
+          send={send}
           onClose={() => setTab("table")}
         />
       )}

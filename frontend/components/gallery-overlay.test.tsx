@@ -29,6 +29,7 @@ function card(id: string, title: string, creator_id?: string): CardSnapshot {
 function state(overrides: Partial<GameStateSnapshot> = {}): GameStateSnapshot {
   return {
     room_code: "ABCD",
+    mode: "online",
     phase: "playing",
     players: [],
     spectators: [],

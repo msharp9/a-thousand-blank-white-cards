@@ -322,6 +322,18 @@ export function useGameSocket(code: string, name: string): GameSocketState {
           case "epilogue":
             setEpilogueCards(msg.cards);
             break;
+          case "admin_proposal_result":
+            setTopNotices((queue) =>
+              enqueueNotice(queue, {
+                id: nextNoticeId("admin"),
+                lane: "top",
+                kind: "admin",
+                message: msg.message,
+                outcome: msg.outcome,
+                timeoutMs: 5000,
+              }),
+            );
+            break;
           case "error":
             lastServerErrorRef.current = msg.message;
             setTopNotices((queue) =>

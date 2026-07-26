@@ -149,6 +149,12 @@ function NoticeBubble({
         notice.kind === "arbiter" &&
           "max-w-lg -rotate-[0.5deg] bg-ink text-background",
         isError && "text-destructive",
+        notice.kind === "admin" &&
+          notice.outcome === "applied" &&
+          "border-marker-green",
+        notice.kind === "admin" &&
+          notice.outcome !== "applied" &&
+          "border-amber",
       )}
       onMouseEnter={pause}
       onMouseLeave={resume}
