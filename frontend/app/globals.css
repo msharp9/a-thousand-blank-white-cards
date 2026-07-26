@@ -217,6 +217,14 @@
   box-shadow: 4px 4px 0 var(--panel-shadow-color);
 }
 
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Scopes ink/text tokens back to light-paper values inside a white card face,
    so its contents stay legible when the surrounding theme is dark. */
 @utility paper-scope {
@@ -257,9 +265,101 @@
   }
 }
 
+.authoring-dialog {
+  height: calc(100dvh - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+}
+
+.card-creator-stage {
+  container-type: size;
+}
+
+.card-creator-card-compact {
+  width: min(400px, 100cqw, max(7rem, calc((100cqh - 8.5rem) * 1.2)));
+}
+
+body:has([data-authoring-dialog]) [data-game-scroll] {
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+body:has([data-authoring-dialog]) [data-game-scroll]::-webkit-scrollbar,
+body:has([data-authoring-dialog])
+  [data-slot="dialog-viewport"]::-webkit-scrollbar {
+  display: none;
+}
+
+body:has([data-authoring-dialog]) [data-slot="dialog-viewport"] {
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+@media (max-width: 767px), (max-height: 699px) {
+  .authoring-dialog {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .authoring-dialog [data-authoring-description] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .authoring-dialog .authoring-footer {
+    min-height: 4.25rem;
+    align-self: end;
+    margin-right: -0.75rem;
+    margin-bottom: -0.75rem;
+    margin-left: -0.75rem;
+    padding: 0.75rem;
+  }
+
+  .authoring-dialog .authoring-footer button {
+    min-height: 44px;
+  }
+}
+
 @media (max-height: 500px) and (pointer: coarse) {
-  .card-creator-card {
-    max-width: 280px;
+  .authoring-dialog {
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .authoring-dialog [data-authoring-header] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .authoring-dialog .authoring-footer {
+    min-height: 3.75rem;
+    align-self: end;
+    margin-right: -0.5rem;
+    margin-bottom: -0.5rem;
+    margin-left: -0.5rem;
+    padding: 0.5rem;
+  }
+
+  [data-card-creator][data-layout="compact"] {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  [data-card-creator][data-layout="compact"] [data-card-tools] {
+    flex-direction: column;
   }
 
   .short-landscape-grid {

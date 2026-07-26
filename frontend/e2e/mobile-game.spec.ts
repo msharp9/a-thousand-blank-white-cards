@@ -91,7 +91,22 @@ function gameState(): GameStateSnapshot {
   };
 }
 
-async function openMockRoom(page: Page, installClock = false) {
+function setupState(): GameStateSnapshot {
+  return {
+    ...gameState(),
+    phase: "setup",
+    has_drawn: false,
+    setup_progress: { p1: 0 },
+    setup_draft_progress: {},
+    cards_to_author: 20,
+  };
+}
+
+async function openMockRoom(
+  page: Page,
+  installClock = false,
+  snapshot = gameState(),
+) {
   if (installClock) await page.clock.install();
   const clientMessages: Record<string, unknown>[] = [];
   let socket: WebSocketRoute | undefined;
@@ -110,13 +125,17 @@ async function openMockRoom(page: Page, installClock = false) {
       const parsed = JSON.parse(String(message)) as Record<string, unknown>;
       clientMessages.push(parsed);
       if (parsed.type === "join") {
-        ws.send(JSON.stringify({ type: "state", state: gameState() }));
+        ws.send(JSON.stringify({ type: "state", state: snapshot }));
       }
     });
   });
 
   await page.goto(`/room/${ROOM}`);
-  await expect(page.getByRole("button", { name: "Scores" })).toBeVisible();
+  await expect(
+    snapshot.phase === "setup"
+      ? page.getByRole("button", { name: "Author a card" })
+      : page.getByRole("button", { name: "Scores" }),
+  ).toBeVisible();
 
   return {
     clientMessages,
@@ -125,6 +144,181 @@ async function openMockRoom(page: Page, installClock = false) {
       socket.send(JSON.stringify(message));
     },
   };
+}
+
+async function expectAuthoringFits(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const viewportHeight =
+          window.visualViewport?.height ?? window.innerHeight;
+        const authoring = document.querySelector<HTMLElement>(
+          "[data-authoring-dialog]",
+        )!;
+        const content = authoring.getBoundingClientRect();
+        const card = document
+          .querySelector<HTMLElement>(".card-creator-card")!
+          .getBoundingClientRect();
+        const surface = document
+          .querySelector<HTMLElement>("[data-authoring-scroll]")!
+          .getBoundingClientRect();
+        const visibleButtons = [
+          ...authoring.querySelectorAll<HTMLElement>("button"),
+        ].filter((node) => node.offsetParent !== null);
+        return (
+          content.bottom <= viewportHeight + 1 &&
+          card.top >= surface.top - 1 &&
+          card.bottom <= surface.bottom + 1 &&
+          visibleButtons.every(
+            (button) =>
+              button.getBoundingClientRect().bottom <= viewportHeight + 1,
+          )
+        );
+      }),
+    )
+    .toBe(true);
+
+  const geometry = await page.evaluate(() => {
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const selectors = [
+      "[data-authoring-dialog]",
+      "[data-authoring-scroll]",
+      "[data-card-creator]",
+    ];
+    const regions = selectors.map((selector) => {
+      const node = document.querySelector<HTMLElement>(selector)!;
+      return {
+        selector,
+        clientWidth: node.clientWidth,
+        clientHeight: node.clientHeight,
+        scrollWidth: node.scrollWidth,
+        scrollHeight: node.scrollHeight,
+        scrollLeft: node.scrollLeft,
+        scrollTop: node.scrollTop,
+      };
+    });
+    const card = document
+      .querySelector<HTMLElement>(".card-creator-card")!
+      .getBoundingClientRect();
+    const surface = document
+      .querySelector<HTMLElement>("[data-authoring-scroll]")!
+      .getBoundingClientRect();
+    const authoring = document.querySelector<HTMLElement>(
+      "[data-authoring-dialog]",
+    )!;
+    const controls = [
+      ...authoring.querySelectorAll<HTMLElement>(
+        "input, textarea, canvas, button",
+      ),
+    ]
+      .filter((node) => node.offsetParent !== null)
+      .map((node) => {
+        const box = node.getBoundingClientRect();
+        return {
+          name:
+            node.getAttribute("aria-label") ||
+            node.getAttribute("title") ||
+            node.textContent?.trim() ||
+            node.tagName,
+          left: box.left,
+          top: box.top,
+          right: box.right,
+          bottom: box.bottom,
+        };
+      });
+    const game = document.querySelector<HTMLElement>("[data-game-scroll]")!;
+    const dialogViewport = document.querySelector<HTMLElement>(
+      '[data-slot="dialog-viewport"]',
+    )!;
+    return {
+      viewportWidth,
+      viewportHeight,
+      regions,
+      card: {
+        left: card.left,
+        top: card.top,
+        right: card.right,
+        bottom: card.bottom,
+      },
+      surface: {
+        left: surface.left,
+        top: surface.top,
+        right: surface.right,
+        bottom: surface.bottom,
+      },
+      controls,
+      gameOverflowY: getComputedStyle(game).overflowY,
+      dialogViewportOverflow: [
+        getComputedStyle(dialogViewport).overflowX,
+        getComputedStyle(dialogViewport).overflowY,
+      ],
+    };
+  });
+
+  for (const region of geometry.regions) {
+    // Transformed dialog borders can round outward by up to two CSS pixels
+    // during a viewport rotation; anything larger indicates real overflow.
+    const roundingTolerance = 3;
+    expect(
+      region.scrollWidth,
+      `${region.selector} has horizontal overflow`,
+    ).toBeLessThanOrEqual(region.clientWidth + roundingTolerance);
+    expect(
+      region.scrollHeight,
+      `${region.selector} has vertical overflow`,
+    ).toBeLessThanOrEqual(region.clientHeight + roundingTolerance);
+    expect(region.scrollLeft).toBe(0);
+    expect(region.scrollTop).toBe(0);
+  }
+  expect(geometry.card.left).toBeGreaterThanOrEqual(geometry.surface.left - 1);
+  expect(geometry.card.top).toBeGreaterThanOrEqual(geometry.surface.top - 1);
+  expect(geometry.card.right).toBeLessThanOrEqual(geometry.surface.right + 1);
+  expect(geometry.card.bottom).toBeLessThanOrEqual(geometry.surface.bottom + 1);
+  for (const control of geometry.controls) {
+    expect(control.left, `${control.name} escapes left`).toBeGreaterThanOrEqual(
+      -1,
+    );
+    expect(control.top, `${control.name} escapes top`).toBeGreaterThanOrEqual(
+      -1,
+    );
+    expect(control.right, `${control.name} escapes right`).toBeLessThanOrEqual(
+      geometry.viewportWidth + 1,
+    );
+    expect(
+      control.bottom,
+      `${control.name} escapes bottom`,
+    ).toBeLessThanOrEqual(geometry.viewportHeight + 1);
+  }
+  expect(geometry.gameOverflowY).toBe("hidden");
+  expect(geometry.dialogViewportOverflow).toEqual(["hidden", "hidden"]);
+}
+
+async function expectPaletteFits(page: Page, selector: string) {
+  const boxes = await page.locator(selector).evaluate((palette) => {
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const nodes = [palette, ...palette.querySelectorAll<HTMLElement>("button")];
+    return {
+      viewportWidth,
+      viewportHeight,
+      boxes: nodes.map((node) => {
+        const box = node.getBoundingClientRect();
+        return {
+          left: box.left,
+          top: box.top,
+          right: box.right,
+          bottom: box.bottom,
+        };
+      }),
+    };
+  });
+  for (const box of boxes.boxes) {
+    expect(box.left).toBeGreaterThanOrEqual(-1);
+    expect(box.top).toBeGreaterThanOrEqual(-1);
+    expect(box.right).toBeLessThanOrEqual(boxes.viewportWidth + 1);
+    expect(box.bottom).toBeLessThanOrEqual(boxes.viewportHeight + 1);
+  }
 }
 
 test("large hands and navigation stay inside the phone viewport", async ({
@@ -313,17 +507,47 @@ test("mobile overlays and blank-card authoring remain compact and reachable", as
   await page
     .getByRole("button", { name: "Fill in & play", exact: true })
     .click();
+  await expectAuthoringFits(page);
+
+  if (compact) {
+    await page.getByTitle("Choose ink color").click();
+    await expectPaletteFits(page, "[data-card-ink-palette]");
+    await page
+      .locator("[data-card-ink-palette]")
+      .getByRole("button", { name: "Red" })
+      .click();
+
+    await page.getByTitle("Choose nib size").click();
+    await expectPaletteFits(page, "[data-card-nib-palette]");
+    await page
+      .locator("[data-card-nib-palette]")
+      .getByRole("button", { name: "9px nib" })
+      .click();
+
+    await page.getByTitle("Choose a stamp").click();
+    await expectPaletteFits(page, "[data-card-stamp-palette]");
+    expect(
+      await page
+        .locator("[data-card-stamp-palette]")
+        .getByRole("button")
+        .count(),
+    ).toBe(15);
+    await page
+      .locator("[data-card-stamp-palette]")
+      .getByRole("button", { name: "Stamp 🐱" })
+      .click();
+  }
+
   await page.getByLabel("Card title").fill("Pocket Volcano");
   await page.getByLabel("Card rules").fill("Everyone loses one point.");
   const canvas = page.getByLabel("Card drawing canvas");
-  await canvas.scrollIntoViewIfNeeded();
   const ratio = await canvas.evaluate((node) => {
     const box = node.getBoundingClientRect();
     return box.width / box.height;
   });
   expect(ratio).toBeCloseTo(6 / 5, 1);
-  // A tap is a legitimate one-point stroke and exercises the keyboard-blur
-  // path without relying on coordinates outside the nested dialog scroller.
+  // A tap applies the armed stamp on compact screens (or a one-point stroke on
+  // desktop) and exercises the keyboard-blur path without scrolling the dialog.
   await canvas.click();
   expect(await canvas.evaluate((node) => document.activeElement === node)).toBe(
     true,
@@ -335,7 +559,9 @@ test("mobile overlays and blank-card authoring remain compact and reachable", as
     await expect(page.getByLabel("Card rules")).toHaveValue(
       "Everyone loses one point.",
     );
+    await expectAuthoringFits(page);
     await page.setViewportSize(portrait);
+    await expectAuthoringFits(page);
   }
   await page.getByRole("button", { name: "Play this card" }).click();
   await expect
@@ -353,4 +579,56 @@ test("mobile overlays and blank-card authoring remain compact and reachable", as
     (message) => message.type === "play" && message.title === "Pocket Volcano",
   );
   expect(String(play?.art)).toMatch(/^data:image\/png;base64,/);
+});
+
+test("setup card authoring and preview keep the full card framed", async ({
+  page,
+}) => {
+  const room = await openMockRoom(page, false, setupState());
+
+  await page.getByRole("button", { name: "Author a card" }).click();
+  await expectAuthoringFits(page);
+  await page.getByLabel("Card title").fill("Pocket Umbrella");
+  await page
+    .getByLabel("Card rules")
+    .fill("Prevent the next point loss this turn.");
+
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect
+    .poll(() =>
+      room.clientMessages.find((message) => message.type === "preview_card"),
+    )
+    .toMatchObject({
+      title: "Pocket Umbrella",
+      description: "Prevent the next point loss this turn.",
+    });
+
+  room.push({
+    type: "preview_result",
+    verdict: "ok",
+    mechanical_status: "applied",
+    mechanical_reason:
+      "The effect is executable and expires after the current turn.",
+    correlation_id: "preview-mobile-1",
+    program: "prevent_point_loss(actor); ".repeat(20),
+  });
+  await expect(page.locator("[data-preview-status]")).toContainText("applied");
+  await expectAuthoringFits(page);
+
+  await page.getByRole("button", { name: "Details" }).click();
+  await expectPaletteFits(page, "[data-preview-details]");
+  await expect(page.locator("[data-preview-details]")).toContainText(
+    "preview-mobile-1",
+  );
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Submit", exact: true }).click();
+  await expect
+    .poll(() =>
+      room.clientMessages.find((message) => message.type === "create_card"),
+    )
+    .toMatchObject({
+      title: "Pocket Umbrella",
+      description: "Prevent the next point loss this turn.",
+    });
 });

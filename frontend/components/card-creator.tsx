@@ -8,8 +8,17 @@ import {
   useRef,
   useState,
 } from "react";
+import { Trash2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { PLAYER_COLORS } from "@/lib/players";
+import { useCompactAuthoringViewport } from "@/lib/use-compact-viewport";
 import { cn } from "@/lib/utils";
 
 // Backend WS frame budget: a data-URL longer than this is rejected server-side,
@@ -132,6 +141,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     const [ink, setInk] = useState(INKS[0].color);
     const [nib, setNib] = useState(NIBS[1].size);
     const [armedStamp, setArmedStamp] = useState<string | null>(null);
+    const compact = useCompactAuthoringViewport();
 
     const redraw = useCallback(() => {
       const canvas = canvasRef.current;
@@ -250,77 +260,265 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     return (
       <div
         data-card-creator
-        className="grid min-w-0 items-start justify-center gap-3 md:grid-cols-[auto_minmax(0,400px)_190px] md:gap-4"
+        data-layout={compact ? "compact" : "expanded"}
+        className={cn(
+          "grid min-w-0 items-start gap-3",
+          compact
+            ? "h-full w-full grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-2"
+            : "grid-cols-[auto_minmax(0,400px)_190px] justify-center gap-4",
+        )}
       >
-        <div className="flex max-w-full flex-row items-center gap-2 overflow-x-auto rounded-2xl border-[2.5px] border-ink bg-card p-2 panel-shadow md:flex-col md:items-stretch md:overflow-visible md:p-2.5">
-          <div className="font-marker text-center text-xs">Ink</div>
-          {INKS.map((pen) => (
-            <button
-              key={pen.color}
-              type="button"
-              title={pen.name}
-              aria-pressed={ink === pen.color && !armedStamp}
-              onClick={() => {
-                setInk(pen.color);
-                setArmedStamp(null);
-              }}
-              className={cn(
-                "size-11 shrink-0 cursor-pointer rounded-full border-2 border-ink md:size-8",
-                ink === pen.color &&
-                  !armedStamp &&
-                  "ring-[3px] ring-ring ring-offset-1",
-              )}
-              style={{ background: pen.color }}
-            />
-          ))}
-          <div className="mx-0.5 h-8 w-0.5 shrink-0 bg-muted md:mx-0 md:my-0.5 md:h-0.5 md:w-auto" />
-          <div className="font-marker text-center text-xs">Nib</div>
-          {NIBS.map((n) => (
-            <button
-              key={n.size}
-              type="button"
-              title={`${n.size}px`}
-              aria-pressed={nib === n.size}
-              onClick={() => {
-                setNib(n.size);
-                setArmedStamp(null);
-              }}
-              className={cn(
-                "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-card md:size-8",
-                nib === n.size && "ring-[3px] ring-ring ring-offset-1",
-              )}
-            >
-              <span
-                className="block w-4.5 rounded-full bg-ink"
-                style={{ height: n.dot }}
-              />
-            </button>
-          ))}
-          <div className="mx-0.5 h-8 w-0.5 shrink-0 bg-muted md:mx-0 md:my-0.5 md:h-0.5 md:w-auto" />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            title="Undo"
-            onClick={undo}
+        {compact ? (
+          <div
+            data-card-tools
+            className="flex min-w-0 items-center justify-center gap-1"
           >
-            ↺
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            title="Clear"
-            onClick={clear}
-          >
-            🗑
-          </Button>
-        </div>
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-11"
+                    title="Choose ink color"
+                  />
+                }
+              >
+                <span
+                  className="size-5 rounded-full border-2 border-ink"
+                  style={{ background: ink }}
+                />
+                <span className="sr-only">
+                  Ink color: {INKS.find((pen) => pen.color === ink)?.name}
+                </span>
+              </PopoverTrigger>
+              <PopoverContent data-card-ink-palette>
+                <PopoverTitle className="mb-2">Ink color</PopoverTitle>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {INKS.map((pen) => (
+                    <PopoverClose
+                      key={pen.color}
+                      type="button"
+                      aria-label={pen.name}
+                      aria-pressed={ink === pen.color && !armedStamp}
+                      onClick={() => {
+                        setInk(pen.color);
+                        setArmedStamp(null);
+                      }}
+                      className={cn(
+                        "size-11 cursor-pointer rounded-full border-2 border-ink outline-none focus-visible:ring-3 focus-visible:ring-ring",
+                        ink === pen.color &&
+                          !armedStamp &&
+                          "ring-[3px] ring-ring ring-offset-1",
+                      )}
+                      style={{ background: pen.color }}
+                    />
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
-        <div className="flex min-w-0 flex-col items-center gap-2">
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-11"
+                    title="Choose nib size"
+                  />
+                }
+              >
+                <span
+                  className="block w-5 rounded-full bg-ink"
+                  style={{ height: Math.min(nib, 8) }}
+                />
+                <span className="sr-only">Nib size: {nib}px</span>
+              </PopoverTrigger>
+              <PopoverContent data-card-nib-palette>
+                <PopoverTitle className="mb-2">Nib size</PopoverTitle>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {NIBS.map((option) => (
+                    <PopoverClose
+                      key={option.size}
+                      type="button"
+                      aria-label={`${option.size}px nib`}
+                      aria-pressed={nib === option.size}
+                      onClick={() => {
+                        setNib(option.size);
+                        setArmedStamp(null);
+                      }}
+                      className={cn(
+                        "flex size-11 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-card outline-none focus-visible:ring-3 focus-visible:ring-ring",
+                        nib === option.size &&
+                          "ring-[3px] ring-ring ring-offset-1",
+                      )}
+                    >
+                      <span
+                        className="block w-5 rounded-full bg-ink"
+                        style={{ height: option.dot }}
+                      />
+                    </PopoverClose>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-11 text-xl"
+                    title="Choose a stamp"
+                  />
+                }
+              >
+                <span aria-hidden>{armedStamp ?? "★"}</span>
+                <span className="sr-only">
+                  {armedStamp ? `Stamp armed: ${armedStamp}` : "Choose a stamp"}
+                </span>
+              </PopoverTrigger>
+              <PopoverContent data-card-stamp-palette>
+                <PopoverTitle className="mb-2">Choose a stamp</PopoverTitle>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {STAMPS.map((emoji) => (
+                    <PopoverClose
+                      key={emoji}
+                      type="button"
+                      aria-label={`Stamp ${emoji}`}
+                      aria-pressed={armedStamp === emoji}
+                      onClick={() => setArmedStamp(emoji)}
+                      className={cn(
+                        "flex size-11 cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-card text-lg outline-none focus-visible:ring-3 focus-visible:ring-ring",
+                        armedStamp === emoji &&
+                          "border-2 border-ring bg-accent",
+                      )}
+                    >
+                      {emoji}
+                    </PopoverClose>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-11"
+              title="Undo"
+              aria-label="Undo"
+              onClick={undo}
+            >
+              <Undo2 />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-11"
+              title="Clear"
+              aria-label="Clear"
+              onClick={clear}
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        ) : (
+          <div
+            data-card-tools
+            className="flex flex-col items-stretch gap-2 rounded-2xl border-[2.5px] border-ink bg-card p-2.5 panel-shadow"
+          >
+            <div className="font-marker text-center text-xs">Ink</div>
+            {INKS.map((pen) => (
+              <button
+                key={pen.color}
+                type="button"
+                title={pen.name}
+                aria-label={pen.name}
+                aria-pressed={ink === pen.color && !armedStamp}
+                onClick={() => {
+                  setInk(pen.color);
+                  setArmedStamp(null);
+                }}
+                className={cn(
+                  "size-8 cursor-pointer rounded-full border-2 border-ink",
+                  ink === pen.color &&
+                    !armedStamp &&
+                    "ring-[3px] ring-ring ring-offset-1",
+                )}
+                style={{ background: pen.color }}
+              />
+            ))}
+            <div className="my-0.5 h-0.5 w-auto bg-muted" />
+            <div className="font-marker text-center text-xs">Nib</div>
+            {NIBS.map((option) => (
+              <button
+                key={option.size}
+                type="button"
+                title={`${option.size}px`}
+                aria-label={`${option.size}px nib`}
+                aria-pressed={nib === option.size}
+                onClick={() => {
+                  setNib(option.size);
+                  setArmedStamp(null);
+                }}
+                className={cn(
+                  "flex size-8 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-card",
+                  nib === option.size && "ring-[3px] ring-ring ring-offset-1",
+                )}
+              >
+                <span
+                  className="block w-4.5 rounded-full bg-ink"
+                  style={{ height: option.dot }}
+                />
+              </button>
+            ))}
+            <div className="my-0.5 h-0.5 w-auto bg-muted" />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title="Undo"
+              aria-label="Undo"
+              onClick={undo}
+            >
+              <Undo2 />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title="Clear"
+              aria-label="Clear"
+              onClick={clear}
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        )}
+
+        <div
+          data-card-stage
+          className={cn(
+            "flex min-w-0 flex-col items-center gap-2",
+            compact &&
+              "card-creator-stage h-full min-h-0 w-full justify-center",
+          )}
+        >
           {/* The card being authored is a physical paper artifact: its face
               stays white and its ink tokens stay dark in both themes. */}
-          <div className="card-creator-card paper-scope bg-card-face relative w-full max-w-[400px] rounded-xl border-[2.5px] border-ink p-3 shadow-[0_12px_30px_rgba(20,18,14,0.22)] sm:p-4">
+          <div
+            className={cn(
+              "card-creator-card paper-scope bg-card-face relative w-full max-w-[400px] rounded-xl border-[2.5px] border-ink p-3 shadow-[0_12px_30px_rgba(20,18,14,0.22)] sm:p-4",
+              compact && "card-creator-card-compact",
+            )}
+          >
             <div className="bg-tape absolute -top-2.5 left-[20%] h-5 w-20 rotate-[-6deg]" />
             <div className="bg-tape absolute -top-2.5 right-[20%] h-5 w-20 rotate-[5deg]" />
             <div className="pointer-events-none absolute inset-2 rounded-lg border border-dashed border-ink/25" />
@@ -364,36 +562,47 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
             />
           </div>
           {caption && (
-            <p className="font-hand text-[15px] text-muted-foreground">
+            <p
+              className={cn(
+                "font-hand text-[15px] text-muted-foreground",
+                compact && "sr-only",
+              )}
+            >
               {caption}
             </p>
           )}
         </div>
 
-        <div className="w-full max-w-[400px] rounded-2xl border-[2.5px] border-ink bg-card p-3 panel-shadow md:w-[190px]">
-          <div className="font-marker mb-1 text-sm">Stamps</div>
-          <div className="mb-2 text-[11px] font-bold text-muted-foreground">
-            Tap one, then tap the card to stamp it.
+        {!compact && (
+          <div
+            data-card-stamps
+            className="w-[190px] rounded-2xl border-[2.5px] border-ink bg-card p-3 panel-shadow"
+          >
+            <div className="font-marker mb-1 text-sm">Stamps</div>
+            <div className="mb-2 text-[11px] font-bold text-muted-foreground">
+              Tap one, then tap the card to stamp it.
+            </div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {STAMPS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  aria-label={`Stamp ${emoji}`}
+                  aria-pressed={armedStamp === emoji}
+                  onClick={() =>
+                    setArmedStamp((cur) => (cur === emoji ? null : emoji))
+                  }
+                  className={cn(
+                    "flex aspect-square cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-card text-lg",
+                    armedStamp === emoji && "border-2 border-ring bg-accent",
+                  )}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 md:grid md:grid-cols-5 md:overflow-visible md:pb-0">
-            {STAMPS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                aria-pressed={armedStamp === emoji}
-                onClick={() =>
-                  setArmedStamp((cur) => (cur === emoji ? null : emoji))
-                }
-                className={cn(
-                  "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-card text-lg md:size-auto md:aspect-square",
-                  armedStamp === emoji && "border-2 border-ring bg-accent",
-                )}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     );
   },
