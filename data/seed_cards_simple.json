@@ -701,11 +701,13 @@
           "args": {
             "event": "on_score_change",
             "scope": "center",
+            "title": "The player who causes a score change gains 1 bonus point.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    actor = ctx.get(\"actor_id\")\n    if actor:\n        state.add_points(\"id:\" + actor, 1)\n"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.register_hook(\"on_score_change\", scope=\"center\", code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor:\\n        state.add_points('id:' + actor, 1)\\n\")"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook(\"on_score_change\", scope=\"center\", code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor:\\n        state.add_points('id:' + actor, 1)\\n\", title=\"The player who causes a score change gains 1 bonus point.\", condition_keys=[])"
     }
   }
 ]

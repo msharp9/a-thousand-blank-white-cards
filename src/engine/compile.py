@@ -266,7 +266,13 @@ def _compile_op(name: str, args: dict) -> Op | None:
             # Validation rules may have tightened since this card was kept —
             # degrade to a visible note instead of crashing deck build/play.
             return CustomNoteOp(note=f"hook from this card no longer validates: {result.error}")
-        return RegisterHookOp(event=str(event), scope=args.get("scope", "center"), code=str(code))
+        return RegisterHookOp(
+            event=str(event),
+            scope=args.get("scope", "center"),
+            code=str(code),
+            title=str(args.get("title") or ""),
+            condition_keys=args.get("condition_keys") or [],
+        )
     if name == "unregister_hook":
         source = args.get("source_card_id") or args.get("card_id")
         if not source:

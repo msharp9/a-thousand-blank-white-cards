@@ -30,7 +30,19 @@ def _hook_card() -> dict:
         "id": "hookc",
         "title": "Alice Tax",
         "description": "At the start of every turn, Alice gains 1 point.",
-        "canonical": {"ops": [{"op": "register_hook", "args": {"event": "on_turn_start", "code": HOOK_CODE}}]},
+        "canonical": {
+            "ops": [
+                {
+                    "op": "register_hook",
+                    "args": {
+                        "event": "on_turn_start",
+                        "code": HOOK_CODE,
+                        "title": "Alice gains 1 point at the start of every turn.",
+                        "condition_keys": ["Cursed"],
+                    },
+                }
+            ]
+        },
     }
 
 
@@ -41,6 +53,8 @@ def test_played_card_registers_serialized_hook_that_fires_on_turn_start() -> Non
 
     assert len(room.state.hooks) == 1
     assert room.state.hooks[0].event == "on_turn_start"
+    assert room.state.hooks[0].title == "Alice gains 1 point at the start of every turn."
+    assert room.state.hooks[0].condition_keys == ["cursed"]
     # Playing advanced the turn to p2; ON_TURN_START fired for that turn.
     assert room.state.get_player("p1").score == 1
 
@@ -72,6 +86,8 @@ def test_hooks_survive_store_round_trip(tmp_path) -> None:
     assert got is not None
     assert [h.id for h in got.state.hooks] == [h.id for h in room.state.hooks]
     assert got.state.hooks[0].code == HOOK_CODE
+    assert got.state.hooks[0].title == "Alice gains 1 point at the start of every turn."
+    assert got.state.hooks[0].condition_keys == ["cursed"]
 
 
 VALIDATE_COLOR_MATCH = (
@@ -150,7 +166,12 @@ def test_triggered_snippet_interpretation_registers_hook_via_op_pipeline() -> No
     room = _room({"tax": card}, {"p1": ["tax"]}, deck=["d1", "d2", "d3"])
     result = InterpretResult(
         program=None,
-        snippet=SnippetEffect(code=HOOK_CODE, explanation="alice tax", trigger="on_turn_start"),
+        snippet=SnippetEffect(
+            code=HOOK_CODE,
+            explanation="Alice gains 1 point at the start of every turn.",
+            trigger="on_turn_start",
+            condition_keys=["Cursed"],
+        ),
         verdict="ok",
         comment="A tax!",
     )
@@ -160,6 +181,8 @@ def test_triggered_snippet_interpretation_registers_hook_via_op_pipeline() -> No
     assert len(room.state.hooks) == 1
     assert room.state.hooks[0].event == "on_turn_start"
     assert room.state.hooks[0].code == HOOK_CODE
+    assert room.state.hooks[0].title == "Alice gains 1 point at the start of every turn."
+    assert room.state.hooks[0].condition_keys == ["cursed"]
     # The card's canonical now carries the register_hook op — a kept copy
     # replays deterministically in a future game.
     assert room.state.cards["tax"]["canonical"]["ops"][0]["op"] == "register_hook"

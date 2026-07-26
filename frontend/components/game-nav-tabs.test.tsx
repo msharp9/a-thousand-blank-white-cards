@@ -96,6 +96,26 @@ describe("GameNavTabs", () => {
     expect(screen.queryByText("Scoreboard")).toBeNull();
   });
 
+  it("opens the player-facing Status Conditions overlay", async () => {
+    const user = userEvent.setup();
+    const state = baseState();
+    state.players[0].conditions = { cursed: true };
+    render(
+      <GameNavTabs
+        gameState={state}
+        roomCode="ABCD"
+        isHost={false}
+        send={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Status" }));
+    expect(
+      screen.getByRole("heading", { name: "Status Conditions" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Alice is Cursed")).toBeTruthy();
+  });
+
   it("switches directly between overlays without needing Table in between", async () => {
     const user = userEvent.setup();
     render(nav());
@@ -129,6 +149,9 @@ describe("GameNavTabs", () => {
     expect(screen.queryByRole("button", { name: "Host" })).toBeNull();
 
     rerender(nav(true));
+    for (const name of ["Table", "Gallery", "Scores", "Status", "Host"]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
     await user.click(screen.getByRole("button", { name: "Host" }));
     expect(screen.getByRole("heading", { name: "Host controls" })).toBeTruthy();
     expect(

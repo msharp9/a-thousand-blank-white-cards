@@ -4,15 +4,17 @@ import { useEffect, useState } from "react";
 import { GalleryOverlay } from "@/components/gallery-overlay";
 import { HostControlOverlay } from "@/components/host-control-overlay";
 import { ScoreboardOverlay } from "@/components/scoreboard-overlay";
+import { StatusConditionsOverlay } from "@/components/status-conditions-overlay";
 import type { ClientMsg, GameStateSnapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "table" | "gallery" | "scores" | "host";
+type Tab = "table" | "gallery" | "scores" | "status" | "host";
 
 const PLAYER_TABS: { id: Tab; label: string }[] = [
   { id: "table", label: "Table" },
   { id: "gallery", label: "Gallery" },
   { id: "scores", label: "Scores" },
+  { id: "status", label: "Status" },
 ];
 
 interface GameNavTabsProps {
@@ -24,13 +26,10 @@ interface GameNavTabsProps {
 }
 
 /**
- * Top-bar view switcher for the playing phase (design's Table/Gallery/Scores
- * tabs — Create and Epilogue are separate phases in this app, not tabs).
- * Table is the default felt view underneath; Gallery and Scores render as
- * full-screen overlays on top of it and close back to Table via the tab, the
- * Escape key, or a scrim tap. The felt/hand stay mounted the whole time, so
- * switching tabs never interrupts live game state — the overlays just read
- * straight from the same gameState this component already re-renders on.
+ * Top-bar view switcher for the playing phase. Create and Epilogue are
+ * separate phases, not tabs. Table is the default felt view underneath;
+ * Gallery, Scores, Status, and Host render as full-screen overlays and close
+ * back to Table. The felt/hand stay mounted while switching views.
  */
 export function GameNavTabs({
   gameState,
@@ -56,7 +55,7 @@ export function GameNavTabs({
   return (
     <>
       <nav
-        className={cn("flex items-center gap-1.5", className)}
+        className={cn("flex items-center gap-1", className)}
         aria-label="Game views"
       >
         {tabs.map(({ id, label }) => (
@@ -66,7 +65,7 @@ export function GameNavTabs({
             aria-pressed={tab === id}
             onClick={() => setTab(id)}
             className={cn(
-              "min-h-11 flex-1 rounded-lg border-[1.5px] border-ink px-2.5 py-1 font-hand text-[15px] transition-colors sm:min-h-0 sm:flex-none",
+              "min-h-11 min-w-0 flex-1 rounded-lg border-[1.5px] border-ink px-1 py-1 font-hand text-[13px] transition-colors min-[360px]:text-[15px] sm:min-h-0 sm:flex-none sm:px-2.5",
               tab === id
                 ? "bg-ink text-background"
                 : "bg-card text-foreground hover:bg-muted",
@@ -86,6 +85,12 @@ export function GameNavTabs({
       {tab === "scores" && (
         <ScoreboardOverlay
           players={gameState.players}
+          onClose={() => setTab("table")}
+        />
+      )}
+      {tab === "status" && (
+        <StatusConditionsOverlay
+          gameState={gameState}
           onClose={() => setTab("table")}
         />
       )}

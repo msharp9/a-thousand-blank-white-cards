@@ -4,6 +4,11 @@ import { useDroppable } from "@dnd-kit/core";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { getCardArtUrl } from "@/lib/art";
 import { seatDropId } from "@/lib/dnd";
+import {
+  conditionDuration,
+  conditionName,
+  conditionValueDetail,
+} from "@/lib/conditions";
 import { playerColor } from "@/lib/players";
 import type {
   CardSnapshot,
@@ -18,29 +23,18 @@ interface GameTableProps {
   myPlayerId: string;
 }
 
-// Reserved keys the engine's turn loop consumes get friendly labels; any other
-// key is a card-invented status, shown with underscores humanized.
-const RESERVED_CONDITION_LABELS: Record<string, string> = {
-  skip_next: "skips next turn",
-  extra_turn: "extra turn",
-};
-
 /**
- * Player-facing label for one condition: friendly names for reserved keys,
- * "poisoned ×3" for numeric stacks, and ", 2 turns left" when the condition
- * carries a TTL (condition_ttls). A TTL of 0 means the current owner turn is
- * the condition's last active one, rendered as ", last turn".
+ * Compact player-facing label shared with the Status view's capitalization,
+ * value details, and turn-based duration language.
  */
 export function conditionLabel(
   key: string,
   value: unknown,
   ttl?: number,
 ): string {
-  let label = RESERVED_CONDITION_LABELS[key] ?? key.replace(/_/g, " ");
-  if (typeof value === "number") label += ` ×${value}`;
-  if (ttl === 0) label += ", last turn";
-  else if (ttl != null) label += `, ${ttl} turn${ttl === 1 ? "" : "s"} left`;
-  return label;
+  const detail = conditionValueDetail(value);
+  const duration = conditionDuration(ttl);
+  return [conditionName(key), detail, duration].filter(Boolean).join(" · ");
 }
 
 function ConditionBadges({ player }: { player: PlayerSnapshot }) {

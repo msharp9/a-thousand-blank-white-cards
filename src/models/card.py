@@ -65,7 +65,7 @@ class CardOp(BaseModel):
             "models.effects (not every name here maps 1:1 to a reducer)."
         )
     )
-    args: dict[str, int | str | bool | None] = Field(
+    args: dict[str, Any] = Field(
         default_factory=dict,
         description="Op-specific arguments, e.g. {'amount': 5, 'target': 'self'}.",
     )

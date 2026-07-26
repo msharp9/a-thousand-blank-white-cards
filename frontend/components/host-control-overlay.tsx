@@ -14,6 +14,7 @@ import { OverlayShell } from "@/components/overlay-shell";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { conditionName, conditionValueDetail } from "@/lib/conditions";
 import { playerColor } from "@/lib/players";
 import type { AdminAction, ClientMsg, GameStateSnapshot } from "@/lib/types";
 
@@ -45,10 +46,8 @@ function conditionKeyFromName(name: string): string {
 }
 
 function conditionDisplay(key: string, value: unknown): string {
-  const name = key.replace(/_/g, " ");
-  if (value === true) return name;
-  if (typeof value === "number") return `${name} ×${value}`;
-  return `${name}: ${String(value)}`;
+  const detail = conditionValueDetail(value);
+  return `${conditionName(key)}${detail ? ` · ${detail}` : ""}`;
 }
 
 function actionLabel(action: AdminAction, state: GameStateSnapshot): string {

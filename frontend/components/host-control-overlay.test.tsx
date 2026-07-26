@@ -134,7 +134,7 @@ describe("HostControlOverlay", () => {
     await user.click(
       screen.getByRole("button", { name: "Review proposal (1)" }),
     );
-    expect(screen.getByText("Set Alice: speak only in questions")).toBeTruthy();
+    expect(screen.getByText("Set Alice: Speak Only In Questions")).toBeTruthy();
     expect(screen.queryByText(/speak_only_in_questions/)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Propose changes" }));
 

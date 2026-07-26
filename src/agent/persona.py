@@ -171,6 +171,8 @@ OP_CATALOG_GUIDE = """\
   * register_hook installs a PERSISTENT sandboxed snippet that fires on a game event
     (on_play, on_turn_start, on_turn_end, on_draw_step, on_score_change, on_game_end) —
     use it for ongoing house rules ("whenever anyone scores, Bob draws a card");
+    always give it a concise, declarative, player-facing title that explains the rule,
+    plus condition_keys for every status it checks or changes (use canonical lowercase);
     unregister_hook removes a card's hooks. on_score_change fires see the change in
     ctx["amount"] (None when players moved by different amounts), the affected players
     in ctx["target_player_ids"], and per-player changes in ctx["deltas"].

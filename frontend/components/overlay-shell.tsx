@@ -17,10 +17,9 @@ interface OverlayShellProps {
 }
 
 /**
- * The full-screen scrim + framed paper panel shared by the Gallery and
- * Scoreboard overlays (design's Gallery/Scores tabs): a dimmed backdrop that
- * closes on tap, a bordered card that swallows inner clicks, and a header with
- * a title/subtitle and a close button. Body content scrolls independently.
+ * Full-screen scrim and framed paper panel shared by the playing-phase
+ * overlays. The backdrop closes on tap, the bordered panel swallows inner
+ * clicks, and body content scrolls independently.
  */
 export function OverlayShell({
   scrimTestId,

@@ -243,13 +243,15 @@
           "args": {
             "event": "on_draw_step",
             "scope": "center",
+            "title": "Every player gains 1 point when they take their draw step.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    state.add_points('self', 1)\n"
           }
         }
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_draw_step', scope='center', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\")"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_draw_step', scope='center', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\", title='Every player gains 1 point when they take their draw step.', condition_keys=[])"
     }
   },
   {
@@ -356,12 +358,14 @@
           "args": {
             "event": "on_game_end",
             "scope": "player",
+            "title": "The owner gains 10 points at the end of the game.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    state.add_points('self', 10)\n"
           }
         }
       ],
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 10)\\n\")"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 10)\\n\", title='The owner gains 10 points at the end of the game.', condition_keys=[])"
     }
   },
   {
@@ -633,11 +637,13 @@
           "args": {
             "event": "on_score_change",
             "scope": "center",
+            "title": "Every score change is announced to the table.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    state.note('A score just changed at the table.')\n"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_score_change', scope='center', code=\"def apply(state, ctx):\\n    state.note('A score just changed at the table.')\\n\")\n"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_score_change', scope='center', code=\"def apply(state, ctx):\\n    state.note('A score just changed at the table.')\\n\", title='Every score change is announced to the table.', condition_keys=[])\n"
     }
   },
   {
@@ -656,11 +662,13 @@
           "args": {
             "event": "on_turn_end",
             "scope": "center",
+            "title": "The active player loses 1 point at the end of every turn.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    state.subtract_points('self', 1)\n"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_end', scope='center', code=\"def apply(state, ctx):\\n    state.subtract_points('self', 1)\\n\")\n"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_end', scope='center', code=\"def apply(state, ctx):\\n    state.subtract_points('self', 1)\\n\", title='The active player loses 1 point at the end of every turn.', condition_keys=[])\n"
     }
   },
   {
@@ -679,11 +687,13 @@
           "args": {
             "event": "on_validate_play",
             "scope": "center",
+            "title": "Players with more than 20 points cannot play cards.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    actor = ctx.get('actor_id')\n    if actor and state.player(actor).score > 20:\n        state.reject_play('Too rich to play - over 20 points.')\n"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_validate_play', scope='center', code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor and state.player(actor).score > 20:\\n        state.reject_play('Too rich to play - over 20 points.')\\n\")\n"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_validate_play', scope='center', code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor and state.player(actor).score > 20:\\n        state.reject_play('Too rich to play - over 20 points.')\\n\", title='Players with more than 20 points cannot play cards.', condition_keys=[])\n"
     }
   },
   {
@@ -1962,6 +1972,10 @@
           "args": {
             "event": "on_turn_start",
             "scope": "player",
+            "title": "The owner may speak only in questions until their next turn.",
+            "condition_keys": [
+              "speak_only_in_questions"
+            ],
             "code": "def apply(state, ctx):\n    state.set_condition('self', 'speak_only_in_questions', False)\n    state.note('The questions-only restriction has ended.')\n"
           }
         },
@@ -1972,7 +1986,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'speak_only_in_questions', True)\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.set_condition('self', 'speak_only_in_questions', False)\\n    state.note('The questions-only restriction has ended.')\\n\")\n    state.note('Until the start of your next turn you may only communicate in questions. Each violation costs 2 points.')"
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'speak_only_in_questions', True)\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.set_condition('self', 'speak_only_in_questions', False)\\n    state.note('The questions-only restriction has ended.')\\n\", title='The owner may speak only in questions until their next turn.', condition_keys=['speak_only_in_questions'])\n    state.note('Until the start of your next turn you may only communicate in questions. Each violation costs 2 points.')"
     }
   },
   {
@@ -2184,6 +2198,10 @@
           "args": {
             "event": "on_game_end",
             "scope": "player",
+            "title": "The owner gains 5 points if their prophesied player wins.",
+            "condition_keys": [
+              "prophesied_winner"
+            ],
             "code": "def apply(state, ctx):\n    best = None\n    for p in state.players():\n        if best is None or p.score > best.score:\n            best = p\n    if best and state.conditions(best.id).get('prophesied_winner'):\n        state.add_points('self', 5)\n"
           }
         },
@@ -2194,7 +2212,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'prophesied_winner', True)\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    best = None\\n    for p in state.players():\\n        if best is None or p.score > best.score:\\n            best = p\\n    if best and state.conditions(best.id).get('prophesied_winner'):\\n        state.add_points('self', 5)\\n\")\n    state.note('Announce who you think will win the game right now. If you are correct, you gain 5 points at game end.')"
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'prophesied_winner', True)\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    best = None\\n    for p in state.players():\\n        if best is None or p.score > best.score:\\n            best = p\\n    if best and state.conditions(best.id).get('prophesied_winner'):\\n        state.add_points('self', 5)\\n\", title='The owner gains 5 points if their prophesied player wins.', condition_keys=['prophesied_winner'])\n    state.note('Announce who you think will win the game right now. If you are correct, you gain 5 points at game end.')"
     }
   },
   {
@@ -2970,11 +2988,13 @@
           "args": {
             "event": "on_game_end",
             "scope": "player",
+            "title": "The owner gains 100 points at the end of the game.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    state.add_points('self', 100)\n"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 100)\\n\")"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 100)\\n\", title='The owner gains 100 points at the end of the game.', condition_keys=[])"
     }
   },
   {
@@ -3679,11 +3699,13 @@
           "args": {
             "event": "on_score_change",
             "scope": "center",
+            "title": "The player who causes a score change gains 1 bonus point.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    actor = ctx.get(\"actor_id\")\n    if actor:\n        state.add_points(\"id:\" + actor, 1)\n"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.register_hook(\"on_score_change\", scope=\"center\", code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor:\\n        state.add_points('id:' + actor, 1)\\n\")"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook(\"on_score_change\", scope=\"center\", code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor:\\n        state.add_points('id:' + actor, 1)\\n\", title=\"The player who causes a score change gains 1 bonus point.\", condition_keys=[])"
     }
   }
 ]

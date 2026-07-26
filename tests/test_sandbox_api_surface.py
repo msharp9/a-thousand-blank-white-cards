@@ -216,6 +216,9 @@ class TestWideFacade:
         assert g.my_hand() == ["c1", "c2"]
         assert g.hand_size("p2") == 1
         assert g.conditions("p1") == {"poisoned": 1}
+        assert g.conditions("p1").get("PoIsOnEd") == 1
+        assert g.conditions("p1")["POISONED"] == 1
+        assert "Poisoned" in g.conditions("p1")
         assert g.rules()["draw"] == 2
         assert g.card("c1")["attributes"] == {"color": "red"}
         assert g.card("missing") is None
@@ -262,6 +265,18 @@ class TestWideFacade:
             "scramble_order",
             "steal_points",
         }
+
+    def test_register_hook_records_player_facing_metadata(self):
+        g = self._game()
+        g.register_hook(
+            "on_turn_end",
+            code="def apply(state, ctx):\n    pass\n",
+            title="Cursed players discard a card at the end of their turn.",
+            condition_keys=["Cursed", " cursed "],
+        )
+        hook = g.ops()[0]
+        assert hook["title"] == "Cursed players discard a card at the end of their turn."
+        assert hook["condition_keys"] == ["cursed"]
 
 
 def test_canonical_mutators_match_op_names_and_parameters() -> None:

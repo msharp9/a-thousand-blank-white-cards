@@ -60,6 +60,27 @@ def test_conditions_default_empty() -> None:
     assert state.get_player("p1").conditions == {}
 
 
+def test_condition_keys_are_case_insensitive_and_normalized_on_load() -> None:
+    player = Player(
+        id="p1",
+        name="A",
+        conditions={"Cursed": True, "CURSED": 2, " stunned ": True},
+        condition_ttls={"cUrSeD": 3, "STUNNED": 1},
+    )
+    assert player.conditions == {"cursed": 2, "stunned": True}
+    assert player.condition_ttls == {"cursed": 3, "stunned": 1}
+
+
+def test_condition_helpers_match_keys_without_regard_to_case() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")])
+    state = state.with_condition("p1", " Cursed ", True, ttl=3)
+    state = state.with_condition("p1", "CURSED", 2)
+    assert state.get_player("p1").conditions == {"cursed": 2}
+    assert state.get_player("p1").condition_ttls == {}
+    state = state.without_condition("p1", "CuRsEd")
+    assert state.get_player("p1").conditions == {}
+
+
 def test_with_condition_sets_key_immutably() -> None:
     state = GameState(room_code="AAAA", players=[Player(id="p1", name="A"), Player(id="p2", name="B")])
     new = state.with_condition("p1", "skip_next", True)

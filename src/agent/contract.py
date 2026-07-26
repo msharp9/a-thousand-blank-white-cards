@@ -38,6 +38,14 @@ class SnippetEffect(BaseModel):
         )
     )
     explanation: str = Field(description="Plain-English explanation of what the snippet does.")
+    condition_keys: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description=(
+            "Persistent hooks only: condition keys whose players are affected by this hook, "
+            "for example ['cursed']. Empty when the hook is unrelated to a condition."
+        ),
+    )
     trigger: str | None = Field(
         default=None,
         description=(
@@ -144,6 +152,8 @@ class InterpretResult(BaseModel):
                                 event=self.snippet.trigger,
                                 scope=self.snippet.scope,
                                 code=self.snippet.code,
+                                title=self.snippet.explanation,
+                                condition_keys=self.snippet.condition_keys,
                             )
                         ]
                     )

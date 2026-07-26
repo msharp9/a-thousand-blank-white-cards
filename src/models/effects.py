@@ -13,6 +13,7 @@ from models.interactions import (
     InteractionDescriptor,
     InteractionResultRef,
 )
+from models.game_state import normalize_condition_key
 
 MAX_RESOLUTION_STEPS = 8
 MAX_INTERACTION_STEPS = 4
@@ -50,6 +51,11 @@ def _validate_target(value: str) -> str:
         return value
     for prefix in _TARGET_PREFIXES:
         if value.startswith(prefix) and len(value) > len(prefix):
+            if prefix == "has:":
+                key = normalize_condition_key(value[len(prefix) :])
+                if not key:
+                    break
+                return f"{prefix}{key}"
             return value
     raise ValueError(
         f"invalid Target {value!r}: expected one of {sorted(_VALID_TARGETS)} "
@@ -484,6 +490,14 @@ class SetConditionOp(BaseModel):
     value: Any = None
     duration_turns: int | None = Field(default=None, ge=1)
 
+    @field_validator("key")
+    @classmethod
+    def _normalize_key(cls, value: str) -> str:
+        key = normalize_condition_key(value)
+        if not key:
+            raise ValueError("condition key cannot be blank")
+        return key
+
 
 class SetCardAttributeOp(BaseModel):
     """Write one key in each targeted card's open ``attributes`` bag.
@@ -534,6 +548,18 @@ class RegisterHookOp(BaseModel):
     event: str  # a GameEvent value, e.g. "on_turn_start"
     scope: Literal["player", "center"] = "center"
     code: str
+    title: str = Field(default="", max_length=300)
+    condition_keys: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("condition_keys")
+    @classmethod
+    def _normalize_condition_keys(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            key = normalize_condition_key(value)
+            if key and key not in normalized:
+                normalized.append(key)
+        return normalized
 
 
 class UnregisterHookOp(BaseModel):

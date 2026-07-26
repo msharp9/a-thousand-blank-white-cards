@@ -199,7 +199,12 @@ def ops_to_sandbox(ops: list[dict]) -> str | None:
                 if not isinstance(event, str) or not isinstance(code, str):
                     raise _Unmappable("register_hook without event/code")
                 scope = args.get("scope", "center")
-                lines.append(f"    state.register_hook({event!r}, scope={scope!r}, code={code!r})")
+                title = args.get("title", "")
+                condition_keys = args.get("condition_keys", [])
+                lines.append(
+                    f"    state.register_hook({event!r}, scope={scope!r}, code={code!r}, "
+                    f"title={title!r}, condition_keys={condition_keys!r})"
+                )
             else:
                 raise _Unmappable(f"op {name!r}")
     except _Unmappable:

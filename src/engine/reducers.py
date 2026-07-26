@@ -59,6 +59,7 @@ from models.game_state import (
     Rules,
     TurnOrderBinding,
     WinCondition,
+    normalize_condition_key,
 )
 
 _hand_reveal_drain: ContextVar[list[dict[str, Any]] | None] = ContextVar("hand_reveal_drain", default=None)
@@ -100,7 +101,7 @@ def _resolve_targets(target: Target, ctx: HookContext, state: GameState) -> list
         pid = target[3:]
         return [pid] if any(p.id == pid for p in players) else []
     if target.startswith("has:"):
-        key = target[4:]
+        key = normalize_condition_key(target[4:])
         return [p.id for p in players if p.conditions.get(key)]
 
     match target:
@@ -942,6 +943,8 @@ def _reduce_register_hook(state: GameState, op: RegisterHookOp, ctx: HookContext
         scope=op.scope,
         owner_id=ctx.actor_id if op.scope == "player" else None,
         code=op.code,
+        title=op.title,
+        condition_keys=op.condition_keys,
     )
     return state.model_copy(update={"hooks": [*state.hooks, spec]}).with_log(
         f"[hook] registered on {op.event} by {source}"
@@ -1075,6 +1078,7 @@ def _release_turn_order_bindings(state: GameState, departed: set[str]) -> GameSt
 
 
 def _bind_condition(state: GameState, source: str, player_id: str, key: str) -> GameState:
+    key = normalize_condition_key(key)
     top = next(
         (
             binding
@@ -1161,6 +1165,7 @@ def _discard_condition_sources(state: GameState, sources: set[str], *, reason: s
 
 
 def _supersede_condition_bindings(state: GameState, player_id: str, key: str) -> GameState:
+    key = normalize_condition_key(key)
     sources = {
         binding.source_card_id
         for binding in state.condition_bindings
@@ -1177,12 +1182,14 @@ def _supersede_condition_bindings(state: GameState, player_id: str, key: str) ->
 
 def clear_condition(state: GameState, player_id: str, key: str) -> GameState:
     """Clear a condition and retire visible cards whose status it represented."""
+    key = normalize_condition_key(key)
     state = _supersede_condition_bindings(state, player_id, key)
     return state.without_condition(player_id, key)
 
 
 def expire_condition(state: GameState, player_id: str, key: str) -> GameState:
     """Expire the active condition layer and discard its source when fully spent."""
+    key = normalize_condition_key(key)
     top = next(
         (
             binding

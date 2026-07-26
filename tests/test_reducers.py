@@ -991,6 +991,11 @@ class TestOpenTargets:
         assert new.get_player("p2").score == state.get_player("p2").score - 3
         assert new.get_player("p1").score == state.get_player("p1").score
 
+    def test_has_target_is_case_insensitive(self):
+        state = make_state().with_condition("p2", "Cursed", True)
+        new = apply_op(state, SubtractPointsOp(target="has:CURSED", amount=3), make_ctx("p1"))
+        assert new.get_player("p2").score == state.get_player("p2").score - 3
+
     def test_attr_card_target_resolves_matching_cards(self):
         state = make_state()
         cards = {
@@ -1014,6 +1019,25 @@ class TestSetCondition:
         state = make_state().with_condition("p1", "poisoned", 1)
         new = apply_op(state, SetConditionOp(target="self", key="poisoned", value=None), make_ctx("p1"))
         assert new.get_player("p1").conditions == {}
+
+    def test_set_and_remove_are_case_insensitive(self):
+        state = apply_op(
+            make_state(),
+            SetConditionOp(target="id:p2", key="Stunned", value=True),
+            make_ctx("p1"),
+        )
+        state = apply_op(
+            state,
+            SetConditionOp(target="id:p2", key="STUNNED", value=2),
+            make_ctx("p1"),
+        )
+        assert state.get_player("p2").conditions == {"stunned": 2}
+        state = apply_op(
+            state,
+            SetConditionOp(target="id:p2", key="sTuNnEd", value=None),
+            make_ctx("p1"),
+        )
+        assert state.get_player("p2").conditions == {}
 
     def _bound_state(self, *sources: str) -> GameState:
         players = [

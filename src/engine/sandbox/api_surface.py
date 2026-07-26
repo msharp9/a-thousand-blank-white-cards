@@ -12,6 +12,23 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
+from models.game_state import normalize_condition_key
+
+
+class _ConditionView(dict[str, Any]):
+    """Detached condition mapping with case-insensitive string lookups."""
+
+    def __getitem__(self, key: str) -> Any:
+        return super().__getitem__(normalize_condition_key(key))
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            key = normalize_condition_key(key)
+        return super().__contains__(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return super().get(normalize_condition_key(key), default)
+
 
 @dataclass
 class _PlayerView:
@@ -108,7 +125,9 @@ class SandboxGame:
         """A player's open conditions bag (poisoned, skip_next, …)."""
         for p in self._state["players"]:
             if p["id"] == player_id:
-                return dict(p.get("conditions") or {})
+                return _ConditionView(
+                    (normalize_condition_key(key), value) for key, value in (p.get("conditions") or {}).items()
+                )
         raise KeyError(f"Player {player_id!r} not found")
 
     def card(self, card_id: str) -> dict[str, Any] | None:
@@ -453,13 +472,35 @@ class SandboxGame:
         """Convenience alias: create_card with destination='deck_shuffle'."""
         self.create_card(title, description, ops, destination="deck_shuffle", count=count)
 
-    def register_hook(self, event: str, scope: str = "center", code: str | None = None) -> None:
+    def register_hook(
+        self,
+        event: str,
+        scope: str = "center",
+        code: str | None = None,
+        *,
+        title: str = "",
+        condition_keys: list[str] | None = None,
+    ) -> None:
         """Install a persistent sandboxed hook (rejected inside hook-produced diffs)."""
         if code is None:
             if "def apply" not in scope:
                 raise ValueError("register_hook requires sandbox code; pass code=... with scope='player' or 'center'")
             code, scope = scope, "center"
-        self._ops.append({"op": "register_hook", "event": str(event), "scope": scope, "code": str(code)})
+        normalized_keys: list[str] = []
+        for value in condition_keys or []:
+            key = normalize_condition_key(value)
+            if key and key not in normalized_keys:
+                normalized_keys.append(key)
+        self._ops.append(
+            {
+                "op": "register_hook",
+                "event": str(event),
+                "scope": scope,
+                "code": str(code),
+                "title": str(title),
+                "condition_keys": normalized_keys,
+            }
+        )
 
     def unregister_hook(self, source_card_id: str) -> None:
         """Remove hooks registered by `source_card_id`."""

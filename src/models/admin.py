@@ -7,6 +7,8 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from models.game_state import normalize_condition_key
+
 
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -67,6 +69,7 @@ class SetConditionAdminAction(_StrictModel):
 
     @model_validator(mode="after")
     def bound_text_value(self) -> SetConditionAdminAction:
+        self.key = normalize_condition_key(self.key)
         if isinstance(self.value, str) and len(self.value) > 500:
             raise ValueError("condition text exceeds 500 characters")
         return self
@@ -76,6 +79,11 @@ class RemoveConditionAdminAction(_StrictModel):
     kind: Literal["remove_condition"] = "remove_condition"
     player_id: str = Field(min_length=1, max_length=80)
     key: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.:-]+$")
+
+    @model_validator(mode="after")
+    def normalize_key(self) -> RemoveConditionAdminAction:
+        self.key = normalize_condition_key(self.key)
+        return self
 
 
 class RemoveHookAdminAction(_StrictModel):

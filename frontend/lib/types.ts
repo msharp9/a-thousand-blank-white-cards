@@ -284,6 +284,8 @@ export type HookSnapshot = {
   event: string;
   scope: "player" | "center";
   owner_id?: string | null;
+  title?: string;
+  condition_keys?: string[];
 };
 
 // A late joiner who watches but never plays (joined after the game left the

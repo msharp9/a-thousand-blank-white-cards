@@ -207,7 +207,7 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
   discarded when the last linked status expires.
 - `set_card_attribute` — `{"card_target": ..., "key": <str>, "value": ...}`
 - `create_card` — `{"title": ..., "description": ..., "ops": [...], "destination": ...}`
-- `register_hook` — `{"event": <GameEvent>, "scope": "center"|"player", "code": <sandbox code>}`
+- `register_hook` — `{"event": <GameEvent>, "scope": "center"|"player", "code": <sandbox code>, "title": <player-facing sentence>, "condition_keys": [<normalized key>, ...]}`
 - `custom_note` — `{"note": <str>}` — flavour / table-adjudicated actions with no engine effect.
 - `counter_play` — `{"mode": "negate"|"steal_hand"|"redirect"}` — reaction cards
   only (see REACTIONS below).

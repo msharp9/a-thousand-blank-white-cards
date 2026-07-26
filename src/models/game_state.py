@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, computed_field, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 HistoryKind = Literal[
     "draw",
@@ -23,6 +23,11 @@ HistoryKind = Literal[
     "discard",
     "admin_change",
 ]
+
+
+def normalize_condition_key(key: str) -> str:
+    """Return the canonical identity used for every open-ended condition."""
+    return key.strip().casefold()
 
 
 class WinCondition(BaseModel):
@@ -115,6 +120,27 @@ class Player(BaseModel):
     hand_public: bool = False
     hand_revealed_to: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_condition_maps(cls, data: Any) -> Any:
+        """Canonicalize persisted condition keys while preserving last-write wins."""
+        if not isinstance(data, dict):
+            return data
+        normalized = dict(data)
+        conditions: dict[str, Any] = {}
+        for key, value in (data.get("conditions") or {}).items():
+            canonical = normalize_condition_key(str(key))
+            if canonical:
+                conditions[canonical] = value
+        ttls: dict[str, int] = {}
+        for key, value in (data.get("condition_ttls") or {}).items():
+            canonical = normalize_condition_key(str(key))
+            if canonical and canonical in conditions:
+                ttls[canonical] = value
+        normalized["conditions"] = conditions
+        normalized["condition_ttls"] = ttls
+        return normalized
+
 
 class EpilogueCardOutcome(BaseModel):
     """One voted-on card's outcome, as surfaced to the final results screen."""
@@ -151,6 +177,18 @@ class HookSpec(BaseModel):
     scope: Literal["player", "center"] = "center"
     owner_id: str | None = None  # player id for player-scoped hooks
     code: str  # sandbox-validated snippet: def apply(state, ctx)
+    title: str = Field(default="", max_length=300)
+    condition_keys: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("condition_keys")
+    @classmethod
+    def _normalize_condition_keys(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            key = normalize_condition_key(value)
+            if key and key not in normalized:
+                normalized.append(key)
+        return normalized
 
 
 class RuleBinding(BaseModel):
@@ -180,6 +218,14 @@ class ConditionBinding(BaseModel):
     had_previous: bool = False
     previous_value: Any = None
     previous_ttl: int | None = None
+
+    @field_validator("key")
+    @classmethod
+    def _normalize_key(cls, value: str) -> str:
+        key = normalize_condition_key(value)
+        if not key:
+            raise ValueError("condition key cannot be blank")
+        return key
 
 
 class TurnOrderBinding(BaseModel):
@@ -526,6 +572,9 @@ class GameState(BaseModel):
         without a ttl clears any stale ttl for the key, so the condition
         persists until removed.
         """
+        key = normalize_condition_key(key)
+        if not key:
+            raise ValueError("condition key cannot be blank")
         players: list[Player] = []
         for p in self.players:
             if p.id != player_id:
@@ -543,6 +592,7 @@ class GameState(BaseModel):
 
         A no-op (still returns a fresh copy) if the key is absent.
         """
+        key = normalize_condition_key(key)
         players = [
             p.model_copy(
                 update={
