@@ -927,8 +927,16 @@ def _reduce_register_hook(state: GameState, op: RegisterHookOp, ctx: HookContext
     existing = [h for h in state.hooks if h.source_card_id == source]
     if len(existing) >= _MAX_HOOKS_PER_CARD:
         raise ValueError(f"register_hook: card {source!r} already registered {_MAX_HOOKS_PER_CARD} hooks")
+    used_suffixes = []
+    prefix = f"hook-{source}-"
+    for hook in existing:
+        if hook.id.startswith(prefix):
+            try:
+                used_suffixes.append(int(hook.id.removeprefix(prefix)))
+            except ValueError:
+                continue
     spec = HookSpec(
-        id=f"hook-{source}-{len(existing)}",
+        id=f"{prefix}{max(used_suffixes, default=-1) + 1}",
         source_card_id=source,
         event=op.event,
         scope=op.scope,

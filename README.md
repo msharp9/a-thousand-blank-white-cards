@@ -50,6 +50,19 @@ A game runs in these steps:
    to keep in the pile for future games. The rest are discarded.
    - **Note:** Many players agree that creating a card that gets the most votes during the Epilogue phase is the true victory.
 
+### Voted host corrections
+
+During play, the host has a mobile-friendly **Host** panel for resolving
+table-policed rules and correcting mistakes. It can adjust scores, move public
+cards or the top/bottom deck card between zones, shuffle or reshuffle, add or
+remove player conditions, remove hooks, eliminate players, or end the game.
+The results screen also lets the host correct scores and winners.
+
+Corrections are never silent: the server previews the complete bundle, pauses
+gameplay, and asks every other seated player to approve it. The whole bundle is
+applied atomically only after unanimous acceptance; one rejection or a
+60-second timeout cancels it. Spectators can follow the vote but do not vote.
+
 **The basic game.** In the simplest game, every card just **adds or subtracts
 points** from one or more players — no special rules needed. That's all it takes
 to play a full game start to finish.

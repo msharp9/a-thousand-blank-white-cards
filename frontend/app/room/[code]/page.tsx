@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { AdminProposalDialog } from "@/components/admin-proposal-dialog";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import { GameTable } from "@/components/game-table";
 import { Hand } from "@/components/hand";
 import { HandRevealDialog } from "@/components/hand-reveal-dialog";
 import { HistoryModal } from "@/components/history-modal";
+import { HostControlOverlay } from "@/components/host-control-overlay";
 import { HouseRulesZone } from "@/components/house-rules-zone";
 import { InteractionPanel } from "@/components/interaction-panel";
 import { FeltDropZone, PlayDndContext } from "@/components/play-dnd";
@@ -86,6 +88,7 @@ export default function RoomPage() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [resultsAdminOpen, setResultsAdminOpen] = useState(false);
   const compactViewport = useCompactViewport();
 
   // Once the stored name hydrates in, adopt it and skip the name gate.
@@ -316,6 +319,21 @@ export default function RoomPage() {
           send(interactionResponseMessage(interactionId, payload))
         }
       />
+      <AdminProposalDialog
+        proposal={gameState?.pending_admin_proposal}
+        players={gameState?.players ?? []}
+        myPlayerId={myPlayerId}
+        isHost={isHost}
+        isSpectator={isSpectator}
+        send={send}
+      />
+      {resultsAdminOpen && gameState?.phase === "results" && (
+        <HostControlOverlay
+          gameState={gameState}
+          send={send}
+          onClose={() => setResultsAdminOpen(false)}
+        />
+      )}
       {pendingPlay && (
         <ReactionWindow
           pending={pendingPlay}
@@ -374,6 +392,8 @@ export default function RoomPage() {
           <GameNavTabs
             gameState={gameState}
             roomCode={code}
+            isHost={isHost}
+            send={send}
             className="order-last w-full sm:order-none sm:w-auto"
           />
         )}
@@ -611,6 +631,7 @@ export default function RoomPage() {
             log={log}
             isHost={isHost}
             send={send}
+            onCorrectResults={() => setResultsAdminOpen(true)}
             onBack={() => router.push("/")}
           />
         )}

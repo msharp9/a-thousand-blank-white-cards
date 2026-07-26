@@ -21,6 +21,7 @@ HistoryKind = Literal[
     "card_fallback",
     "dice_roll",
     "discard",
+    "admin_change",
 ]
 
 

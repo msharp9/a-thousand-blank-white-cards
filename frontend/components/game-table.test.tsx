@@ -21,6 +21,7 @@ function baseState(
 ): GameStateSnapshot {
   return {
     room_code: "ABCD",
+    mode: "online",
     phase: "playing",
     players: [player(), player({ id: "me", name: "Me" })],
     spectators: [],

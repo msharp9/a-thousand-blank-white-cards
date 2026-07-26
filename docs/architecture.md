@@ -189,12 +189,22 @@ discriminated union (`ClientMsg`, keyed on `type`) validated by a single
 
 - **Client → server**: `join`, `start`, `play`, `pass` / `end_turn`,
   `create_card`, `redraft_card`, `preview_card`, `interaction_response`,
-  `epilogue_vote`. There
+  `admin_propose`, `admin_vote`, `admin_cancel`, `epilogue_start`,
+  `epilogue_vote`, `epilogue_done`, `epilogue_finalize`. There
   is no client `draw` message: drawing is auto-triggered server-side at the
   start of each turn (see `_start_turn` in `board/rooms/room.py`).
 - **Server → client**: `state`, `brewing`, `card_interpreted`, `effect_applied`,
   `preview_result`, `prompt_choice`, `interaction_request`,
-  `interaction_progress`, `epilogue`, `error`.
+  `interaction_progress`, `admin_proposal_result`, `epilogue`, `error`.
+
+Host correction proposals are typed action bundles rather than arbitrary state
+patches. The room validates and previews the full bundle against a copy of the
+current state, pauses gameplay and the turn timer, then requires unanimous
+acceptance from every other seated player. Spectators do not vote. Any rejection
+or the 60-second deadline cancels the proposal; unanimous acceptance applies the
+bundle atomically without firing gameplay hooks. The reconnect snapshot includes
+only the privacy-safe preview and named vote status, never hidden card identities
+or the raw action payload.
 
 **Handshake and close codes** (`board/ws.py`): the socket is accepted, then the
 first message MUST be a `join` carrying a valid `player_id`. The frontend

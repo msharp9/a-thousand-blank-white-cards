@@ -16,6 +16,7 @@ vi.mock("./create-card-dialog", () => ({
 function setupState(): GameStateSnapshot {
   return {
     room_code: "ROOM01",
+    mode: "online",
     phase: "setup",
     players: [
       {

@@ -18,6 +18,7 @@ interface ResultsScreenProps {
   log: string[];
   isHost: boolean;
   send: (msg: ClientMsg) => void;
+  onCorrectResults?: () => void;
   onBack: () => void;
 }
 
@@ -38,17 +39,19 @@ export function ResultsScreen({
   log,
   isHost,
   send,
+  onCorrectResults,
   onBack,
 }: ResultsScreenProps) {
   const isFinal = gameState.phase === "ended";
 
-  let winnerIds = gameState.winner_ids ?? [];
-  if (winnerIds.length === 0 && gameState.players.length > 0) {
+  let winnerIds = gameState.winner_ids;
+  if (winnerIds === undefined && gameState.players.length > 0) {
     const top = Math.max(...gameState.players.map((p) => p.score));
     winnerIds = gameState.players
       .filter((p) => p.score === top)
       .map((p) => p.id);
   }
+  winnerIds ??= [];
 
   const iWon = winnerIds.includes(myPlayerId);
   const winnerNames = gameState.players
@@ -111,13 +114,23 @@ export function ResultsScreen({
         />
       )}
       {!isFinal && isHost && (
-        <Button
-          size="lg"
-          className="font-marker text-lg"
-          onClick={() => send({ type: "epilogue_start" })}
-        >
-          Start epilogue
-        </Button>
+        <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2">
+          <Button
+            variant="outline"
+            size="lg"
+            className="font-marker text-lg"
+            onClick={onCorrectResults}
+          >
+            Correct results
+          </Button>
+          <Button
+            size="lg"
+            className="font-marker text-lg"
+            onClick={() => send({ type: "epilogue_start" })}
+          >
+            Start epilogue
+          </Button>
+        </div>
       )}
       {!isFinal && !isHost && (
         <p className="font-hand text-base italic text-muted-foreground">

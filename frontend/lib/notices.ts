@@ -26,6 +26,14 @@ export type ViewportNotice =
     }
   | {
       id: string;
+      lane: "top";
+      kind: "admin";
+      message: string;
+      outcome: "applied" | "rejected" | "expired" | "cancelled";
+      timeoutMs: 5000;
+    }
+  | {
+      id: string;
       lane: "arbiter";
       kind: "arbiter";
       message: string;

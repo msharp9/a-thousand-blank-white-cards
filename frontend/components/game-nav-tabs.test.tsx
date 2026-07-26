@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GameNavTabs } from "./game-nav-tabs";
 import type { GameStateSnapshot } from "@/lib/types";
 
@@ -9,6 +9,7 @@ function baseState(
 ): GameStateSnapshot {
   return {
     room_code: "ABCD",
+    mode: "online",
     phase: "playing",
     players: [
       {
@@ -52,8 +53,17 @@ function baseState(
 }
 
 describe("GameNavTabs", () => {
+  const nav = (isHost = false) => (
+    <GameNavTabs
+      gameState={baseState()}
+      roomCode="ABCD"
+      isHost={isHost}
+      send={vi.fn()}
+    />
+  );
+
   it("defaults to Table with no overlay mounted", () => {
-    render(<GameNavTabs gameState={baseState()} roomCode="ABCD" />);
+    render(nav());
     expect(screen.getByRole("button", { name: "Table" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -64,7 +74,7 @@ describe("GameNavTabs", () => {
 
   it("mounts the Gallery overlay on tab click and unmounts on Table", async () => {
     const user = userEvent.setup();
-    render(<GameNavTabs gameState={baseState()} roomCode="ABCD" />);
+    render(nav());
 
     await user.click(screen.getByRole("button", { name: "Gallery" }));
     expect(screen.getByText("The Deck")).toBeTruthy();
@@ -76,7 +86,7 @@ describe("GameNavTabs", () => {
 
   it("mounts the Scores overlay on tab click and unmounts on Table", async () => {
     const user = userEvent.setup();
-    render(<GameNavTabs gameState={baseState()} roomCode="ABCD" />);
+    render(nav());
 
     await user.click(screen.getByRole("button", { name: "Scores" }));
     expect(screen.getByText("Scoreboard")).toBeTruthy();
@@ -88,7 +98,7 @@ describe("GameNavTabs", () => {
 
   it("switches directly between overlays without needing Table in between", async () => {
     const user = userEvent.setup();
-    render(<GameNavTabs gameState={baseState()} roomCode="ABCD" />);
+    render(nav());
 
     await user.click(screen.getByRole("button", { name: "Gallery" }));
     expect(screen.getByText("The Deck")).toBeTruthy();
@@ -100,7 +110,7 @@ describe("GameNavTabs", () => {
 
   it("closes the open overlay on Escape", async () => {
     const user = userEvent.setup();
-    render(<GameNavTabs gameState={baseState()} roomCode="ABCD" />);
+    render(nav());
 
     await user.click(screen.getByRole("button", { name: "Gallery" }));
     expect(screen.getByText("The Deck")).toBeTruthy();
@@ -111,5 +121,18 @@ describe("GameNavTabs", () => {
       "aria-pressed",
       "true",
     );
+  });
+
+  it("shows mobile-friendly host controls only to the host", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(nav());
+    expect(screen.queryByRole("button", { name: "Host" })).toBeNull();
+
+    rerender(nav(true));
+    await user.click(screen.getByRole("button", { name: "Host" }));
+    expect(screen.getByRole("heading", { name: "Host controls" })).toBeTruthy();
+    expect(
+      screen.getByText("Every change needs unanimous table approval"),
+    ).toBeTruthy();
   });
 });
