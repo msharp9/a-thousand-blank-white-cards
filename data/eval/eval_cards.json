@@ -877,25 +877,24 @@
   {
     "id": "eval-036",
     "title": "Total Chaos",
-    "description": "Gain 5, everyone else loses 3 and skips, take an extra turn, and destroy all cards in play.",
+    "description": "Absolute pandemonium: you gain 5 points, everyone else loses 3, everyone else skips their next turn, you take an extra turn, and every card currently in play is destroyed.",
     "alt_text": null,
     "human_canonical": {
       "target": "all",
       "placement": "discard",
-      "magnitude_sign": "positive",
       "ops": [
         {
           "op": "add_points",
           "args": {
-            "target": "self",
-            "amount": 5
+            "amount": 5,
+            "target": "self"
           }
         },
         {
           "op": "subtract_points",
           "args": {
-            "target": "all_others",
-            "amount": 3
+            "amount": 3,
+            "target": "all_others"
           }
         },
         {
@@ -919,7 +918,8 @@
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)\n    state.subtract_points('all_others', 3)\n    state.skip_turn('all_others')\n    state.extra_turn('self')\n    state.destroy_card(card_target='all_in_play')"
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)\n    state.subtract_points('all_others', 3)\n    state.skip_turn('all_others')\n    state.extra_turn('self')\n    state.destroy_card(card_target='all_in_play')",
+      "magnitude_sign": "positive"
     }
   },
   {
@@ -980,12 +980,11 @@
   {
     "id": "eval-039",
     "title": "Spicy Uno",
-    "description": "Use basic Uno rules and add colored Draw 2, Draw 4, and Reverse cards to the deck.",
+    "description": "Use basic Uno ending and draw rules, color your remaining hand red, and shuffle Draw 2, Draw 4, and Reverse cards into the deck.",
     "alt_text": null,
     "human_canonical": {
       "target": "all",
       "placement": "center",
-      "magnitude_sign": "neutral",
       "steps": [
         {
           "kind": "ops",
@@ -1004,8 +1003,15 @@
               "amount": 0
             },
             {
+              "op": "set_card_attribute",
+              "card_target": "all_in_hand",
+              "key": "color",
+              "value": "red"
+            },
+            {
               "op": "create_card",
               "title": "Draw 2",
+              "description": "The next player draws 2 and skips their turn.",
               "ops": [
                 {
                   "op": "draw_cards",
@@ -1013,15 +1019,25 @@
                     "target": "right_neighbor",
                     "amount": 2
                   }
+                },
+                {
+                  "op": "skip_turn",
+                  "args": {
+                    "target": "right_neighbor"
+                  }
                 }
               ],
               "attributes": {
-                "color": "red"
-              }
+                "color": "red",
+                "symbol": "draw_2"
+              },
+              "destination": "deck_shuffle",
+              "count": 1
             },
             {
               "op": "create_card",
               "title": "Draw 4",
+              "description": "The next player draws 4 and skips their turn.",
               "ops": [
                 {
                   "op": "draw_cards",
@@ -1029,15 +1045,25 @@
                     "target": "right_neighbor",
                     "amount": 4
                   }
+                },
+                {
+                  "op": "skip_turn",
+                  "args": {
+                    "target": "right_neighbor"
+                  }
                 }
               ],
               "attributes": {
-                "color": "wild"
-              }
+                "color": "wild",
+                "symbol": "draw_4"
+              },
+              "destination": "deck_shuffle",
+              "count": 1
             },
             {
               "op": "create_card",
               "title": "Reverse",
+              "description": "Reverse turn order.",
               "ops": [
                 {
                   "op": "reverse_order",
@@ -1045,26 +1071,29 @@
                 }
               ],
               "attributes": {
-                "color": "red"
-              }
+                "color": "red",
+                "symbol": "reverse"
+              },
+              "destination": "deck_shuffle",
+              "count": 1
             }
           ]
         }
       ],
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
-      "sandbox": null
+      "sandbox": null,
+      "magnitude_sign": "neutral"
     }
   },
   {
     "id": "eval-040",
     "title": "Wild Uno",
-    "description": "Use Uno ending rules and enforce color alignment on every play.",
+    "description": "Use Uno's empty-hand ending and zero-draw rule. Track the color of each played card and reject plays that do not match the current color.",
     "alt_text": null,
     "human_canonical": {
       "target": "all",
       "placement": "center",
-      "magnitude_sign": "neutral",
       "steps": [
         {
           "kind": "ops",
@@ -1102,9 +1131,10 @@
           ]
         }
       ],
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
-      "sandbox": null
+      "sandbox": null,
+      "magnitude_sign": "neutral"
     }
   },
   {
@@ -1728,6 +1758,174 @@
       "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.move_cards(card_target='last_played', to_zone='hand', to_player='card_owner')"
+    }
+  },
+  {
+    "id": "eval-100",
+    "title": "Win the Game",
+    "description": "Congratulations! You win immediately. The game is over. Really.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "end_game",
+          "args": {
+            "winner": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.end_game('self')",
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "id": "eval-101",
+    "title": "Person with Fewest Points Wins",
+    "description": "New game rule: the player with the FEWEST points at game end wins instead.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "lowest_points"
+          }
+        }
+      ],
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('lowest_points')",
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "id": "eval-102",
+    "title": "Red Card Rule",
+    "description": "At the physical table, only red cards may be played while this rule remains in the center.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "in_person",
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.current_color",
+            "value": "red"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_validate_play",
+            "scope": "center",
+            "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.current_color', 'red')\n    state.register_hook('on_validate_play', scope='center', code=\"def apply(state, ctx):\\n    color = ctx.get('card_attributes', {}).get('color')\\n    current = state.rules().get('extra', {}).get('current_color')\\n    if current and color != current:\\n        state.reject_play('Card color must match ' + current)\\n\")",
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "id": "eval-103",
+    "title": "Sudden Death",
+    "description": "New rule, effective immediately: whoever has the most points right now wins. The game is over.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "highest_points"
+          }
+        },
+        {
+          "op": "end_game",
+          "args": {}
+        }
+      ],
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('highest_points')\n    state.end_game()",
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "id": "eval-104",
+    "title": "The Big Finish",
+    "description": "End the game now. The player with the most points wins.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "end_game",
+          "args": {
+            "winner": "player_with_most_points"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.end_game(winners=['player_with_most_points'])\n",
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "id": "eval-105",
+    "title": "The Ejector Seat",
+    "description": "Choose a player. They are out of the game: their hand is discarded and they take no more turns. Any cards they have in play stay in effect.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "eliminate_player",
+          "args": {
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.eliminate_player('id:' + pid)\n",
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "id": "eval-106",
+    "title": "Boomerang",
+    "description": "Like a boomerang, this card comes right back: after it resolves, return it to its owner's hand instead of the discard pile.",
+    "alt_text": "a wooden boomerang curving back toward the hand that threw it",
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "this",
+            "to_target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card('this', 'self')",
+      "magnitude_sign": "neutral"
     }
   }
 ]

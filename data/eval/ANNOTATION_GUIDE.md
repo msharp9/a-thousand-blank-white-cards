@@ -11,10 +11,10 @@ agent turns free-text cards into game effects.
   and transcribed by a vision model. Each record has a real `image_url`, a
   verbatim `title` + `description`, an `alt_text` (the art description, split
   out of the old bracketed description prefix), and a filled `human_canonical`.
-- **`eval_cards.json`** — the hand-annotated **gold** set (~35 cards) the eval
+- **`eval_cards.json`** — the hand-annotated **gold** set (~73 cards) the eval
   harness scores against. No `image_url`: entries were authored for
   coverage/diversity rather than transcribed from a specific photo.
-- **`eval_cards_hard.json`** — the **hard** set (~25 cards): deliberately
+- **`eval_cards_hard.json`** — the **hard** set (~35 cards): deliberately
   compositional effects (`ops: null`, sandbox-only) that stretch the agent —
   hand/deck inspection, alt_text queries, hooks, reactions, multi-step
   conditionals.

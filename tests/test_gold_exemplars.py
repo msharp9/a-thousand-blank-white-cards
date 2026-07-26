@@ -20,6 +20,7 @@ from models.effects import (
     OpsStep,
     ScrambleOrderOp,
     SetWinConditionOp,
+    ShuffleDeckOp,
     SkipTurnOp,
     SnippetStep,
     StealPointsOp,
@@ -31,11 +32,16 @@ DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 
 
 def _gold_card(title: str) -> dict:
-    cards = json.loads((DATA_DIR / "seed_cards_gold.json").read_text())
-    for card in cards:
-        if card["title"] == title:
-            return card
-    raise AssertionError(f"No gold card titled {title!r}")
+    sources = (
+        (DATA_DIR / "seed_cards_gold.json", "canonical"),
+        (DATA_DIR / "eval" / "eval_cards.json", "human_canonical"),
+        (DATA_DIR / "eval" / "eval_cards_hard.json", "human_canonical"),
+    )
+    for path, canonical_key in sources:
+        for card in json.loads(path.read_text()):
+            if card["title"] == title:
+                return {**card, "canonical": card[canonical_key]}
+    raise AssertionError(f"No executable corpus card titled {title!r}")
 
 
 def test_card_counter_compiles_draw_then_scores_hand_via_snippet() -> None:
@@ -88,6 +94,15 @@ def test_total_chaos_chains_five_ops() -> None:
         DestroyCardOp,
     ]
     assert prog.requires_choice is False
+
+
+def test_controlled_chaos_is_symmetric_and_does_not_change_turn_counts() -> None:
+    card = _gold_card("Controlled Chaos")
+    prog = compile_card({"id": "c", "title": card["title"], "ops": card["canonical"]["ops"]})
+    assert [type(op) for op in prog.ops] == [ScrambleOrderOp, ShuffleDeckOp, DrawCardsOp]
+    assert prog.ops[1].include_discard is True
+    assert prog.ops[2].target == "all"
+    assert prog.ops[2].amount == 2
 
 
 def test_basic_uno_expresses_empty_hand_end_and_zero_draw() -> None:

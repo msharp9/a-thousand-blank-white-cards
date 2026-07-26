@@ -102,14 +102,14 @@ seed card if you happen to draw it).
       happens once and the score uses the post-draw hand size.
 - [ ] **Rule replacement** — Author a card described like: *"Use Uno's
       empty-hand ending and zero-draw rule. Track the color of each played
-      card and reject plays that do not match the current color."* (seed deck:
-      "Wild Uno"). Confirm draw count 0, the empty-hand end/win rules, and the
+      card and reject plays that do not match the current color."* (eval
+      reference: "Wild Uno"). Confirm draw count 0, the empty-hand end/win rules, and the
       color-alignment rule appear in the dynamic-state panel and affect later
       turns.
 - [ ] **Sealed auction** — Author a card described like: *"Everyone secretly
       bids points for this card. The highest bidder pays their bid and takes
       this card into their hand. Ties go to the earliest player in turn
-      order."* (seed deck: "Going Once, Going Twice"). Bid from both devices
+      order."* (hard eval reference: "Going Once, Going Twice"). Bid from both devices
       and confirm no values leak before completion. Confirm the winner pays,
       receives the played card, and tied bids follow visible turn order.
 - [ ] **Drawing and vote chain** — Author a card described like: *"Everyone

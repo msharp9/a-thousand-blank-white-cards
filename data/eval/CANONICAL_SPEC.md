@@ -163,8 +163,8 @@ input mid-resolution**. Each item is one of:
   step writes the arrangement back with `move_cards` (see gold "Crystal Ball").
 
 Bounds: ≤ 8 steps per plan, ≤ 4 interaction barriers, byte caps enforced by
-`models.effects.ResolutionPlan`. Exemplars: gold "Going Once, Going Twice"
-(sealed auction), "Cat Show" (drawing contest + vote).
+`models.effects.ResolutionPlan`. Exemplars: hard eval "Going Once, Going Twice"
+(sealed auction) and seed gold "Cat Show" (drawing contest + vote).
 
 ### OPS — structured operations
 

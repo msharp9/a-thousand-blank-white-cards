@@ -576,5 +576,40 @@
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    milled = min(3, state.deck_size)\n    if milled > 0:\n        state.move_cards(from_zone='deck', selector='top', count=milled, to_zone='discard')\n        state.add_points('self', milled)"
     }
+  },
+  {
+    "id": "hard-070",
+    "title": "Going Once, Going Twice",
+    "description": "Everyone secretly bids points for this card. The highest bidder pays their bid and takes this card into their hand. Ties go to the earliest player in turn order.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "bids",
+          "request": {
+            "kind": "number",
+            "prompt": "How many points do you bid?",
+            "audience": "all",
+            "sealed": true,
+            "minimum": 0,
+            "maximum": 100,
+            "integer": true
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    bids = ctx['interactions']['bids']\n    best = max(bids.values())\n    winner = [pid for pid in state.turn_order if bids[pid] == best][0]\n    state.subtract_points('id:' + winner, int(best))\n    state.transfer_card('this', 'id:' + winner)\n",
+          "explanation": "Resolve a sealed bid deterministically, charge the winner, and move the played card with the canonical transfer_card API."
+        }
+      ],
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null,
+      "magnitude_sign": "neutral",
+      "ops": null
+    }
   }
 ]

@@ -230,48 +230,6 @@
     }
   },
   {
-    "id": "seed-gold-010",
-    "title": "Win the Game",
-    "description": "Congratulations! You win immediately. The game is over. Really.",
-    "alt_text": null,
-    "canonical": {
-      "target": "self",
-      "placement": "discard",
-      "ops": [
-        {
-          "op": "end_game",
-          "args": {
-            "winner": "self"
-          }
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.end_game('self')"
-    }
-  },
-  {
-    "id": "seed-gold-011",
-    "title": "Person with Fewest Points Wins",
-    "description": "New game rule: the player with the FEWEST points at game end wins instead.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "trigger": "on_game_end",
-      "ops": [
-        {
-          "op": "set_win_condition",
-          "args": {
-            "kind": "lowest_points"
-          }
-        }
-      ],
-      "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('lowest_points')"
-    }
-  },
-  {
     "id": "seed-gold-012",
     "title": "Draw Bonus Rule",
     "description": "For the rest of the game, whenever a player takes their draw step, they gain 1 point.",
@@ -384,36 +342,6 @@
     }
   },
   {
-    "id": "seed-gold-016",
-    "title": "Red Card Rule",
-    "description": "At the physical table, only red cards may be played while this rule remains in the center.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "venue": "in_person",
-      "ops": [
-        {
-          "op": "set_rule",
-          "args": {
-            "path": "extra.current_color",
-            "value": "red"
-          }
-        },
-        {
-          "op": "register_hook",
-          "args": {
-            "event": "on_validate_play",
-            "scope": "center",
-            "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"
-          }
-        }
-      ],
-      "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.current_color', 'red')\n    state.register_hook('on_validate_play', scope='center', code=\"def apply(state, ctx):\\n    color = ctx.get('card_attributes', {}).get('color')\\n    current = state.rules().get('extra', {}).get('current_color')\\n    if current and color != current:\\n        state.reject_play('Card color must match ' + current)\\n\")"
-    }
-  },
-  {
     "id": "seed-gold-017",
     "title": "This Card is Worth 10 Points If You Keep It",
     "description": "Hold onto this card. At game end, it's worth 10 points — but only if you still have it.",
@@ -458,114 +386,6 @@
     }
   },
   {
-    "id": "seed-gold-019",
-    "title": "Spicy Uno",
-    "description": "Use basic Uno ending and draw rules, color your remaining hand red, and shuffle Draw 2, Draw 4, and Reverse cards into the deck.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "steps": [
-        {
-          "kind": "ops",
-          "ops": [
-            {
-              "op": "set_win_condition",
-              "kind": "empty_hand"
-            },
-            {
-              "op": "set_rule",
-              "path": "end_condition.type",
-              "value": "empty_hand"
-            },
-            {
-              "op": "change_draw_count",
-              "amount": 0
-            },
-            {
-              "op": "set_card_attribute",
-              "card_target": "all_in_hand",
-              "key": "color",
-              "value": "red"
-            },
-            {
-              "op": "create_card",
-              "title": "Draw 2",
-              "description": "The next player draws 2 and skips their turn.",
-              "ops": [
-                {
-                  "op": "draw_cards",
-                  "args": {
-                    "target": "right_neighbor",
-                    "amount": 2
-                  }
-                },
-                {
-                  "op": "skip_turn",
-                  "args": {
-                    "target": "right_neighbor"
-                  }
-                }
-              ],
-              "attributes": {
-                "color": "red",
-                "symbol": "draw_2"
-              },
-              "destination": "deck_shuffle",
-              "count": 1
-            },
-            {
-              "op": "create_card",
-              "title": "Draw 4",
-              "description": "The next player draws 4 and skips their turn.",
-              "ops": [
-                {
-                  "op": "draw_cards",
-                  "args": {
-                    "target": "right_neighbor",
-                    "amount": 4
-                  }
-                },
-                {
-                  "op": "skip_turn",
-                  "args": {
-                    "target": "right_neighbor"
-                  }
-                }
-              ],
-              "attributes": {
-                "color": "wild",
-                "symbol": "draw_4"
-              },
-              "destination": "deck_shuffle",
-              "count": 1
-            },
-            {
-              "op": "create_card",
-              "title": "Reverse",
-              "description": "Reverse turn order.",
-              "ops": [
-                {
-                  "op": "reverse_order",
-                  "args": {}
-                }
-              ],
-              "attributes": {
-                "color": "red",
-                "symbol": "reverse"
-              },
-              "destination": "deck_shuffle",
-              "count": 1
-            }
-          ]
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": null
-    }
-  },
-  {
     "id": "seed-gold-020",
     "title": "Card Counter",
     "description": "Draw 2 cards, then gain 1 point for every card now in your hand. The bigger your hand, the bigger the bonus.",
@@ -588,128 +408,6 @@
           "kind": "snippet",
           "code": "def apply(state, ctx):\n    hand_size = state.player(state.actor_id).hand_size\n    state.add_points('self', hand_size)\n",
           "explanation": "Read the hand only after the draw step has committed."
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": null
-    }
-  },
-  {
-    "id": "seed-gold-021",
-    "title": "Sudden Death",
-    "description": "New rule, effective immediately: whoever has the most points right now wins. The game is over.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "ops": [
-        {
-          "op": "set_win_condition",
-          "args": {
-            "kind": "highest_points"
-          }
-        },
-        {
-          "op": "end_game",
-          "args": {}
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('highest_points')\n    state.end_game()"
-    }
-  },
-  {
-    "id": "seed-gold-022",
-    "title": "Total Chaos",
-    "description": "Absolute pandemonium: you gain 5 points, everyone else loses 3, everyone else skips their next turn, you take an extra turn, and every card currently in play is destroyed.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "discard",
-      "ops": [
-        {
-          "op": "add_points",
-          "args": {
-            "amount": 5,
-            "target": "self"
-          }
-        },
-        {
-          "op": "subtract_points",
-          "args": {
-            "amount": 3,
-            "target": "all_others"
-          }
-        },
-        {
-          "op": "skip_turn",
-          "args": {
-            "target": "all_others"
-          }
-        },
-        {
-          "op": "extra_turn",
-          "args": {
-            "target": "self"
-          }
-        },
-        {
-          "op": "destroy_card",
-          "args": {
-            "card_target": "all_in_play"
-          }
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)\n    state.subtract_points('all_others', 3)\n    state.skip_turn('all_others')\n    state.extra_turn('self')\n    state.destroy_card(card_target='all_in_play')"
-    }
-  },
-  {
-    "id": "seed-gold-023",
-    "title": "Wild Uno",
-    "description": "Use Uno's empty-hand ending and zero-draw rule. Track the color of each played card and reject plays that do not match the current color.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "steps": [
-        {
-          "kind": "ops",
-          "ops": [
-            {
-              "op": "set_win_condition",
-              "kind": "empty_hand"
-            },
-            {
-              "op": "set_rule",
-              "path": "end_condition.type",
-              "value": "empty_hand"
-            },
-            {
-              "op": "change_draw_count",
-              "amount": 0
-            },
-            {
-              "op": "set_rule",
-              "path": "extra.current_color",
-              "value": "red"
-            },
-            {
-              "op": "register_hook",
-              "event": "on_validate_play",
-              "scope": "center",
-              "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"
-            },
-            {
-              "op": "register_hook",
-              "event": "on_play",
-              "scope": "center",
-              "code": "def apply(state, ctx):\n    card = state.card(ctx['card_id'])\n    if card:\n        color = card.get('attributes', {}).get('color')\n        if color:\n            state.set_rule('extra.current_color', color)\n"
-            }
-          ]
         }
       ],
       "trigger": null,
@@ -742,39 +440,6 @@
       "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.scramble_order()\n    state.steal_points('player_with_most_points', 'self', 4)"
-    }
-  },
-  {
-    "id": "seed-gold-025",
-    "title": "Going Once, Going Twice",
-    "description": "Everyone secretly bids points for this card. The highest bidder pays their bid and takes this card into their hand. Ties go to the earliest player in turn order.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "discard",
-      "steps": [
-        {
-          "kind": "interaction",
-          "result_key": "bids",
-          "request": {
-            "kind": "number",
-            "prompt": "How many points do you bid?",
-            "audience": "all",
-            "sealed": true,
-            "minimum": 0,
-            "maximum": 100,
-            "integer": true
-          }
-        },
-        {
-          "kind": "snippet",
-          "code": "def apply(state, ctx):\n    bids = ctx['interactions']['bids']\n    best = max(bids.values())\n    winner = [pid for pid in state.turn_order if bids[pid] == best][0]\n    state.subtract_points('id:' + winner, int(best))\n    state.transfer_card('this', 'id:' + winner)\n",
-          "explanation": "Resolve a sealed bid deterministically, charge the winner, and move the played card with the canonical transfer_card API."
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": null
     }
   },
   {
@@ -1024,7 +689,7 @@
   {
     "id": "seed-gold-036",
     "title": "Fresh Deck Energy",
-    "description": "Add a brand new 'Wild Point' card to the top of the deck.",
+    "description": "Add a brand new 'Wild Point' card to the top of the deck. Wild Point: Gain 2 points.",
     "alt_text": null,
     "canonical": {
       "target": "none",
@@ -1567,27 +1232,6 @@
     }
   },
   {
-    "id": "seed-gold-058",
-    "title": "The Big Finish",
-    "description": "End the game now. The player with the most points wins.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "discard",
-      "venue": "all",
-      "trigger": null,
-      "ops": [
-        {
-          "op": "end_game",
-          "args": {
-            "winner": "player_with_most_points"
-          }
-        }
-      ],
-      "sandbox": "def apply(state, ctx):\n    state.end_game(winners=['player_with_most_points'])\n"
-    }
-  },
-  {
     "id": "seed-gold-059",
     "title": "Show and Tell",
     "description": "Hold your cards up for the class. Reveal your entire hand to every player.",
@@ -1710,7 +1354,7 @@
     "canonical": {
       "target": "none",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1908,27 +1552,6 @@
         }
       ],
       "sandbox": "def apply(state, ctx):\n    state.set_condition('all_others', 'drowsy', True, duration_turns=2)\n    state.add_points('self', 1)\n"
-    }
-  },
-  {
-    "id": "seed-gold-070",
-    "title": "The Ejector Seat",
-    "description": "Choose a player. They are out of the game: their hand is discarded and they take no more turns. Any cards they have in play stay in effect.",
-    "alt_text": null,
-    "canonical": {
-      "target": "player",
-      "placement": "discard",
-      "venue": "all",
-      "trigger": null,
-      "ops": [
-        {
-          "op": "eliminate_player",
-          "args": {
-            "target": "chosen_player"
-          }
-        }
-      ],
-      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.eliminate_player('id:' + pid)\n"
     }
   },
   {
@@ -2179,28 +1802,6 @@
     }
   },
   {
-    "id": "seed-gold-110",
-    "title": "Boomerang",
-    "description": "Like a boomerang, this card comes right back: after it resolves, return it to its owner's hand instead of the discard pile.",
-    "alt_text": "a wooden boomerang curving back toward the hand that threw it",
-    "canonical": {
-      "target": "card",
-      "placement": "discard",
-      "venue": "all",
-      "trigger": null,
-      "ops": [
-        {
-          "op": "transfer_card",
-          "args": {
-            "card_target": "this",
-            "to_target": "card_owner"
-          }
-        }
-      ],
-      "sandbox": "def apply(state, ctx):\n    state.transfer_card('this', 'card_owner')"
-    }
-  },
-  {
     "id": "seed-gold-111",
     "title": "Rewind",
     "description": "Undo the last thing that happened: the last card played is removed from the game, and you draw a fresh card.",
@@ -2250,6 +1851,38 @@
     }
   },
   {
+    "id": "seed-gold-113",
+    "title": "Controlled Chaos",
+    "description": "Scramble the turn order, shuffle the discard pile into the deck, then every player draws 2 cards.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "scramble_order",
+          "args": {}
+        },
+        {
+          "op": "shuffle_deck",
+          "args": {
+            "include_discard": true
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "all",
+            "amount": 2
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.scramble_order()\n    state.shuffle_deck(include_discard=True)\n    state.draw_cards('all', 2)"
+    }
+  },
+  {
     "id": "seed-filler-000",
     "title": "Compliment Someone",
     "description": "Say something genuinely nice about another player right now. They gain 1 point if they believe you.",
@@ -2257,7 +1890,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -2313,7 +1946,7 @@
     "canonical": {
       "target": "self",
       "placement": "player",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": "on_turn_start",
       "ops": [
         {
@@ -2506,7 +2139,7 @@
     "canonical": {
       "target": "player",
       "placement": "player",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -2621,7 +2254,7 @@
     "canonical": {
       "target": "self",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -2705,7 +2338,7 @@
     "canonical": {
       "target": "none",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -2754,7 +2387,7 @@
     "canonical": {
       "target": "all",
       "placement": "center",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -2782,7 +2415,7 @@
     "canonical": {
       "target": "self",
       "placement": "player",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -2950,7 +2583,7 @@
     "canonical": {
       "target": "all",
       "placement": "center",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -2978,7 +2611,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -3001,22 +2634,15 @@
   {
     "id": "seed-filler-027",
     "title": "Chaos Shuffle",
-    "description": "All players pass their hands to the player on their left simultaneously.",
+    "description": "Every live player passes their entire hand to the player on their left simultaneously.",
     "alt_text": null,
     "canonical": {
       "target": "all",
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
-        {
-          "op": "custom_note",
-          "args": {
-            "note": "All players pass their entire hands to the player on their left simultaneously."
-          }
-        }
-      ],
-      "sandbox": "def apply(state, ctx):\n    state.note('All players pass their entire hands to the player on their left simultaneously.')"
+      "ops": null,
+      "sandbox": "def apply(state, ctx):\n    live = []\n    for pid in state.turn_order:\n        if not state.player(pid).eliminated:\n            live.append(pid)\n    if len(live) < 2:\n        state.note('Chaos Shuffle needs at least two live players.')\n        return\n    actor = ctx.get('actor_id') or state.actor_id\n    start = live.index(actor)\n    order = live[start:] + live[:start]\n    marker_key = 'chaos_shuffle_origin'\n    marker_value = ctx.get('card_id') or 'chaos_shuffle'\n    state.set_card_attribute('all_in_hand', marker_key, marker_value)\n    for index in range(1, len(order)):\n        state.move_cards(from_zone='hand', selector='all', count=50, from_player='id:' + order[index], to_zone='hand', to_player='id:' + order[index - 1])\n    tagged = 'attr:' + marker_key + '=' + marker_value\n    state.move_cards(card_target=tagged, to_zone='hand', to_player='id:' + order[-1])\n    state.set_card_attribute(tagged, marker_key, None)"
     }
   },
   {
@@ -3027,7 +2653,7 @@
     "canonical": {
       "target": "all_others",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -3050,43 +2676,55 @@
   {
     "id": "seed-filler-029",
     "title": "The Clone",
-    "description": "Copy the effect of any card that has already been played this game. If you can remember it.",
+    "description": "Take the most recently played card that is still in the game and put it into your hand.",
     "alt_text": null,
     "canonical": {
       "target": "card",
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
-        {
-          "op": "custom_note",
-          "args": {
-            "note": "Copy the effect of any card that has already been played this game — if you can remember it. The table re-applies that effect."
-          }
-        }
-      ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Copy the effect of any card that has already been played this game, if you can remember it. The table re-applies that effect.')"
+      "ops": null,
+      "sandbox": "def apply(state, ctx):\n    for event in reversed(state.history(kind='play')):\n        card_id = event.get('card_id')\n        if card_id and state.card(card_id):\n            state.transfer_card('id:' + card_id, 'self')\n            return\n    state.note('No previously played card remains to clone.')"
     }
   },
   {
     "id": "seed-filler-030",
     "title": "Timeout",
-    "description": "The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence.",
+    "description": "Pause the game until every player presses Ready, or until 2 minutes have passed.",
     "alt_text": null,
     "canonical": {
-      "target": "none",
+      "target": "all",
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence."
+          "kind": "interaction",
+          "result_key": "ready",
+          "request": {
+            "kind": "choice",
+            "schema_version": 1,
+            "prompt": "Timeout! Press Ready when you are ready to resume.",
+            "audience": "all",
+            "sealed": false,
+            "timeout_seconds": 120,
+            "options": [
+              {
+                "id": "ready",
+                "label": "Ready"
+              }
+            ],
+            "min_selections": 1,
+            "max_selections": 1
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    state.note('Timeout ended. Play resumes.')"
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence.')"
+      "sandbox": null
     }
   },
   {
@@ -3120,7 +2758,7 @@
   {
     "id": "seed-filler-032",
     "title": "Hot Potato",
-    "description": "Pass this card to another player at any time, even out of turn, to give them a problem you don't want. They must play it on their next turn.",
+    "description": "The player on your right loses 2 points, then this card goes into their hand instead of the discard pile.",
     "alt_text": null,
     "canonical": {
       "target": "player",
@@ -3129,20 +2767,21 @@
       "trigger": null,
       "ops": [
         {
-          "op": "transfer_card",
+          "op": "subtract_points",
           "args": {
-            "card_target": "this",
-            "to_target": "chosen_player"
+            "target": "right_neighbor",
+            "amount": 2
           }
         },
         {
-          "op": "custom_note",
+          "op": "transfer_card",
           "args": {
-            "note": "The chosen player must play this card on their next turn. It may be passed again at any time, even out of turn."
+            "card_target": "this",
+            "to_target": "right_neighbor"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.transfer_card('this', chosen)\n    state.note('The chosen player must play this card on their next turn. It may be passed again at any time, even out of turn.')"
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('right_neighbor', 2)\n    state.transfer_card('this', 'right_neighbor')"
     }
   },
   {
@@ -3153,7 +2792,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -3210,7 +2849,7 @@
     "canonical": {
       "target": "self",
       "placement": "player",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -3233,30 +2872,29 @@
   {
     "id": "seed-filler-036",
     "title": "Nap Time",
-    "description": "Close your eyes for 30 seconds. You are resting. Nothing can target you during this time. Probably.",
+    "description": "Draw 3 cards, then skip your next turn. Enjoy the nap.",
     "alt_text": null,
     "canonical": {
       "target": "self",
-      "placement": "player",
+      "placement": "discard",
       "venue": "all",
       "trigger": null,
       "ops": [
         {
-          "op": "set_condition",
+          "op": "draw_cards",
           "args": {
             "target": "self",
-            "key": "napping",
-            "value": true
+            "amount": 3
           }
         },
         {
-          "op": "custom_note",
+          "op": "skip_turn",
           "args": {
-            "note": "Close your eyes for 30 seconds. Nothing can target you while napping. Probably. Afterwards, remove this card and the condition."
+            "target": "self"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'napping', True)\n    state.note('Close your eyes for 30 seconds. Nothing can target you while napping. Probably. Afterwards, remove this card and the condition.')"
+      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 3)\n    state.skip_turn('self')"
     }
   },
   {
@@ -3267,7 +2905,7 @@
     "canonical": {
       "target": "self",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -3290,7 +2928,7 @@
   {
     "id": "seed-filler-038",
     "title": "Mystery Box",
-    "description": "Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first.",
+    "description": "Discard 1 random card from your hand, then draw 2 cards.",
     "alt_text": null,
     "canonical": {
       "target": "self",
@@ -3299,20 +2937,21 @@
       "trigger": null,
       "ops": [
         {
-          "op": "draw_cards",
+          "op": "discard_random",
           "args": {
             "target": "self",
-            "amount": 1
+            "count": 1
           }
         },
         {
-          "op": "custom_note",
+          "op": "draw_cards",
           "args": {
-            "note": "Draw one card at random and play it immediately, without looking first."
+            "target": "self",
+            "amount": 2
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 1)\n    state.note('Draw one card at random and play it immediately, without looking first.')"
+      "sandbox": "def apply(state, ctx):\n    state.discard_random('self', 1)\n    state.draw_cards('self', 2)"
     }
   },
   {

@@ -18,9 +18,17 @@ DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 
 
 def _gold_plan(title: str) -> ResolutionPlan:
-    cards = json.loads((DATA_DIR / "seed_cards_gold.json").read_text())
-    card = next(card for card in cards if card["title"] == title)
-    return ResolutionPlan.model_validate({"steps": card["canonical"]["steps"]})
+    corpora = (
+        ("seed_cards_gold.json", "canonical"),
+        ("seed_cards_fillers.json", "canonical"),
+        ("eval/eval_cards_hard.json", "human_canonical"),
+    )
+    for path, canonical_key in corpora:
+        cards = json.loads((DATA_DIR / path).read_text())
+        card = next((card for card in cards if card["title"] == title), None)
+        if card is not None:
+            return ResolutionPlan.model_validate({"steps": card[canonical_key]["steps"]})
+    raise AssertionError(f"interaction card not found: {title}")
 
 
 def _room_with_plan(plan: ResolutionPlan) -> Room:
@@ -102,6 +110,32 @@ def test_auction_tie_uses_effective_turn_order() -> None:
     asyncio.run(scenario())
     assert [player.score for player in room.state.players] == [10, 5]
     assert room.state.get_player("p2").hand == ["card"]
+
+
+def test_timeout_resumes_when_every_player_is_ready() -> None:
+    room = _room_with_plan(_gold_plan("Timeout"))
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        pending = room._pending_resolution
+        assert pending is not None
+        assert pending.request.timeout_seconds == 120
+
+        await room.handle_action(
+            "p1",
+            _response(pending.interaction_id, "choice", option_ids=["ready"]),
+        )
+        assert room._pending_resolution is not None
+        await room.handle_action(
+            "p2",
+            _response(pending.interaction_id, "choice", option_ids=["ready"]),
+        )
+
+    asyncio.run(scenario())
+    assert room._pending_resolution is None
+    assert room.state.discard == ["card"]
+    assert room.state.turn_index == 1
+    assert any("Timeout ended. Play resumes." in entry for entry in room.state.log)
 
 
 def test_invalid_interaction_audience_falls_back_atomically() -> None:

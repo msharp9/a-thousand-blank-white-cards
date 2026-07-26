@@ -140,7 +140,7 @@ flowchart TB
 - **Tools (`web_search`, `card_rag_hybrid`, `game_rules`, `mtg_lookup`,
   `read_engine_methods`, `read_game_state`, `agent_memory`, `dry_run`)** — A custom set of tools is the main driver to card interpretation accuracy. Several tools are aimed at helping the model understand what code to write by giving the model access to known good cards and their code via RAG, the game engine methods, game state, etc. Access to web search and the Magic the Gathering api were added to help it understand obscure references and memes, since understanding the game mechanics isn't useful if the agent can't interpret the users intent. The most valuable addition though, is the `dry_run` tool that allows it test code it writes before submitting which helps it catch syntax errors and adjust assumptions. Learn more here: [`src/agent/tools/`](../src/agent/tools/).
 - **Embedding model** — turns card text into vectors so we can retrieve
-  structurally-similar exemplars; it runs through the one gateway so a single credential drives both chat and embeddings. Production is using `titan-embed-text-v2`, 1024-dim. I've changed it depending on which gateway I hit, OpenAI, ollama, bifrost, but I haven't noticed a difference based on model because I currently only load a small seed dataset of 131 cards (the gold, filler, and simple decks combined).
+  structurally-similar exemplars; it runs through the one gateway so a single credential drives both chat and embeddings. Production is using `titan-embed-text-v2`, 1024-dim. I've changed it depending on which gateway I hit, OpenAI, ollama, bifrost, but I haven't noticed a difference based on model because I currently only load a small seed dataset of 149 cards (the gold, filler, and simple decks combined).
 - **Vector DB (Qdrant, in-memory `cards` collection)** — stores the exemplar-card
   corpus and serves cosine top-k retrieval; in-memory keeps the prototype
   zero-infra while the same client can point at a hosted Qdrant later.
@@ -297,11 +297,11 @@ is in-memory (see the persistence caveats in
 
 ### Dataset
 
-A **35-card hand-annotated gold set** ([`data/eval/eval_cards.json`](../data/eval/eval_cards.json)).
+A **73-card hand-annotated gold set** ([`data/eval/eval_cards.json`](../data/eval/eval_cards.json)).
 Each card carries a structured `human_canonical` label (timing, target, placement,
 trigger_event, ops, magnitude_sign) that spot-checks as correct and consistent with the
-engine's op vocabulary. It is small (n=35) — good for a directional baseline, too small
-for tight confidence intervals. It is joined by a 34-card compositional [`eval_hard` suite](../data/eval/eval_cards_hard.json), a balanced 24-card placement suite, a large 698-card dataset created from [real cards](../data/eval/real_cards.json), and the 159-card seed corpus as additional benchmarks (`config.EVAL_BENCHMARKS`).
+engine's op vocabulary. It is small (n=73) — good for a directional baseline, too small
+for tight confidence intervals. It is joined by a 35-card compositional [`eval_hard` suite](../data/eval/eval_cards_hard.json), a balanced 24-card placement suite, a large 698-card dataset created from [real cards](../data/eval/real_cards.json), and the 149-card seed corpus as additional benchmarks (`config.EVAL_BENCHMARKS`).
 
 ### Harness and scorers
 

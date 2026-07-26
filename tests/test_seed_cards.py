@@ -9,6 +9,37 @@ from models.card import GoldCard, parse_seed_card
 
 DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 
+MIGRATED_TITLES = {
+    "Win the Game",
+    "Person with Fewest Points Wins",
+    "Red Card Rule",
+    "Spicy Uno",
+    "Sudden Death",
+    "Total Chaos",
+    "Wild Uno",
+    "Going Once, Going Twice",
+    "The Big Finish",
+    "The Ejector Seat",
+    "Boomerang",
+}
+
+IN_PERSON_TITLES = {
+    "Roll for It",
+    "Compliment Someone",
+    "Speak Only in Questions",
+    "Rename a Player",
+    "Dramatic Reading",
+    "The Wild Card",
+    "The Referendum",
+    "Tourist Mode",
+    "Forbidden Word",
+    "The Floor Vote",
+    "Two Truths and a Lie (Card Edition)",
+    "Unreliable Narrator",
+    "The Hype Card",
+    "The Historian",
+}
+
 
 def _load(filename: str) -> list[dict]:
     return json.loads((DATA_DIR / filename).read_text())
@@ -16,7 +47,7 @@ def _load(filename: str) -> list[dict]:
 
 class TestGoldCards:
     def test_count(self) -> None:
-        assert len(_load("seed_cards_gold.json")) == 87
+        assert len(_load("seed_cards_gold.json")) == 77
 
     def test_all_parse_as_gold(self) -> None:
         for d in _load("seed_cards_gold.json"):
@@ -75,3 +106,17 @@ class TestCombinedFile:
         for card in _load("seed_cards.json"):
             venue = card.get("canonical", {}).get("venue")
             assert venue in allowed, f"Invalid or missing venue for {card['id']}: {venue!r}"
+
+    def test_migrated_eval_cards_are_not_playable_seeds(self) -> None:
+        titles = {card["title"] for card in _load("seed_cards.json")}
+        assert titles.isdisjoint(MIGRATED_TITLES)
+        assert "Controlled Chaos" in titles
+
+    def test_reviewed_in_person_edits_live_in_authoritative_sources(self) -> None:
+        sources = _load("seed_cards_gold.json") + _load("seed_cards_fillers.json")
+        venues = {card["title"]: card["canonical"]["venue"] for card in sources}
+        assert {title for title in IN_PERSON_TITLES if venues.get(title) != "in_person"} == set()
+
+    def test_fresh_deck_energy_describes_the_created_card(self) -> None:
+        cards = {card["title"]: card for card in _load("seed_cards_gold.json")}
+        assert cards["Fresh Deck Energy"]["description"].endswith("Wild Point: Gain 2 points.")
