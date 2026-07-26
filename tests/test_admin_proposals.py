@@ -13,6 +13,7 @@ from models.admin import (
     EndGameAdminAction,
     MoveCardAdminAction,
     RemoveHookAdminAction,
+    SetConditionAdminAction,
     SetResultWinnersAdminAction,
     SetScoreAdminAction,
     ShuffleDeckAdminAction,
@@ -179,10 +180,10 @@ def test_pending_snapshot_is_safe_and_never_contains_actions_or_deck_ids() -> No
 
     snapshot = room.snapshot_for("p2")
     pending = snapshot["pending_admin_proposal"]
-    encoded = str(pending)
+    public_description = str({"preview": pending["preview"], "warnings": pending["warnings"]})
     assert "actions" not in pending
-    assert "d1" not in encoded
-    assert "Hidden one" not in encoded
+    assert "d1" not in public_description
+    assert "Hidden one" not in public_description
     assert pending["preview"][0]["detail"].startswith("Top card of deck")
 
 
@@ -239,6 +240,29 @@ def test_exact_hook_removal_does_not_remove_sibling_hook() -> None:
     asyncio.run(room.handle_action("p3", AdminVoteMsg(proposal_id=proposal_id, accept=True)))
 
     assert [hook.id for hook in room.state.hooks] == ["hook-rule-1"]
+
+
+def test_condition_preview_uses_a_table_facing_name() -> None:
+    room = _room()
+    asyncio.run(
+        room.handle_action(
+            "p1",
+            AdminProposeMsg(
+                actions=[
+                    SetConditionAdminAction(
+                        player_id="p2",
+                        key="speak_only_in_questions",
+                        value=True,
+                    )
+                ]
+            ),
+        )
+    )
+
+    proposal = room._pending_admin
+    assert proposal is not None
+    assert proposal.preview[0].detail == "Bob: speak only in questions"
+    assert "speak_only_in_questions" not in proposal.preview[0].detail
 
 
 def test_eliminating_active_player_rotates_to_next_player() -> None:

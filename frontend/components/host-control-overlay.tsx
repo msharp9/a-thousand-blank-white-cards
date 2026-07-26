@@ -29,6 +29,28 @@ function cardTitle(state: GameStateSnapshot, cardId: string) {
   return state.cards[cardId]?.title || "Untitled card";
 }
 
+const CONDITION_KEY_ALIASES: Record<string, string> = {
+  "skip next turn": "skip_next",
+  "extra turn": "extra_turn",
+};
+
+function conditionKeyFromName(name: string): string {
+  const normalizedName = name.trim().toLowerCase();
+  const alias = CONDITION_KEY_ALIASES[normalizedName];
+  if (alias) return alias;
+  return normalizedName
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function conditionDisplay(key: string, value: unknown): string {
+  const name = key.replace(/_/g, " ");
+  if (value === true) return name;
+  if (typeof value === "number") return `${name} ×${value}`;
+  return `${name}: ${String(value)}`;
+}
+
 function actionLabel(action: AdminAction, state: GameStateSnapshot): string {
   const player = (id: string) =>
     state.players.find((candidate) => candidate.id === id)?.name ?? id;
@@ -42,9 +64,9 @@ function actionLabel(action: AdminAction, state: GameStateSnapshot): string {
         ? "Shuffle discard pile into the deck"
         : "Shuffle the deck";
     case "set_condition":
-      return `Set ${player(action.player_id)}: ${action.key}=${String(action.value)}`;
+      return `Set ${player(action.player_id)}: ${conditionDisplay(action.key, action.value)}`;
     case "remove_condition":
-      return `Remove ${action.key} from ${player(action.player_id)}`;
+      return `Remove ${action.key.replace(/_/g, " ")} from ${player(action.player_id)}`;
     case "remove_hook":
       return `Remove hook ${action.hook_id}`;
     case "eliminate_players":
@@ -538,7 +560,7 @@ function ConditionForm({
   onAdd: (action: AdminAction) => void;
 }) {
   const [playerId, setPlayerId] = useState(gameState.players[0]?.id ?? "");
-  const [key, setKey] = useState("");
+  const [conditionName, setConditionName] = useState("");
   const [value, setValue] = useState("true");
   const [valueType, setValueType] = useState<"boolean" | "number" | "text">(
     "boolean",
@@ -549,15 +571,20 @@ function ConditionForm({
   );
 
   const add = () => {
-    if (!key.trim()) return;
+    const key = conditionKeyFromName(conditionName);
+    if (!key) return;
     let parsed: string | number | boolean = value;
-    if (valueType === "boolean") parsed = value !== "false";
+    if (valueType === "boolean") parsed = true;
     if (valueType === "number") parsed = Number(value);
-    if (valueType === "number" && !Number.isFinite(parsed)) return;
+    if (
+      (valueType === "number" && !Number.isFinite(parsed)) ||
+      (valueType !== "boolean" && !value.trim())
+    )
+      return;
     onAdd({
       kind: "set_condition",
       player_id: playerId,
-      key: key.trim(),
+      key,
       value: parsed,
       ...(duration ? { duration_turns: Number(duration) } : {}),
     });
@@ -586,7 +613,7 @@ function ConditionForm({
               className="flex items-center gap-2 rounded-xl border-2 border-ink bg-panel-paper p-2"
             >
               <span className="min-w-0 flex-1 font-hand">
-                {conditionKey}={JSON.stringify(current)}
+                {conditionDisplay(conditionKey, current)}
               </span>
               <Button
                 variant="outline"
@@ -607,16 +634,22 @@ function ConditionForm({
           ))}
         </div>
       )}
-      <Input
-        placeholder="Condition key, e.g. left_hand_only"
-        value={key}
-        maxLength={80}
-        onChange={(event) =>
-          setKey(event.target.value.replace(/[^A-Za-z0-9_.:-]/g, ""))
-        }
-      />
+      <label className="flex flex-col gap-1 font-hand text-base">
+        <span className="text-muted-foreground">Condition</span>
+        <Input
+          aria-label="Condition name"
+          placeholder="e.g. Left hand only or Speak only in questions"
+          value={conditionName}
+          maxLength={120}
+          onChange={(event) => setConditionName(event.target.value)}
+        />
+        <span className="text-sm text-muted-foreground">
+          Enter any condition your table agreed to. It will appear on this
+          player’s seat.
+        </span>
+      </label>
       <LabeledSelect
-        label="Value type"
+        label="How should it be tracked?"
         value={valueType}
         onChange={(next) => {
           const type = next as typeof valueType;
@@ -624,25 +657,20 @@ function ConditionForm({
           setValue(type === "boolean" ? "true" : "");
         }}
         options={[
-          ["boolean", "Yes / no"],
-          ["number", "Number"],
-          ["text", "Text"],
+          ["boolean", "On / off (most conditions)"],
+          ["number", "Number or stacks"],
+          ["text", "Text note"],
         ]}
       />
-      {valueType === "boolean" ? (
-        <LabeledSelect
-          label="Value"
-          value={value}
-          onChange={setValue}
-          options={[
-            ["true", "True"],
-            ["false", "False"],
-          ]}
-        />
-      ) : (
+      {valueType !== "boolean" && (
         <Input
+          aria-label="Condition value"
           type={valueType === "number" ? "number" : "text"}
-          placeholder="Condition value"
+          placeholder={
+            valueType === "number"
+              ? "Number of stacks, e.g. 3"
+              : "Short note shown with the condition"
+          }
           value={value}
           maxLength={500}
           onChange={(event) => setValue(event.target.value)}
@@ -656,7 +684,15 @@ function ConditionForm({
         value={duration}
         onChange={(event) => setDuration(event.target.value)}
       />
-      <Button size="lg" className="min-h-12" disabled={!key} onClick={add}>
+      <Button
+        size="lg"
+        className="min-h-12"
+        disabled={
+          !conditionKeyFromName(conditionName) ||
+          (valueType !== "boolean" && !value.trim())
+        }
+        onClick={add}
+      >
         Add condition change
       </Button>
     </section>
