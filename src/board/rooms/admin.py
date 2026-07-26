@@ -82,6 +82,15 @@ def _destination_label(state: GameState, action: MoveCardAdminAction) -> str:
     return action.to_zone
 
 
+def _condition_label(key: str, value: object) -> str:
+    name = key.replace("_", " ")
+    if value is True:
+        return name
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{name} ×{value}"
+    return f"{name}: {value}"
+
+
 def _move_op(action: MoveCardAdminAction) -> MoveCardsOp:
     destination = "exile" if action.to_zone == "exile" else action.to_zone
     kwargs: dict = {
@@ -205,7 +214,7 @@ def apply_admin_actions(
 
         elif isinstance(action, SetConditionAdminAction):
             player = working.get_player(action.player_id)
-            previous = player.conditions.get(action.key, "not set")
+            previous = player.conditions.get(action.key)
             working = apply_op(
                 working,
                 SetConditionOp(
@@ -216,7 +225,9 @@ def apply_admin_actions(
                 ),
                 ctx,
             )
-            detail = f"{player.name}: {action.key} {previous!r} → {action.value!r}"
+            detail = f"{player.name}: {_condition_label(action.key, action.value)}"
+            if previous is not None:
+                detail += f" (was {_condition_label(action.key, previous)})"
             if action.duration_turns is not None:
                 detail += f" for {action.duration_turns} turn(s)"
             previews.append(AdminProposalPreviewItem(kind=action.kind, title="Set condition", detail=detail))
@@ -235,7 +246,7 @@ def apply_admin_actions(
                 AdminProposalPreviewItem(
                     kind=action.kind,
                     title="Remove condition",
-                    detail=f"{player.name}: remove {action.key}={previous!r}",
+                    detail=f"{player.name}: remove {_condition_label(action.key, previous)}",
                 )
             )
 

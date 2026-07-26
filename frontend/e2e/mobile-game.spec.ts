@@ -617,6 +617,38 @@ test("mobile overlays and blank-card authoring remain compact and reachable", as
   expect(String(play?.art)).toMatch(/^data:image\/png;base64,/);
 });
 
+test("host can add a condition by its table-facing name", async ({ page }) => {
+  const room = await openMockRoom(page);
+
+  await page.getByRole("button", { name: "Host" }).click();
+  await page.getByRole("button", { name: "Conditions" }).click();
+  await expect(
+    page.getByText("Enter any condition your table agreed to"),
+  ).toBeVisible();
+  await page.getByLabel("Condition name").fill("Speak Only in Questions");
+  await expect(page.getByLabel("How should it be tracked?")).toHaveValue(
+    "boolean",
+  );
+  await page.getByRole("button", { name: "Add condition change" }).click();
+  await page.getByRole("button", { name: "Review proposal (1)" }).click();
+  await page.getByRole("button", { name: "Propose changes" }).click();
+
+  await expect
+    .poll(() =>
+      room.clientMessages.find((message) => message.type === "admin_propose"),
+    )
+    .toMatchObject({
+      actions: [
+        {
+          kind: "set_condition",
+          player_id: "p1",
+          key: "speak_only_in_questions",
+          value: true,
+        },
+      ],
+    });
+});
+
 test("setup card authoring and preview keep the full card framed", async ({
   page,
 }) => {

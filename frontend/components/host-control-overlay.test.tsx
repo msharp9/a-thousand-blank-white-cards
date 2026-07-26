@@ -112,6 +112,45 @@ describe("HostControlOverlay", () => {
     expect(screen.getByRole("option", { name: "Bottom card" })).toBeTruthy();
   });
 
+  it("turns a human-readable condition name into a valid on/off condition", async () => {
+    const user = userEvent.setup();
+    const send = vi.fn();
+    render(
+      <HostControlOverlay gameState={state()} send={send} onClose={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Conditions" }));
+    expect(screen.queryByPlaceholderText(/Condition key/)).toBeNull();
+    expect(
+      screen.getByText(/Enter any condition your table agreed to/),
+    ).toBeTruthy();
+    await user.type(
+      screen.getByLabelText("Condition name"),
+      "Speak Only in Questions",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Add condition change" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Review proposal (1)" }),
+    );
+    expect(screen.getByText("Set Alice: speak only in questions")).toBeTruthy();
+    expect(screen.queryByText(/speak_only_in_questions/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Propose changes" }));
+
+    expect(send).toHaveBeenCalledWith({
+      type: "admin_propose",
+      actions: [
+        {
+          kind: "set_condition",
+          player_id: "host",
+          key: "speak_only_in_questions",
+          value: true,
+        },
+      ],
+    });
+  });
+
   it("submits score and winner corrections together from results", async () => {
     const user = userEvent.setup();
     const send = vi.fn();
