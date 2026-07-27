@@ -714,6 +714,10 @@ export default function RoomPage() {
                 cards={epilogueCards}
                 send={send}
                 isHost={isHost}
+                canVote={Boolean(
+                  myPlayerId &&
+                  gameState.players.some((p) => p.id === myPlayerId),
+                )}
                 roomCode={code}
               />
             </div>
