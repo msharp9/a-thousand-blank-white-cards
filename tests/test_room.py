@@ -610,6 +610,25 @@ def test_candidates_scoped_to_a_chosen_players_hand() -> None:
     assert chosen_card_candidates(state, plan, "p1", "src") == []
 
 
+def test_candidates_never_leak_the_hidden_deck() -> None:
+    from board.rooms.choices import chosen_card_candidates
+    from models.effects import MoveCardsOp
+
+    plan = _plan(MoveCardsOp(card_target="chosen_card", from_zone="deck", to_zone="discard"))
+    state = _choice_state().model_copy(update={"deck": ["d1", "d2", "d3"]})
+    # deck is hidden — a chosen_card scoped to it offers nothing, never the deck itself.
+    assert chosen_card_candidates(state, plan, "p1", "src") == []
+
+
+def test_candidates_scoped_to_the_public_discard() -> None:
+    from board.rooms.choices import chosen_card_candidates
+    from models.effects import MoveCardsOp
+
+    plan = _plan(MoveCardsOp(card_target="chosen_card", from_zone="discard", to_zone="exile"))
+    state = _choice_state().model_copy(update={"discard": ["dc1", "dc2"]})
+    assert chosen_card_candidates(state, plan, "p1", "src") == ["dc1", "dc2"]
+
+
 def test_plan_choice_needs_detects_the_from_player_axis() -> None:
     from board.rooms.choices import plan_choice_needs
     from models.effects import MoveCardsOp

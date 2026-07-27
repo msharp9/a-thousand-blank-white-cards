@@ -185,8 +185,12 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
   zone (`selector`/`count` are not applied there and must stay at their defaults; a
   mismatched card is a logged no-op). `card_target: "chosen_card"` with a `from_zone`
   also SCOPES the play-time card prompt to that zone ("exile a card in the center"
-  offers only center cards — see gold "Into the Void"); an unscoped `chosen_card`
-  offers the public in-play cards plus the actor's own hand. Destination is
+  offers only center cards — see gold "Into the Void"); the prompt candidates are
+  the zone's public contents (`center`/`exile`/`discard` in state order, or
+  `hand`/`in_play` from the resolved `from_player` owners) — `deck` is hidden and
+  never offered, so a `chosen_card` scoped to `from_zone: "deck"` has no eligible
+  candidates. An unscoped `chosen_card` offers the public in-play cards plus the
+  actor's own hand. Destination is
   `{"to_zone": <zone>, "to_position": "top"|"bottom"|"shuffle"}` (`to_position`
   applies only to a deck destination). `from_player`/`to_player` (`<TARGET>`) are required
   exactly when the corresponding zone is `hand`/`in_play`; `to_player` also accepts

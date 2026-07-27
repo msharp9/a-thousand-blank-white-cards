@@ -40,8 +40,10 @@ def chosen_card_candidates(
     Policy, per choice-requiring op:
 
     - a ``move_cards`` that declares ``from_zone`` scopes its candidates to
-      that zone: center in state order; hand/in_play only from the resolved
-      ``from_player`` owners;
+      that zone: center/exile/discard (already public) in state order;
+      hand/in_play only from the resolved ``from_player`` owners; ``deck``
+      is hidden and never offered — a chosen_card cannot be scoped to the
+      deck without leaking its order/identity, so it yields no candidates;
     - an unscoped chosen_card keeps the legacy universe: every public
       in-play card plus the actor's own hand.
 
@@ -83,7 +85,9 @@ def _op_candidates(state: GameState, op: Op, actor_id: str, chosen_player_id: st
         return state.center_cards()
     if from_zone == "exile":
         return list(state.exiled)
-    return list(getattr(state, from_zone))
+    if from_zone == "discard":
+        return list(state.discard)
+    return []
 
 
 def _owner_ids(state: GameState, from_player: str, actor_id: str, chosen_player_id: str | None) -> list[str]:
