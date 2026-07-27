@@ -13,6 +13,7 @@ import {
   hookTitle,
 } from "@/lib/conditions";
 import { playerColor } from "@/lib/players";
+import { coreRuleSentences } from "@/lib/rules";
 import type { GameStateSnapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -38,14 +39,33 @@ export function StatusConditionsOverlay({
   return (
     <OverlayShell
       scrimTestId="status-conditions-scrim"
-      title="Status Conditions"
-      subtitle="What affects everyone right now"
-      closeLabel="Close status conditions"
+      title="Rules & Status"
+      subtitle="The rules and effects shaping this game."
+      closeLabel="Close rules and status"
       onClose={onClose}
       presentation={presentation}
       panelClassName="max-w-[760px]"
     >
       <div className="flex flex-col gap-6">
+        <section aria-labelledby="core-rules-heading">
+          <h3
+            id="core-rules-heading"
+            className="font-marker text-lg sm:text-xl"
+          >
+            Core Rules
+          </h3>
+          <ul className="mt-2 flex flex-col gap-1.5 rounded-xl border-2 border-ink bg-panel-paper p-4 panel-shadow">
+            {coreRuleSentences(gameState.rules).map((sentence, index) => (
+              <li
+                key={`${index}-${sentence}`}
+                className="font-hand text-lg leading-snug"
+              >
+                {sentence}
+              </li>
+            ))}
+          </ul>
+        </section>
+
         <section aria-labelledby="player-conditions-heading">
           <h3
             id="player-conditions-heading"
@@ -107,16 +127,16 @@ export function StatusConditionsOverlay({
           )}
         </section>
 
-        <section aria-labelledby="active-hooks-heading">
+        <section aria-labelledby="reactionary-rules-heading">
           <h3
-            id="active-hooks-heading"
+            id="reactionary-rules-heading"
             className="font-marker text-lg sm:text-xl"
           >
-            Active Hooks
+            Reactionary Rules
           </h3>
           {gameState.hooks.length === 0 ? (
             <p className="mt-2 rounded-xl border-2 border-dashed border-ink/40 bg-panel-paper p-4 font-hand text-muted-foreground">
-              No active hooks.
+              No reactionary rules are active.
             </p>
           ) : (
             <div className="mt-2 flex flex-col gap-3">
