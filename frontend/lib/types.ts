@@ -353,6 +353,9 @@ export type EpilogueCardOutcome = { id: string; title: string };
 export type EpilogueResultSummary = {
   kept: EpilogueCardOutcome[];
   destroyed: EpilogueCardOutcome[];
+  // "Table favorite" ids: kept cards tied for the most Keep votes this game.
+  // Always a subset of kept. Optional — old snapshots predate the field.
+  favorite_card_ids?: string[];
 };
 
 export type GameStateSnapshot = {

@@ -156,25 +156,59 @@ function EpilogueOutcomeLists({
   cards,
   roomCode,
 }: {
-  result: { kept: EpilogueCardOutcome[]; destroyed: EpilogueCardOutcome[] };
+  result: {
+    kept: EpilogueCardOutcome[];
+    destroyed: EpilogueCardOutcome[];
+    favorite_card_ids?: string[];
+  };
   cards: Record<string, CardSnapshot>;
   roomCode: string;
 }) {
+  // Defensive re-normalization of what the backend already guarantees: only
+  // kept cards can be favorites, so an odd/old snapshot never decorates a
+  // destroyed card.
+  const keptIds = new Set(result.kept.map((o) => o.id));
+  const favoriteIds = new Set(
+    (result.favorite_card_ids ?? []).filter((id) => keptIds.has(id)),
+  );
+  const favoriteTitles = result.kept
+    .filter((o) => favoriteIds.has(o.id))
+    .map((o) => o.title || "Untitled card");
+
   return (
-    <div className="grid w-full max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
-      <OutcomeColumn
-        title="Kept"
-        outcomes={result.kept}
-        cards={cards}
-        roomCode={roomCode}
-      />
-      <OutcomeColumn
-        title="Destroyed"
-        outcomes={result.destroyed}
-        cards={cards}
-        roomCode={roomCode}
-        destroyed
-      />
+    <div className="flex w-full max-w-2xl flex-col gap-3">
+      <p className="text-center font-hand text-[17px]">
+        {favoriteTitles.length > 0 ? (
+          <>
+            <span aria-hidden="true" className="text-amber">
+              ★
+            </span>{" "}
+            Table {favoriteTitles.length > 1 ? "favorites" : "favorite"} —{" "}
+            <span className="sr-only">Most Keep votes this game: </span>
+            <span className="font-marker text-base">
+              {favoriteTitles.join(", ")}
+            </span>
+          </>
+        ) : (
+          "No table favorite this game."
+        )}
+      </p>
+      <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
+        <OutcomeColumn
+          title="Kept"
+          outcomes={result.kept}
+          cards={cards}
+          roomCode={roomCode}
+          favoriteIds={favoriteIds}
+        />
+        <OutcomeColumn
+          title="Destroyed"
+          outcomes={result.destroyed}
+          cards={cards}
+          roomCode={roomCode}
+          destroyed
+        />
+      </div>
     </div>
   );
 }
@@ -185,12 +219,14 @@ function OutcomeColumn({
   cards,
   roomCode,
   destroyed,
+  favoriteIds,
 }: {
   title: string;
   outcomes: EpilogueCardOutcome[];
   cards: Record<string, CardSnapshot>;
   roomCode: string;
   destroyed?: boolean;
+  favoriteIds?: Set<string>;
 }) {
   return (
     <div className="flex flex-col gap-2 rounded-2xl border-[2.5px] border-ink bg-card p-3 panel-shadow">
@@ -208,16 +244,35 @@ function OutcomeColumn({
         <div className="flex flex-wrap gap-3 px-1 pb-2 pt-1">
           {outcomes.map((outcome) => {
             const card = cards[outcome.id];
+            const isFavorite =
+              !destroyed && Boolean(favoriteIds?.has(outcome.id));
             return (
-              <SketchCard
+              <div
                 key={outcome.id}
-                card={card}
-                title={card ? undefined : outcome.title}
-                w={92}
-                rot={stableRotation(outcome.id, 3)}
-                artUrl={card ? getCardArtUrl(roomCode, card) : null}
-                className={cn(destroyed && "opacity-70 grayscale")}
-              />
+                className="flex flex-col items-center gap-1"
+              >
+                <SketchCard
+                  card={card}
+                  title={card ? undefined : outcome.title}
+                  w={92}
+                  rot={stableRotation(outcome.id, 3)}
+                  artUrl={card ? getCardArtUrl(roomCode, card) : null}
+                  className={cn(
+                    destroyed && "opacity-70 grayscale",
+                    isFavorite &&
+                      "rounded-md ring-[3px] ring-amber ring-offset-2 ring-offset-card",
+                  )}
+                />
+                {isFavorite && (
+                  <span className="rounded-full border border-amber bg-amber/15 px-2 py-0.5 font-hand text-[13px] leading-tight text-ink">
+                    <span aria-hidden="true">★</span> Table favorite
+                    <span className="sr-only">
+                      {" "}
+                      — Most Keep votes this game
+                    </span>
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>

@@ -578,9 +578,9 @@ class Room:
         # Spectators (joined after the game started) may observe but not act:
         # reject every game-mutating / authoring message. They still receive all
         # broadcasts (state, brewing, effect_applied, …) over their socket.
-        # epilogue_vote is intentionally allowed through — spectators created no
-        # cards, so a stray vote is harmless and the epilogue guard handles it —
-        # but every write/authoring path is gated here.
+        # epilogue_vote/epilogue_done are blocked for every spectator, host
+        # included — only seated players decide a card's fate — while a
+        # spectator host keeps the start/finalize controls below.
         spectator_actions = {
             "start",
             "lobby_set_host",
@@ -599,6 +599,8 @@ class Room:
             "admin_view",
             "epilogue_start",
             "epilogue_finalize",
+            "epilogue_vote",
+            "epilogue_done",
         }
         spectator_host_actions = {
             "start",
@@ -4450,7 +4452,10 @@ class Room:
         if self._epilogue is None:
             await self.connections.send(player_id, {"type": "error", "message": "No epilogue in progress"})
             return
-        self._epilogue.record_vote(player_id, msg.card_id, msg.keep)
+        if not self._epilogue.record_vote(player_id, msg.card_id, msg.keep):
+            await self.connections.send(
+                player_id, {"type": "error", "message": "Vote rejected: not an eligible voter or unknown card"}
+            )
 
     async def _handle_epilogue_done(self, player_id: str) -> None:
         """A player is done voting — cards they never voted on abstain.
@@ -4480,9 +4485,10 @@ class Room:
     async def _finalize_epilogue(self) -> None:
         """Tally votes, persist kept cards, and transition to ``ended``.
 
-        Surfaces the outcome as ``state.epilogue_result`` (id+title per card)
-        so the final results screen — and a client reconnecting after the
-        vote — can render kept/destroyed lists straight from the snapshot.
+        Surfaces the outcome as ``state.epilogue_result`` (id+title per card,
+        plus the table-favorite ids) so the final results screen — and a client
+        reconnecting after the vote — can render kept/destroyed lists and the
+        favorite highlight straight from the snapshot.
         """
         result = await self._epilogue.tally_and_persist(card_art=self.card_art)
         epilogue_result = EpilogueResultSummary(
@@ -4494,6 +4500,7 @@ class Room:
                 EpilogueCardOutcome(id=cid, title=self._card_title(self.state.cards.get(cid, {})))
                 for cid in result.destroyed
             ],
+            favorite_card_ids=list(result.favorites),
         )
         self.state = self.state.model_copy(update={"phase": "ended", "epilogue_result": epilogue_result})
         await self._broadcast_state()
