@@ -409,6 +409,76 @@ def test_reaction_needing_choice_prompts_then_applies() -> None:
     assert _score(room, "p2") == 13
 
 
+def _void_counter(cid: str = "cs") -> dict:
+    return _card(
+        cid,
+        "Void Counter",
+        [
+            {"op": "counter_play", "args": {"mode": "negate"}},
+            {"op": "move_cards", "args": {"card_target": "chosen_card", "from_zone": "center", "to_zone": "exile"}},
+        ],
+        trigger="on_reaction",
+    )
+
+
+def _with_center(room: Room, center: list[str]) -> Room:
+    cards = {**room.state.cards, **{cid: {"id": cid, "title": cid.upper()} for cid in center}}
+    room.state = room.state.model_copy(update={"house_rules": list(center), "cards": cards})
+    return room
+
+
+def test_reaction_card_choice_is_scoped_to_the_center() -> None:
+    room = _with_center(_reaction_room(p2_hand=[_void_counter()]), ["hr1", "hr2"])
+    socks = _connect_all(room)
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="atk"))
+        await room.handle_action("p2", PlayMsg(card_id="cs", as_reaction=True))
+        prompt = next(m for m in _sent(socks["p2"]) if m["type"] == "prompt_choice")
+        assert [c["card_id"] for c in prompt["choices"]] == ["hr1", "hr2"]
+        assert room._pending is not None and room._pending.claimed_by == "p2"
+        await room.handle_action("p2", PlayMsg(card_id="cs", as_reaction=True, chosen_card_id="hr1"))
+
+    asyncio.run(scenario())
+    assert room._pending is None
+    assert room.state.exiled == ["hr1"]
+    assert room.state.house_rules == ["hr2"]
+    assert _score(room, "p1") == 0  # Zap countered
+
+
+def test_reaction_rejects_a_forged_card_choice() -> None:
+    room = _with_center(_reaction_room(p2_hand=[_void_counter()]), ["hr1"])
+    socks = _connect_all(room)
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="atk"))
+        await room.handle_action("p2", PlayMsg(card_id="cs", as_reaction=True, chosen_card_id="atk"))
+        errors = [m for m in _sent(socks["p2"]) if m["type"] == "error"]
+        assert any("Invalid target card" in m["message"] for m in errors)
+        assert room._pending is not None  # window still open; play not committed
+        assert room.state.exiled == []
+        room._pending.timer.cancel()
+
+    asyncio.run(scenario())
+
+
+def test_reaction_with_empty_center_errors_and_unclaims() -> None:
+    room = _with_center(_reaction_room(p2_hand=[_void_counter()]), [])
+    socks = _connect_all(room)
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="atk"))
+        await room.handle_action("p2", PlayMsg(card_id="cs", as_reaction=True))
+        errors = [m for m in _sent(socks["p2"]) if m["type"] == "error"]
+        assert any("no eligible target card" in m["message"] for m in errors)
+        assert not [m for m in _sent(socks["p2"]) if m["type"] == "prompt_choice"]
+        assert room._pending is not None and room._pending.claimed_by is None  # may pass instead
+        assert "cs" in room.state.get_player("p2").hand
+        room._pending.timer.cancel()
+
+    asyncio.run(scenario())
+
+
 def test_no_nested_window_for_reactions() -> None:
     # p3 also holds a reaction, but a resolving reaction never opens a window.
     room = _reaction_room(p3_hand=[_counterspell("cs3")])
