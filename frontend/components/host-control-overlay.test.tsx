@@ -172,4 +172,53 @@ describe("HostControlOverlay", () => {
       actions: [{ kind: "set_result_winners", winner_ids: ["host", "p2"] }],
     });
   });
+
+  it("syncs untouched scores while preserving an explicit host edit", async () => {
+    const user = userEvent.setup();
+    const initial = state();
+    const { rerender } = render(
+      <HostControlOverlay
+        gameState={initial}
+        send={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const remotelyScored = state({
+      players: initial.players.map((player) =>
+        player.id === "p2" ? { ...player, score: 3 } : player,
+      ),
+    });
+    rerender(
+      <HostControlOverlay
+        gameState={remotelyScored}
+        send={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Bob score")).toHaveValue(3);
+    expect(
+      screen.getByRole("button", { name: "Review proposal (0)" }),
+    ).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Add one point to Bob" }),
+    );
+    const changedAgain = state({
+      players: initial.players.map((player) =>
+        player.id === "p2" ? { ...player, score: 9 } : player,
+      ),
+    });
+    rerender(
+      <HostControlOverlay
+        gameState={changedAgain}
+        send={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Bob score")).toHaveValue(4);
+    expect(
+      screen.getByRole("button", { name: "Review proposal (1)" }),
+    ).toBeEnabled();
+  });
 });

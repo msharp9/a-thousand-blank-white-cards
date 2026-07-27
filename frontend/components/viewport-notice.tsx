@@ -13,6 +13,7 @@ interface ViewportNoticeHostProps {
   arbiterNotices: ViewportNotice[];
   players: PlayerSnapshot[];
   onDismiss: (id: string) => void;
+  stackedGameNav?: boolean;
 }
 
 export function ViewportNoticeHost({
@@ -20,6 +21,7 @@ export function ViewportNoticeHost({
   arbiterNotices,
   players,
   onDismiss,
+  stackedGameNav = false,
 }: ViewportNoticeHostProps) {
   const top = topNotices[0];
   const arbiter = arbiterNotices[0];
@@ -33,7 +35,10 @@ export function ViewportNoticeHost({
       {top && (
         <div
           data-notice-lane="top"
-          className="absolute inset-x-0 top-[calc(env(safe-area-inset-top)+7.25rem)] flex justify-center px-[max(0.75rem,env(safe-area-inset-left))] sm:top-[4.5rem]"
+          className={cn(
+            "absolute inset-x-0 top-[calc(env(safe-area-inset-top)+7.25rem)] flex justify-center px-[max(0.75rem,env(safe-area-inset-left))]",
+            stackedGameNav ? "xl:top-[4.5rem]" : "sm:top-[4.5rem]",
+          )}
         >
           <NoticeBubble notice={top} players={players} onDismiss={onDismiss} />
         </div>

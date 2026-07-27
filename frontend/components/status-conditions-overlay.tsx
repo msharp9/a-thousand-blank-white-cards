@@ -1,6 +1,9 @@
 "use client";
 
-import { OverlayShell } from "@/components/overlay-shell";
+import {
+  OverlayShell,
+  type PanelPresentation,
+} from "@/components/overlay-shell";
 import { PlayerAvatar } from "@/components/player-avatar";
 import {
   activeConditions,
@@ -11,14 +14,17 @@ import {
 } from "@/lib/conditions";
 import { playerColor } from "@/lib/players";
 import type { GameStateSnapshot } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface StatusConditionsOverlayProps {
   gameState: GameStateSnapshot;
+  presentation?: PanelPresentation;
   onClose: () => void;
 }
 
 export function StatusConditionsOverlay({
   gameState,
+  presentation = "modal",
   onClose,
 }: StatusConditionsOverlayProps) {
   const conditionedPlayers = gameState.players
@@ -36,6 +42,7 @@ export function StatusConditionsOverlay({
       subtitle="What affects everyone right now"
       closeLabel="Close status conditions"
       onClose={onClose}
+      presentation={presentation}
       panelClassName="max-w-[760px]"
     >
       <div className="flex flex-col gap-6">
@@ -51,7 +58,12 @@ export function StatusConditionsOverlay({
               No active status conditions.
             </p>
           ) : (
-            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div
+              className={cn(
+                "mt-2 grid grid-cols-1 gap-3",
+                presentation === "modal" && "sm:grid-cols-2",
+              )}
+            >
               {conditionedPlayers.map(({ player, index, conditions }) => (
                 <article
                   key={player.id}

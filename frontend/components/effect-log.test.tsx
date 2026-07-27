@@ -42,4 +42,12 @@ describe("EffectLog", () => {
     render(<EffectLog log={[]} brewing="Interpreting Zap" />);
     expect(screen.queryByText(/no cards played yet/i)).toBeNull();
   });
+
+  it("renders panel content without the embedded strip heading", () => {
+    render(
+      <EffectLog log={["Alice played Zap"]} brewing={null} variant="panel" />,
+    );
+    expect(screen.queryByText("Play Log")).toBeNull();
+    expect(screen.getByText("Alice played Zap")).toBeTruthy();
+  });
 });

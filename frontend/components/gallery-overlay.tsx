@@ -2,17 +2,22 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { OverlayShell } from "@/components/overlay-shell";
+import {
+  OverlayShell,
+  type PanelPresentation,
+} from "@/components/overlay-shell";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
 import { getCardArtUrl } from "@/lib/art";
 import { resolvePlayerName } from "@/lib/players";
 import { publicCardIds } from "@/lib/public-cards";
 import type { CardSnapshot, GameStateSnapshot } from "@/lib/types";
 import { useCompactViewport } from "@/lib/use-compact-viewport";
+import { cn } from "@/lib/utils";
 
 interface GalleryOverlayProps {
   gameState: GameStateSnapshot;
   roomCode: string;
+  presentation?: PanelPresentation;
   onClose: () => void;
 }
 
@@ -41,6 +46,7 @@ const BATCH_SIZE = 60;
 export function GalleryOverlay({
   gameState,
   roomCode,
+  presentation = "modal",
   onClose,
 }: GalleryOverlayProps) {
   const compactViewport = useCompactViewport();
@@ -75,6 +81,7 @@ export function GalleryOverlay({
       subtitle={`${sorted.length} card${sorted.length === 1 ? "" : "s"} played so far`}
       closeLabel="Close gallery"
       onClose={onClose}
+      presentation={presentation}
       panelClassName="max-w-[1100px]"
     >
       {sorted.length === 0 ? (
@@ -85,7 +92,11 @@ export function GalleryOverlay({
         <>
           <div
             data-gallery-grid
-            className="grid grid-cols-2 justify-items-center gap-x-3 gap-y-4 sm:flex sm:flex-wrap sm:justify-center sm:gap-6"
+            className={cn(
+              "grid grid-cols-2 justify-items-center gap-x-3 gap-y-4",
+              presentation === "modal" &&
+                "sm:flex sm:flex-wrap sm:justify-center sm:gap-6",
+            )}
           >
             {visible.map((card) => (
               <GalleryCard

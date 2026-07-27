@@ -258,9 +258,10 @@ async function expectAuthoringFits(page: Page) {
   });
 
   for (const region of geometry.regions) {
-    // Transformed dialog borders can round outward by up to two CSS pixels
-    // during a viewport rotation; anything larger indicates real overflow.
-    const roundingTolerance = 3;
+    // The three-pixel transformed dialog border can round outward by one
+    // additional pixel during viewport rotation; larger deltas are real
+    // overflow rather than paint rounding.
+    const roundingTolerance = 4;
     expect(
       region.scrollWidth,
       `${region.selector} has horizontal overflow`,
@@ -390,7 +391,7 @@ test("large hands and navigation stay inside the phone viewport", async ({
   );
 });
 
-test("live notices remain visible while the game is scrolled to the log", async ({
+test("live notices remain visible while the game is scrolled", async ({
   page,
 }) => {
   const room = await openMockRoom(page, true);
@@ -461,17 +462,23 @@ test("live notices remain visible while the game is scrolled to the log", async 
   await expect(sequelBubble).toBeHidden();
   await page.clock.fastForward(3100);
   await expect(page.getByText(/Bartholomew.*rolls 1d6/)).toBeHidden();
+  await page.getByRole("button", { name: "Play Log" }).click();
   await expect(
-    page.locator("[data-game-scroll]").getByText(/falling sandwich/),
+    page.locator("[data-game-panel-body]").getByText(/falling sandwich/),
   ).toBeAttached();
 });
 
-test("mobile overlays and blank-card authoring remain compact and reachable", async ({
+test("adaptive panels and blank-card authoring remain compact and reachable", async ({
   page,
 }) => {
   const room = await openMockRoom(page);
+  const wide = (await page.viewportSize())!.width >= 1280;
 
   await page.getByRole("button", { name: "Gallery" }).click();
+  await expect(page.locator("[data-game-panel-shell]")).toHaveAttribute(
+    "data-presentation",
+    wide ? "sidebar" : "modal",
+  );
   const gallery = page.locator("[data-gallery-grid]");
   await expect(gallery).toBeVisible();
   const compact = (await page.viewportSize())!.width < 640;
@@ -505,10 +512,12 @@ test("mobile overlays and blank-card authoring remain compact and reachable", as
   await page.getByRole("button", { name: "Close scoreboard" }).click();
 
   await page.getByRole("button", { name: "Host" }).click();
-  const hostDialog = page.getByRole("dialog", { name: "Host controls" });
-  await expect(hostDialog).toBeVisible();
-  const hostBounds = await hostDialog.evaluate((dialog) => {
-    const box = dialog.getBoundingClientRect();
+  const hostPanel = page.getByRole(wide ? "complementary" : "dialog", {
+    name: "Host controls",
+  });
+  await expect(hostPanel).toBeVisible();
+  const hostBounds = await hostPanel.evaluate((panel) => {
+    const box = panel.getBoundingClientRect();
     const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
     const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
     return {
@@ -615,6 +624,84 @@ test("mobile overlays and blank-card authoring remain compact and reachable", as
     (message) => message.type === "play" && message.title === "Pocket Volcano",
   );
   expect(String(play?.art)).toMatch(/^data:image\/png;base64,/);
+});
+
+test("wide game panels share the viewport and preserve edits across the breakpoint", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium");
+  await openMockRoom(page);
+
+  await expect(
+    page.locator("[data-game-scroll]").getByText("Play Log"),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Play Log" }).click();
+  const shell = page.locator("[data-game-panel-shell]");
+  const game = page.locator("[data-game-scroll]");
+  const panelBody = page.locator("[data-game-panel-body]");
+  await expect(shell).toHaveAttribute("data-presentation", "sidebar");
+  await expect(
+    page.getByRole("complementary", { name: "Play Log" }),
+  ).toBeVisible();
+  await expect(page.getByText("Hand card 14")).toBeAttached();
+
+  const geometry = await page.evaluate(() => {
+    const game = document
+      .querySelector<HTMLElement>("[data-game-scroll]")!
+      .getBoundingClientRect();
+    const panel = document
+      .querySelector<HTMLElement>("[data-game-panel-shell]")!
+      .getBoundingClientRect();
+    return {
+      viewportWidth: window.innerWidth,
+      gameRight: game.right,
+      panelLeft: panel.left,
+      panelRight: panel.right,
+      documentWidth: document.documentElement.scrollWidth,
+    };
+  });
+  expect(Math.abs(geometry.gameRight - geometry.panelLeft)).toBeLessThanOrEqual(
+    1,
+  );
+  expect(geometry.panelRight).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+  expect(geometry.documentWidth).toBeLessThanOrEqual(
+    geometry.viewportWidth + 1,
+  );
+
+  const initialGameScroll = await game.evaluate((node) => node.scrollTop);
+  await panelBody.evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  expect(await panelBody.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  expect(await game.evaluate((node) => node.scrollTop)).toBe(initialGameScroll);
+
+  await page.getByRole("button", { name: "Host" }).click();
+  await page
+    .getByRole("button", {
+      name: "Add one point to Bartholomew With A Very Long Name",
+    })
+    .click();
+  await expect(
+    page.getByLabel("Bartholomew With A Very Long Name score"),
+  ).toHaveValue("-9");
+
+  await page.setViewportSize({ width: 1279, height: 720 });
+  await expect(shell).toHaveAttribute("data-presentation", "modal");
+  await expect(
+    page.getByRole("dialog", { name: "Host controls" }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Bartholomew With A Very Long Name score"),
+  ).toHaveValue("-9");
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(shell).toHaveAttribute("data-presentation", "sidebar");
+  await expect(
+    page.getByRole("complementary", { name: "Host controls" }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Bartholomew With A Very Long Name score"),
+  ).toHaveValue("-9");
 });
 
 test("host can add a condition by its table-facing name", async ({ page }) => {

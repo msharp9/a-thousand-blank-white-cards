@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -14,12 +20,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { DiscardPile } from "@/components/discard-pile";
-import { EffectLog } from "@/components/effect-log";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
 import { EpilogueView } from "@/components/epilogue";
 import { ExilePile } from "@/components/exile-pile";
-import { GameNavTabs } from "@/components/game-nav-tabs";
+import { GameNavTabs, type GameView } from "@/components/game-nav-tabs";
 import { GameTable } from "@/components/game-table";
+import { GameViewPanel } from "@/components/game-view-panel";
 import { Hand } from "@/components/hand";
 import { HandRevealDialog } from "@/components/hand-reveal-dialog";
 import { HistoryModal } from "@/components/history-modal";
@@ -37,7 +43,10 @@ import { ViewportNoticeHost } from "@/components/viewport-notice";
 import { getCardArtUrl } from "@/lib/art";
 import { interactionResponseMessage } from "@/lib/interactions";
 import { playerColor } from "@/lib/players";
-import { useCompactViewport } from "@/lib/use-compact-viewport";
+import {
+  useCompactViewport,
+  useWideGameView,
+} from "@/lib/use-compact-viewport";
 import type {
   CardSnapshot,
   GameStateSnapshot,
@@ -89,7 +98,9 @@ export default function RoomPage() {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resultsAdminOpen, setResultsAdminOpen] = useState(false);
+  const [gameView, setGameView] = useState<GameView>("table");
   const compactViewport = useCompactViewport();
+  const wideGameView = useWideGameView();
 
   // Once the stored name hydrates in, adopt it and skip the name gate.
   // Adjusting state during render is React's recommended alternative to a
@@ -194,6 +205,35 @@ export default function RoomPage() {
   const isHost = Boolean(
     gameState && myPlayerId && gameState.players[0]?.id === myPlayerId,
   );
+
+  if (
+    gameView !== "table" &&
+    (phase !== "playing" || (gameView === "host" && !isHost))
+  ) {
+    setGameView("table");
+  }
+
+  const closeGameView = useCallback(() => {
+    const closingView = gameView;
+    setGameView("table");
+    if (closingView === "table") return;
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          `[data-game-view-trigger="${closingView}"]`,
+        )
+        ?.focus({ preventScroll: true });
+    });
+  }, [gameView]);
+
+  useEffect(() => {
+    if (gameView === "table") return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") closeGameView();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeGameView, gameView]);
 
   // Winner names for the epilogue banner: the backend resolves scoring and sets
   // winner_ids at the playing → epilogue transition, so they're known before
@@ -348,7 +388,7 @@ export default function RoomPage() {
       )}
       <header
         data-game-header
-        className="sticky top-0 z-40 flex flex-wrap items-center gap-x-2 gap-y-2 border-b-[2.5px] border-ink bg-card px-[max(0.75rem,env(safe-area-inset-left))] pt-[max(0.625rem,env(safe-area-inset-top))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)] sm:flex-nowrap sm:gap-3.5 sm:px-5 sm:py-2.5"
+        className="sticky top-0 z-40 flex flex-wrap items-center gap-x-2 gap-y-2 border-b-[2.5px] border-ink bg-card px-[max(0.75rem,env(safe-area-inset-left))] pt-[max(0.625rem,env(safe-area-inset-top))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-2.5 shadow-[0_3px_0_rgba(26,26,26,0.08)] sm:gap-3.5 sm:px-5 sm:py-2.5 xl:flex-nowrap"
       >
         <Link
           href="/"
@@ -390,11 +430,10 @@ export default function RoomPage() {
         </span>
         {phase === "playing" && gameState && (
           <GameNavTabs
-            gameState={gameState}
-            roomCode={code}
+            activeView={gameView}
             isHost={isHost}
-            send={send}
-            className="order-last w-full sm:order-none sm:w-auto"
+            onViewChange={setGameView}
+            className="order-last w-full xl:order-none xl:w-auto"
           />
         )}
       </header>
@@ -404,267 +443,288 @@ export default function RoomPage() {
         arbiterNotices={arbiterNotices}
         players={gameState?.players ?? []}
         onDismiss={dismissNotice}
+        stackedGameNav={phase === "playing"}
       />
 
       <div
-        data-game-scroll
-        className={cn(
-          "min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain",
-          phase !== "playing" && "p-4",
-        )}
+        data-game-workspace
+        className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
       >
-        {!gameState && (
-          <p className="p-4 font-hand text-lg text-muted-foreground">
-            Waiting for game state…
-          </p>
-        )}
+        <div
+          data-game-scroll
+          className={cn(
+            "min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain",
+            phase !== "playing" && "p-4",
+          )}
+        >
+          {!gameState && (
+            <p className="p-4 font-hand text-lg text-muted-foreground">
+              Waiting for game state…
+            </p>
+          )}
 
-        {gameState && phase === "lobby" && (
-          <div className="flex flex-col items-center pt-10">
-            <div className="flex w-full max-w-sm -rotate-[0.6deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-card p-6 panel-shadow">
-              <h2 className="font-marker text-2xl">The Lobby</h2>
-              <p className="text-center font-hand text-lg text-muted-foreground">
-                Waiting for players — share the room code{" "}
-                <span className="font-mono text-base text-ink">{code}</span>.
-              </p>
-              {gameState.players.length > 0 && (
-                <ul className="flex w-full flex-col gap-2">
-                  {gameState.players.map((p, i) => (
-                    <li key={p.id} className="flex items-center gap-2.5">
-                      <PlayerAvatar
-                        name={p.name}
-                        color={playerColor(i)}
-                        size={30}
-                      />
-                      <span className="font-hand text-lg">
-                        {p.name}
-                        {p.id === myPlayerId && " (you)"}
-                        {i === 0 && (
-                          <span className="ml-1 text-sm text-muted-foreground">
-                            · host
-                          </span>
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {isHost ? (
-                <Button
-                  size="lg"
-                  className="font-marker text-lg"
-                  onClick={() => send({ type: "start" })}
-                >
-                  Start game
-                </Button>
-              ) : (
-                <p className="font-hand text-base italic text-muted-foreground">
-                  Waiting for the host to start…
+          {gameState && phase === "lobby" && (
+            <div className="flex flex-col items-center pt-10">
+              <div className="flex w-full max-w-sm -rotate-[0.6deg] flex-col items-center gap-4 rounded-2xl border-[2.5px] border-ink bg-card p-6 panel-shadow">
+                <h2 className="font-marker text-2xl">The Lobby</h2>
+                <p className="text-center font-hand text-lg text-muted-foreground">
+                  Waiting for players — share the room code{" "}
+                  <span className="font-mono text-base text-ink">{code}</span>.
                 </p>
-              )}
+                {gameState.players.length > 0 && (
+                  <ul className="flex w-full flex-col gap-2">
+                    {gameState.players.map((p, i) => (
+                      <li key={p.id} className="flex items-center gap-2.5">
+                        <PlayerAvatar
+                          name={p.name}
+                          color={playerColor(i)}
+                          size={30}
+                        />
+                        <span className="font-hand text-lg">
+                          {p.name}
+                          {p.id === myPlayerId && " (you)"}
+                          {i === 0 && (
+                            <span className="ml-1 text-sm text-muted-foreground">
+                              · host
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {isHost ? (
+                  <Button
+                    size="lg"
+                    className="font-marker text-lg"
+                    onClick={() => send({ type: "start" })}
+                  >
+                    Start game
+                  </Button>
+                ) : (
+                  <p className="font-hand text-base italic text-muted-foreground">
+                    Waiting for the host to start…
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {gameState && phase === "setup" && (
-          <SetupPhase
-            gameState={gameState}
-            myPlayerId={myPlayerId ?? ""}
-            send={send}
-            previewResult={previewResult}
-            isSpectator={isSpectator}
-          />
-        )}
+          {gameState && phase === "setup" && (
+            <SetupPhase
+              gameState={gameState}
+              myPlayerId={myPlayerId ?? ""}
+              send={send}
+              previewResult={previewResult}
+              isSpectator={isSpectator}
+            />
+          )}
 
-        {gameState && phase === "playing" && (
-          /* Drag-and-drop card play: hand cards drag onto the felt (general
+          {gameState && phase === "playing" && (
+            /* Drag-and-drop card play: hand cards drag onto the felt (general
              play) or an opponent seat (targeted play). Click-to-select + Play
              keeps working unchanged inside <Hand>. */
-          <PlayDndContext cards={gameState.cards} roomCode={code} send={send}>
-            <div className="flex min-h-full min-w-0 flex-col">
-              <GameTable gameState={gameState} myPlayerId={myPlayerId ?? ""} />
-
-              {/* felt table: center zone + deck/action dock */}
-              <FeltDropZone className="mx-2 my-2.5 flex min-h-[320px] min-w-0 flex-1 flex-col items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)] sm:mx-4 sm:min-h-[380px] sm:flex-row">
-                <HouseRulesZone
-                  centerCards={houseRuleCards}
-                  brewingCardId={brewing}
-                  roomCode={code}
+            <PlayDndContext cards={gameState.cards} roomCode={code} send={send}>
+              <div className="flex min-h-full min-w-0 flex-col">
+                <GameTable
+                  gameState={gameState}
+                  myPlayerId={myPlayerId ?? ""}
                 />
-                <div className="flex shrink-0 flex-row items-center justify-center gap-3.5 overflow-x-auto border-t-2 border-dashed border-white/30 bg-black/15 px-3 py-2 sm:flex-col sm:overflow-visible sm:border-t-0 sm:border-l-2 sm:px-5 sm:py-4">
-                  <div className="text-center">
-                    {deckCount > 0 ? (
-                      <div className="relative mx-auto h-[104px] w-[74px] sm:h-32 sm:w-[92px]">
-                        <SketchCard
-                          faceDown
-                          showTape={false}
-                          w={compactViewport ? 74 : 92}
-                          rot={3}
-                          className="absolute top-1 left-1"
-                        />
-                        <SketchCard
-                          faceDown
-                          showTape={false}
-                          w={compactViewport ? 74 : 92}
-                          rot={-2}
-                          className="absolute top-0.5 left-0.5"
-                        />
-                        <SketchCard
-                          faceDown
-                          showTape={false}
-                          w={compactViewport ? 74 : 92}
-                          className="absolute top-0 left-0"
-                        />
-                      </div>
-                    ) : (
-                      <div className="mx-auto flex h-[104px] w-[74px] items-center justify-center rounded-[7px] border-2 border-dashed border-white/40 font-hand text-sm text-white/70 sm:h-32 sm:w-[92px]">
-                        empty
-                      </div>
+
+                {/* felt table: center zone + deck/action dock */}
+                <FeltDropZone className="mx-2 my-2.5 flex min-h-[320px] min-w-0 flex-1 flex-col items-stretch overflow-hidden rounded-[22px] border-[3px] border-ink bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.18)] sm:mx-4 sm:min-h-[380px] sm:flex-row">
+                  <HouseRulesZone
+                    centerCards={houseRuleCards}
+                    brewingCardId={brewing}
+                    roomCode={code}
+                  />
+                  <div className="flex shrink-0 flex-row items-center justify-center gap-3.5 overflow-x-auto border-t-2 border-dashed border-white/30 bg-black/15 px-3 py-2 sm:flex-col sm:overflow-visible sm:border-t-0 sm:border-l-2 sm:px-5 sm:py-4">
+                    <div className="text-center">
+                      {deckCount > 0 ? (
+                        <div className="relative mx-auto h-[104px] w-[74px] sm:h-32 sm:w-[92px]">
+                          <SketchCard
+                            faceDown
+                            showTape={false}
+                            w={compactViewport ? 74 : 92}
+                            rot={3}
+                            className="absolute top-1 left-1"
+                          />
+                          <SketchCard
+                            faceDown
+                            showTape={false}
+                            w={compactViewport ? 74 : 92}
+                            rot={-2}
+                            className="absolute top-0.5 left-0.5"
+                          />
+                          <SketchCard
+                            faceDown
+                            showTape={false}
+                            w={compactViewport ? 74 : 92}
+                            className="absolute top-0 left-0"
+                          />
+                        </div>
+                      ) : (
+                        <div className="mx-auto flex h-[104px] w-[74px] items-center justify-center rounded-[7px] border-2 border-dashed border-white/40 font-hand text-sm text-white/70 sm:h-32 sm:w-[92px]">
+                          empty
+                        </div>
+                      )}
+                      <p className="mt-1.5 font-hand text-[15px] text-white">
+                        Deck · {deckCount}
+                      </p>
+                    </div>
+                    <DiscardPile
+                      topCard={topDiscard}
+                      count={gameState.discard.length}
+                      roomCode={code}
+                      onClick={() => setHistoryOpen(true)}
+                    />
+                    {exiled.length > 0 && (
+                      <ExilePile
+                        topCard={topExiled}
+                        count={exiled.length}
+                        roomCode={code}
+                      />
                     )}
-                    <p className="mt-1.5 font-hand text-[15px] text-white">
-                      Deck · {deckCount}
+                  </div>
+                </FeltDropZone>
+
+                {/* your zone */}
+                {isSpectator ? (
+                  <div className="border-t-[2.5px] border-ink bg-card px-5 py-4">
+                    <p className="mx-auto w-fit rounded-xl border-2 border-dashed border-ink/40 px-5 py-3 font-hand text-base text-muted-foreground">
+                      You joined after the game started — you are spectating and
+                      cannot play cards.
                     </p>
                   </div>
-                  <DiscardPile
-                    topCard={topDiscard}
-                    count={gameState.discard.length}
-                    roomCode={code}
-                    onClick={() => setHistoryOpen(true)}
-                  />
-                  {exiled.length > 0 && (
-                    <ExilePile
-                      topCard={topExiled}
-                      count={exiled.length}
-                      roomCode={code}
-                    />
-                  )}
-                </div>
-              </FeltDropZone>
-
-              {/* your zone */}
-              {isSpectator ? (
-                <div className="border-t-[2.5px] border-ink bg-card px-5 py-4">
-                  <p className="mx-auto w-fit rounded-xl border-2 border-dashed border-ink/40 px-5 py-3 font-hand text-base text-muted-foreground">
-                    You joined after the game started — you are spectating and
-                    cannot play cards.
-                  </p>
-                </div>
-              ) : (
-                <div className="min-w-0 border-t-[2.5px] border-ink bg-card px-3 pt-3 pb-4 sm:px-5">
-                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-2.5">
-                      {me && (
-                        <>
-                          <PlayerAvatar
-                            name={me.name}
-                            color={playerColor(myIndex)}
-                            size={38}
-                          />
-                          <span className="font-hand text-[22px] leading-none">
-                            {me.name}
-                            {isActive && (
-                              <span className="ml-1 text-[15px] text-primary">
-                                · your turn
-                              </span>
-                            )}
-                          </span>
-                          <span
-                            className="font-marker text-2xl tabular-nums"
-                            style={{ color: playerColor(myIndex) }}
-                          >
-                            {me.score}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    {/* End turn only when the player may pass (holds no playable
+                ) : (
+                  <div className="min-w-0 border-t-[2.5px] border-ink bg-card px-3 pt-3 pb-4 sm:px-5">
+                    <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5">
+                        {me && (
+                          <>
+                            <PlayerAvatar
+                              name={me.name}
+                              color={playerColor(myIndex)}
+                              size={38}
+                            />
+                            <span className="font-hand text-[22px] leading-none">
+                              {me.name}
+                              {isActive && (
+                                <span className="ml-1 text-[15px] text-primary">
+                                  · your turn
+                                </span>
+                              )}
+                            </span>
+                            <span
+                              className="font-marker text-2xl tabular-nums"
+                              style={{ color: playerColor(myIndex) }}
+                            >
+                              {me.score}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {/* End turn only when the player may pass (holds no playable
                       card); the server drew for them at turn start. Hidden
                       while a play is brewing — the server freezes game
                       actions during interpretation. */}
-                    {isActive && !brewing && gameState.can_pass && (
-                      <Button
-                        variant="outline"
-                        onClick={() => send({ type: "pass" })}
-                      >
-                        End Turn ⟳
-                      </Button>
-                    )}
-                  </div>
-                  {myInPlayCards.length > 0 && (
-                    <div className="mb-1 flex items-center gap-2">
-                      <span className="font-hand text-sm text-muted-foreground">
-                        In front of you:
-                      </span>
-                      {myInPlayCards.map((card) => (
-                        <SketchCard
-                          key={card.id}
-                          card={card}
-                          w={56}
-                          showTape={false}
-                          rot={stableRotation(card.id, 4)}
-                          artUrl={getCardArtUrl(code, card)}
-                        />
-                      ))}
+                      {isActive && !brewing && gameState.can_pass && (
+                        <Button
+                          variant="outline"
+                          onClick={() => send({ type: "pass" })}
+                        >
+                          End Turn ⟳
+                        </Button>
+                      )}
                     </div>
-                  )}
-                  <Hand
-                    cards={myHandCards}
-                    canPlay={isActive}
-                    brewing={brewing}
-                    send={send}
-                    roomCode={code}
-                    revealedBadge={myHandRevealedBadge}
-                  />
+                    {myInPlayCards.length > 0 && (
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="font-hand text-sm text-muted-foreground">
+                          In front of you:
+                        </span>
+                        {myInPlayCards.map((card) => (
+                          <SketchCard
+                            key={card.id}
+                            card={card}
+                            w={56}
+                            showTape={false}
+                            rot={stableRotation(card.id, 4)}
+                            artUrl={getCardArtUrl(code, card)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    <Hand
+                      cards={myHandCards}
+                      canPlay={isActive}
+                      brewing={brewing}
+                      send={send}
+                      roomCode={code}
+                      revealedBadge={myHandRevealedBadge}
+                    />
+                  </div>
+                )}
+
+                <DynamicStatePanel gameState={gameState} />
+              </div>
+            </PlayDndContext>
+          )}
+
+          {gameState && phase === "results" && (
+            <ResultsScreen
+              gameState={gameState}
+              myPlayerId={myPlayerId ?? ""}
+              log={log}
+              isHost={isHost}
+              send={send}
+              onCorrectResults={() => setResultsAdminOpen(true)}
+              onBack={() => router.push("/")}
+            />
+          )}
+
+          {gameState && phase === "epilogue" && (
+            <div className="flex flex-col gap-4">
+              {epilogueWinnerNames.length > 0 && (
+                <div className="mx-auto -rotate-[0.5deg] rounded-xl border-2 border-ink bg-card px-5 py-2 text-center panel-shadow">
+                  <p className="font-hand text-lg">
+                    {epilogueWinnerNames.length > 1 ? "Winners" : "Winner"}:{" "}
+                    <span className="font-marker text-base text-primary">
+                      {epilogueWinnerNames.join(", ")}
+                    </span>
+                  </p>
                 </div>
               )}
-
-              <EffectLog log={log} brewing={brewing} />
-              <DynamicStatePanel gameState={gameState} />
+              <EpilogueView
+                cards={epilogueCards}
+                send={send}
+                isHost={isHost}
+                roomCode={code}
+              />
             </div>
-          </PlayDndContext>
-        )}
+          )}
 
-        {gameState && phase === "results" && (
-          <ResultsScreen
-            gameState={gameState}
-            myPlayerId={myPlayerId ?? ""}
-            log={log}
-            isHost={isHost}
-            send={send}
-            onCorrectResults={() => setResultsAdminOpen(true)}
-            onBack={() => router.push("/")}
-          />
-        )}
-
-        {gameState && phase === "epilogue" && (
-          <div className="flex flex-col gap-4">
-            {epilogueWinnerNames.length > 0 && (
-              <div className="mx-auto -rotate-[0.5deg] rounded-xl border-2 border-ink bg-card px-5 py-2 text-center panel-shadow">
-                <p className="font-hand text-lg">
-                  {epilogueWinnerNames.length > 1 ? "Winners" : "Winner"}:{" "}
-                  <span className="font-marker text-base text-primary">
-                    {epilogueWinnerNames.join(", ")}
-                  </span>
-                </p>
-              </div>
-            )}
-            <EpilogueView
-              cards={epilogueCards}
-              send={send}
+          {gameState && phase === "ended" && (
+            <ResultsScreen
+              gameState={gameState}
+              myPlayerId={myPlayerId ?? ""}
+              log={log}
               isHost={isHost}
-              roomCode={code}
+              send={send}
+              onBack={() => router.push("/")}
             />
-          </div>
-        )}
+          )}
+        </div>
 
-        {gameState && phase === "ended" && (
-          <ResultsScreen
+        {gameState && phase === "playing" && gameView !== "table" && (
+          <GameViewPanel
+            view={gameView}
             gameState={gameState}
-            myPlayerId={myPlayerId ?? ""}
+            roomCode={code}
             log={log}
-            isHost={isHost}
+            brewing={brewing}
+            presentation={wideGameView ? "sidebar" : "modal"}
             send={send}
-            onBack={() => router.push("/")}
+            onClose={closeGameView}
           />
         )}
       </div>

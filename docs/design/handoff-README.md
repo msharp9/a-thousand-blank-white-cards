@@ -77,13 +77,13 @@ A reusable card renders in two faces and at many sizes.
 
 > Note: an earlier version had a colored corner **points badge**; it was intentionally **removed** per review. Points/effects now live only in the rule text. Do not reintroduce a numeric badge on cards.
 
-Card sizes in use: hand 130×182 · table center 126×176 · opponent/you "in front" 52×73 / 56×78 · deck 92×128 · discard 80×112 · gallery 164×230 · epilogue 160×224 · play-log mini 30×42 · history-modal 52×73 · home hero 120×168 · opponent face-down fan 40×56.
+Card sizes in use: hand 130×182 · table center 126×176 · opponent/you "in front" 52×73 / 56×78 · deck 92×128 · discard 80×112 · gallery 164×230 · epilogue 160×224 · history-modal 52×73 · home hero 120×168 · opponent face-down fan 40×56.
 
 ## Screens / Views
 Single-page app with a router (`screen` state) and a persistent top bar (except on Home).
 
 ### Top bar (all screens except Home)
-Sticky, white, `border-bottom:2.5px solid #1a1a1a`. Left: "1KBWC" logo (Permanent Marker, click → Home). Nav tabs: **Table, Create, Gallery, Scores, Epilogue** — active tab is filled black (`#1a1a1a` bg, white text), others white with black border. Right: "Turn N" label (Patrick Hand).
+Sticky, white, `border-bottom:2.5px solid #1a1a1a`. Left: "1KBWC" logo (Permanent Marker, click → Home). During play the nav buttons are **Table, Log, Gallery, Scores, Status**, plus **Host** for the room host. The active button is filled black (`#1a1a1a` bg, white text); others are white with a black border. The bar also shows the room, phase, turn, timer, and connection state. Below 1280px the navigation occupies its own row so all controls retain phone-sized touch targets.
 
 ### 1. Home
 Full-viewport centered hero. Three floating hero cards overlapped (negative margins, `floaty` animation): a truly blank card ("Blank."), "Free Point! 🎉", "Meow. 🐱". Faint rotated emoji doodles in the four corners (✏️ 🎲 🦆 🌋, opacity 0.5). Title "1000 Blank / White Cards" (Permanent Marker, `clamp(38px,7vw,84px)`). Tagline (Patrick Hand). Two sticker buttons: **Play Now** (red → Table) and **Make a Card** (white → Create). A 3-step "how to play" row beneath.
@@ -95,7 +95,9 @@ Vertical stack:
   - **Center zone** (flex:1) — label "◆ AFFECTS EVERYONE ◆" (Permanent Marker, translucent white), holds cards that affect all players (126×176) each with a "by <name>" tab. Empty state: dashed box "Nothing in play for everyone…".
   - **Deck/discard dock** (right, darker inset column, `border-left:2px dashed`): stacked face-down deck (three 92×128 cards, slight rotations) + "Deck · N"; **Draw a Card** (yellow) and **Draw a Blank** (white) buttons; clickable **discard** card (80×112) labeled "Discard · tap for log".
 - **Your zone** (white, top-bordered): header with your avatar/name ("· your turn")/score on the left and **End Turn ⟳** on the right. When a hand card is selected, a **target chooser** bar appears (cream, `2px dashed`, `popin`): "Play "<title>" to:" followed by buttons **Everyone** (👥, yellow), one per player (avatar emoji + name, player-color bg, white text), **Discard** (🗑, white), and **Cancel**. Below, an optional "In front of you:" row of your own in-front cards. Then your **hand fan** (130×182 cards, overlapped -34px, rotated by index; selected card lifts translateY(-34px), unselected dim to opacity 0.55; hover lifts translateY(-24px) and straightens).
-- **Play Log strip** (bottom, `#efe9da`, top-bordered): "Play Log" label + horizontal-scroll list of plays, **newest first**. Each entry: mini card (30×42) + "**<by>** → <target>" over "<turn> · <title>". Empty state: "No cards played yet."
+- **Play Log panel** (opened from **Log**): a scrollable list of plays, **newest first**, including the live card-interpreting indicator and distinct AI-arbiter commentary. Empty state: "No cards played yet." It opens as a modal below 1280px and as a 420px right sidebar on wider screens.
+
+Gallery, Scores, Status, Play Log, and Host share the same adaptive presentation. On wide screens one selected view sits beside the still-interactive table; on smaller screens it opens over the table as a modal. **Table**, ✕, or Escape closes the selected view.
 
 **History modal** (opens on discard tap): fixed full-screen scrim `rgba(20,18,14,0.55)`; centered card-styled panel (`border:3px`, radius 18, `box-shadow:8px 8px 0`). Header "Everything Played" (Permanent Marker) + ✕ close. Scrollable list of every play: 52×73 card + title (Patrick Hand) + rule (Nunito) + right-aligned "**<by>** → <target> / <turn>". Click scrim or ✕ to close.
 
@@ -117,7 +119,7 @@ Centered max-width 720. "Scoreboard" title + subtitle. One row per player, **sor
 Centered max-width 1000. "The Epilogue" title + subtitle. A counter line: "<n> kept · <n> cut · <n> to decide". Wrapping grid of all cards (160×224); under each, **Keep** and **Cut** buttons. Keep selected → green fill; Cut selected → red fill and the card dims (opacity 0.35) + `grayscale(0.9)`. Clicking the active choice again clears it.
 
 ## Interactions & Behavior
-- **Navigation:** top-bar tabs and logo set the current screen. Home buttons route to Table / Create.
+- **Navigation:** playing-phase buttons select Table or one auxiliary panel; the logo returns Home. Setup, Results, and Epilogue remain game phases rather than navigation tabs.
 - **Select a hand card:** click toggles selection; selected lifts and others dim; the target chooser appears.
 - **Play a card:** clicking a target button removes it from hand, appends it to the chosen destination (center / that player's in-front list / discard = top of discard), pushes an entry to the play log (`{by, target, turn}`, newest first), and clears the selection. Center/in-front cards get a random rotation −6…+6deg and a `popin` entrance.
 - **Cancel:** clears selection.

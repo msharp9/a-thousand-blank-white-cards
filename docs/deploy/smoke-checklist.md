@@ -84,12 +84,13 @@ Do these against the **live Vercel URL** with two devices.
 - [ ] **Real-time state sync** — Take an action on one device (e.g. change name,
       ready up, advance phase) and confirm the other device updates within a
       second or two without a manual refresh.
-- [ ] **Play a card** — Play a card from a hand and confirm the **effect log**
-      updates on **both** devices with the resulting effect.
+- [ ] **Play a card** — Play a card from a hand, open **Log** from the top
+      navigation, and confirm the **Play Log** updates on **both** devices with
+      the resulting effect.
 - [ ] **Author a wild card** — Write a new custom (wild) card and submit it.
       Confirm the **brewing indicator** appears while the agent interprets it,
       then a **verdict** is returned and applied. The card's effect should be
-      reflected in game state / the effect log.
+      reflected in game state / the Play Log.
 - [ ] **Reconnect** — Refresh one device mid-game and confirm it reconnects to
       the same room and restores state (no lost session).
 The next four checks exercise specific card behaviors. What matters is the

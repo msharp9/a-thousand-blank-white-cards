@@ -96,7 +96,7 @@ export function ReactionWindow({
     return (
       <div
         data-reaction-status
-        className="fixed inset-x-0 top-[calc(env(safe-area-inset-top)+7.25rem)] z-50 mx-auto w-fit max-w-[calc(100%-1.5rem)] -rotate-[0.4deg] rounded-xl border-2 border-ink bg-card px-3 py-2 sticker-shadow-sm sm:top-[4.5rem] sm:px-4 sm:py-2.5"
+        className="fixed inset-x-0 top-[calc(env(safe-area-inset-top)+7.25rem)] z-50 mx-auto w-fit max-w-[calc(100%-1.5rem)] -rotate-[0.4deg] rounded-xl border-2 border-ink bg-card px-3 py-2 sticker-shadow-sm sm:px-4 sm:py-2.5 xl:top-[4.5rem]"
       >
         <p className="font-hand text-base">
           ⏳ {actorName} plays <b>“{title}”</b> — waiting to see if anyone

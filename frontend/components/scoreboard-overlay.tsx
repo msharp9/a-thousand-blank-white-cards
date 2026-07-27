@@ -1,6 +1,9 @@
 "use client";
 
-import { OverlayShell } from "@/components/overlay-shell";
+import {
+  OverlayShell,
+  type PanelPresentation,
+} from "@/components/overlay-shell";
 import { MEDALS, StandingRow } from "@/components/standing-row";
 import { playerColor } from "@/lib/players";
 import type { PlayerSnapshot } from "@/lib/types";
@@ -8,6 +11,7 @@ import { useCompactViewport } from "@/lib/use-compact-viewport";
 
 interface ScoreboardOverlayProps {
   players: PlayerSnapshot[];
+  presentation?: PanelPresentation;
   onClose: () => void;
 }
 
@@ -20,6 +24,7 @@ interface ScoreboardOverlayProps {
  */
 export function ScoreboardOverlay({
   players,
+  presentation = "modal",
   onClose,
 }: ScoreboardOverlayProps) {
   const compactViewport = useCompactViewport();
@@ -35,6 +40,7 @@ export function ScoreboardOverlay({
       subtitle="How everyone’s doing right now"
       closeLabel="Close scoreboard"
       onClose={onClose}
+      presentation={presentation}
       panelClassName="max-w-[720px]"
     >
       <div

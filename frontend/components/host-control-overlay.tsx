@@ -10,19 +10,24 @@ import {
   ShuffleIcon,
   Trash2Icon,
 } from "lucide-react";
-import { OverlayShell } from "@/components/overlay-shell";
+import {
+  OverlayShell,
+  type PanelPresentation,
+} from "@/components/overlay-shell";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { conditionName, conditionValueDetail } from "@/lib/conditions";
 import { playerColor } from "@/lib/players";
 import type { AdminAction, ClientMsg, GameStateSnapshot } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 type View = "main" | "move" | "condition" | "hooks" | "outcome" | "review";
 
 interface HostControlOverlayProps {
   gameState: GameStateSnapshot;
   send: (message: ClientMsg) => void;
+  presentation?: PanelPresentation;
   onClose: () => void;
 }
 
@@ -84,23 +89,25 @@ function actionLabel(action: AdminAction, state: GameStateSnapshot): string {
 export function HostControlOverlay({
   gameState,
   send,
+  presentation = "modal",
   onClose,
 }: HostControlOverlayProps) {
   const [view, setView] = useState<View>("main");
   const [queued, setQueued] = useState<AdminAction[]>([]);
-  const [scores, setScores] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      gameState.players.map((player) => [player.id, String(player.score)]),
-    ),
-  );
+  const [scoreEdits, setScoreEdits] = useState<Record<string, string>>({});
   const [resultWinners, setResultWinners] = useState<string[]>(
     gameState.winner_ids ?? [],
   );
 
+  const updateScore = (playerId: string, value: string) => {
+    setScoreEdits((current) => ({ ...current, [playerId]: value }));
+  };
+
   const scoreActions = useMemo<AdminAction[]>(
     () =>
       gameState.players.flatMap((player) => {
-        const value = Number(scores[player.id]);
+        if (scoreEdits[player.id] === undefined) return [];
+        const value = Number(scoreEdits[player.id]);
         if (
           !Number.isInteger(value) ||
           value === player.score ||
@@ -110,7 +117,7 @@ export function HostControlOverlay({
           return [];
         return [{ kind: "set_score", player_id: player.id, score: value }];
       }),
-    [gameState.players, scores],
+    [gameState.players, scoreEdits],
   );
   const resultAction: AdminAction[] =
     gameState.phase === "results"
@@ -158,6 +165,7 @@ export function HostControlOverlay({
       subtitle="Every change needs unanimous table approval"
       closeLabel="Close host controls"
       onClose={onClose}
+      presentation={presentation}
       panelClassName="max-w-[760px]"
     >
       {view !== "main" && (
@@ -179,7 +187,9 @@ export function HostControlOverlay({
             </p>
             <div className="mt-2 flex flex-col gap-2">
               {gameState.players.map((player, index) => {
-                const parsed = Number(scores[player.id]);
+                const parsed = Number(
+                  scoreEdits[player.id] ?? String(player.score),
+                );
                 return (
                   <div
                     key={player.id}
@@ -199,13 +209,13 @@ export function HostControlOverlay({
                       className="size-11 shrink-0"
                       aria-label={`Subtract one point from ${player.name}`}
                       onClick={() =>
-                        setScores((current) => ({
-                          ...current,
-                          [player.id]: String(
+                        updateScore(
+                          player.id,
+                          String(
                             (Number.isFinite(parsed) ? parsed : player.score) -
                               1,
                           ),
-                        }))
+                        )
                       }
                     >
                       <MinusIcon />
@@ -213,13 +223,10 @@ export function HostControlOverlay({
                     <Input
                       aria-label={`${player.name} score`}
                       type="number"
-                      value={scores[player.id]}
+                      value={scoreEdits[player.id] ?? String(player.score)}
                       className="h-11 w-20 text-center font-mono"
                       onChange={(event) =>
-                        setScores((current) => ({
-                          ...current,
-                          [player.id]: event.target.value,
-                        }))
+                        updateScore(player.id, event.target.value)
                       }
                     />
                     <Button
@@ -228,13 +235,13 @@ export function HostControlOverlay({
                       className="size-11 shrink-0"
                       aria-label={`Add one point to ${player.name}`}
                       onClick={() =>
-                        setScores((current) => ({
-                          ...current,
-                          [player.id]: String(
+                        updateScore(
+                          player.id,
+                          String(
                             (Number.isFinite(parsed) ? parsed : player.score) +
                               1,
                           ),
-                        }))
+                        )
                       }
                     >
                       <PlusIcon />
@@ -255,7 +262,12 @@ export function HostControlOverlay({
           ) : (
             <section>
               <h3 className="font-marker text-lg">Table state</h3>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div
+                className={cn(
+                  "mt-2 grid grid-cols-2 gap-2",
+                  presentation === "modal" && "sm:grid-cols-3",
+                )}
+              >
                 <ControlButton
                   label="Move a card"
                   onClick={() => setView("move")}
