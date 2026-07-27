@@ -10,6 +10,12 @@ import {
   conditionValueDetail,
 } from "@/lib/conditions";
 import { playerColor } from "@/lib/players";
+import {
+  projectSeats,
+  SEAT_EDGE_LABELS,
+  seatEdge,
+  type SeatEdge,
+} from "@/lib/seating";
 import type {
   CardSnapshot,
   GameStateSnapshot,
@@ -65,12 +71,26 @@ function ConditionBadges({ player }: { player: PlayerSnapshot }) {
  * The opponents row at the top of the Play Table: one panel per non-self
  * player (all players when spectating), dashed-bordered in that player's
  * identity color, with their face-down hand fan and in-front cards.
+ *
+ * Seats project viewer-relative from the mutable turn_order (lib/seating):
+ * far-left is the seated viewer's turn-order successor, far-right their
+ * predecessor; spectators see the canonical order. Identity colors stay keyed
+ * to the roster index so they never shift when the turn order does.
  */
 export function GameTable({ gameState, myPlayerId }: GameTableProps) {
-  const { players, spectators, turn_index, cards } = gameState;
+  const { players, spectators, turn_index, turn_order, cards } = gameState;
   const activePlayerId = players.length
     ? players[turn_index % players.length]?.id
     : undefined;
+  const rosterIndex = new Map(players.map((p, index) => [p.id, index]));
+  const viewerSeated = rosterIndex.has(myPlayerId);
+  const seats = projectSeats(
+    turn_order,
+    players.map((p) => p.id),
+    myPlayerId,
+  )
+    .map((id) => players[rosterIndex.get(id) ?? -1])
+    .filter((p): p is PlayerSnapshot => Boolean(p));
 
   return (
     <div className="flex min-w-0 flex-col gap-2 px-3 pt-3 pb-1.5 sm:px-5 sm:pt-5">
@@ -79,19 +99,18 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
         className="-mx-3 overflow-x-auto overscroll-x-contain px-3 snap-x snap-mandatory sm:mx-0 sm:overflow-visible sm:px-0"
       >
         <div className="flex w-max justify-start gap-3 sm:w-auto sm:flex-wrap sm:justify-center sm:gap-6">
-          {players.map((player, index) =>
-            player.id === myPlayerId ? null : (
-              <OpponentPanel
-                key={player.id}
-                player={player}
-                color={playerColor(index)}
-                cards={cards}
-                roomCode={gameState.room_code}
-                isActive={player.id === activePlayerId}
-                myPlayerId={myPlayerId}
-              />
-            ),
-          )}
+          {seats.map((player, seatIndex) => (
+            <OpponentPanel
+              key={player.id}
+              player={player}
+              color={playerColor(rosterIndex.get(player.id) ?? seatIndex)}
+              edge={seatEdge(seatIndex, seats.length, viewerSeated)}
+              cards={cards}
+              roomCode={gameState.room_code}
+              isActive={player.id === activePlayerId}
+              myPlayerId={myPlayerId}
+            />
+          ))}
         </div>
       </div>
       {spectators.length > 0 && (
@@ -115,6 +134,7 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
 function OpponentPanel({
   player,
   color,
+  edge,
   cards,
   roomCode,
   isActive,
@@ -122,6 +142,7 @@ function OpponentPanel({
 }: {
   player: PlayerSnapshot;
   color: string;
+  edge: SeatEdge | null;
   cards: Record<string, CardSnapshot>;
   roomCode: string;
   isActive: boolean;
@@ -160,6 +181,11 @@ function OpponentPanel({
     <div
       ref={setNodeRef}
       data-seat-drop={player.id}
+      data-seat-edge={edge ?? undefined}
+      role="group"
+      aria-label={
+        edge ? `${player.name} — ${SEAT_EDGE_LABELS[edge]}` : player.name
+      }
       className={cn(
         "flex max-w-[280px] shrink-0 snap-center flex-col items-center gap-1.5 overflow-hidden rounded-[14px] bg-card/60 px-3 py-2 sm:max-w-none",
         "transition-[box-shadow,transform] duration-150",
@@ -171,6 +197,14 @@ function OpponentPanel({
         boxShadow: isOver ? `0 0 0 3px ${color}, 0 0 16px ${color}` : undefined,
       }}
     >
+      {edge && (
+        <span
+          data-seat-edge-label
+          className="font-hand text-[11px] leading-none text-muted-foreground"
+        >
+          {SEAT_EDGE_LABELS[edge]}
+        </span>
+      )}
       <div className="flex items-center gap-2">
         <PlayerAvatar name={player.name} color={color} size={34} />
         <span className="font-hand text-[19px] leading-none">
