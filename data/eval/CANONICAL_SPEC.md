@@ -248,8 +248,9 @@ reads `ctx["interactions"][result_key]`.
 
 Style guide:
 - Player targets are runtime Target strings: `"self"`, `"chooser"` (the chosen
-  player), `"all"`, `"all_others"`, `"left_neighbor"`, `"right_neighbor"`,
-  `"id:<player_id>"`, `"has:<condition_key>"`.
+  player), `"all"`, `"all_others"`, `"left_neighbor"` (the NEXT player in turn
+  order — the successor), `"right_neighbor"` (the PREVIOUS player — the
+  predecessor), `"id:<player_id>"`, `"has:<condition_key>"`.
 - Read `ctx` defensively: `ctx.get("actor_id", "")`.
 - Use `state.note(...)` for the table-adjudicated part of a dare.
 - Point losses use `subtract_points` (`add_points` rejects negative amounts).

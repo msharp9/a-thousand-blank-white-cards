@@ -181,8 +181,8 @@ OP_CATALOG_GUIDE = """\
 - Use the EXACT numbers the card states: "draw 3" is amount=3, "gain 10" is amount=10,
   "lose 4" is subtract_points amount=4. Never default a number the card specifies.
 - Relative targets follow play direction: the NEXT player (the one after you) is
-  right_neighbor; the PREVIOUS player is left_neighbor. "Skip the next player" targets
-  right_neighbor — not yourself, not left_neighbor.
+  left_neighbor; the PREVIOUS player is right_neighbor. "Skip the next player" targets
+  left_neighbor — not yourself, not right_neighbor.
 - set_condition writes a per-player status ("cursed", "polite"); set_rule writes a
   global/game rule. A card about one player's state uses set_condition, not set_rule.
 - REACTION cards ("counterspell", "cancel that", "steal that spell", "play only when

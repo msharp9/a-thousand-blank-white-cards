@@ -112,8 +112,18 @@ def test_hot_potato_penalizes_the_right_neighbor_and_moves_itself() -> None:
     )
 
     assert report["ok"] is True, report
-    assert report["after"]["scores"] == {"p1": 0, "p2": -2, "p3": 0}
-    assert report["after"]["hand_sizes"] == {"p1": 0, "p2": 1, "p3": 0}
+    assert report["after"]["scores"] == {"p1": 0, "p2": 0, "p3": -2}
+    assert report["after"]["hand_sizes"] == {"p1": 0, "p2": 0, "p3": 1}
+
+
+def test_groundhog_day_gives_the_previous_player_the_extra_turn() -> None:
+    card = _filler("Groundhog Day")
+    report = _run(card, _state(card, {"p1": [card["id"]], "p2": [], "p3": []}))
+
+    assert report["ok"] is True, report
+    assert any(op["op"] == "extra_turn" and op["target"] == "right_neighbor" for op in report["emitted_ops"]), report[
+        "emitted_ops"
+    ]
 
 
 def test_nap_time_draws_three_and_schedules_the_players_next_turn_skip() -> None:

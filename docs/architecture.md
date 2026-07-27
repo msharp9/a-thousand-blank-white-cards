@@ -418,7 +418,10 @@ discriminated union in `models/effects.py` (`add_points`, `subtract_points`,
 authoritative complete union). Each op addresses players via a `Target`
 (`self`, `left_neighbor`, `all_others`, `chooser`, `player_with_most_points`, …)
 and, for card manipulation, a `CardTarget` (`this`, `chosen_card`,
-`all_in_play`, `all_in_hand`, `all_in_center`).
+`all_in_play`, `all_in_hand`, `all_in_center`). Neighbors follow the effective
+turn order: `left_neighbor` is the turn-order successor (the next player;
+authoring alias `next_player`) and `right_neighbor` the predecessor (alias
+`previous_player`).
 
 Game rules are **data** (`GameState.rules`, per `docs/state-example.jsonc`):
 draw/play counts, the end condition (`deck_empty`/`empty_hand`/`points_reached`/`now`),

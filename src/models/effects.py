@@ -184,8 +184,10 @@ _AUTHORING_TARGET_ALIASES: dict[str, Target] = {
     "others": "all_others",
     # the player who acts immediately after the actor in turn_order — see
     # engine.loop._next_in_order / advance_turn, which both step +1 through
-    # state.effective_turn_order(); that is exactly right_neighbor's formula.
-    "next_player": "right_neighbor",
+    # state.effective_turn_order(); that is exactly left_neighbor's formula.
+    "next_player": "left_neighbor",
+    # the player who acted immediately before the actor (turn-order predecessor).
+    "previous_player": "right_neighbor",
 }
 
 

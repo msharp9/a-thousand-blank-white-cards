@@ -16,7 +16,7 @@
       "endCondition": { "type": "deckEmpty" },  // The game ends when the deck is empty
       "winCondition": { "type": "maxPoints" }  // The player with the most points wins
     },
-    "turnOrder": ["Player1", "Player2"],  // The order in which players take their turns
+    "turnOrder": ["Player1", "Player2"],  // The order in which players take their turns; a player's left_neighbor is the next id in this rotation (their successor), right_neighbor the previous
     "players": {
       "Player1": {
         "points": 2,  // Current points of Player1

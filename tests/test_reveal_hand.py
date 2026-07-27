@@ -61,7 +61,7 @@ def test_compile_card_maps_reveal_hand_authoring_op() -> None:
     assert program is not None
     op = program.ops[0]
     assert isinstance(op, RevealHandOp)
-    assert op.to == "right_neighbor"
+    assert op.to == "left_neighbor"
     assert op.persistent is True
 
 
