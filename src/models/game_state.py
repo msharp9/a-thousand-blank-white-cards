@@ -306,6 +306,10 @@ class GameState(BaseModel):
     # Watchers who joined after the game left the lobby (see Spectator). Kept
     # separate from ``players`` rather than merged in as a flagged Player.
     spectators: list[Spectator] = Field(default_factory=list)
+    # The participant with room-management authority. The host may be either a
+    # player or a spectator; spectator hosts remain structurally excluded from
+    # gameplay while retaining host-only room/admin controls.
+    host_id: str | None = None
 
     # Card registry grows during play as new cards are invented
     deck: list[str] = Field(default_factory=list)  # card ids (ordered)
@@ -379,6 +383,23 @@ class GameState(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
+    def _backfill_legacy_host(cls, data: Any) -> Any:
+        """Give pre-host persisted states their historical first-player host."""
+        if not isinstance(data, dict) or "host_id" in data:
+            return data
+        players = data.get("players") or []
+        if not players:
+            return data
+        first = players[0]
+        host_id = first.get("id") if isinstance(first, dict) else getattr(first, "id", None)
+        if host_id is None:
+            return data
+        updated = dict(data)
+        updated["host_id"] = host_id
+        return updated
+
+    @model_validator(mode="before")
+    @classmethod
     def _lift_legacy_rule_fields(cls, data: Any) -> Any:
         """Accept pre-``rules`` inputs (old persisted states, terse test builders).
 
@@ -405,6 +426,17 @@ class GameState(BaseModel):
             rules.setdefault(legacy[key], data.pop(key))
         data["rules"] = rules
         return data
+
+    @model_validator(mode="after")
+    def _validate_participant_identity(self) -> GameState:
+        player_ids = [player.id for player in self.players]
+        spectator_ids = [spectator.id for spectator in self.spectators]
+        all_ids = [*player_ids, *spectator_ids]
+        if len(all_ids) != len(set(all_ids)):
+            raise ValueError("participant ids must be unique across players and spectators")
+        if self.host_id is not None and self.host_id not in all_ids:
+            raise ValueError("host_id must identify a player or spectator")
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -452,6 +484,21 @@ class GameState(BaseModel):
             if p.id == player_id:
                 return p
         raise KeyError(f"Player {player_id!r} not found")
+
+    def get_spectator(self, spectator_id: str) -> Spectator:
+        for spectator in self.spectators:
+            if spectator.id == spectator_id:
+                return spectator
+        raise KeyError(f"Spectator {spectator_id!r} not found")
+
+    def has_participant(self, participant_id: str) -> bool:
+        return any(player.id == participant_id for player in self.players) or self.is_spectator(participant_id)
+
+    def participant_name(self, participant_id: str) -> str:
+        try:
+            return self.get_player(participant_id).name
+        except KeyError:
+            return self.get_spectator(participant_id).name
 
     def is_spectator(self, player_id: str) -> bool:
         """True if ``player_id`` is a watcher (present in ``spectators``)."""

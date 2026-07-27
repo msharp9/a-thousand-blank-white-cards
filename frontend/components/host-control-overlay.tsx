@@ -28,6 +28,8 @@ interface HostControlOverlayProps {
   gameState: GameStateSnapshot;
   send: (message: ClientMsg) => void;
   presentation?: PanelPresentation;
+  godMode?: boolean;
+  godModeLoading?: boolean;
   onClose: () => void;
 }
 
@@ -62,7 +64,15 @@ function actionLabel(action: AdminAction, state: GameStateSnapshot): string {
     case "set_score":
       return `Set ${player(action.player_id)}’s score to ${action.score}`;
     case "move_card":
-      return `Move ${action.card_id ? cardTitle(state, action.card_id) : `${action.selector} deck card`} to ${action.to_zone}`;
+      return `Move ${
+        action.card_id
+          ? cardTitle(state, action.card_id)
+          : `${action.selector} deck card`
+      }${
+        action.source_zone === "hand" && action.source_player_id
+          ? ` from ${player(action.source_player_id)}’s hand`
+          : ""
+      } to ${action.to_zone}`;
     case "shuffle_deck":
       return action.include_discard
         ? "Shuffle discard pile into the deck"
@@ -90,6 +100,8 @@ export function HostControlOverlay({
   gameState,
   send,
   presentation = "modal",
+  godMode = false,
+  godModeLoading = false,
   onClose,
 }: HostControlOverlayProps) {
   const [view, setView] = useState<View>("main");
@@ -156,13 +168,35 @@ export function HostControlOverlay({
     onClose();
   };
 
+  if (godModeLoading) {
+    return (
+      <OverlayShell
+        scrimTestId="host-controls-scrim"
+        title="Host controls"
+        subtitle="Opening protected God mode…"
+        closeLabel="Close host controls"
+        onClose={onClose}
+        presentation={presentation}
+        panelClassName="max-w-[760px]"
+      >
+        <p role="status" className="font-hand text-lg text-muted-foreground">
+          Loading hands and deck order…
+        </p>
+      </OverlayShell>
+    );
+  }
+
   return (
     <OverlayShell
       scrimTestId="host-controls-scrim"
       title={
         gameState.phase === "results" ? "Correct results" : "Host controls"
       }
-      subtitle="Every change needs unanimous table approval"
+      subtitle={
+        godMode
+          ? "God mode · hidden card state is visible only in this panel"
+          : "Every change needs unanimous table approval"
+      }
       closeLabel="Close host controls"
       onClose={onClose}
       presentation={presentation}
@@ -335,7 +369,11 @@ export function HostControlOverlay({
       )}
 
       {view === "move" && (
-        <MoveCardForm gameState={gameState} onAdd={addAction} />
+        <MoveCardForm
+          gameState={gameState}
+          godMode={godMode}
+          onAdd={addAction}
+        />
       )}
       {view === "condition" && (
         <ConditionForm gameState={gameState} onAdd={addAction} />
@@ -401,14 +439,19 @@ function ControlButton({
 
 function MoveCardForm({
   gameState,
+  godMode,
   onAdd,
 }: {
   gameState: GameStateSnapshot;
+  godMode: boolean;
   onAdd: (action: AdminAction) => void;
 }) {
   const [sourceZone, setSourceZone] = useState<
-    "deck" | "discard" | "center" | "exile" | "in_play"
+    "deck" | "discard" | "center" | "exile" | "in_play" | "hand"
   >("discard");
+  const [sourcePlayer, setSourcePlayer] = useState(
+    gameState.players[0]?.id ?? "",
+  );
   const [sourceValue, setSourceValue] = useState("");
   const [selector, setSelector] = useState<"top" | "bottom">("top");
   const [toZone, setToZone] = useState<
@@ -420,6 +463,22 @@ function MoveCardForm({
   >("top");
 
   const choices = useMemo(() => {
+    if (sourceZone === "deck" && godMode)
+      return gameState.deck.map((id, index) => ({
+        id,
+        playerId: "",
+        label: `#${index + 1}${index === 0 ? " (top)" : index === gameState.deck.length - 1 ? " (bottom)" : ""} — ${cardTitle(gameState, id)}`,
+      }));
+    if (sourceZone === "hand") {
+      const player = gameState.players.find(
+        (candidate) => candidate.id === sourcePlayer,
+      );
+      return (player?.hand ?? []).map((id) => ({
+        id,
+        playerId: player?.id ?? "",
+        label: cardTitle(gameState, id),
+      }));
+    }
     if (sourceZone === "discard")
       return gameState.discard.map((id) => ({
         id,
@@ -447,21 +506,23 @@ function MoveCardForm({
         })),
       );
     return [];
-  }, [gameState, sourceZone]);
+  }, [gameState, godMode, sourcePlayer, sourceZone]);
 
   const add = () => {
     const selected = choices.find(
       (choice) => `${choice.playerId}|${choice.id}` === sourceValue,
     );
-    if (sourceZone !== "deck" && !selected) return;
+    if ((sourceZone !== "deck" || godMode) && !selected) return;
     onAdd({
       kind: "move_card",
       source_zone: sourceZone,
       ...(sourceZone === "deck"
-        ? { selector }
+        ? godMode
+          ? { card_id: selected?.id }
+          : { selector }
         : {
             card_id: selected?.id,
-            ...(sourceZone === "in_play"
+            ...(sourceZone === "in_play" || sourceZone === "hand"
               ? { source_player_id: selected?.playerId }
               : {}),
           }),
@@ -488,10 +549,27 @@ function MoveCardForm({
           ["center", `Center (${gameState.house_rules.length})`],
           ["exile", `Exile (${gameState.exiled?.length ?? 0})`],
           ["in_play", "Player in-play zones"],
-          ["deck", `Hidden deck (${gameState.deck_count ?? 0})`],
+          ...(godMode ? ([["hand", "Player hands"]] as string[][]) : []),
+          [
+            "deck",
+            godMode
+              ? `Ordered deck (${gameState.deck.length})`
+              : `Hidden deck (${gameState.deck_count ?? 0})`,
+          ],
         ]}
       />
-      {sourceZone === "deck" ? (
+      {sourceZone === "hand" && (
+        <LabeledSelect
+          label="Source player"
+          value={sourcePlayer}
+          onChange={(value) => {
+            setSourcePlayer(value);
+            setSourceValue("");
+          }}
+          options={gameState.players.map((player) => [player.id, player.name])}
+        />
+      )}
+      {sourceZone === "deck" && !godMode ? (
         <LabeledSelect
           label="Hidden card"
           value={selector}
@@ -503,7 +581,7 @@ function MoveCardForm({
         />
       ) : (
         <LabeledSelect
-          label="Card"
+          label={sourceZone === "deck" ? "Exact deck card" : "Card"}
           value={sourceValue}
           onChange={setSourceValue}
           options={[
@@ -553,7 +631,7 @@ function MoveCardForm({
         className="min-h-12"
         disabled={
           (sourceZone === "deck" && (gameState.deck_count ?? 0) === 0) ||
-          (sourceZone !== "deck" && !sourceValue)
+          ((sourceZone !== "deck" || godMode) && !sourceValue)
         }
         onClick={add}
       >

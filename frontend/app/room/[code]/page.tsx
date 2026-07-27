@@ -49,6 +49,7 @@ import {
 } from "@/lib/use-compact-viewport";
 import type {
   CardSnapshot,
+  ClientMsg,
   GameStateSnapshot,
   PromptChoiceMsg,
 } from "@/lib/types";
@@ -143,6 +144,8 @@ export default function RoomPage() {
 
   const {
     gameState,
+    adminGameState,
+    clearAdminGameState,
     log,
     brewing,
     previewResult,
@@ -167,8 +170,8 @@ export default function RoomPage() {
   const me = gameState?.players.find((p) => p.id === myPlayerId);
   const myIndex =
     gameState?.players.findIndex((p) => p.id === myPlayerId) ?? -1;
-  // A spectator joined after the game started: they observe but can't act, so
-  // all play/pass/author controls are hidden and a banner is shown instead.
+  // Spectators observe but cannot act, whether assigned in the lobby or joined
+  // after play began, so all play/pass/author controls stay hidden.
   // Spectators live in their own snapshot collection, not `players`.
   const isSpectator = Boolean(
     gameState?.spectators.some((s) => s.id === myPlayerId),
@@ -202,9 +205,9 @@ export default function RoomPage() {
       .filter((c): c is CardSnapshot => Boolean(c));
   }, [gameState]);
 
-  const isHost = Boolean(
-    gameState && myPlayerId && gameState.players[0]?.id === myPlayerId,
-  );
+  const hostId = gameState?.host_id ?? gameState?.players[0]?.id ?? null;
+  const isHost = Boolean(gameState && myPlayerId && hostId === myPlayerId);
+  const isGodHost = isHost && isSpectator;
 
   if (
     gameView !== "table" &&
@@ -234,6 +237,18 @@ export default function RoomPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [closeGameView, gameView]);
+
+  useEffect(() => {
+    if (phase === "playing" && gameView === "host" && isGodHost) {
+      clearAdminGameState();
+      send({ type: "admin_view", open: true });
+      return () => {
+        send({ type: "admin_view", open: false });
+        clearAdminGameState();
+      };
+    }
+    clearAdminGameState();
+  }, [clearAdminGameState, gameView, isGodHost, phase, send]);
 
   // Winner names for the epilogue banner: the backend resolves scoring and sets
   // winner_ids at the playing → epilogue transition, so they're known before
@@ -362,6 +377,7 @@ export default function RoomPage() {
       <AdminProposalDialog
         proposal={gameState?.pending_admin_proposal}
         players={gameState?.players ?? []}
+        spectators={gameState?.spectators ?? []}
         myPlayerId={myPlayerId}
         isHost={isHost}
         isSpectator={isSpectator}
@@ -471,32 +487,33 @@ export default function RoomPage() {
                   Waiting for players — share the room code{" "}
                   <span className="font-mono text-base text-ink">{code}</span>.
                 </p>
-                {gameState.players.length > 0 && (
-                  <ul className="flex w-full flex-col gap-2">
-                    {gameState.players.map((p, i) => (
-                      <li key={p.id} className="flex items-center gap-2.5">
-                        <PlayerAvatar
-                          name={p.name}
-                          color={playerColor(i)}
-                          size={30}
-                        />
-                        <span className="font-hand text-lg">
-                          {p.name}
-                          {p.id === myPlayerId && " (you)"}
-                          {i === 0 && (
-                            <span className="ml-1 text-sm text-muted-foreground">
-                              · host
-                            </span>
-                          )}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <div className="flex w-full flex-col gap-4">
+                  <LobbyRoster
+                    title="Players"
+                    people={gameState.players}
+                    role="player"
+                    hostId={hostId}
+                    myPlayerId={myPlayerId}
+                    canManage={isHost}
+                    canMoveLastPlayer={gameState.players.length > 1}
+                    send={send}
+                  />
+                  <LobbyRoster
+                    title="Spectators"
+                    people={gameState.spectators}
+                    role="spectator"
+                    hostId={hostId}
+                    myPlayerId={myPlayerId}
+                    canManage={isHost}
+                    canMoveLastPlayer
+                    send={send}
+                  />
+                </div>
                 {isHost ? (
                   <Button
                     size="lg"
                     className="font-marker text-lg"
+                    disabled={gameState.players.length === 0}
                     onClick={() => send({ type: "start" })}
                   >
                     Start game
@@ -592,8 +609,7 @@ export default function RoomPage() {
                 {isSpectator ? (
                   <div className="border-t-[2.5px] border-ink bg-card px-5 py-4">
                     <p className="mx-auto w-fit rounded-xl border-2 border-dashed border-ink/40 px-5 py-3 font-hand text-base text-muted-foreground">
-                      You joined after the game started — you are spectating and
-                      cannot play cards.
+                      You are spectating and cannot play cards.
                     </p>
                   </div>
                 ) : (
@@ -718,11 +734,19 @@ export default function RoomPage() {
         {gameState && phase === "playing" && gameView !== "table" && (
           <GameViewPanel
             view={gameView}
-            gameState={gameState}
+            gameState={
+              gameView === "host" && isGodHost && adminGameState
+                ? adminGameState
+                : gameState
+            }
             roomCode={code}
             log={log}
             brewing={brewing}
             presentation={wideGameView ? "sidebar" : "modal"}
+            godMode={gameView === "host" && isGodHost}
+            godModeLoading={
+              gameView === "host" && isGodHost && adminGameState === null
+            }
             send={send}
             onClose={closeGameView}
           />
@@ -783,6 +807,89 @@ export default function RoomPage() {
         />
       )}
     </main>
+  );
+}
+
+function LobbyRoster({
+  title,
+  people,
+  role,
+  hostId,
+  myPlayerId,
+  canManage,
+  canMoveLastPlayer,
+  send,
+}: {
+  title: string;
+  people: { id: string; name: string }[];
+  role: "player" | "spectator";
+  hostId: string | null;
+  myPlayerId: string | null;
+  canManage: boolean;
+  canMoveLastPlayer: boolean;
+  send: (message: ClientMsg) => void;
+}) {
+  return (
+    <section>
+      <h3 className="font-marker text-sm">{title}</h3>
+      {people.length === 0 ? (
+        <p className="font-hand text-sm italic text-muted-foreground">None.</p>
+      ) : (
+        <ul className="mt-1 flex flex-col gap-2">
+          {people.map((person, index) => (
+            <li
+              key={person.id}
+              className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-ink/30 bg-panel-paper p-2"
+            >
+              <PlayerAvatar
+                name={person.name}
+                color={playerColor(index)}
+                size={30}
+              />
+              <span className="min-w-0 flex-1 truncate font-hand text-lg">
+                {person.name}
+                {person.id === myPlayerId && " (you)"}
+                {person.id === hostId && (
+                  <span className="ml-1 text-sm text-muted-foreground">
+                    · host
+                  </span>
+                )}
+              </span>
+              {canManage && person.id !== hostId && (
+                <Button
+                  variant="outline"
+                  className="min-h-9 px-2 font-hand"
+                  onClick={() =>
+                    send({
+                      type: "lobby_set_host",
+                      participant_id: person.id,
+                    })
+                  }
+                >
+                  Make host
+                </Button>
+              )}
+              {canManage && (
+                <Button
+                  variant="outline"
+                  className="min-h-9 px-2 font-hand"
+                  disabled={role === "player" && !canMoveLastPlayer}
+                  onClick={() =>
+                    send({
+                      type: "lobby_set_role",
+                      participant_id: person.id,
+                      role: role === "player" ? "spectator" : "player",
+                    })
+                  }
+                >
+                  {role === "player" ? "Make spectator" : "Make player"}
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

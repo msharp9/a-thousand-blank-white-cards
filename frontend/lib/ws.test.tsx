@@ -154,4 +154,23 @@ describe("useGameSocket brewing lifecycle", () => {
       roll: { total: 5 },
     });
   });
+
+  it("keeps privileged admin state separate and clears it on phase exit", () => {
+    const { result } = renderHook(() => useGameSocket("ABCD", "Morgan"));
+    const ws = MockWebSocket.instances[0];
+    const privileged = baseState({
+      host_id: "spectator-host",
+      deck: ["secret-card"],
+    });
+
+    act(() => ws.onopen?.());
+    act(() => ws.emit({ type: "admin_state", state: privileged }));
+    expect(result.current.adminGameState?.deck).toEqual(["secret-card"]);
+    expect(result.current.gameState).toBeNull();
+
+    act(() =>
+      ws.emit({ type: "state", state: baseState({ phase: "results" }) }),
+    );
+    expect(result.current.adminGameState).toBeNull();
+  });
 });

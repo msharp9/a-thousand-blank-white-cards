@@ -105,4 +105,20 @@ describe("AdminProposalDialog", () => {
     expect(screen.getByText("You’re spectating this table vote.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Accept change" })).toBeNull();
   });
+
+  it("names a spectator host as the proposer", () => {
+    render(
+      <AdminProposalDialog
+        proposal={{ ...proposal(), proposer_id: "spectator-host" }}
+        players={players}
+        spectators={[{ id: "spectator-host", name: "Morgan" }]}
+        myPlayerId="p2"
+        isHost={false}
+        isSpectator={false}
+        send={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Morgan · proposed")).toBeTruthy();
+  });
 });

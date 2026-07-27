@@ -58,8 +58,8 @@ export function SetupPhase({
     .map((id) => gameState.cards[id])
     .filter((c): c is CardSnapshot => Boolean(c));
 
-  // A spectator joined after the game started (setup counts as started): they
-  // cannot author cards, so show a watch-only notice instead of the setup UI.
+  // Spectators cannot author cards, whether assigned in the lobby or joined
+  // after setup began, so show a watch-only notice instead of the setup UI.
   if (isSpectator) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
@@ -67,8 +67,7 @@ export function SetupPhase({
           Setup in progress
         </h2>
         <p className="font-hand text-base italic text-muted-foreground">
-          You joined after the game started — you are spectating and cannot
-          author cards.
+          You are spectating and cannot author cards.
         </p>
       </div>
     );

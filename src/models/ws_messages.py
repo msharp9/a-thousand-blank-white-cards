@@ -59,6 +59,17 @@ class StartMsg(BaseModel):
     type: Literal["start"] = "start"
 
 
+class LobbySetHostMsg(BaseModel):
+    type: Literal["lobby_set_host"] = "lobby_set_host"
+    participant_id: str = Field(min_length=1, max_length=80)
+
+
+class LobbySetRoleMsg(BaseModel):
+    type: Literal["lobby_set_role"] = "lobby_set_role"
+    participant_id: str = Field(min_length=1, max_length=80)
+    role: Literal["player", "spectator"]
+
+
 class PassMsg(BaseModel):
     """The active player ends their turn without playing a card.
 
@@ -192,10 +203,19 @@ class AdminCancelMsg(BaseModel):
     proposal_id: str = Field(min_length=1, max_length=80)
 
 
+class AdminViewMsg(BaseModel):
+    """Open/close the spectator host's temporary privileged admin view."""
+
+    type: Literal["admin_view"] = "admin_view"
+    open: bool
+
+
 ClientMsg = Annotated[
     Union[
         JoinMsg,
         StartMsg,
+        LobbySetHostMsg,
+        LobbySetRoleMsg,
         PassMsg,
         EndTurnMsg,
         PlayMsg,
@@ -211,6 +231,7 @@ ClientMsg = Annotated[
         AdminProposeMsg,
         AdminVoteMsg,
         AdminCancelMsg,
+        AdminViewMsg,
     ],
     Field(discriminator="type"),
 ]
@@ -224,6 +245,13 @@ class StateMsg(BaseModel):
 
     type: Literal["state"] = "state"
     state: dict  # serialized GameState snapshot; typed further in frontend
+
+
+class AdminStateMsg(BaseModel):
+    """Targeted full card-state snapshot for an open spectator-host panel."""
+
+    type: Literal["admin_state"] = "admin_state"
+    state: dict
 
 
 class EffectAppliedMsg(BaseModel):
@@ -379,6 +407,7 @@ class AdminProposalResultMsg(BaseModel):
 
 ServerMsg = Union[
     StateMsg,
+    AdminStateMsg,
     EffectAppliedMsg,
     CardInterpretedMsg,
     PreviewResultMsg,

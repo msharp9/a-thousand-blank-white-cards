@@ -13,6 +13,15 @@ export type Placement = {
 
 export type JoinMsg = { type: "join"; player_id: string | null; name: string };
 export type StartMsg = { type: "start" };
+export type LobbySetHostMsg = {
+  type: "lobby_set_host";
+  participant_id: string;
+};
+export type LobbySetRoleMsg = {
+  type: "lobby_set_role";
+  participant_id: string;
+  role: "player" | "spectator";
+};
 // A turn begins with an automatic server-side draw (there is no client `draw`
 // message); the active player then plays a card OR ends their turn.
 // A turn ends by playing a card OR ending the turn. `pass` and `end_turn` are
@@ -85,7 +94,7 @@ export type AdminAction =
   | { kind: "set_score"; player_id: string; score: number }
   | {
       kind: "move_card";
-      source_zone: "deck" | "discard" | "center" | "exile" | "in_play";
+      source_zone: "deck" | "discard" | "center" | "exile" | "in_play" | "hand";
       card_id?: string;
       source_player_id?: string;
       selector?: "top" | "bottom";
@@ -120,6 +129,7 @@ export type AdminCancelMsg = {
   type: "admin_cancel";
   proposal_id: string;
 };
+export type AdminViewMsg = { type: "admin_view"; open: boolean };
 
 export type DrawingPoint = { x: number; y: number };
 export type DrawingStroke = {
@@ -150,6 +160,8 @@ export type InteractionResponseMsg = {
 export type ClientMsg =
   | JoinMsg
   | StartMsg
+  | LobbySetHostMsg
+  | LobbySetRoleMsg
   | PassMsg
   | EndTurnMsg
   | PlayMsg
@@ -164,6 +176,7 @@ export type ClientMsg =
   | AdminProposeMsg
   | AdminVoteMsg
   | AdminCancelMsg
+  | AdminViewMsg
   | InteractionResponseMsg;
 
 // ─── server → client ──────────────────────────────────────────────────────
@@ -345,6 +358,8 @@ export type EpilogueResultSummary = {
 export type GameStateSnapshot = {
   room_code: string;
   mode: Mode;
+  // Explicit room host. Optional only for compatibility with legacy snapshots.
+  host_id?: string | null;
   phase: "lobby" | "setup" | "playing" | "results" | "epilogue" | "ended";
   players: PlayerSnapshot[];
   spectators: SpectatorSnapshot[];
@@ -455,6 +470,10 @@ export type PendingInteractionSummary = {
 };
 
 export type StateMsg = { type: "state"; state: GameStateSnapshot };
+export type AdminStateMsg = {
+  type: "admin_state";
+  state: GameStateSnapshot;
+};
 export type EffectAppliedMsg = { type: "effect_applied"; log_entry: string };
 export type CardInterpretedMsg = {
   type: "card_interpreted";
@@ -614,6 +633,7 @@ export type AdminProposalResultMsg = {
 
 export type ServerMsg =
   | StateMsg
+  | AdminStateMsg
   | EffectAppliedMsg
   | CardInterpretedMsg
   | PreviewResultMsg

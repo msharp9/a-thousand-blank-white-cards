@@ -112,6 +112,76 @@ describe("HostControlOverlay", () => {
     expect(screen.getByRole("option", { name: "Bottom card" })).toBeTruthy();
   });
 
+  it("God mode offers exact player-hand and ordered-deck moves", async () => {
+    const user = userEvent.setup();
+    const send = vi.fn();
+    const base = state();
+    const godState = state({
+      host_id: "spectator-host",
+      players: base.players.map((player) =>
+        player.id === "p2" ? { ...player, hand: ["bob-secret"] } : player,
+      ),
+      spectators: [{ id: "spectator-host", name: "Morgan" }],
+      deck: ["d1", "d2"],
+      deck_count: 2,
+      cards: {
+        ...base.cards,
+        "bob-secret": {
+          id: "bob-secret",
+          title: "Bob Secret",
+          description: "",
+        },
+        d1: { id: "d1", title: "First Draw", description: "" },
+        d2: { id: "d2", title: "Deck Bottom", description: "" },
+      },
+    });
+    render(
+      <HostControlOverlay
+        gameState={godState}
+        godMode
+        send={send}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Move a card" }));
+    expect(screen.getByRole("option", { name: "Player hands" })).toBeTruthy();
+    expect(
+      screen.getByRole("option", { name: "Ordered deck (2)" }),
+    ).toBeTruthy();
+
+    await user.selectOptions(screen.getByLabelText("From"), "deck");
+    expect(
+      screen.getByRole("option", { name: "#1 (top) — First Draw" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("option", { name: "#2 (bottom) — Deck Bottom" }),
+    ).toBeTruthy();
+
+    await user.selectOptions(screen.getByLabelText("From"), "hand");
+    await user.selectOptions(screen.getByLabelText("Source player"), "p2");
+    await user.selectOptions(screen.getByLabelText("Card"), "p2|bob-secret");
+    await user.selectOptions(screen.getByLabelText("To"), "discard");
+    await user.click(screen.getByRole("button", { name: "Add card move" }));
+    await user.click(
+      screen.getByRole("button", { name: "Review proposal (1)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Propose changes" }));
+
+    expect(send).toHaveBeenCalledWith({
+      type: "admin_propose",
+      actions: [
+        {
+          kind: "move_card",
+          source_zone: "hand",
+          card_id: "bob-secret",
+          source_player_id: "p2",
+          to_zone: "discard",
+        },
+      ],
+    });
+  });
+
   it("turns a human-readable condition name into a valid on/off condition", async () => {
     const user = userEvent.setup();
     const send = vi.fn();

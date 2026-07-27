@@ -47,6 +47,13 @@ def _player_name(state: GameState, player_id: str) -> str:
         raise ValueError(f"Unknown player {player_id!r}") from exc
 
 
+def _participant_name(state: GameState, participant_id: str) -> str:
+    try:
+        return state.participant_name(participant_id)
+    except KeyError as exc:
+        raise ValueError(f"Unknown participant {participant_id!r}") from exc
+
+
 def _card_title(state: GameState, card_id: str) -> str:
     card = state.cards.get(card_id)
     if card is None:
@@ -56,11 +63,13 @@ def _card_title(state: GameState, card_id: str) -> str:
     return getattr(card, "title", None) or "Untitled card"
 
 
-def _locate_public_card(state: GameState, action: MoveCardAdminAction) -> None:
+def _locate_card(state: GameState, action: MoveCardAdminAction) -> None:
     card_id = action.card_id
     if card_id is None:
-        raise ValueError("Public card move requires a card id")
-    if action.source_zone == "discard":
+        raise ValueError("Exact card move requires a card id")
+    if action.source_zone == "deck":
+        present = card_id in state.deck
+    elif action.source_zone == "discard":
         present = card_id in state.discard
     elif action.source_zone == "center":
         present = card_id in state.house_rules
@@ -68,6 +77,8 @@ def _locate_public_card(state: GameState, action: MoveCardAdminAction) -> None:
         present = card_id in state.exiled
     elif action.source_zone == "in_play":
         present = card_id in state.get_player(action.source_player_id or "").in_play
+    elif action.source_zone == "hand":
+        present = card_id in state.get_player(action.source_player_id or "").hand
     else:
         present = False
     if not present:
@@ -78,7 +89,8 @@ def _destination_label(state: GameState, action: MoveCardAdminAction) -> str:
     if action.to_zone in {"hand", "in_play"}:
         return f"{_player_name(state, action.to_player_id or '')}'s {action.to_zone.replace('_', ' ')}"
     if action.to_zone == "deck":
-        return f"{action.deck_position} of deck"
+        position = "random position" if action.deck_position == "shuffle" else action.deck_position
+        return f"{position} of deck"
     return action.to_zone
 
 
@@ -99,7 +111,7 @@ def _move_op(action: MoveCardAdminAction) -> MoveCardsOp:
     }
     if action.to_player_id is not None:
         kwargs["to_player"] = f"id:{action.to_player_id}"
-    if action.source_zone == "deck":
+    if action.source_zone == "deck" and action.selector is not None:
         kwargs.update({"from_zone": "deck", "selector": action.selector, "count": 1})
     else:
         kwargs["card_target"] = f"id:{action.card_id}"
@@ -129,6 +141,7 @@ def apply_admin_actions(
     proposer_id: str,
     *,
     rng_seed: int,
+    allow_hidden_sources: bool = False,
 ) -> AdminApplication:
     """Apply a validated action bundle to an immutable state copy.
 
@@ -137,7 +150,7 @@ def apply_admin_actions(
     """
 
     _validate_phase(actions, state.phase)
-    _player_name(state, proposer_id)
+    _participant_name(state, proposer_id)
     working = state
     previews: list[AdminProposalPreviewItem] = []
     warnings: list[str] = []
@@ -166,13 +179,20 @@ def apply_admin_actions(
             )
 
         elif isinstance(action, MoveCardAdminAction):
-            if action.source_zone == "deck":
+            hidden_source = action.source_zone == "hand" or (
+                action.source_zone == "deck" and action.card_id is not None
+            )
+            # Authorize before checking membership/title so a normal host
+            # cannot use guessed card ids as a hidden-state oracle.
+            if hidden_source and not allow_hidden_sources:
+                raise ValueError("Exact hidden-card selection requires a spectator host")
+
+            if action.source_zone == "deck" and action.selector is not None:
                 if not working.deck:
                     raise ValueError("The deck is empty")
-                hidden_label = f"{action.selector.title()} card of deck"
-                card_label = hidden_label
+                card_label = f"{action.selector.title()} card of deck"
             else:
-                _locate_public_card(working, action)
+                _locate_card(working, action)
                 card_label = _card_title(working, action.card_id or "")
             if action.to_player_id is not None:
                 _player_name(working, action.to_player_id)
@@ -180,8 +200,11 @@ def apply_admin_actions(
             before_rules = len(working.rule_bindings)
             before_conditions = len(working.condition_bindings)
             working = apply_op(working, _move_op(action), ctx, rng=rng)
-            source = "deck" if action.source_zone == "deck" else action.source_zone.replace("_", " ")
-            detail = f"{card_label}: {source} → {_destination_label(before, action)}"
+            if action.source_zone == "hand":
+                source = f"{_player_name(before, action.source_player_id or '')}'s hand"
+            else:
+                source = "deck" if action.source_zone == "deck" else action.source_zone.replace("_", " ")
+            destination = _destination_label(before, action)
             cascades = []
             if len(working.hooks) < before_hooks:
                 cascades.append(f"{before_hooks - len(working.hooks)} hook(s) removed")
@@ -189,11 +212,32 @@ def apply_admin_actions(
                 cascades.append(f"{before_rules - len(working.rule_bindings)} rule binding(s) released")
             if len(working.condition_bindings) < before_conditions:
                 cascades.append(f"{before_conditions - len(working.condition_bindings)} condition binding(s) released")
+            detail = f"{card_label}: {source} → {destination}"
             if cascades:
                 detail += f"; {', '.join(cascades)}"
-            if action.source_zone in {"deck", "discard"} and action.to_zone in {"center", "in_play"}:
-                warnings.append(f"{card_label} will move into play without replaying its old effect.")
-            previews.append(AdminProposalPreviewItem(kind=action.kind, title="Move card", detail=detail))
+            if action.source_zone in {"deck", "discard", "hand"} and action.to_zone in {"center", "in_play"}:
+                warning_label = "The selected hidden card" if hidden_source else card_label
+                warnings.append(f"{warning_label} will move into play without replaying its old effect.")
+            if hidden_source:
+                public_detail = f"A selected hidden card: {source} → {destination}"
+                if cascades:
+                    public_detail += f"; {', '.join(cascades)}"
+                private_viewers = [proposer_id]
+                if action.source_zone == "hand" and action.source_player_id is not None:
+                    private_viewers.append(action.source_player_id)
+                if action.to_zone == "hand" and action.to_player_id is not None:
+                    private_viewers.append(action.to_player_id)
+                previews.append(
+                    AdminProposalPreviewItem(
+                        kind=action.kind,
+                        title="Move hidden card",
+                        detail=public_detail,
+                        private_detail=detail,
+                        private_viewer_ids=list(dict.fromkeys(private_viewers)),
+                    )
+                )
+            else:
+                previews.append(AdminProposalPreviewItem(kind=action.kind, title="Move card", detail=detail))
 
         elif isinstance(action, ShuffleDeckAdminAction):
             total = len(working.deck) + (len(working.discard) if action.include_discard else 0)

@@ -7,12 +7,14 @@ import type {
   ClientMsg,
   PendingAdminProposalSnapshot,
   PlayerSnapshot,
+  SpectatorSnapshot,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface AdminProposalDialogProps {
   proposal: PendingAdminProposalSnapshot | null | undefined;
   players: PlayerSnapshot[];
+  spectators?: SpectatorSnapshot[];
   myPlayerId: string | null;
   isHost: boolean;
   isSpectator: boolean;
@@ -22,6 +24,7 @@ interface AdminProposalDialogProps {
 export function AdminProposalDialog({
   proposal,
   players,
+  spectators = [],
   myPlayerId,
   isHost,
   isSpectator,
@@ -36,8 +39,11 @@ export function AdminProposalDialog({
   }, [proposal]);
 
   const playerNames = useMemo(
-    () => new Map(players.map((player) => [player.id, player.name])),
-    [players],
+    () =>
+      new Map(
+        [...players, ...spectators].map((person) => [person.id, person.name]),
+      ),
+    [players, spectators],
   );
   if (!proposal) return null;
 

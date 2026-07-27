@@ -154,7 +154,10 @@ Rooms are created and joined over REST (`board.app.create_app`):
   `player_id` (an opaque UUID the client stores per-room in `sessionStorage`)
   and a `spectator` flag. **Join policy**: a joiner arriving while the room is
   in the `lobby` phase becomes a real player; a joiner arriving after the game
-  has started becomes a spectator (observes, cannot act).
+  has started becomes a spectator (observes, cannot act). During the lobby, the
+  current host may transfer `GameState.host_id` to any participant and move
+  participants reversibly between player and spectator roles. These operations
+  are rejected after game start, and at least one player must remain.
 - `GET /rooms/{code}/state` → read-only debug snapshot.
 - `GET /rooms/{code}/cards/{card_id}/art` → a card's hand-drawn art as PNG
   bytes (see [Card art](#card-art-out-of-band-transport)).
@@ -189,22 +192,36 @@ discriminated union (`ClientMsg`, keyed on `type`) validated by a single
 
 - **Client → server**: `join`, `start`, `play`, `pass` / `end_turn`,
   `create_card`, `redraft_card`, `preview_card`, `interaction_response`,
-  `admin_propose`, `admin_vote`, `admin_cancel`, `epilogue_start`,
+  `lobby_set_host`, `lobby_set_role`, `admin_view`, `admin_propose`,
+  `admin_vote`, `admin_cancel`, `epilogue_start`,
   `epilogue_vote`, `epilogue_done`, `epilogue_finalize`. There
   is no client `draw` message: drawing is auto-triggered server-side at the
   start of each turn (see `_start_turn` in `board/rooms/room.py`).
 - **Server → client**: `state`, `brewing`, `card_interpreted`, `effect_applied`,
   `preview_result`, `prompt_choice`, `interaction_request`,
-  `interaction_progress`, `admin_proposal_result`, `epilogue`, `error`.
+  `interaction_progress`, targeted `admin_state`, `admin_proposal_result`,
+  `epilogue`, `error`.
 
 Host correction proposals are typed action bundles rather than arbitrary state
 patches. The room validates and previews the full bundle against a copy of the
 current state, pauses gameplay and the turn timer, then requires unanimous
-acceptance from every other seated player. Spectators do not vote. Any rejection
-or the 60-second deadline cancels the proposal; unanimous acceptance applies the
+acceptance from every seated player except a player-host proposer. Spectators do
+not vote, so a spectator-host proposal requires every player. Any rejection or
+the 60-second deadline cancels the proposal; unanimous acceptance applies the
 bundle atomically without firing gameplay hooks. The reconnect snapshot includes
-only the privacy-safe preview and named vote status, never hidden card identities
-or the raw action payload.
+only the viewer's privacy-safe preview and named vote status, never the raw
+action payload. For a hidden-card move, only the spectator host and affected
+hand owner receive the exact card detail; other players, spectators, and audit
+history receive a generic description.
+
+A spectator host may open the Host panel during play to subscribe to a targeted,
+transient `admin_state` projection containing all hands and exact deck order.
+Ordinary `state` broadcasts remain redacted, including for that same spectator,
+so privileged data is not rendered on the table or retained after the panel
+closes, the socket disconnects, a proposal starts, or the phase changes. Player
+hosts never receive this projection and may only target public cards or the
+deck's top/bottom card. Sealed interaction responses remain outside every
+`GameState` projection.
 
 **Handshake and close codes** (`board/ws.py`): the socket is accepted, then the
 first message MUST be a `join` carrying a valid `player_id`. The frontend

@@ -16,6 +16,8 @@ interface GameViewPanelProps {
   log: string[];
   brewing: string | null;
   presentation: PanelPresentation;
+  godMode?: boolean;
+  godModeLoading?: boolean;
   send: (message: ClientMsg) => void;
   onClose: () => void;
 }
@@ -27,6 +29,8 @@ export function GameViewPanel({
   log,
   brewing,
   presentation,
+  godMode = false,
+  godModeLoading = false,
   send,
   onClose,
 }: GameViewPanelProps) {
@@ -71,6 +75,8 @@ export function GameViewPanel({
           gameState={gameState}
           send={send}
           presentation={presentation}
+          godMode={godMode}
+          godModeLoading={godModeLoading}
           onClose={onClose}
         />
       );

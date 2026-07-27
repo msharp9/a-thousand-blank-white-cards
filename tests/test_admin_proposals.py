@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
@@ -19,7 +20,7 @@ from models.admin import (
     ShuffleDeckAdminAction,
 )
 from models.game_state import HookSpec
-from models.ws_messages import AdminCancelMsg, AdminProposeMsg, AdminVoteMsg
+from models.ws_messages import AdminCancelMsg, AdminProposeMsg, AdminViewMsg, AdminVoteMsg
 
 
 def _room(mode: str = "in_person", *, phase: str = "playing") -> Room:
@@ -43,6 +44,21 @@ def _room(mode: str = "in_person", *, phase: str = "playing") -> Room:
         }
     )
     room._has_drawn = True
+    return room
+
+
+def _spectator_host_room() -> Room:
+    room = _room()
+    room.add_spectator("s1", "Morgan")
+    room.connections.connect("s1", AsyncMock())
+    players = [
+        player.model_copy(update={"hand": ["h1"]}) if player.id == "p2" else player for player in room.state.players
+    ]
+    cards = {
+        **room.state.cards,
+        "h1": {"id": "h1", "title": "Secret Hand Card", "description": ""},
+    }
+    room.state = room.state.model_copy(update={"host_id": "s1", "players": players, "cards": cards})
     return room
 
 
@@ -342,3 +358,132 @@ def test_pending_proposal_round_trips_through_file_store(tmp_path) -> None:
     assert restored is not None
     assert restored._pending_admin is not None
     assert restored._pending_admin.model_dump() == room._pending_admin.model_dump()
+
+
+def test_spectator_host_proposal_requires_every_player() -> None:
+    room = _spectator_host_room()
+
+    asyncio.run(
+        room.handle_action(
+            "s1",
+            AdminProposeMsg(actions=[SetScoreAdminAction(player_id="p2", score=7)]),
+        )
+    )
+
+    assert room._pending_admin is not None
+    assert room._pending_admin.required_voter_ids == ["p1", "p2", "p3"]
+    assert room.state.get_player("p2").score == 0
+    for player_id in ("p1", "p2"):
+        asyncio.run(
+            room.handle_action(
+                player_id,
+                AdminVoteMsg(
+                    proposal_id=room._pending_admin.proposal_id,
+                    accept=True,
+                ),
+            )
+        )
+        assert room.state.get_player("p2").score == 0
+    asyncio.run(
+        room.handle_action(
+            "p3",
+            AdminVoteMsg(
+                proposal_id=room._pending_admin.proposal_id,
+                accept=True,
+            ),
+        )
+    )
+    assert room.state.get_player("p2").score == 7
+
+
+def test_hidden_hand_move_preview_is_personalized_and_audit_is_generic() -> None:
+    room = _spectator_host_room()
+    action = MoveCardAdminAction(
+        source_zone="hand",
+        source_player_id="p2",
+        card_id="h1",
+        to_zone="discard",
+    )
+
+    asyncio.run(room.handle_action("s1", AdminProposeMsg(actions=[action])))
+
+    host_item = room.snapshot_for("s1")["pending_admin_proposal"]["preview"][0]
+    owner_item = room.snapshot_for("p2")["pending_admin_proposal"]["preview"][0]
+    other_item = room.snapshot_for("p3")["pending_admin_proposal"]["preview"][0]
+    assert "Secret Hand Card" in host_item["detail"]
+    assert "Secret Hand Card" in owner_item["detail"]
+    assert "Secret Hand Card" not in other_item["detail"]
+    assert "selected hidden card" in other_item["detail"].lower()
+    assert "private_detail" not in host_item
+    assert "private_viewer_ids" not in host_item
+
+    proposal_id = room._pending_admin.proposal_id
+    asyncio.run(room.handle_action("p1", AdminVoteMsg(proposal_id=proposal_id, accept=False)))
+    audit = room.state.history_events[-1]
+    assert audit.kind == "admin_change"
+    assert "Secret Hand Card" not in str(audit.data)
+    assert "h1" not in str(audit.data)
+
+
+def test_spectator_host_can_move_hand_card_to_random_deck_position() -> None:
+    room = _spectator_host_room()
+    action = MoveCardAdminAction(
+        source_zone="hand",
+        source_player_id="p2",
+        card_id="h1",
+        to_zone="deck",
+        deck_position="shuffle",
+    )
+
+    asyncio.run(room.handle_action("s1", AdminProposeMsg(actions=[action])))
+    proposal_id = room._pending_admin.proposal_id
+    for player_id in ("p1", "p2", "p3"):
+        asyncio.run(
+            room.handle_action(
+                player_id,
+                AdminVoteMsg(proposal_id=proposal_id, accept=True),
+            )
+        )
+
+    assert "h1" not in room.state.get_player("p2").hand
+    assert "h1" in room.state.deck
+
+
+def test_player_host_cannot_probe_exact_hidden_card_ids() -> None:
+    room = _room()
+    socket = room.connections.get("p1")
+    socket.reset_mock()
+    action = MoveCardAdminAction(
+        source_zone="deck",
+        card_id="d1",
+        to_zone="discard",
+    )
+
+    asyncio.run(room.handle_action("p1", AdminProposeMsg(actions=[action])))
+
+    assert room._pending_admin is None
+    payload = socket.send_text.call_args.args[0]
+    assert "spectator host" in payload
+    assert "d1" not in payload
+
+
+def test_admin_view_is_full_card_state_but_normal_spectator_state_stays_hidden() -> None:
+    room = _spectator_host_room()
+    socket = room.connections.get("s1")
+    socket.reset_mock()
+
+    normal = room.snapshot_for("s1")
+    assert all(not player["hand"] for player in normal["players"])
+    assert normal["deck"] == []
+    assert "h1" not in normal["cards"]
+
+    asyncio.run(room.handle_action("s1", AdminViewMsg(open=True)))
+    payload = json.loads(socket.send_text.call_args.args[0])
+    assert payload["type"] == "admin_state"
+    admin = payload["state"]
+    assert next(player for player in admin["players"] if player["id"] == "p2")["hand"] == ["h1"]
+    assert admin["deck"] == ["d1", "d2"]
+    assert {"h1", "d1", "d2"} <= set(admin["cards"])
+
+    asyncio.run(room.handle_action("s1", AdminViewMsg(open=False)))
+    assert "s1" not in room._admin_viewers

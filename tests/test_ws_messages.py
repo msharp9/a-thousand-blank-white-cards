@@ -118,6 +118,22 @@ def test_state_msg_envelope() -> None:
     assert m.state == {"players": []}
 
 
+def test_lobby_and_admin_view_messages_discriminate() -> None:
+    ta = TypeAdapter(ClientMsg)
+    host = ta.validate_python({"type": "lobby_set_host", "participant_id": "p2"})
+    role = ta.validate_python(
+        {
+            "type": "lobby_set_role",
+            "participant_id": "p2",
+            "role": "spectator",
+        }
+    )
+    admin_view = ta.validate_python({"type": "admin_view", "open": True})
+    assert host.participant_id == "p2"
+    assert role.role == "spectator"
+    assert admin_view.open is True
+
+
 # ─── card text length limits (enforced on all authoring messages) ────────────
 
 

@@ -379,6 +379,10 @@ class Room:
         self._interaction_timer: asyncio.Task | None = None
         self._pending_admin: PendingAdminProposal | None = None
         self._admin_timer: asyncio.Task | None = None
+        # Spectator hosts receive privileged card state only while their Host
+        # panel is explicitly open. This is connection/session state, never
+        # persisted game state.
+        self._admin_viewers: set[str] = set()
         # The pausable per-turn clock (rules.turn_timer). Transient like the
         # reaction/interaction timers: a restart re-arms a fresh full clock
         # (see ensure_pending_timeout) rather than persisting the remainder.
@@ -414,7 +418,12 @@ class Room:
     def add_player(self, player_id: str, name: str) -> None:
         """Append a real player to the immutable GameState (reassigns self.state)."""
         new_players = [*self.state.players, Player(id=player_id, name=name)]
-        self.state = self.state.model_copy(update={"players": new_players})
+        self.state = self.state.model_copy(
+            update={
+                "players": new_players,
+                "host_id": self.state.host_id or player_id,
+            }
+        )
 
     def add_spectator(self, player_id: str, name: str) -> None:
         """Append a spectator (late joiner) to the immutable GameState.
@@ -426,7 +435,12 @@ class Room:
         which decides from the room's phase; this method just records it.
         """
         new_spectators = [*self.state.spectators, Spectator(id=player_id, name=name)]
-        self.state = self.state.model_copy(update={"spectators": new_spectators})
+        self.state = self.state.model_copy(
+            update={
+                "spectators": new_spectators,
+                "host_id": self.state.host_id or player_id,
+            }
+        )
 
     def get_player_ids(self) -> list[str]:
         """All ids that may open a WebSocket for this room: players + spectators."""
@@ -436,10 +450,60 @@ class Room:
         return self.state.is_spectator(player_id)
 
     def _is_host(self, player_id: str) -> bool:
-        """True for the room's first joiner — mirrors the frontend's
-        ``players[0]`` host convention. Players are only ever appended (see
-        ``add_player``), so this is stable for the life of the room."""
-        return bool(self.state.players) and self.state.players[0].id == player_id
+        return self.state.host_id == player_id
+
+    def _is_god_host(self, participant_id: str) -> bool:
+        return self._is_host(participant_id) and self._is_spectator(participant_id)
+
+    def clear_admin_view(self, participant_id: str) -> None:
+        """Drop one transient privileged Host-panel subscription."""
+        self._admin_viewers.discard(participant_id)
+
+    async def _handle_lobby_set_host(self, player_id: str, msg) -> None:
+        if self.state.phase != "lobby":
+            await self.connections.send(player_id, {"type": "error", "message": "Host changes are lobby-only"})
+            return
+        if not self._is_host(player_id):
+            await self.connections.send(player_id, {"type": "error", "message": "Only the host can transfer hosting"})
+            return
+        if not self.state.has_participant(msg.participant_id):
+            await self.connections.send(player_id, {"type": "error", "message": "Participant not found"})
+            return
+        if self.state.host_id == msg.participant_id:
+            return
+        self.state = self.state.model_copy(update={"host_id": msg.participant_id})
+        await self._broadcast_state()
+
+    async def _handle_lobby_set_role(self, player_id: str, msg) -> None:
+        if self.state.phase != "lobby":
+            await self.connections.send(player_id, {"type": "error", "message": "Role changes are lobby-only"})
+            return
+        if not self._is_host(player_id):
+            await self.connections.send(player_id, {"type": "error", "message": "Only the host can assign roles"})
+            return
+        if not self.state.has_participant(msg.participant_id):
+            await self.connections.send(player_id, {"type": "error", "message": "Participant not found"})
+            return
+
+        is_spectator = self.state.is_spectator(msg.participant_id)
+        if (msg.role == "spectator") == is_spectator:
+            return
+        if msg.role == "spectator":
+            if len(self.state.players) <= 1:
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": "At least one player must remain in the game"},
+                )
+                return
+            participant = self.state.get_player(msg.participant_id)
+            players = [candidate for candidate in self.state.players if candidate.id != msg.participant_id]
+            spectators = [*self.state.spectators, Spectator(id=participant.id, name=participant.name)]
+        else:
+            participant = self.state.get_spectator(msg.participant_id)
+            players = [*self.state.players, Player(id=participant.id, name=participant.name)]
+            spectators = [candidate for candidate in self.state.spectators if candidate.id != msg.participant_id]
+        self.state = self.state.model_copy(update={"players": players, "spectators": spectators})
+        await self._broadcast_state()
 
     # ── turn helpers ──
     def _is_active_player(self, player_id: str) -> bool:
@@ -503,8 +567,10 @@ class Room:
         # epilogue_vote is intentionally allowed through — spectators created no
         # cards, so a stray vote is harmless and the epilogue guard handles it —
         # but every write/authoring path is gated here.
-        if self._is_spectator(player_id) and mtype in {
+        spectator_actions = {
             "start",
+            "lobby_set_host",
+            "lobby_set_role",
             "pass",
             "end_turn",
             "play",
@@ -516,14 +582,41 @@ class Room:
             "admin_propose",
             "admin_vote",
             "admin_cancel",
-        }:
+            "admin_view",
+            "epilogue_start",
+            "epilogue_finalize",
+        }
+        spectator_host_actions = {
+            "start",
+            "lobby_set_host",
+            "lobby_set_role",
+            "admin_propose",
+            "admin_cancel",
+            "admin_view",
+            "epilogue_start",
+            "epilogue_finalize",
+        }
+        if (
+            self._is_spectator(player_id)
+            and mtype in spectator_actions
+            and not (self._is_host(player_id) and mtype in spectator_host_actions)
+        ):
             await self.connections.send(player_id, {"type": "error", "message": "Spectators cannot take game actions"})
             return
-        if self._pending_admin is not None and mtype not in {"admin_vote", "admin_cancel"}:
+        if self._pending_admin is not None and mtype not in {"admin_vote", "admin_cancel", "admin_view"}:
             await self.connections.send(
                 player_id,
                 {"type": "error", "message": "Waiting for the table to vote on the host's proposal"},
             )
+            return
+        if mtype == "lobby_set_host":
+            await self._handle_lobby_set_host(player_id, msg)
+            return
+        if mtype == "lobby_set_role":
+            await self._handle_lobby_set_role(player_id, msg)
+            return
+        if mtype == "admin_view":
+            await self._handle_admin_view(player_id, msg)
             return
         if mtype == "admin_propose":
             await self._handle_admin_propose(player_id, msg)
@@ -755,6 +848,12 @@ class Room:
         Deck building never requires a live external service; it runs in a thread
         since collection may touch the (in-memory) RAG store.
         """
+        if not self._is_host(player_id):
+            await self.connections.send(player_id, {"type": "error", "message": "Only the host can start the game"})
+            return
+        if not self.state.players:
+            await self.connections.send(player_id, {"type": "error", "message": "At least one player is required"})
+            return
         if self.state.phase == "lobby":
             await self._enter_setup()
         elif self.state.phase == "setup":
@@ -4011,6 +4110,37 @@ class Room:
 
     # ── voted host corrections ──
 
+    async def _handle_admin_view(self, player_id: str, msg) -> None:
+        if not msg.open:
+            self.clear_admin_view(player_id)
+            return
+        if self.state.phase != "playing":
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "God mode is only available during play"},
+            )
+            return
+        if not self._is_god_host(player_id):
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "God mode requires a spectator host"},
+            )
+            return
+        if self._pending_admin is not None:
+            await self.connections.send(
+                player_id,
+                {"type": "error", "message": "God mode is unavailable during a table vote"},
+            )
+            return
+        self._admin_viewers.add(player_id)
+        await self.connections.send(
+            player_id,
+            {
+                "type": "admin_state",
+                "state": redact_snapshot(self.snapshot(), player_id, reveal_all_cards=True),
+            },
+        )
+
     async def _handle_admin_propose(self, player_id: str, msg) -> None:
         if not self._is_host(player_id):
             await self.connections.send(player_id, {"type": "error", "message": "Only the host can propose changes"})
@@ -4041,6 +4171,7 @@ class Room:
                 list(msg.actions),
                 player_id,
                 rng_seed=rng_seed,
+                allow_hidden_sources=self._is_god_host(player_id),
             )
         except (KeyError, ValueError) as exc:
             await self.connections.send(player_id, {"type": "error", "message": str(exc)})
@@ -4058,6 +4189,7 @@ class Room:
             preview=application.preview,
             warnings=application.warnings,
         )
+        self.clear_admin_view(player_id)
         self._pending_admin = proposal
         await self._pause_turn_timer()
         if not required:
@@ -4182,6 +4314,7 @@ class Room:
                 proposal.actions,
                 proposal.proposer_id,
                 rng_seed=proposal.rng_seed,
+                allow_hidden_sources=self._is_god_host(proposal.proposer_id),
             )
         except KeyError, ValueError:
             await self._finish_admin_proposal(
@@ -4398,6 +4531,12 @@ class Room:
         """
         return redact_snapshot(self.snapshot(), viewer_id)
 
+    def admin_snapshot_for(self, viewer_id: str) -> dict:
+        """Full card-state projection for an authorized open God-mode panel."""
+        if self.state.phase != "playing" or not self._is_god_host(viewer_id):
+            raise ValueError("God mode requires a spectator host during play")
+        return redact_snapshot(self.snapshot(), viewer_id, reveal_all_cards=True)
+
     async def _log_and_broadcast(self, log_entry: str) -> None:
         """Append ``log_entry`` to the persistent game log AND broadcast it live.
 
@@ -4432,3 +4571,17 @@ class Room:
     async def _broadcast_state(self) -> None:
         snap = self.snapshot()
         await self.connections.broadcast_state(lambda viewer_id: redact_snapshot(snap, viewer_id))
+        if self.state.phase != "playing":
+            self._admin_viewers.clear()
+            return
+        for viewer_id in list(self._admin_viewers):
+            if not self._is_god_host(viewer_id):
+                self._admin_viewers.discard(viewer_id)
+                continue
+            await self.connections.send(
+                viewer_id,
+                {
+                    "type": "admin_state",
+                    "state": redact_snapshot(snap, viewer_id, reveal_all_cards=True),
+                },
+            )

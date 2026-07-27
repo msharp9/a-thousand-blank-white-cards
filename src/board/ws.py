@@ -88,6 +88,8 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
         except Exception:
             pass
 
+    # Privileged admin card state never survives a reconnect/replaced socket.
+    room.clear_admin_view(player_id)
     room.connections.connect(player_id, websocket)
     logger.info("player %s connected to room %s", player_id, code)
 
@@ -118,4 +120,6 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
         if websocket.application_state == WebSocketState.CONNECTED:
             raise
     logger.info("player %s disconnected from room %s", player_id, code)
+    if room.connections.get(player_id) is websocket:
+        room.clear_admin_view(player_id)
     room.connections.disconnect(player_id, websocket)

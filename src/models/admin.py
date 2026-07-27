@@ -22,7 +22,7 @@ class SetScoreAdminAction(_StrictModel):
 
 class MoveCardAdminAction(_StrictModel):
     kind: Literal["move_card"] = "move_card"
-    source_zone: Literal["deck", "discard", "center", "exile", "in_play"]
+    source_zone: Literal["deck", "discard", "center", "exile", "in_play", "hand"]
     card_id: str | None = Field(default=None, max_length=80)
     source_player_id: str | None = Field(default=None, max_length=80)
     selector: Literal["top", "bottom"] | None = None
@@ -33,11 +33,11 @@ class MoveCardAdminAction(_StrictModel):
     @model_validator(mode="after")
     def validate_zones(self) -> MoveCardAdminAction:
         if self.source_zone == "deck":
-            if self.selector is None or self.card_id is not None or self.source_player_id is not None:
-                raise ValueError("deck source requires selector and forbids card_id/source_player_id")
-        elif self.source_zone == "in_play":
+            if (self.selector is None) == (self.card_id is None) or self.source_player_id is not None:
+                raise ValueError("deck source requires exactly one of selector or card_id")
+        elif self.source_zone in {"in_play", "hand"}:
             if self.card_id is None or self.source_player_id is None or self.selector is not None:
-                raise ValueError("in_play source requires card_id and source_player_id")
+                raise ValueError(f"{self.source_zone} source requires card_id and source_player_id")
         elif self.card_id is None or self.source_player_id is not None or self.selector is not None:
             raise ValueError("public global source requires card_id only")
 
@@ -144,6 +144,11 @@ class AdminProposalPreviewItem(_StrictModel):
     kind: str
     title: str = Field(max_length=160)
     detail: str = Field(max_length=1000)
+    # Server-only personalized detail for a hidden-card action. Snapshot
+    # projection substitutes it only for the listed viewers, then strips both
+    # fields before anything leaves the server.
+    private_detail: str | None = Field(default=None, max_length=1000)
+    private_viewer_ids: list[str] = Field(default_factory=list, max_length=100)
 
 
 class PendingAdminProposal(_StrictModel):

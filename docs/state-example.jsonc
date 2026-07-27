@@ -1,5 +1,6 @@
 {
   "state": {
+    "hostId": "Person1",  // Explicit host participant id; may refer to a player or spectator
     "board": {
       "cardsInCenter": ["Card1", "Card2"],  // Cards currently in play on the board
       "discardPile": ["Card3", "Card4"],  // Cards that have been played and are no longer in the game

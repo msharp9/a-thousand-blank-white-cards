@@ -14,8 +14,35 @@ def test_constructs_with_defaults() -> None:
     assert state.turn_order == []
     assert state.draw_count == 1
     assert state.phase == "lobby"
+    assert state.host_id is None
     assert isinstance(state.win_condition, WinCondition)
     assert state.win_condition.kind == "highest_points"
+
+
+def test_legacy_state_backfills_first_player_as_host() -> None:
+    state = GameState.model_validate(
+        {
+            "room_code": "AAAA",
+            "players": [{"id": "p1", "name": "A"}, {"id": "p2", "name": "B"}],
+        }
+    )
+    assert state.host_id == "p1"
+
+
+def test_host_may_be_a_spectator_but_must_be_a_participant() -> None:
+    state = GameState(
+        room_code="AAAA",
+        players=[Player(id="p1", name="A")],
+        spectators=[Spectator(id="s1", name="S")],
+        host_id="s1",
+    )
+    assert state.participant_name("s1") == "S"
+    with pytest.raises(ValueError, match="host_id"):
+        GameState(
+            room_code="AAAA",
+            players=[Player(id="p1", name="A")],
+            host_id="missing",
+        )
 
 
 def test_effective_turn_order_falls_back_to_turn_players() -> None:

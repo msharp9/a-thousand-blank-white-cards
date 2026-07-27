@@ -16,8 +16,9 @@ the end wins (unless they don't), but the real fun is inventing the cards.
 
 A game runs in these steps:
 
-1. **Join the lobby.** Everyone opens the room and enters a name. One player is
-   the host.
+1. **Join the lobby.** Everyone opens the room and enters a name. The host can
+   transfer hosting and move attendees between player and spectator roles until
+   the game starts.
 2. **Start the game.** The host starts it once everyone's in.
 3. **Build the deck.** The deck is assembled from three sources:
    - **30 pre-made cards** are sampled from the shared card corpus, which starts
@@ -58,10 +59,18 @@ cards or the top/bottom deck card between zones, shuffle or reshuffle, add or
 remove player conditions, remove hooks, eliminate players, or end the game.
 The results screen also lets the host correct scores and winners.
 
+If the lobby assigns hosting to a spectator, the Host panel enters **God
+mode**. Only that panel receives the complete hands and ordered deck, allowing
+the spectator host to propose exact hidden-card moves. A host who is also a
+player remains subject to ordinary hidden-information redaction.
+
 Corrections are never silent: the server previews the complete bundle, pauses
-gameplay, and asks every other seated player to approve it. The whole bundle is
-applied atomically only after unanimous acceptance; one rejection or a
-60-second timeout cancels it. Spectators can follow the vote but do not vote.
+gameplay, and asks every seated player other than a player-host proposer to
+approve it. A spectator-host proposal therefore requires every player. The
+whole bundle is applied atomically only after unanimous acceptance; one
+rejection or a 60-second timeout cancels it. Spectators can follow the vote but
+do not vote. Hidden-card details are shown only to the spectator host and the
+affected hand owner; everyone else sees a generic description.
 
 **The basic game.** In the simplest game, every card just **adds or subtracts
 points** from one or more players — no special rules needed. That's all it takes

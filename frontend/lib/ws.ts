@@ -55,6 +55,10 @@ function closeCodeMessage(code: number): string {
 
 export interface GameSocketState {
   gameState: GameStateSnapshot | null;
+  // Full card state targeted only to an open spectator-host admin panel.
+  // Kept separate so the normal table always renders the redacted snapshot.
+  adminGameState: GameStateSnapshot | null;
+  clearAdminGameState: () => void;
   log: string[];
   brewing: string | null;
   previewResult: PreviewResult | null;
@@ -95,6 +99,8 @@ export interface GameSocketState {
 export function useGameSocket(code: string, name: string): GameSocketState {
   const wsRef = useRef<WebSocket | null>(null);
   const [gameState, setGameState] = useState<GameStateSnapshot | null>(null);
+  const [adminGameState, setAdminGameState] =
+    useState<GameStateSnapshot | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [brewing, setBrewing] = useState<string | null>(null);
   const [previewResult, setPreviewResult] =
@@ -152,6 +158,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
 
   const clearPromptChoice = useCallback(() => setPromptChoice(null), []);
   const clearHandReveal = useCallback(() => setHandReveal(null), []);
+  const clearAdminGameState = useCallback(() => setAdminGameState(null), []);
 
   useEffect(() => {
     if (!code || !name) return;
@@ -180,6 +187,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
         switch (msg.type) {
           case "state":
             setGameState(msg.state);
+            if (msg.state.phase !== "playing") setAdminGameState(null);
             if (msg.state.pending_interaction) {
               const pending = msg.state.pending_interaction;
               setInteractionRequest((current) =>
@@ -223,6 +231,9 @@ export function useGameSocket(code: string, name: string): GameSocketState {
             // normal flow) — clearing here rescues a reconnect that missed the
             // clearing push, which would otherwise soft-lock the hand.
             setBrewing(null);
+            break;
+          case "admin_state":
+            setAdminGameState(msg.state);
             break;
           case "effect_applied":
             setLog((prev) => [...prev, msg.log_entry]);
@@ -353,6 +364,7 @@ export function useGameSocket(code: string, name: string): GameSocketState {
 
       ws.onclose = (evt) => {
         setConnected(false);
+        setAdminGameState(null);
         if (cancelled) return;
         // Application-level close codes (4xxx) are hard rejections from our
         // server that retrying can never fix: 4000 bad first message, 4001
@@ -395,6 +407,8 @@ export function useGameSocket(code: string, name: string): GameSocketState {
 
   return {
     gameState,
+    adminGameState,
+    clearAdminGameState,
     log,
     brewing,
     previewResult,
