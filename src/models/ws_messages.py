@@ -284,12 +284,25 @@ class PreviewResultMsg(BaseModel):
 
 
 class PromptChoiceMsg(BaseModel):
-    """Server asks the active player to pick a target."""
+    """Server asks one chooser to pick a target (targeted send, never broadcast).
+
+    A card needing BOTH axes prompts twice: player first, then card. Each
+    prompt carries the context accumulated so far (``chosen_player_id`` /
+    ``chosen_card_id``) so the follow-up play can re-send the full selection,
+    plus ``as_reaction`` so a reaction's follow-up routes back into the open
+    window. ``cards`` carries full snapshots for exactly the offered card
+    candidates — the chooser's redacted state snapshot never includes another
+    player's hidden hand content.
+    """
 
     type: Literal["prompt_choice"] = "prompt_choice"
     card_id: str
     prompt: str
-    choices: list[dict]  # list of {player_id, name}
+    choices: list[dict]  # list of {player_id, name} or {card_id, name}
+    cards: dict[str, dict] = Field(default_factory=dict)  # card_id -> card snapshot
+    chosen_player_id: str | None = None
+    chosen_card_id: str | None = None
+    as_reaction: bool = False
 
 
 class InteractionRequestMsg(BaseModel):

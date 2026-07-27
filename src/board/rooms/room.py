@@ -2458,12 +2458,12 @@ class Room:
         if needs_player_choice and chosen_player_id is None:
             await self.connections.send(
                 player_id,
-                {
-                    "type": "prompt_choice",
-                    "card_id": card_id,
-                    "prompt": f"Choose a target player for {title}",
-                    "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
-                },
+                self._prompt_choice_msg(
+                    card_id,
+                    f"Choose a target player for {title}",
+                    [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                    chosen_card_id=chosen_card_id,
+                ),
             )
             return
         if chosen_player_id is not None and chosen_player_id not in valid_player_ids:
@@ -2485,12 +2485,13 @@ class Room:
             if chosen_card_id is None:
                 await self.connections.send(
                     player_id,
-                    {
-                        "type": "prompt_choice",
-                        "card_id": card_id,
-                        "prompt": f"Choose a target card for {title}",
-                        "choices": self._card_choice_payload(valid_card_ids),
-                    },
+                    self._prompt_choice_msg(
+                        card_id,
+                        f"Choose a target card for {title}",
+                        self._card_choice_payload(valid_card_ids),
+                        cards=self._card_choice_snapshots(valid_card_ids),
+                        chosen_player_id=chosen_player_id,
+                    ),
                 )
                 return
             if chosen_card_id not in valid_card_ids:
@@ -2777,6 +2778,48 @@ class Room:
             entries.append({"card_id": cid, "name": title or cid})
         return entries
 
+    def _card_choice_snapshots(self, card_ids: list[str]) -> dict[str, dict]:
+        """Full card snapshots for exactly the offered candidates.
+
+        Rides the targeted card prompt because the chooser's redacted state
+        snapshot never carries another player's hidden hand content (same
+        rationale as HandRevealedMsg.cards). Must only ever be sent to the
+        chooser — never broadcast, never persisted.
+        """
+        snapshots: dict[str, dict] = {}
+        for cid in card_ids:
+            card = self.state.cards.get(cid)
+            if isinstance(card, dict):
+                snapshots[cid] = dict(card)
+            elif card is not None:
+                snapshots[cid] = card.model_dump()
+        return snapshots
+
+    def _prompt_choice_msg(
+        self,
+        card_id: str,
+        prompt: str,
+        choices: list[dict],
+        *,
+        cards: dict[str, dict] | None = None,
+        chosen_player_id: str | None = None,
+        chosen_card_id: str | None = None,
+        as_reaction: bool = False,
+    ) -> dict:
+        """One prompt_choice envelope carrying the accumulated two-step context
+        (see PromptChoiceMsg) — the follow-up play must re-send every choice
+        made so far, so each prompt echoes what is already decided."""
+        return {
+            "type": "prompt_choice",
+            "card_id": card_id,
+            "prompt": prompt,
+            "choices": choices,
+            "cards": cards or {},
+            "chosen_player_id": chosen_player_id,
+            "chosen_card_id": chosen_card_id,
+            "as_reaction": as_reaction,
+        }
+
     def _is_play_on_draw(self, card) -> bool:
         """True when the card carries the ``play_on_draw`` attribute — it never
         rests in a hand; the room plays it for its holder the moment it lands
@@ -2912,12 +2955,12 @@ class Room:
         if needs_player_choice and pending.chosen_player_id is None:
             await self.connections.send(
                 pending.owner_id,
-                {
-                    "type": "prompt_choice",
-                    "card_id": pending.card_id,
-                    "prompt": f"Choose a target player for {title}",
-                    "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
-                },
+                self._prompt_choice_msg(
+                    pending.card_id,
+                    f"Choose a target player for {title}",
+                    [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                    chosen_card_id=pending.chosen_card_id,
+                ),
             )
             return
         if needs_card_choice and pending.chosen_card_id is None:
@@ -2938,12 +2981,13 @@ class Room:
                 return
             await self.connections.send(
                 pending.owner_id,
-                {
-                    "type": "prompt_choice",
-                    "card_id": pending.card_id,
-                    "prompt": f"Choose a target card for {title}",
-                    "choices": self._card_choice_payload(valid_card_ids),
-                },
+                self._prompt_choice_msg(
+                    pending.card_id,
+                    f"Choose a target card for {title}",
+                    self._card_choice_payload(valid_card_ids),
+                    cards=self._card_choice_snapshots(valid_card_ids),
+                    chosen_player_id=pending.chosen_player_id,
+                ),
             )
 
     async def _resume_auto_play(self, player_id: str, msg) -> None:
@@ -3834,12 +3878,13 @@ class Room:
             # re-enters here carrying as_reaction + the choice.
             await self.connections.send(
                 player_id,
-                {
-                    "type": "prompt_choice",
-                    "card_id": card_id,
-                    "prompt": f"Choose a target player for {self._card_title(card)}",
-                    "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
-                },
+                self._prompt_choice_msg(
+                    card_id,
+                    f"Choose a target player for {self._card_title(card)}",
+                    [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                    chosen_card_id=chosen_card_id,
+                    as_reaction=True,
+                ),
             )
             return
         if chosen_player_id is not None and chosen_player_id not in {p.id for p in self.state.players}:
@@ -3856,12 +3901,14 @@ class Room:
             if chosen_card_id is None:
                 await self.connections.send(
                     player_id,
-                    {
-                        "type": "prompt_choice",
-                        "card_id": card_id,
-                        "prompt": f"Choose a target card for {self._card_title(card)}",
-                        "choices": self._card_choice_payload(valid_card_ids),
-                    },
+                    self._prompt_choice_msg(
+                        card_id,
+                        f"Choose a target card for {self._card_title(card)}",
+                        self._card_choice_payload(valid_card_ids),
+                        cards=self._card_choice_snapshots(valid_card_ids),
+                        chosen_player_id=chosen_player_id,
+                        as_reaction=True,
+                    ),
                 )
                 return
             if chosen_card_id not in valid_card_ids:

@@ -768,29 +768,28 @@ export default function RoomPage() {
         onPick={(choice) => {
           if (!promptChoice) return;
           // A prompt option carries either a player_id (player-target axis) or a
-          // card_id (card-target axis). Re-send the play with the picked target;
-          // the backend re-interprets, validates, applies, and advances.
-          // While a reaction window is open, a prompt for any card other than
-          // the suspended one is a REACTION needing a target — its follow-up
-          // must re-carry as_reaction so it routes back into the window.
-          const asReaction = Boolean(
-            pendingPlay && promptChoice.card_id !== pendingPlay.card_id,
-          );
-          if (choice.player_id) {
-            send({
-              type: "play",
-              card_id: promptChoice.card_id,
-              chosen_player_id: choice.player_id,
-              ...(asReaction ? { as_reaction: true } : {}),
-            });
-          } else if (choice.card_id) {
-            send({
-              type: "play",
-              card_id: promptChoice.card_id,
-              chosen_card_id: choice.card_id,
-              ...(asReaction ? { as_reaction: true } : {}),
-            });
-          }
+          // card_id (card-target axis). Merge the pick with the context the
+          // prompt carried from earlier steps (a two-axis card prompts twice)
+          // so the follow-up play re-sends the COMPLETE selection; the backend
+          // re-interprets, validates, applies, and advances.
+          // A reaction's prompt carries as_reaction; older servers omit it, so
+          // fall back to the open-window heuristic (a prompt for any card other
+          // than the suspended one is a reaction needing a target).
+          const asReaction =
+            promptChoice.as_reaction ??
+            Boolean(
+              pendingPlay && promptChoice.card_id !== pendingPlay.card_id,
+            );
+          const chosenPlayerId =
+            choice.player_id ?? promptChoice.chosen_player_id;
+          const chosenCardId = choice.card_id ?? promptChoice.chosen_card_id;
+          send({
+            type: "play",
+            card_id: promptChoice.card_id,
+            ...(chosenPlayerId ? { chosen_player_id: chosenPlayerId } : {}),
+            ...(chosenCardId ? { chosen_card_id: chosenCardId } : {}),
+            ...(asReaction ? { as_reaction: true } : {}),
+          });
           clearPromptChoice();
         }}
         onCancel={clearPromptChoice}

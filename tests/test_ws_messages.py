@@ -246,3 +246,31 @@ def test_dice_roll_server_message_round_trip() -> None:
     }
     # card_id is optional: hook-originated rolls may have no card in context.
     assert DiceRollMsg(actor_id="p1", sides=2, values=[1], total=1).card_id is None
+
+
+def test_prompt_choice_msg_two_step_fields_default_empty() -> None:
+    from models.ws_messages import PromptChoiceMsg
+
+    msg = PromptChoiceMsg(card_id="c1", prompt="Choose", choices=[{"player_id": "p1", "name": "Alice"}])
+    assert msg.cards == {}
+    assert msg.chosen_player_id is None
+    assert msg.chosen_card_id is None
+    assert msg.as_reaction is False
+
+
+def test_prompt_choice_msg_carries_accumulated_context_and_snapshots() -> None:
+    from models.ws_messages import PromptChoiceMsg
+
+    msg = PromptChoiceMsg(
+        card_id="theft",
+        prompt="Choose a target card",
+        choices=[{"card_id": "b1", "name": "Loot"}],
+        cards={"b1": {"id": "b1", "title": "Loot"}},
+        chosen_player_id="p2",
+        as_reaction=True,
+    )
+    payload = json.loads(msg.model_dump_json())
+    assert payload["cards"] == {"b1": {"id": "b1", "title": "Loot"}}
+    assert payload["chosen_player_id"] == "p2"
+    assert payload["chosen_card_id"] is None
+    assert payload["as_reaction"] is True

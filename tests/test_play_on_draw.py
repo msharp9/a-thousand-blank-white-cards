@@ -388,6 +388,80 @@ def test_auto_play_with_empty_center_defers_without_falling_back_to_a_hand() -> 
     assert any("no eligible target card" in line for line in room.state.log)
 
 
+THEFT_OPS = [
+    {
+        "op": "move_cards",
+        "args": {
+            "card_target": "chosen_card",
+            "from_zone": "hand",
+            "from_player": "chooser",
+            "to_zone": "hand",
+            "to_player": "self",
+        },
+    },
+    {"op": "subtract_points", "args": {"target": "chooser", "amount": 3}},
+]
+
+
+def _theft_pod_room() -> Room:
+    room = _room(
+        {"podt": _pod_card("podt", THEFT_OPS), "filler": _plain_card("filler", ADD3)},
+        deck=["podt", "filler"],
+    )
+    cards = {**room.state.cards, **{cid: {"id": cid, "title": cid.upper()} for cid in ("bs1", "bs2")}}
+    players = [
+        p.model_copy(update={"hand": ["bs1", "bs2"], "score": 5}) if p.id == "p2" else p for p in room.state.players
+    ]
+    room.state = room.state.model_copy(update={"cards": cards, "players": players})
+    return room
+
+
+def test_auto_play_two_axis_prompts_player_then_the_chosen_hand_with_context() -> None:
+    room = _theft_pod_room()
+
+    async def scenario() -> None:
+        await room._start_turn("p1")
+        await room.handle_action("p1", PlayMsg(card_id="podt", chosen_player_id="p2"))
+
+    asyncio.run(scenario())
+
+    prompts = [m for m in _sent(room, "p1") if m.get("type") == "prompt_choice"]
+    assert len(prompts) == 2
+    assert {c["player_id"] for c in prompts[0]["choices"]} == {"p1", "p2"}
+    card_prompt = prompts[1]
+    assert [c["card_id"] for c in card_prompt["choices"]] == ["bs1", "bs2"]
+    assert card_prompt["chosen_player_id"] == "p2"
+    assert set(card_prompt["cards"]) == {"bs1", "bs2"}
+    assert room._pending_auto_play is not None
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="podt", chosen_player_id="p2", chosen_card_id="bs2")))
+
+    assert room._pending_auto_play is None
+    assert "bs2" in room.state.get_player("p1").hand
+    assert room.state.get_player("p2").hand == ["bs1"]
+    assert room.state.get_player("p2").score == 2
+    assert "podt" in room.state.discard
+    assert room._plays_this_turn == 0  # no action cost
+    assert room.state.active_player().id == "p1"
+
+
+def test_auto_play_two_axis_rejects_a_forged_card_and_keeps_waiting() -> None:
+    room = _theft_pod_room()
+
+    async def scenario() -> None:
+        await room._start_turn("p1")
+        await room.handle_action("p1", PlayMsg(card_id="podt", chosen_player_id="p2"))
+        await room.handle_action("p1", PlayMsg(card_id="podt", chosen_player_id="p2", chosen_card_id="filler"))
+
+    asyncio.run(scenario())
+
+    assert room._pending_auto_play is not None
+    assert any("Invalid target card" in m.get("message", "") for m in _sent(room, "p1"))
+    assert room.state.get_player("p2").hand == ["bs1", "bs2"]
+    assert room.state.get_player("p2").score == 5
+    assert "podt" in room.state.get_player("p1").hand
+
+
 def test_dead_prompt_still_runs_the_deferred_turn_decision() -> None:
     cards = {
         "starter": _plain_card("starter", DRAW1),
