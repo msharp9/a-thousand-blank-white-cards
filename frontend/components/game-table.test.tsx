@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { conditionLabel, GameTable } from "./game-table";
+import { playerColor } from "@/lib/players";
 import type { GameStateSnapshot, PlayerSnapshot } from "@/lib/types";
 
 function player(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
@@ -78,6 +79,141 @@ describe("conditionLabel", () => {
     expect(conditionLabel("poisoned", true, 0)).toBe(
       "Poisoned · for the rest of this turn",
     );
+  });
+});
+
+function fourSeatState(turnOrder: string[]): GameStateSnapshot {
+  return baseState({
+    players: [
+      player({ id: "a", name: "Alice" }),
+      player({ id: "b", name: "Bob" }),
+      player({ id: "me", name: "Me" }),
+      player({ id: "c", name: "Cleo" }),
+    ],
+    turn_order: turnOrder,
+  });
+}
+
+function railOrder(container: HTMLElement): string[] {
+  return [...container.querySelectorAll("[data-seat-drop]")].map(
+    (seat) => seat.getAttribute("data-seat-drop") ?? "",
+  );
+}
+
+describe("GameTable seat projection", () => {
+  it("anchors the viewer and rotates opponents successor-first", () => {
+    const { container } = render(
+      <GameTable
+        gameState={fourSeatState(["me", "a", "b", "c"])}
+        myPlayerId="me"
+      />,
+    );
+    expect(railOrder(container)).toEqual(["a", "b", "c"]);
+  });
+
+  it("projects a mid-order viewer without reversing", () => {
+    const { container } = render(
+      <GameTable
+        gameState={fourSeatState(["a", "b", "me", "c"])}
+        myPlayerId="me"
+      />,
+    );
+    expect(railOrder(container)).toEqual(["c", "a", "b"]);
+  });
+
+  it("reprojects when the turn order reverses, roster untouched", () => {
+    const state = fourSeatState(["c", "me", "b", "a"]);
+    const { container } = render(
+      <GameTable gameState={state} myPlayerId="me" />,
+    );
+    expect(railOrder(container)).toEqual(["b", "a", "c"]);
+    expect(state.players.map((p) => p.id)).toEqual(["a", "b", "me", "c"]);
+  });
+
+  it("normalizes malformed turn orders deterministically", () => {
+    const { container } = render(
+      <GameTable
+        gameState={fourSeatState(["ghost", "c", "c", "me"])}
+        myPlayerId="me"
+      />,
+    );
+    expect(railOrder(container)).toEqual(["a", "b", "c"]);
+  });
+
+  it("shows a spectator every seat in canonical order", () => {
+    const state = fourSeatState(["a", "b", "me", "c"]);
+    state.spectators = [{ id: "spec", name: "Watcher" }];
+    const { container } = render(
+      <GameTable gameState={state} myPlayerId="spec" />,
+    );
+    expect(railOrder(container)).toEqual(["a", "b", "me", "c"]);
+    expect(container.querySelector("[data-seat-edge]")).toBeNull();
+  });
+
+  it("keeps identity colors keyed to the roster index", () => {
+    const { container } = render(
+      <GameTable
+        gameState={fourSeatState(["a", "b", "me", "c"])}
+        myPlayerId="me"
+      />,
+    );
+    const seats = [
+      ...container.querySelectorAll<HTMLElement>("[data-seat-drop]"),
+    ];
+    expect(seats[0].style.border).toContain(playerColor(3));
+    expect(seats[1].style.border).toContain(playerColor(0));
+    expect(seats[2].style.border).toContain(playerColor(1));
+  });
+
+  it("labels the far-left and far-right seats relative to the viewer", () => {
+    const { container } = render(
+      <GameTable
+        gameState={fourSeatState(["a", "b", "me", "c"])}
+        myPlayerId="me"
+      />,
+    );
+    const edges = [...container.querySelectorAll("[data-seat-drop]")].map(
+      (seat) => seat.getAttribute("data-seat-edge"),
+    );
+    expect(edges).toEqual(["left", null, "right"]);
+    expect(screen.getByText("Left · next seat")).toBeTruthy();
+    expect(screen.getByText("Right · previous seat")).toBeTruthy();
+    expect(
+      screen.getByRole("group", { name: "Cleo — Left · next seat" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("group", { name: "Bob — Right · previous seat" }),
+    ).toBeTruthy();
+  });
+
+  it("labels a sole opponent as both neighbors", () => {
+    render(<GameTable gameState={baseState()} myPlayerId="me" />);
+    expect(screen.getByText("Left & right neighbor")).toBeTruthy();
+    expect(
+      screen.getByRole("group", { name: "Alice — Left & right neighbor" }),
+    ).toBeTruthy();
+  });
+
+  it("derives the playing marker from players[turn_index]", () => {
+    const state = fourSeatState(["a", "b", "me", "c"]);
+    state.turn_index = 3;
+    render(<GameTable gameState={state} myPlayerId="me" />);
+    const cleoSeat = screen.getByRole("group", {
+      name: "Cleo — Left · next seat",
+    });
+    expect(cleoSeat.textContent).toContain("· playing");
+  });
+
+  it("keeps eliminated and offline seats visible", () => {
+    const state = fourSeatState(["me", "a", "b", "c"]);
+    state.players[0].eliminated = true;
+    state.players[1].connected = false;
+    const { container } = render(
+      <GameTable gameState={state} myPlayerId="me" />,
+    );
+    expect(railOrder(container)).toEqual(["a", "b", "c"]);
+    expect(screen.getByText("· eliminated")).toBeTruthy();
+    expect(screen.getByText("· offline")).toBeTruthy();
   });
 });
 

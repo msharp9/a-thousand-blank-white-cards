@@ -391,6 +391,41 @@ test("large hands and navigation stay inside the phone viewport", async ({
   );
 });
 
+test("opponent rail follows viewer-relative turn order and reprojects on scramble", async ({
+  page,
+}) => {
+  const room = await openMockRoom(page);
+  const seats = page.locator("[data-opponent-rail] [data-seat-drop]");
+  const railOrder = () =>
+    seats.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("data-seat-drop")),
+    );
+
+  await expect
+    .poll(railOrder)
+    .toEqual(["p2", "p3", "p4", "p5", "p6", "p7", "p8"]);
+  await expect(seats.first()).toHaveAttribute("data-seat-edge", "left");
+  await expect(seats.last()).toHaveAttribute("data-seat-edge", "right");
+  await expect(page.getByText("Left · next seat")).toBeAttached();
+  await expect(page.getByText("Right · previous seat")).toBeAttached();
+
+  const scrambled = gameState();
+  scrambled.turn_order = ["p4", "p2", "p8", "p1", "p6", "p3", "p7", "p5"];
+  room.push({ type: "state", state: scrambled });
+  await expect
+    .poll(railOrder)
+    .toEqual(["p6", "p3", "p7", "p5", "p4", "p2", "p8"]);
+  await expect(seats.first()).toHaveAttribute("data-seat-edge", "left");
+  await expect(seats.last()).toHaveAttribute("data-seat-edge", "right");
+
+  const reversed = gameState();
+  reversed.turn_order = ["p8", "p7", "p6", "p5", "p4", "p3", "p2", "p1"];
+  room.push({ type: "state", state: reversed });
+  await expect
+    .poll(railOrder)
+    .toEqual(["p8", "p7", "p6", "p5", "p4", "p3", "p2"]);
+});
+
 test("live notices remain visible while the game is scrolled", async ({
   page,
 }) => {
