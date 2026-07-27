@@ -126,6 +126,55 @@ def test_nap_time_draws_three_and_schedules_the_players_next_turn_skip() -> None
     assert any(op["op"] == "skip_turn" and op["target"] == "self" for op in report["emitted_ops"])
 
 
+def _gold(title: str) -> dict:
+    cards = json.loads((DATA_DIR / "seed_cards_gold.json").read_text())
+    return next(card for card in cards if card["title"] == title)
+
+
+def test_into_the_void_exiles_only_the_chosen_center_card() -> None:
+    card = _gold("Into the Void")
+    (op,) = card["canonical"]["ops"]
+    assert op["args"] == {"card_target": "chosen_card", "from_zone": "center", "to_zone": "exile"}
+    assert "from_zone='center'" in card["canonical"]["sandbox"]
+
+    from engine.events import GameEvent, HookContext
+    from engine.reducers import apply_op
+
+    plan = compile_card_plan({**card, "origin": "seed"})
+    assert plan is not None and plan.steps
+    state = _state(card, {"p1": [card["id"], "keeper"], "p2": []})
+    state = state.model_copy(
+        update={
+            "cards": {**state.cards, "house-rule": {"id": "house-rule", "title": "House Rule"}},
+            "house_rules": ["house-rule"],
+        }
+    )
+    ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1", card_id=card["id"], chosen_card_id="house-rule")
+    (compiled_op,) = plan.operations()
+    new = apply_op(state, compiled_op, ctx)
+
+    assert new.exiled == ["house-rule"]
+    assert new.house_rules == []
+    assert new.get_player("p1").hand == [card["id"], "keeper"]
+
+
+def test_into_the_void_ignores_a_card_that_is_not_in_the_center() -> None:
+    card = _gold("Into the Void")
+
+    from engine.events import GameEvent, HookContext
+    from engine.reducers import apply_op
+
+    plan = compile_card_plan({**card, "origin": "seed"})
+    state = _state(card, {"p1": [card["id"], "keeper"], "p2": []})
+    ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1", card_id=card["id"], chosen_card_id="keeper")
+    (compiled_op,) = plan.operations()
+    new = apply_op(state, compiled_op, ctx)
+
+    assert new.exiled == []
+    assert "keeper" in new.get_player("p1").hand
+    assert any("[move_cards no-op]" in line for line in new.log)
+
+
 def test_mystery_box_discards_one_then_draws_two() -> None:
     card = _filler("Mystery Box")
     report = _run(

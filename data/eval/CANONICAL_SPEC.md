@@ -180,8 +180,18 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
 - `discard_random` — `{"target": <TARGET>, "count": <int 1-10>}` — the engine picks the cards at apply time
 - `move_cards` — move cards between zones (`"deck" | "discard" | "hand" | "in_play" | "center" | "exile"`)
   without playing them (mill, exile/"remove from the game", tuck, fetch). Source is
-  EITHER `{"card_target": ...}` OR `{"from_zone": <zone>, "selector": "top"|"bottom"|"all"|"random", "count": <int 1-50>}`;
-  destination is `{"to_zone": <zone>, "to_position": "top"|"bottom"|"shuffle"}` (`to_position`
+  `{"card_target": ...}`, `{"from_zone": <zone>, "selector": "top"|"bottom"|"all"|"random", "count": <int 1-50>}`,
+  or BOTH — with both, the addressed card moves only if it actually sits in the declared
+  zone (`selector`/`count` are not applied there and must stay at their defaults; a
+  mismatched card is a logged no-op). `card_target: "chosen_card"` with a `from_zone`
+  also SCOPES the play-time card prompt to that zone ("exile a card in the center"
+  offers only center cards — see gold "Into the Void"); the prompt candidates are
+  the zone's public contents (`center`/`exile`/`discard` in state order, or
+  `hand`/`in_play` from the resolved `from_player` owners) — `deck` is hidden and
+  never offered, so a `chosen_card` scoped to `from_zone: "deck"` has no eligible
+  candidates. An unscoped `chosen_card` offers the public in-play cards plus the
+  actor's own hand. Destination is
+  `{"to_zone": <zone>, "to_position": "top"|"bottom"|"shuffle"}` (`to_position`
   applies only to a deck destination). `from_player`/`to_player` (`<TARGET>`) are required
   exactly when the corresponding zone is `hand`/`in_play`; `to_player` also accepts
   `"card_owner"` (each moved card routes to its own owner). Random picks use the engine's rng

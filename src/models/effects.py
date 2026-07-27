@@ -356,17 +356,20 @@ _PLAYER_ZONES: frozenset[str] = frozenset({"hand", "in_play"})
 class MoveCardsOp(BaseModel):
     """Move cards between zones without playing them (mill, tuck, unbury…).
 
-    Source is EITHER an explicit ``card_target`` (cards move from wherever
-    they currently live) OR a ``from_zone`` with a ``selector``/``count``
+    Source is an explicit ``card_target`` (cards move from wherever they
+    currently live), a ``from_zone`` with a ``selector``/``count``
     (``selector="random"`` picks with the engine's injected rng at reduce
-    time — never pre-resolved, so snippets learn nothing about hidden cards).
-    "top" of the deck is the next card drawn; "top" of any other zone is its
-    most recently added card. ``from_player``/``to_player`` are required
-    exactly when the corresponding zone is per-player (hand/in_play).
-    ``to_position`` applies only when the destination is the deck: "top",
-    "bottom", or "shuffle" (a random position per card). ``to_player`` also
-    accepts "card_owner" — each moved card routes to its own owner (see the
-    CardFlowTarget notes above).
+    time — never pre-resolved, so snippets learn nothing about hidden cards),
+    or BOTH: the addressed card(s) move only if they actually sit in the
+    declared zone ("exile the chosen card, but only from the center") —
+    ``selector``/``count`` are not applied in that mode and must stay at
+    their defaults. "top" of the deck is the next card drawn; "top" of any
+    other zone is its most recently added card. ``from_player``/``to_player``
+    are required exactly when the corresponding zone is per-player
+    (hand/in_play). ``to_position`` applies only when the destination is the
+    deck: "top", "bottom", or "shuffle" (a random position per card).
+    ``to_player`` also accepts "card_owner" — each moved card routes to its
+    own owner (see the CardFlowTarget notes above).
     """
 
     op: Literal["move_cards"] = "move_cards"
@@ -381,8 +384,11 @@ class MoveCardsOp(BaseModel):
 
     @model_validator(mode="after")
     def _source_shape_and_player_zones(self) -> MoveCardsOp:
-        if (self.card_target is None) == (self.from_zone is None):
-            raise ValueError("move_cards requires exactly one of card_target or from_zone")
+        if self.card_target is None and self.from_zone is None:
+            raise ValueError("move_cards requires card_target or from_zone (or both)")
+        if self.card_target is not None and self.from_zone is not None:
+            if self.selector != "top" or self.count != 1:
+                raise ValueError("move_cards with card_target and from_zone does not apply selector/count")
         if self.from_zone in _PLAYER_ZONES and self.from_player is None:
             raise ValueError(f"move_cards from_zone {self.from_zone!r} requires from_player")
         if self.from_player is not None and self.from_zone not in _PLAYER_ZONES:
@@ -677,22 +683,32 @@ _CHOICE_TARGETS: frozenset[str] = frozenset({"chooser", "target_player"})
 _TARGET_FIELDS: tuple[str, ...] = ("target", "from_target", "to_target", "to", "winner", "from_player", "to_player")
 
 
+def op_choice_axes(op: Op) -> tuple[bool, bool]:
+    """(needs_player_choice, needs_card_choice) — this op's play-time prompt axes.
+
+    The player axis is any player-target field equal to "chooser"/
+    "target_player" (including EndGameOp.winners); the card axis is a
+    card_target of "chosen_card". The ONE choice-axis detector shared by
+    program compilation and the Room's prompt_choice flow.
+    """
+    needs_player = any(
+        isinstance(value, str) and value in _CHOICE_TARGETS
+        for value in (getattr(op, field, None) for field in _TARGET_FIELDS)
+    )
+    if isinstance(op, EndGameOp) and any(target in _CHOICE_TARGETS for target in op.winners):
+        needs_player = True
+    card_target = getattr(op, "card_target", None)
+    needs_card = isinstance(card_target, str) and card_target in _CHOICE_CARD_TARGETS
+    return needs_player, needs_card
+
+
 def op_requires_choice(op: Op) -> bool:
     """True if this op needs a play-time choice from the actor.
 
-    Any player-target field equal to "chooser"/"target_player", or a
-    card_target of "chosen_card". Choice-requiring ops are only resolvable
-    through the prompt_choice flow — contexts without one (snippet diffs,
-    hooks) must reject them up front.
+    Choice-requiring ops are only resolvable through the prompt_choice flow —
+    contexts without one (snippet diffs, hooks) must reject them up front.
     """
-    for field in _TARGET_FIELDS:
-        value = getattr(op, field, None)
-        if isinstance(value, str) and value in _CHOICE_TARGETS:
-            return True
-    if isinstance(op, EndGameOp) and any(target in _CHOICE_TARGETS for target in op.winners):
-        return True
-    card_target = getattr(op, "card_target", None)
-    return isinstance(card_target, str) and card_target in _CHOICE_CARD_TARGETS
+    return any(op_choice_axes(op))
 
 
 # ---------------------------------------------------------------------------

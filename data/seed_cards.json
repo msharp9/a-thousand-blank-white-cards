@@ -1662,7 +1662,7 @@
   {
     "id": "seed-gold-100",
     "title": "Into the Void",
-    "description": "Choose any card in play or in a hand and remove it from the game entirely. It doesn't go to the discard pile — it's just gone.",
+    "description": "Choose a card in the center and exile it. It leaves the game instead of going to the discard pile.",
     "alt_text": "a small card being pulled into a swirling black hole",
     "canonical": {
       "target": "card",
@@ -1674,11 +1674,12 @@
           "op": "move_cards",
           "args": {
             "card_target": "chosen_card",
+            "from_zone": "center",
             "to_zone": "exile"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, to_zone='exile')\n"
+      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, from_zone='center', to_zone='exile')\n"
     }
   },
   {

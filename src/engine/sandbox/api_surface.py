@@ -305,8 +305,10 @@ class SandboxGame:
     ) -> None:
         """Move cards between zones (deck/discard/hand/in_play/center/exile) without playing them.
 
-        Give EITHER an explicit `card_target` OR a `from_zone` with
-        `selector` ("top"/"bottom"/"all"/"random") and `count` (1-50);
+        Give an explicit `card_target`, a `from_zone` with `selector`
+        ("top"/"bottom"/"all"/"random") and `count` (1-50), or BOTH — the
+        addressed card moves only if it actually sits in the declared zone
+        (`selector`/`count` are not applied there and must stay defaults).
         `from_player`/`to_player` are required exactly when the corresponding
         zone is "hand" or "in_play"; `to_player` also accepts "card_owner"
         (each moved card routes to its own owner). `to_position` applies only
@@ -317,8 +319,10 @@ class SandboxGame:
         """
         if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 50:
             raise ValueError(f"count must be an int in 1..50, got {count!r}")
-        if (card_target is None) == (from_zone is None):
-            raise ValueError("move_cards requires exactly one of card_target or from_zone")
+        if card_target is None and from_zone is None:
+            raise ValueError("move_cards requires card_target or from_zone (or both)")
+        if card_target is not None and from_zone is not None and (selector != "top" or count != 1):
+            raise ValueError("move_cards with card_target and from_zone does not apply selector/count")
         if from_zone is not None and from_zone not in self._ZONES:
             raise ValueError(f"from_zone must be one of {self._ZONES}, got {from_zone!r}")
         if to_zone not in self._ZONES:

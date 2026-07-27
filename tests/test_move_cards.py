@@ -34,11 +34,28 @@ def make_ctx(actor_id="p1", card_id=None, chosen_card_id=None) -> HookContext:
 
 
 class TestMoveCardsModel:
-    def test_requires_exactly_one_source(self):
-        with pytest.raises(ValidationError, match="exactly one of card_target or from_zone"):
+    def test_requires_a_source(self):
+        with pytest.raises(ValidationError, match="requires card_target or from_zone"):
             MoveCardsOp(to_zone="discard")
-        with pytest.raises(ValidationError, match="exactly one of card_target or from_zone"):
-            MoveCardsOp(card_target="this", from_zone="deck", to_zone="discard")
+
+    def test_addressed_mode_combines_card_target_with_a_declared_zone(self):
+        op = MoveCardsOp(card_target="chosen_card", from_zone="center", to_zone="exile")
+        assert (op.card_target, op.from_zone) == ("chosen_card", "center")
+        assert op_requires_choice(op)
+
+    def test_addressed_mode_rejects_selector_and_count(self):
+        with pytest.raises(ValidationError, match="does not apply selector/count"):
+            MoveCardsOp(card_target="this", from_zone="center", to_zone="exile", selector="all")
+        with pytest.raises(ValidationError, match="does not apply selector/count"):
+            MoveCardsOp(card_target="this", from_zone="center", to_zone="exile", count=2)
+
+    def test_addressed_mode_keeps_the_player_zone_rules(self):
+        with pytest.raises(ValidationError, match="requires from_player"):
+            MoveCardsOp(card_target="chosen_card", from_zone="hand", to_zone="discard")
+        with pytest.raises(ValidationError, match="from_player is only valid"):
+            MoveCardsOp(card_target="chosen_card", from_zone="center", from_player="self", to_zone="exile")
+        op = MoveCardsOp(card_target="chosen_card", from_zone="hand", from_player="self", to_zone="discard")
+        assert op.from_player == "self"
 
     def test_from_player_required_exactly_for_player_zones(self):
         with pytest.raises(ValidationError, match="requires from_player"):
@@ -224,6 +241,70 @@ class TestMoveCardsReducer:
         for cid in ("c3", "c4", "c5"):
             assert all(cid not in line for line in move_lines)
         assert not [e for e in new.history_events if e.kind == "discard"]
+
+
+class TestMoveCardsAddressedZone:
+    """card_target + from_zone: the addressed card moves only from the declared
+    zone (and, for player zones, only from a resolved from_player owner)."""
+
+    def _center_state(self) -> GameState:
+        return make_state(
+            house_rules=["hr1", "hr2"],
+            cards={"hr1": {"id": "hr1", "title": "Rule One"}, "hr2": {"id": "hr2", "title": "Rule Two"}},
+        )
+
+    def test_chosen_center_card_moves_to_exile(self):
+        new = apply_op(
+            self._center_state(),
+            MoveCardsOp(card_target="chosen_card", from_zone="center", to_zone="exile"),
+            make_ctx(chosen_card_id="hr1"),
+        )
+        assert new.exiled == ["hr1"]
+        assert new.house_rules == ["hr2"]
+
+    def test_mismatched_zone_is_logged_no_op(self):
+        state = self._center_state()
+        new = apply_op(
+            state,
+            MoveCardsOp(card_target="chosen_card", from_zone="center", to_zone="exile"),
+            make_ctx(chosen_card_id="c1"),  # c1 is in p1's hand, not the center
+        )
+        assert new.exiled == []
+        assert new.get_player("p1").hand == ["c1", "c2"]
+        assert any("[move_cards no-op]" in line and "is not in zone 'center'" in line for line in new.log)
+
+    def test_owner_mismatch_is_logged_no_op(self):
+        state = make_state(cards={"c3": {"id": "c3", "title": "Three"}})
+        new = apply_op(
+            state,
+            MoveCardsOp(card_target="id:c3", from_zone="hand", from_player="self", to_zone="discard"),
+            make_ctx("p1"),  # c3 belongs to p2
+        )
+        assert new.discard == []
+        assert new.get_player("p2").hand == ["c3", "c4", "c5"]
+        assert any("[move_cards no-op]" in line and "does not belong to 'self'" in line for line in new.log)
+
+    def test_owner_match_moves_the_addressed_card(self):
+        state = make_state(cards={"c3": {"id": "c3", "title": "Three"}})
+        new = apply_op(
+            state,
+            MoveCardsOp(card_target="id:c3", from_zone="hand", from_player="id:p2", to_zone="discard"),
+            make_ctx("p1"),
+        )
+        assert new.discard == ["c3"]
+        assert new.get_player("p2").hand == ["c4", "c5"]
+
+    def test_stale_zone_never_falls_back_to_a_hand(self):
+        # Empty center: the addressed choice resolves to nothing — a logged
+        # no-op that must not touch any hand.
+        state = make_state(cards={"c1": {"id": "c1", "title": "One"}})
+        new = apply_op(
+            state,
+            MoveCardsOp(card_target="chosen_card", from_zone="center", to_zone="exile"),
+            make_ctx(chosen_card_id="c1"),
+        )
+        assert new.exiled == []
+        assert new.get_player("p1").hand == ["c1", "c2"]
 
 
 class TestMoveCardsRetiresBoardEffects:
@@ -475,10 +556,12 @@ class TestSandboxMirrors:
 
     def test_move_cards_validation_mirrors_the_model(self):
         g = self._game()
-        with pytest.raises(ValueError, match="exactly one of card_target or from_zone"):
+        with pytest.raises(ValueError, match="requires card_target or from_zone"):
             g.move_cards(to_zone="discard")
-        with pytest.raises(ValueError, match="exactly one of card_target or from_zone"):
-            g.move_cards(card_target="this", from_zone="deck", to_zone="discard")
+        with pytest.raises(ValueError, match="does not apply selector/count"):
+            g.move_cards(card_target="this", from_zone="deck", to_zone="discard", selector="all")
+        with pytest.raises(ValueError, match="does not apply selector/count"):
+            g.move_cards(card_target="this", from_zone="deck", to_zone="discard", count=2)
         with pytest.raises(ValueError, match="from_player is required"):
             g.move_cards(from_zone="hand", to_zone="discard")
         with pytest.raises(ValueError, match="to_player is required"):
@@ -505,6 +588,14 @@ class TestSandboxMirrors:
         new = apply_snippet_diff(make_state(), g.ops(), make_ctx(), rng=random.Random(0))
         assert new.deck == []
         assert new.exiled == ["d1", "d2", "d3"]
+
+    def test_recorded_addressed_zone_move_revalidates_and_applies(self):
+        g = self._game()
+        g.move_cards(card_target="id:hr1", from_zone="center", to_zone="exile")
+        state = make_state(house_rules=["hr1"], cards={"hr1": {"id": "hr1", "title": "Rule"}})
+        new = apply_snippet_diff(state, g.ops(), make_ctx(), rng=random.Random(0))
+        assert new.exiled == ["hr1"]
+        assert new.house_rules == []
 
     def test_recorded_shuffle_deck_revalidates(self):
         g = self._game()
