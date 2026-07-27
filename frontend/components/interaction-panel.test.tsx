@@ -77,6 +77,29 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function drawingCanvas(capture?: {
+  set?: ReturnType<typeof vi.fn>;
+  release?: ReturnType<typeof vi.fn>;
+  has?: (pointerId: number) => boolean;
+}) {
+  const canvas = screen.getByRole("img", { name: "Drawing canvas" });
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 0, top: 0, width: 200, height: 100 }),
+  });
+  if (capture) {
+    Object.defineProperty(canvas, "setPointerCapture", {
+      value: capture.set ?? vi.fn(),
+    });
+    Object.defineProperty(canvas, "hasPointerCapture", {
+      value: capture.has ?? (() => true),
+    });
+    Object.defineProperty(canvas, "releasePointerCapture", {
+      value: capture.release ?? vi.fn(),
+    });
+  }
+  return canvas;
+}
+
 describe("InteractionPanel field renderers", () => {
   it("submits bounded choice selections", async () => {
     const user = userEvent.setup();
@@ -154,11 +177,7 @@ describe("InteractionPanel field renderers", () => {
     const { onSubmit } = panel(
       request({ kind: "drawing", max_strokes: 4, max_points_per_stroke: 8 }),
     );
-    const canvas = screen.getByRole("img", { name: "Drawing canvas" });
-    Object.defineProperty(canvas, "getBoundingClientRect", {
-      value: () => ({ left: 0, top: 0, width: 200, height: 100 }),
-    });
-    Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
+    const canvas = drawingCanvas();
     fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 20, clientY: 20 });
     fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 180, clientY: 90 });
     fireEvent.pointerUp(canvas, { pointerId: 1 });
@@ -196,6 +215,129 @@ describe("InteractionPanel field renderers", () => {
     expect(
       screen.getByRole("img", { name: "Drawing submission" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("drawing gesture hardening", () => {
+  it("prevents default page gestures and captures the accepted pointer", () => {
+    const set = vi.fn();
+    const release = vi.fn();
+    panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas({ set, release });
+    expect(
+      fireEvent.pointerDown(canvas, { pointerId: 7, clientX: 20, clientY: 20 }),
+    ).toBe(false);
+    expect(set).toHaveBeenCalledWith(7);
+    expect(
+      fireEvent.pointerMove(canvas, { pointerId: 7, clientX: 60, clientY: 80 }),
+    ).toBe(false);
+    fireEvent.pointerUp(canvas, { pointerId: 7 });
+    expect(release).toHaveBeenCalledWith(7);
+    expect(
+      fireEvent.pointerMove(canvas, { pointerId: 7, clientX: 90, clientY: 90 }),
+    ).toBe(true);
+  });
+
+  it("applies gesture-blocking styles to the canvas and keeps the modal scrollable", () => {
+    panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas();
+    expect(canvas.style.touchAction).toBe("none");
+    expect(canvas.style.userSelect).toBe("none");
+    expect(canvas.getAttribute("style")).toContain(
+      "overscroll-behavior: contain",
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("overflow-y-auto");
+    expect(dialog.className).toContain("overscroll-contain");
+  });
+
+  it("blocks native touch scrolling on the canvas but not the modal", () => {
+    const { view } = panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas();
+    const touches = [{ clientX: 50, clientY: 50 }];
+    expect(fireEvent.touchMove(canvas, { touches })).toBe(false);
+    expect(fireEvent.touchMove(screen.getByRole("dialog"), { touches })).toBe(
+      true,
+    );
+    view.rerender(
+      <InteractionPanel
+        pending={pending}
+        request={request({ kind: "drawing" })}
+        progressMessage={null}
+        cards={{}}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(fireEvent.touchMove(canvas, { touches })).toBe(false);
+    view.unmount();
+    expect(fireEvent.touchMove(canvas, { touches })).toBe(true);
+  });
+
+  it("ignores secondary pointers so a second finger cannot corrupt the stroke", () => {
+    const { onSubmit } = panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas({});
+    fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 20, clientY: 20 });
+    expect(
+      fireEvent.pointerDown(canvas, {
+        pointerId: 2,
+        clientX: 100,
+        clientY: 50,
+      }),
+    ).toBe(true);
+    fireEvent.pointerMove(canvas, { pointerId: 2, clientX: 140, clientY: 70 });
+    fireEvent.pointerUp(canvas, { pointerId: 2 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 180, clientY: 90 });
+    fireEvent.pointerUp(canvas, { pointerId: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Submit drawing" }));
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "drawing",
+      strokes: [
+        {
+          color: "#1a1a1a",
+          width: 0.01,
+          points: [
+            { x: 0.1, y: 0.2 },
+            { x: 0.9, y: 0.9 },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("ends the stroke on pointer cancel and lost pointer capture", () => {
+    const { onSubmit } = panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas({});
+    fireEvent.pointerDown(canvas, { pointerId: 3, clientX: 20, clientY: 20 });
+    fireEvent.pointerCancel(canvas, { pointerId: 3 });
+    fireEvent.pointerMove(canvas, { pointerId: 3, clientX: 180, clientY: 90 });
+    fireEvent.pointerDown(canvas, { pointerId: 4, clientX: 100, clientY: 50 });
+    fireEvent.lostPointerCapture(canvas, { pointerId: 4 });
+    fireEvent.pointerMove(canvas, { pointerId: 4, clientX: 180, clientY: 90 });
+    fireEvent.click(screen.getByRole("button", { name: "Submit drawing" }));
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "drawing",
+      strokes: [
+        { color: "#1a1a1a", width: 0.01, points: [{ x: 0.1, y: 0.2 }] },
+        { color: "#1a1a1a", width: 0.01, points: [{ x: 0.5, y: 0.5 }] },
+      ],
+    });
+  });
+
+  it("keeps Undo and Clear working after hardened strokes", () => {
+    panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas({});
+    for (const pointerId of [1, 2]) {
+      fireEvent.pointerDown(canvas, { pointerId, clientX: 20, clientY: 20 });
+      fireEvent.pointerUp(canvas, { pointerId });
+    }
+    expect(screen.getByText(/2\/64 strokes/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(screen.getByText(/1\/64 strokes/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText(/0\/64 strokes/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Submit drawing" }),
+    ).toBeDisabled();
   });
 });
 

@@ -626,6 +626,163 @@ test("adaptive panels and blank-card authoring remain compact and reachable", as
   expect(String(play?.art)).toMatch(/^data:image\/png;base64,/);
 });
 
+test("drawing interaction gestures stay on the canvas without moving the page", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name === "desktop-chromium");
+  const room = await openMockRoom(page);
+  room.push({
+    type: "interaction_request",
+    schema_version: 1,
+    interaction_id: "draw-1",
+    deadline_at: "2099-01-01T00:00:00.000Z",
+    progress: {
+      expected_count: 1,
+      received_count: 0,
+      submitted: false,
+      complete: false,
+    },
+    descriptor: {
+      schema_version: 1,
+      prompt: "Draw a volcano",
+      audience: "all",
+      sealed: false,
+      timeout_seconds: 300,
+      kind: "drawing",
+      max_strokes: 8,
+      max_points_per_stroke: 32,
+    },
+  });
+
+  const canvas = page.getByRole("img", { name: "Drawing canvas" });
+  await expect(canvas).toBeVisible();
+  await expect(canvas).toHaveCSS("touch-action", "none");
+
+  const gesture = await canvas.evaluate((node) => {
+    const svg = node as Element;
+    const dialog = svg.closest<HTMLElement>("section[aria-modal='true']")!;
+    const box = svg.getBoundingClientRect();
+    const midX = box.left + box.width / 2;
+    const midY = box.top + box.height / 2;
+    const touchMoveOn = (target: Element, x: number, y: number) => {
+      let event: Event;
+      // WebKit exposes Touch/TouchEvent but marks their constructors illegal;
+      // a plain cancelable Event still exercises the native touchmove handler.
+      try {
+        const touch = new Touch({
+          identifier: 1,
+          target,
+          clientX: x,
+          clientY: y,
+        });
+        event = new TouchEvent("touchmove", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          touches: [touch],
+          targetTouches: [touch],
+          changedTouches: [touch],
+        });
+      } catch {
+        event = new Event("touchmove", { bubbles: true, cancelable: true });
+      }
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const before = { windowY: window.scrollY, dialogTop: dialog.scrollTop };
+    const verticalPrevented = touchMoveOn(svg, midX, midY + 120);
+    const horizontalPrevented = touchMoveOn(svg, midX - 120, midY);
+    const outsidePrevented = touchMoveOn(dialog, midX, midY + 120);
+    const styles = getComputedStyle(svg);
+    const dialogStyles = getComputedStyle(dialog);
+    return {
+      verticalPrevented,
+      horizontalPrevented,
+      outsidePrevented,
+      windowMoved: window.scrollY !== before.windowY,
+      dialogMoved: dialog.scrollTop !== before.dialogTop,
+      overscrollBehavior: styles.overscrollBehaviorY,
+      userSelect: styles.webkitUserSelect || styles.userSelect,
+      dialogOverflowY: dialogStyles.overflowY,
+      dialogOverscroll: dialogStyles.overscrollBehaviorY,
+    };
+  });
+  expect(gesture.verticalPrevented).toBe(true);
+  expect(gesture.horizontalPrevented).toBe(true);
+  expect(gesture.outsidePrevented).toBe(false);
+  expect(gesture.windowMoved).toBe(false);
+  expect(gesture.dialogMoved).toBe(false);
+  expect(gesture.overscrollBehavior).toBe("contain");
+  expect(gesture.userSelect).toBe("none");
+  expect(gesture.dialogOverflowY).toBe("auto");
+  expect(gesture.dialogOverscroll).toBe("contain");
+
+  const box = (await canvas.boundingBox())!;
+  if (testInfo.project.name.includes("chromium")) {
+    const cdp = await page.context().newCDPSession(page);
+    const midX = box.x + box.width / 2;
+    // A downward touch drag from the canvas is the pull-to-refresh gesture;
+    // it must feed the stroke instead of scrolling or refreshing the page.
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: midX, y: box.y + 20 }],
+    });
+    for (let step = 1; step <= 6; step += 1) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: midX, y: box.y + 20 + step * 25 }],
+      });
+    }
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await expect(page.getByText(/1\/8 strokes/)).toBeVisible();
+    const scrolled = await page.evaluate(() => ({
+      windowY: window.scrollY,
+      pageTop: window.visualViewport?.pageTop ?? 0,
+      dialogTop: document.querySelector<HTMLElement>(
+        "section[aria-modal='true']",
+      )!.scrollTop,
+    }));
+    expect(scrolled).toEqual({ windowY: 0, pageTop: 0, dialogTop: 0 });
+    await page.getByRole("button", { name: "Clear" }).click();
+    await expect(page.getByText(/0\/8 strokes/)).toBeVisible();
+  }
+
+  await page.mouse.move(box.x + 20, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 20, box.y + box.height - 20, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect(page.getByText(/1\/8 strokes/)).toBeVisible();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByText(/0\/8 strokes/)).toBeVisible();
+
+  await page.mouse.move(box.x + 30, box.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 30, box.y + 40, { steps: 3 });
+  await page.mouse.up();
+  await expect(page.getByText(/1\/8 strokes/)).toBeVisible();
+  await page.getByRole("button", { name: "Submit drawing" }).click();
+  await expect
+    .poll(() =>
+      room.clientMessages.find(
+        (message) => message.type === "interaction_response",
+      ),
+    )
+    .toMatchObject({
+      interaction_id: "draw-1",
+      payload: { kind: "drawing" },
+    });
+  const response = room.clientMessages.find(
+    (message) => message.type === "interaction_response",
+  ) as { payload: { strokes: { points: unknown[] }[] } };
+  expect(response.payload.strokes).toHaveLength(1);
+  expect(response.payload.strokes[0].points.length).toBeGreaterThan(1);
+});
+
 test("wide game panels share the viewport and preserve edits across the breakpoint", async ({
   page,
 }, testInfo) => {
