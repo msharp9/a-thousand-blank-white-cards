@@ -9,12 +9,20 @@ from unittest.mock import AsyncMock, MagicMock
 import agent.triage as triage_module
 from config import get_settings
 from models.effects import ResolutionPlan
+from models.interactions import (
+    MAX_INTERACTION_DESCRIPTOR_BYTES,
+    MAX_OPTION_PAYLOAD_BYTES,
+    DrawingResponse,
+    encoded_payload_size,
+)
 from models.ws_messages import InteractionResponseMsg, PlayMsg
 from board.rooms.room import Room
 from board.rooms.store import FileRoomStore
 from board.rooms.manager import RoomManager
 
 DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
+
+_PLAYER_NAMES = ("Alice", "Bob", "Cara", "Dave", "Eve", "Finn")
 
 
 def _gold_plan(title: str) -> ResolutionPlan:
@@ -31,10 +39,11 @@ def _gold_plan(title: str) -> ResolutionPlan:
     raise AssertionError(f"interaction card not found: {title}")
 
 
-def _room_with_plan(plan: ResolutionPlan) -> Room:
+def _room_with_plan(plan: ResolutionPlan, *, player_count: int = 2) -> Room:
     room = Room("INTERA")
-    room.add_player("p1", "Alice")
-    room.add_player("p2", "Bob")
+    player_ids = [f"p{index + 1}" for index in range(player_count)]
+    for player_id, name in zip(player_ids, _PLAYER_NAMES):
+        room.add_player(player_id, name)
     card = {
         "id": "card",
         "title": "Interactive",
@@ -47,9 +56,31 @@ def _room_with_plan(plan: ResolutionPlan) -> Room:
     room.state = room.state.model_copy(
         update={"phase": "playing", "cards": {"card": card}, "players": players, "deck": []}
     )
-    room.connections.connect("p1", AsyncMock())
-    room.connections.connect("p2", AsyncMock())
+    for player_id in player_ids:
+        room.connections.connect(player_id, AsyncMock())
     return room
+
+
+def _dense_strokes(stroke_count: int, points_per_stroke: int, salt: int = 0) -> list[dict]:
+    """Realistic client drawing data: full-precision float coordinates."""
+    return [
+        {
+            "width": 0.0123456789,
+            "points": [
+                {
+                    "x": ((i * 7919 + s * 104729 + salt) % 997) / 997,
+                    "y": ((i * 6101 + s * 15485863 + salt) % 991) / 991,
+                }
+                for i in range(points_per_stroke)
+            ],
+        }
+        for s in range(stroke_count)
+    ]
+
+
+def _submitted_value(strokes: list[dict]) -> list[dict]:
+    """The value the room stores for an accepted drawing response."""
+    return [stroke.model_dump() for stroke in DrawingResponse(strokes=strokes).strokes]
 
 
 def _response(interaction_id: str, kind: str, **payload) -> InteractionResponseMsg:
@@ -558,15 +589,109 @@ def test_drawing_then_vote_materializes_sealed_submissions_and_tied_winners() ->
     assert room._pending_resolution is None
 
 
+def test_dense_drawing_over_option_cap_advances_to_vote_with_compacted_previews() -> None:
+    room = _room_with_plan(_gold_plan("Cat Show"))
+    submissions = {"p1": _dense_strokes(6, 200, salt=1), "p2": _dense_strokes(6, 200, salt=2)}
+    originals = {pid: _submitted_value(strokes) for pid, strokes in submissions.items()}
+    assert all(encoded_payload_size(value) > MAX_OPTION_PAYLOAD_BYTES for value in originals.values())
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        drawing_id = room._pending_resolution.interaction_id
+        await room.handle_action("p1", _response(drawing_id, "drawing", strokes=submissions["p1"]))
+        await room.handle_action("p2", _response(drawing_id, "drawing", strokes=submissions["p2"]))
+        vote = room._pending_resolution
+        assert vote is not None and vote.request.kind == "choice"
+        assert {option.id: option.label for option in vote.request.options} == {"p1": "Alice", "p2": "Bob"}
+        for option in vote.request.options:
+            assert option.payload
+            assert encoded_payload_size(option.payload) <= MAX_OPTION_PAYLOAD_BYTES
+        # Only the vote previews are compacted; the accepted originals persist untouched.
+        assert vote.interactions["cats"] == originals
+        await room.handle_action("p1", _response(vote.interaction_id, "choice", option_ids=["p1"]))
+        await room.handle_action("p2", _response(vote.interaction_id, "choice", option_ids=["p1"]))
+
+    asyncio.run(scenario())
+    assert room._pending_resolution is None
+    assert [player.score for player in room.state.players] == [3, 0]
+    assert room.state.cards["card"]["mechanical_status"] == "applied"
+
+
+def test_aggregate_drawings_over_descriptor_cap_advance_and_score_tied_winners() -> None:
+    room = _room_with_plan(_gold_plan("Cat Show"), player_count=6)
+    submissions = {f"p{index}": _dense_strokes(3, 150, salt=index) for index in range(1, 7)}
+    originals = {pid: _submitted_value(strokes) for pid, strokes in submissions.items()}
+    assert all(encoded_payload_size(value) <= MAX_OPTION_PAYLOAD_BYTES for value in originals.values())
+    assert sum(encoded_payload_size(value) for value in originals.values()) > MAX_INTERACTION_DESCRIPTOR_BYTES
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        drawing_id = room._pending_resolution.interaction_id
+        for pid, strokes in submissions.items():
+            await room.handle_action(pid, _response(drawing_id, "drawing", strokes=strokes))
+        vote = room._pending_resolution
+        assert vote is not None and vote.request.kind == "choice"
+        assert {option.id for option in vote.request.options} == set(submissions)
+        assert all(option.payload for option in vote.request.options)
+        assert len(vote.request.model_dump_json().encode()) <= MAX_INTERACTION_DESCRIPTOR_BYTES
+        assert vote.interactions["cats"] == originals
+        for pid in ("p1", "p2", "p3"):
+            await room.handle_action(pid, _response(vote.interaction_id, "choice", option_ids=["p1"]))
+        for pid in ("p4", "p5", "p6"):
+            await room.handle_action(pid, _response(vote.interaction_id, "choice", option_ids=["p2"]))
+
+    asyncio.run(scenario())
+    assert room._pending_resolution is None
+    assert [player.score for player in room.state.players] == [3, 3, 0, 0, 0, 0]
+    assert room.state.cards["card"]["mechanical_status"] == "applied"
+
+
+def test_sealed_drawing_submissions_never_leave_the_server_raw() -> None:
+    room = _room_with_plan(_gold_plan("Cat Show"))
+    marker = 0.7654321987654321
+    p1_strokes = [*_dense_strokes(6, 200, salt=1), {"points": [{"x": marker, "y": marker}, {"x": 0.5, "y": 0.5}]}]
+    marker_text = json.dumps(marker)
+
+    def sent_text(pid: str) -> str:
+        return "".join(call.args[0] for call in room.connections._connections[pid].send_text.call_args_list)
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card"))
+        drawing_id = room._pending_resolution.interaction_id
+        await room.handle_action("p1", _response(drawing_id, "drawing", strokes=p1_strokes))
+        # Barrier still open: p1's sealed drawing is invisible to everyone.
+        assert "responses" not in room.snapshot()["pending_interaction"]
+        assert marker_text not in json.dumps(room.snapshot())
+        assert marker_text not in sent_text("p2")
+        await room.handle_action("p2", _response(drawing_id, "drawing", strokes=_dense_strokes(2, 50, salt=2)))
+        vote = room._pending_resolution
+        assert vote is not None and vote.request.kind == "choice"
+        # The vote reveals compacted previews only — never the raw submission.
+        p2_messages = [
+            json.loads(call.args[0]) for call in room.connections._connections["p2"].send_text.call_args_list
+        ]
+        vote_requests = [
+            message
+            for message in p2_messages
+            if message["type"] == "interaction_request" and message["descriptor"]["kind"] == "choice"
+        ]
+        assert vote_requests and all(option["payload"] for option in vote_requests[-1]["descriptor"]["options"])
+        assert marker_text not in sent_text("p1")
+        assert marker_text not in sent_text("p2")
+
+    asyncio.run(scenario())
+
+
 def test_cat_show_vote_stage_survives_cold_restore_and_completes(tmp_path) -> None:
     room = _room_with_plan(_gold_plan("Cat Show"))
-    stroke = [{"points": [{"x": 0.1, "y": 0.2}, {"x": 0.8, "y": 0.9}]}]
+    submissions = {"p1": _dense_strokes(6, 200, salt=1), "p2": _dense_strokes(6, 200, salt=2)}
+    originals = {pid: _submitted_value(strokes) for pid, strokes in submissions.items()}
 
     async def reach_vote() -> None:
         await room.handle_action("p1", PlayMsg(card_id="card"))
         drawing_id = room._pending_resolution.interaction_id
-        await room.handle_action("p1", _response(drawing_id, "drawing", strokes=stroke))
-        await room.handle_action("p2", _response(drawing_id, "drawing", strokes=stroke))
+        await room.handle_action("p1", _response(drawing_id, "drawing", strokes=submissions["p1"]))
+        await room.handle_action("p2", _response(drawing_id, "drawing", strokes=submissions["p2"]))
 
     asyncio.run(reach_vote())
     assert room._pending_resolution is not None
@@ -578,7 +703,8 @@ def test_cat_show_vote_stage_survives_cold_restore_and_completes(tmp_path) -> No
     restored = FileRoomStore(tmp_path).get(room.code)
     assert restored is not None and restored._pending_resolution is not None
     assert restored._pending_resolution.request.kind == "choice"
-    assert set(restored._pending_resolution.interactions["cats"]) == {"p1", "p2"}
+    # Full-precision originals round-trip; the persisted vote carries compact previews.
+    assert restored._pending_resolution.interactions["cats"] == originals
     restored.connections.connect("p1", AsyncMock())
     restored.connections.connect("p2", AsyncMock())
 

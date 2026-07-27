@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import re
@@ -12,6 +13,62 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
 MAX_INTERACTION_DESCRIPTOR_BYTES = 131_072
 MAX_INTERACTION_VALUE_BYTES = 65_536
+MAX_OPTION_PAYLOAD_BYTES = 32_768
+
+
+def encoded_payload_size(payload: Any) -> int:
+    """Byte size of an option payload as :class:`InteractionOption` measures it."""
+    return len(json.dumps(payload, default=str).encode())
+
+
+def _is_drawing_payload(payload: Any) -> bool:
+    return (
+        isinstance(payload, list)
+        and bool(payload)
+        and all(
+            isinstance(stroke, dict)
+            and isinstance(stroke.get("points"), list)
+            and bool(stroke["points"])
+            and all(
+                isinstance(point, dict)
+                and isinstance(point.get("x"), int | float)
+                and isinstance(point.get("y"), int | float)
+                for point in stroke["points"]
+            )
+            for stroke in payload
+        )
+    )
+
+
+def compact_drawing_preview(payload: Any, budget: int) -> Any:
+    """Deterministically shrink a drawing payload for use as a vote-option preview.
+
+    Non-drawing payloads pass through unchanged. Drawing payloads are deep-copied
+    (the submitted original is never mutated), coordinates and widths are rounded
+    to 4 decimal places, then the longest reducible polyline is repeatedly
+    downsampled (first and last points preserved) and, if still oversized, strokes
+    are thinned fairly — always keeping at least one stroke — until the encoding
+    fits within ``budget`` bytes.
+    """
+    if not _is_drawing_payload(payload):
+        return payload
+    preview = copy.deepcopy(payload)
+    for stroke in preview:
+        if isinstance(stroke.get("width"), float):
+            stroke["width"] = round(stroke["width"], 4)
+        stroke["points"] = [
+            {**point, "x": round(point["x"], 4), "y": round(point["y"], 4)} for point in stroke["points"]
+        ]
+    while encoded_payload_size(preview) > budget:
+        longest = max(range(len(preview)), key=lambda i: len(preview[i]["points"]))
+        points = preview[longest]["points"]
+        if len(points) > 2:
+            preview[longest]["points"] = [*points[:-1:2], points[-1]]
+        elif len(preview) > 1:
+            preview = preview[::2]
+        else:
+            break
+    return preview
 
 
 def _identifier(value: str) -> str:
@@ -43,8 +100,8 @@ class InteractionOption(StrictModel):
 
     @model_validator(mode="after")
     def bounded_payload(self):
-        if len(json.dumps(self.payload, default=str).encode()) > 32_768:
-            raise ValueError("option payload exceeds 32768 bytes")
+        if encoded_payload_size(self.payload) > MAX_OPTION_PAYLOAD_BYTES:
+            raise ValueError(f"option payload exceeds {MAX_OPTION_PAYLOAD_BYTES} bytes")
         return self
 
 

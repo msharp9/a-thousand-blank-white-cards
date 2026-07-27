@@ -53,6 +53,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
+from pydantic import ValidationError
+
 from engine.apply import apply_effect
 from engine.compile import compile_card_plan
 from engine.events import EventBus, GameEvent, HookContext
@@ -88,16 +90,18 @@ from models.interactions import (
     ChoiceResponse,
     ConfirmInteraction,
     ConfirmResponse,
+    MAX_INTERACTION_DESCRIPTOR_BYTES,
+    MAX_OPTION_PAYLOAD_BYTES,
     DrawingInteraction,
     DrawingResponse,
     InteractionDescriptor,
-    InteractionOption,
     InteractionProgress,
     InteractionResponsePayload,
     NumberInteraction,
     NumberResponse,
     TextInteraction,
     TextResponse,
+    compact_drawing_preview,
 )
 from board.rooms.interactions import PendingResolution
 from board.rooms.admin import apply_admin_actions
@@ -140,6 +144,15 @@ REACTION_WINDOW_SECONDS = 15.0
 # hand tail is discarded for them.
 HAND_LIMIT_RESULT_KEY = "hand_limit_discards"
 HAND_LIMIT_TIMEOUT_SECONDS = 60
+
+# Headroom kept when budgeting dynamic-choice option payloads: the descriptor
+# cap is measured on pydantic's compact JSON while payloads are budgeted with
+# json.dumps' spaced encoding, so the margin absorbs any residual drift.
+_PREVIEW_SERIALIZATION_MARGIN = 1_024
+
+# Floor below which the preview budget stops halving; a budget this small means
+# even a minimal one-stroke preview cannot fit and the plan must fall back.
+_MIN_PREVIEW_BUDGET = 256
 
 # A host correction needs unanimous consent from every other seated player.
 ADMIN_PROPOSAL_TIMEOUT_SECONDS = 60
@@ -3043,21 +3056,38 @@ class Room:
             source = refs["options"]
             if not isinstance(source, dict):
                 raise PlanExecutionError("choice options reference must resolve to an object")
-            options = [
-                InteractionOption(
-                    id=str(player_id),
-                    label=self._name(str(player_id)),
-                    payload=value,
-                )
-                for player_id, value in source.items()
-            ]
-            request = ChoiceInteraction.model_validate(
-                {
-                    **request.model_dump(mode="python"),
-                    "options": [option.model_dump(mode="python") for option in options],
-                    "max_selections": min(request.max_selections, len(options)),
-                }
+            base = request.model_dump(mode="python")
+            base["max_selections"] = min(request.max_selections, len(source))
+            labels = {str(player_id): self._name(str(player_id)) for player_id in source}
+            skeleton = ChoiceInteraction.model_validate(
+                {**base, "options": [{"id": option_id, "label": label} for option_id, label in labels.items()]}
             )
+            available = (
+                MAX_INTERACTION_DESCRIPTOR_BYTES
+                - len(skeleton.model_dump_json().encode())
+                - _PREVIEW_SERIALIZATION_MARGIN
+            )
+            budget = min(MAX_OPTION_PAYLOAD_BYTES, available // max(len(source), 1))
+            while True:
+                try:
+                    request = ChoiceInteraction.model_validate(
+                        {
+                            **base,
+                            "options": [
+                                {
+                                    "id": str(player_id),
+                                    "label": labels[str(player_id)],
+                                    "payload": compact_drawing_preview(value, budget),
+                                }
+                                for player_id, value in source.items()
+                            ],
+                        }
+                    )
+                    break
+                except ValidationError:
+                    if budget <= _MIN_PREVIEW_BUDGET:
+                        raise
+                    budget //= 2
         if isinstance(request, CardPickInteraction) and "card_ids" in refs:
             if not isinstance(refs["card_ids"], list) or not refs["card_ids"]:
                 raise PlanExecutionError("card_ids reference must resolve to a non-empty list")
