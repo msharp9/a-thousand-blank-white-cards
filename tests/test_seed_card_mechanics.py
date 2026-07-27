@@ -199,3 +199,58 @@ def test_mystery_box_discards_one_then_draws_two() -> None:
         "discard_random",
         "draw_cards",
     ]
+
+
+def test_grand_theft_moves_the_chosen_victim_card_and_costs_three() -> None:
+    card = _gold("Grand Theft")
+    move, subtract = card["canonical"]["ops"]
+    assert move["op"] == "move_cards"
+    assert move["args"] == {
+        "card_target": "chosen_card",
+        "from_zone": "hand",
+        "from_player": "chooser",
+        "to_zone": "hand",
+        "to_player": "self",
+    }
+    assert subtract == {"op": "subtract_points", "args": {"target": "chooser", "amount": 3}}
+    # The sandbox mirror resolves the ctx choices to explicit ids (snippets
+    # have no prompt_choice flow) but keeps the same hand-scoped move.
+    assert "from_zone='hand'" in card["canonical"]["sandbox"]
+    assert "chosen_player_id" in card["canonical"]["sandbox"]
+    assert "chosen_card_id" in card["canonical"]["sandbox"]
+
+    from engine.events import GameEvent, HookContext
+    from engine.reducers import apply_op
+
+    plan = compile_card_plan({**card, "origin": "seed"})
+    assert plan is not None and plan.steps
+    state = _state(card, {"p1": [card["id"], "mine"], "p2": ["loot", "kept"]})
+    ctx = HookContext(
+        event=GameEvent.ON_PLAY, actor_id="p1", card_id=card["id"], chosen_player_id="p2", chosen_card_id="loot"
+    )
+    for op in plan.operations():
+        state = apply_op(state, op, ctx)
+
+    assert "loot" in state.get_player("p1").hand
+    assert state.get_player("p2").hand == ["kept"]
+    assert state.get_player("p2").score == -3
+    assert state.get_player("p1").score == 0
+
+
+def test_grand_theft_move_ignores_a_card_outside_the_chosen_hand() -> None:
+    card = _gold("Grand Theft")
+
+    from engine.events import GameEvent, HookContext
+    from engine.reducers import apply_op
+
+    plan = compile_card_plan({**card, "origin": "seed"})
+    state = _state(card, {"p1": [card["id"], "mine"], "p2": ["loot"]})
+    ctx = HookContext(
+        event=GameEvent.ON_PLAY, actor_id="p1", card_id=card["id"], chosen_player_id="p2", chosen_card_id="mine"
+    )
+    move_op = plan.operations()[0]
+    new = apply_op(state, move_op, ctx)
+
+    assert "mine" in new.get_player("p1").hand  # zone-scoped: not in p2's hand, no move
+    assert new.get_player("p2").hand == ["loot"]
+    assert any("[move_cards no-op]" in line for line in new.log)

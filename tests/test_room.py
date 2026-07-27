@@ -637,6 +637,150 @@ def test_plan_choice_needs_detects_the_from_player_axis() -> None:
     assert plan_choice_needs(plan) == (True, True)
 
 
+# ── two-step victim-hand selection (Grand Theft shape, bead 0fr.2) ──
+GRAND_THEFT_OPS = [
+    {
+        "op": "move_cards",
+        "args": {
+            "card_target": "chosen_card",
+            "from_zone": "hand",
+            "from_player": "chooser",
+            "to_zone": "hand",
+            "to_player": "self",
+        },
+    },
+    {"op": "subtract_points", "args": {"target": "chooser", "amount": 3}},
+]
+
+
+def _theft_room() -> Room:
+    """p1 (Alice, active) holds 'theft' + own card; Bob and Cara hold hidden hands."""
+    room = Room("ABCDEF")
+    room.add_player("p1", "Alice")
+    room.add_player("p2", "Bob")
+    room.add_player("p3", "Cara")
+    hands = {"p1": ["theft", "alice-own"], "p2": ["bob-secret-1", "bob-secret-2"], "p3": ["cara-secret-1"]}
+    cards = {
+        "theft": {
+            "id": "theft",
+            "title": "Grand Theft",
+            "description": "Choose a player, take one of their cards, and cost them 3 points.",
+            "canonical": {"ops": GRAND_THEFT_OPS},
+        },
+    }
+    for hand in hands.values():
+        for cid in hand:
+            cards.setdefault(cid, {"id": cid, "title": cid.upper()})
+    players = [p.model_copy(update={"hand": hands[p.id], "score": 5}) for p in room.state.players]
+    room.state = room.state.model_copy(
+        update={"phase": "playing", "deck": ["d1", "d2"], "cards": cards, "players": players}
+    )
+    room._has_drawn = True
+    for pid in ("p1", "p2", "p3"):
+        room.connections.connect(pid, AsyncMock())
+    return room
+
+
+def _msgs(room: Room, pid: str) -> list[dict]:
+    ws = room.connections._connections[pid]
+    return [json.loads(c.args[0]) for c in ws.send_text.call_args_list]
+
+
+def test_theft_prompts_player_first_including_self() -> None:
+    room = _theft_room()
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft")))
+    prompt = next(m for m in _msgs(room, "p1") if m["type"] == "prompt_choice")
+    assert {c["player_id"] for c in prompt["choices"]} == {"p1", "p2", "p3"}
+    assert prompt["cards"] == {}
+    assert prompt["as_reaction"] is False
+    assert room.state.turn_index == 0
+
+
+def test_theft_card_prompt_offers_only_the_chosen_victims_hand_with_snapshots() -> None:
+    room = _theft_room()
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft")))
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft", chosen_player_id="p2")))
+    prompts = [m for m in _msgs(room, "p1") if m["type"] == "prompt_choice"]
+    card_prompt = prompts[-1]
+    assert [c["card_id"] for c in card_prompt["choices"]] == ["bob-secret-1", "bob-secret-2"]
+    # The prompt carries the accumulated context + full snapshots for exactly
+    # the candidates (the chooser's redacted snapshot hides Bob's hand).
+    assert card_prompt["chosen_player_id"] == "p2"
+    assert set(card_prompt["cards"]) == {"bob-secret-1", "bob-secret-2"}
+    assert card_prompt["cards"]["bob-secret-1"]["title"] == "BOB-SECRET-1"
+    assert room.state.turn_index == 0  # still held pending
+
+
+def test_theft_choosing_self_offers_own_other_cards_only() -> None:
+    room = _theft_room()
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft", chosen_player_id="p1")))
+    prompt = next(m for m in _msgs(room, "p1") if m["type"] == "prompt_choice")
+    assert [c["card_id"] for c in prompt["choices"]] == ["alice-own"]  # never Grand Theft itself
+
+
+def test_theft_final_followup_transfers_exactly_the_chosen_card_and_penalizes_once() -> None:
+    room = _theft_room()
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft")))
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft", chosen_player_id="p2")))
+    asyncio.run(
+        room.handle_action("p1", PlayMsg(card_id="theft", chosen_player_id="p2", chosen_card_id="bob-secret-2"))
+    )
+    assert "bob-secret-2" in room.state.get_player("p1").hand
+    # Bob keeps his other card (plus his next turn's auto-draw) — exactly the
+    # selected card moved.
+    assert "bob-secret-2" not in room.state.get_player("p2").hand
+    assert "bob-secret-1" in room.state.get_player("p2").hand
+    assert room.state.get_player("p2").score == 2
+    assert room.state.get_player("p1").score == 5
+    assert "theft" in room.state.discard
+    assert room.state.turn_index == 1  # resolved exactly once, turn advanced
+    prompts = [m for m in _msgs(room, "p1") if m["type"] == "prompt_choice"]
+    assert len(prompts) == 2  # player, then card — no re-prompt loop
+
+
+def test_theft_rejects_a_forged_card_outside_the_chosen_hand() -> None:
+    room = _theft_room()
+    for forged in ("alice-own", "cara-secret-1"):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft", chosen_player_id="p2", chosen_card_id=forged)))
+    errors = [m for m in _msgs(room, "p1") if m["type"] == "error"]
+    assert len([m for m in errors if "Invalid target card" in m["message"]]) == 2
+    assert "theft" in room.state.get_player("p1").hand  # play not consumed
+    assert room.state.get_player("p2").hand == ["bob-secret-1", "bob-secret-2"]
+    assert all(p.score == 5 for p in room.state.players)
+    assert room.state.turn_index == 0
+    assert room._plays_this_turn == 0
+
+
+def test_theft_rejects_a_stale_card_that_left_the_victims_hand() -> None:
+    room = _theft_room()
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft", chosen_player_id="p2")))
+    # Bob's hand changes between the prompt and the answer.
+    players = [p.model_copy(update={"hand": ["bob-secret-1"]}) if p.id == "p2" else p for p in room.state.players]
+    room.state = room.state.model_copy(update={"players": players, "discard": ["bob-secret-2"]})
+    asyncio.run(
+        room.handle_action("p1", PlayMsg(card_id="theft", chosen_player_id="p2", chosen_card_id="bob-secret-2"))
+    )
+    errors = [m for m in _msgs(room, "p1") if m["type"] == "error"]
+    assert any("Invalid target card" in m["message"] for m in errors)
+    assert "theft" in room.state.get_player("p1").hand
+    assert all(p.score == 5 for p in room.state.players)
+    assert room.state.turn_index == 0
+
+
+def test_theft_leaks_no_victim_hand_data_to_other_players_or_spectators() -> None:
+    room = _theft_room()
+    room.add_spectator("spec", "Watcher")
+    room.connections.connect("spec", AsyncMock())
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft")))
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="theft", chosen_player_id="p2")))
+    # The card prompt (ids + snapshots of Bob's hidden hand) goes ONLY to Alice.
+    for pid in ("p3", "spec"):
+        raw = [c.args[0] for c in room.connections._connections[pid].send_text.call_args_list]
+        assert all("bob-secret" not in payload for payload in raw)
+    assert not any(m["type"] == "prompt_choice" for m in _msgs(room, "p2"))
+    assert not any(m["type"] == "prompt_choice" for m in _msgs(room, "p3"))
+
+
 # ── auto-draw → play → pass turn model ──
 def _playing_room(deck: list[str]) -> Room:
     room = _room_with_two_players()

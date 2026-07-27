@@ -479,6 +479,77 @@ def test_reaction_with_empty_center_errors_and_unclaims() -> None:
     asyncio.run(scenario())
 
 
+def _snatch_counter(cid: str = "cs") -> dict:
+    """Counter AND steal a chosen card from a chosen player's hand (two axes)."""
+    return _card(
+        cid,
+        "Snatch Counter",
+        [
+            {"op": "counter_play", "args": {"mode": "negate"}},
+            {
+                "op": "move_cards",
+                "args": {
+                    "card_target": "chosen_card",
+                    "from_zone": "hand",
+                    "from_player": "chooser",
+                    "to_zone": "hand",
+                    "to_player": "self",
+                },
+            },
+        ],
+        trigger="on_reaction",
+    )
+
+
+def test_reaction_two_axis_prompts_carry_reaction_flag_and_context() -> None:
+    room = _reaction_room(p2_hand=[_snatch_counter()])
+    cards = {**room.state.cards, "keep1": {"id": "keep1", "title": "KEEP1"}}
+    players = [p.model_copy(update={"hand": ["atk", "keep1"]}) if p.id == "p1" else p for p in room.state.players]
+    room.state = room.state.model_copy(update={"cards": cards, "players": players})
+    socks = _connect_all(room)
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="atk"))
+        await room.handle_action("p2", PlayMsg(card_id="cs", as_reaction=True))
+        player_prompt = next(m for m in _sent(socks["p2"]) if m["type"] == "prompt_choice")
+        assert player_prompt["as_reaction"] is True
+        await room.handle_action("p2", PlayMsg(card_id="cs", as_reaction=True, chosen_player_id="p1"))
+        card_prompt = [m for m in _sent(socks["p2"]) if m["type"] == "prompt_choice"][-1]
+        # Scoped to the chosen player's hand, context + snapshots + flag carried.
+        assert [c["card_id"] for c in card_prompt["choices"]] == ["atk", "keep1"]
+        assert card_prompt["chosen_player_id"] == "p1"
+        assert card_prompt["as_reaction"] is True
+        assert set(card_prompt["cards"]) == {"atk", "keep1"}
+        await room.handle_action(
+            "p2", PlayMsg(card_id="cs", as_reaction=True, chosen_player_id="p1", chosen_card_id="keep1")
+        )
+
+    asyncio.run(scenario())
+    assert room._pending is None
+    assert "keep1" in room.state.get_player("p2").hand
+    assert "keep1" not in room.state.get_player("p1").hand
+    assert _score(room, "p1") == 0  # Zap countered
+
+
+def test_reaction_two_axis_rejects_a_forged_card_from_another_hand() -> None:
+    room = _reaction_room(p2_hand=[_snatch_counter()], p3_hand=[_counterspell("cs3")])
+    socks = _connect_all(room)
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="atk"))
+        await room.handle_action(
+            "p2", PlayMsg(card_id="cs", as_reaction=True, chosen_player_id="p1", chosen_card_id="cs3")
+        )
+        errors = [m for m in _sent(socks["p2"]) if m["type"] == "error"]
+        assert any("Invalid target card" in m["message"] for m in errors)
+        assert room._pending is not None  # window still open; nothing committed
+        assert "cs3" in room.state.get_player("p3").hand
+        assert "cs" in room.state.get_player("p2").hand
+        room._pending.timer.cancel()
+
+    asyncio.run(scenario())
+
+
 def test_no_nested_window_for_reactions() -> None:
     # p3 also holds a reaction, but a resolving reaction never opens a window.
     room = _reaction_room(p3_hand=[_counterspell("cs3")])

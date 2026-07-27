@@ -1010,10 +1010,13 @@
       "trigger": null,
       "ops": [
         {
-          "op": "transfer_card",
+          "op": "move_cards",
           "args": {
             "card_target": "chosen_card",
-            "to_target": "self"
+            "from_zone": "hand",
+            "from_player": "chooser",
+            "to_zone": "hand",
+            "to_player": "self"
           }
         },
         {
@@ -1024,7 +1027,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.transfer_card(\"id:\" + (ctx.get(\"chosen_card_id\") or \"\"), 'self')\n    state.subtract_points(chosen, 3)"
+      "sandbox": "def apply(state, ctx):\n    victim = ctx.get('chosen_player_id')\n    loot = ctx.get('chosen_card_id')\n    if victim and loot:\n        state.move_cards(card_target='id:' + loot, from_zone='hand', from_player='id:' + victim, to_zone='hand', to_player='self')\n        state.subtract_points('id:' + victim, 3)"
     }
   },
   {

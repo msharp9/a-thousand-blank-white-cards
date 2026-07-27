@@ -518,6 +518,17 @@ export type PromptChoiceMsg = {
   card_id: string;
   prompt: string;
   choices: PromptChoiceOption[];
+  // Full snapshots for exactly the offered card candidates — hidden-hand cards
+  // never ride the chooser's redacted state snapshot, so they ride here.
+  cards?: Record<string, CardSnapshot>;
+  // Context accumulated across a two-step (player then card) prompt chain. The
+  // follow-up play must merge these with the new pick so the final message
+  // carries the complete selection.
+  chosen_player_id?: string;
+  chosen_card_id?: string;
+  // True when this prompt belongs to a reaction play: the follow-up must
+  // re-send as_reaction so it routes back into the open window.
+  as_reaction?: boolean;
 };
 export type EpilogueMsg = { type: "epilogue"; cards: CardSnapshot[] };
 export type ErrorMsg = { type: "error"; message: string };
