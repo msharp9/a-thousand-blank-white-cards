@@ -10,10 +10,9 @@ export type AuxiliaryGameView = Exclude<GameView, "table">;
 const PLAYER_VIEWS: {
   id: GameView;
   label: string;
-  accessibleLabel?: string;
 }[] = [
   { id: "table", label: "Table" },
-  { id: "log", label: "Log", accessibleLabel: "Play Log" },
+  { id: "log", label: "History" },
   { id: "gallery", label: "Gallery" },
   { id: "scores", label: "Scores" },
   { id: "status", label: "Status" },
@@ -41,14 +40,13 @@ export function GameNavTabs({
       className={cn("flex items-center gap-1", className)}
       aria-label="Game views"
     >
-      {views.map(({ id, label, accessibleLabel }) => {
+      {views.map(({ id, label }) => {
         const selected = activeView === id;
         return (
           <button
             key={id}
             type="button"
             data-game-view-trigger={id}
-            aria-label={accessibleLabel}
             aria-pressed={selected}
             aria-expanded={id === "table" ? undefined : selected}
             aria-controls={id === "table" ? undefined : "game-view-panel"}

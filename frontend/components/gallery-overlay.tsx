@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 interface GalleryOverlayProps {
   gameState: GameStateSnapshot;
   roomCode: string;
-  presentation?: PanelPresentation;
+  presentation: PanelPresentation;
   onClose: () => void;
 }
 
@@ -46,7 +46,7 @@ const BATCH_SIZE = 60;
 export function GalleryOverlay({
   gameState,
   roomCode,
-  presentation = "modal",
+  presentation,
   onClose,
 }: GalleryOverlayProps) {
   const compactViewport = useCompactViewport();

@@ -16,17 +16,17 @@ function NavHarness({ isHost = false }: { isHost?: boolean }) {
 }
 
 describe("GameNavTabs", () => {
-  it("defaults to Table and exposes Play Log with its full accessible name", () => {
+  it("defaults to Table and exposes History as the log view", () => {
     render(<NavHarness />);
 
     expect(screen.getByRole("button", { name: "Table" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Play Log" })).toHaveTextContent(
-      "Log",
+    expect(screen.getByRole("button", { name: "History" })).toHaveTextContent(
+      "History",
     );
-    expect(screen.getByRole("button", { name: "Play Log" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "History" })).toHaveAttribute(
       "aria-expanded",
       "false",
     );
@@ -70,7 +70,7 @@ describe("GameNavTabs", () => {
     rerender(<NavHarness isHost />);
     for (const name of [
       "Table",
-      "Play Log",
+      "History",
       "Gallery",
       "Scores",
       "Status",

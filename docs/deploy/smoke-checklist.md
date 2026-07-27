@@ -84,7 +84,7 @@ Do these against the **live Vercel URL** with two devices.
 - [ ] **Real-time state sync** — Take an action on one device (e.g. change name,
       ready up, advance phase) and confirm the other device updates within a
       second or two without a manual refresh.
-- [ ] **Play a card** — Play a card from a hand, open **Log** from the top
+- [ ] **Play a card** — Play a card from a hand, open **History** from the top
       navigation, and confirm the **Play Log** updates on **both** devices with
       the resulting effect.
 - [ ] **Author a wild card** — Write a new custom (wild) card and submit it.

@@ -25,7 +25,13 @@ describe("ScoreboardOverlay", () => {
       player({ id: "p2", name: "Bob", score: 9, in_play: ["x"] }),
       player({ id: "p3", name: "Cara", score: 6 }),
     ];
-    render(<ScoreboardOverlay players={players} onClose={() => {}} />);
+    render(
+      <ScoreboardOverlay
+        players={players}
+        presentation="modal"
+        onClose={() => {}}
+      />,
+    );
 
     // Presence of each exact "<name> <medal>" string confirms both the sort
     // (highest score first) and the medal assignment in one assertion.
@@ -43,7 +49,13 @@ describe("ScoreboardOverlay", () => {
     const players: PlayerSnapshot[] = [
       player({ id: "p1", name: "Alice", hand: [], hand_count: 4 }),
     ];
-    render(<ScoreboardOverlay players={players} onClose={() => {}} />);
+    render(
+      <ScoreboardOverlay
+        players={players}
+        presentation="modal"
+        onClose={() => {}}
+      />,
+    );
     expect(screen.getByText("4 in hand · 0 in play")).toBeTruthy();
   });
 
@@ -52,11 +64,33 @@ describe("ScoreboardOverlay", () => {
       player({ id: "p1", name: "Alice", score: 1 }),
       player({ id: "p2", name: "Bob", score: 99 }),
     ];
-    render(<ScoreboardOverlay players={players} onClose={() => {}} />);
+    render(
+      <ScoreboardOverlay
+        players={players}
+        presentation="modal"
+        onClose={() => {}}
+      />,
+    );
     const bobScore = screen.getByText("99");
     const aliceScore = screen.getByText("1");
     expect(bobScore.style.color).toBe(playerColor(1));
     expect(aliceScore.style.color).toBe(playerColor(0));
+  });
+
+  it("renders in the page flow when presented as a sidebar", () => {
+    render(
+      <ScoreboardOverlay
+        presentation="sidebar"
+        players={[player({ id: "p1", name: "Alice" })]}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("complementary", { name: "Scoreboard" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByTestId("scoreboard-scrim")).toBeNull();
   });
 
   it("closes via the close button", async () => {
@@ -64,6 +98,7 @@ describe("ScoreboardOverlay", () => {
     const onClose = vi.fn();
     render(
       <ScoreboardOverlay
+        presentation="modal"
         players={[player({ id: "p1", name: "Alice" })]}
         onClose={onClose}
       />,
@@ -77,6 +112,7 @@ describe("ScoreboardOverlay", () => {
     const onClose = vi.fn();
     render(
       <ScoreboardOverlay
+        presentation="modal"
         players={[player({ id: "p1", name: "Alice" })]}
         onClose={onClose}
       />,

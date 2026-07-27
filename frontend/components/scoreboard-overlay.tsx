@@ -11,7 +11,7 @@ import { useCompactViewport } from "@/lib/use-compact-viewport";
 
 interface ScoreboardOverlayProps {
   players: PlayerSnapshot[];
-  presentation?: PanelPresentation;
+  presentation: PanelPresentation;
   onClose: () => void;
 }
 
@@ -24,7 +24,7 @@ interface ScoreboardOverlayProps {
  */
 export function ScoreboardOverlay({
   players,
-  presentation = "modal",
+  presentation,
   onClose,
 }: ScoreboardOverlayProps) {
   const compactViewport = useCompactViewport();

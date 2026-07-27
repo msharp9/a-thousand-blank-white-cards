@@ -462,7 +462,7 @@ test("live notices remain visible while the game is scrolled", async ({
   await expect(sequelBubble).toBeHidden();
   await page.clock.fastForward(3100);
   await expect(page.getByText(/Bartholomew.*rolls 1d6/)).toBeHidden();
-  await page.getByRole("button", { name: "Play Log" }).click();
+  await page.getByRole("button", { name: "History" }).click();
   await expect(
     page.locator("[data-game-panel-body]").getByText(/falling sandwich/),
   ).toBeAttached();
@@ -635,8 +635,22 @@ test("wide game panels share the viewport and preserve edits across the breakpoi
   await expect(
     page.locator("[data-game-scroll]").getByText("Play Log"),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Play Log" }).click();
   const shell = page.locator("[data-game-panel-shell]");
+  await page.getByRole("button", { name: "Gallery" }).click();
+  await expect(shell).toHaveAttribute("data-presentation", "sidebar");
+  await expect(
+    page.getByRole("complementary", { name: "The Deck" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("gallery-scrim")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Scores" }).click();
+  await expect(shell).toHaveAttribute("data-presentation", "sidebar");
+  await expect(
+    page.getByRole("complementary", { name: "Scoreboard" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("scoreboard-scrim")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "History" }).click();
   const game = page.locator("[data-game-scroll]");
   const panelBody = page.locator("[data-game-panel-body]");
   await expect(shell).toHaveAttribute("data-presentation", "sidebar");
