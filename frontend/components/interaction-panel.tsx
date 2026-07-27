@@ -151,7 +151,20 @@ function DrawingInput({
     Math.max(2, Number.isFinite(requestedPoints) ? requestedPoints : 256),
   );
   const [strokes, setStrokes] = useState<DrawingStroke[]>([]);
-  const drawingRef = useRef(false);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const activePointerRef = useRef<number | null>(null);
+
+  // React registers touch listeners passively, so scroll/pull-to-refresh must
+  // be blocked with a native non-passive touchmove listener on the canvas.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const blockTouchScroll = (event: TouchEvent) => {
+      if (event.cancelable) event.preventDefault();
+    };
+    svg.addEventListener("touchmove", blockTouchScroll, { passive: false });
+    return () => svg.removeEventListener("touchmove", blockTouchScroll);
+  }, []);
 
   const pointFor = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -164,10 +177,14 @@ function DrawingInput({
 
   const startStroke = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (disabled || strokes.length >= maxStrokes) return;
+    if (activePointerRef.current !== null) return;
     const point = pointFor(event);
     if (!point) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drawingRef.current = true;
+    event.preventDefault();
+    activePointerRef.current = event.pointerId;
+    if (typeof event.currentTarget.setPointerCapture === "function") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
     setStrokes((current) => [
       ...current,
       { color: DEFAULT_COLOR, width: DEFAULT_WIDTH, points: [point] },
@@ -175,7 +192,8 @@ function DrawingInput({
   };
 
   const extendStroke = (event: ReactPointerEvent<SVGSVGElement>) => {
-    if (!drawingRef.current) return;
+    if (activePointerRef.current !== event.pointerId) return;
+    event.preventDefault();
     const point = pointFor(event);
     if (!point) return;
     setStrokes((current) => {
@@ -188,21 +206,38 @@ function DrawingInput({
     });
   };
 
-  const finishStroke = () => {
-    drawingRef.current = false;
+  const finishStroke = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (activePointerRef.current !== event.pointerId) return;
+    activePointerRef.current = null;
+    const target = event.currentTarget;
+    if (
+      typeof target.hasPointerCapture === "function" &&
+      typeof target.releasePointerCapture === "function" &&
+      target.hasPointerCapture(event.pointerId)
+    ) {
+      target.releasePointerCapture(event.pointerId);
+    }
   };
 
   return (
     <div className="flex flex-col gap-3">
       <svg
+        ref={svgRef}
         viewBox="0 0 100 100"
         role="img"
         aria-label="Drawing canvas"
         className="aspect-[4/3] w-full touch-none rounded-xl border-2 border-ink bg-card-face shadow-inner"
+        style={{
+          touchAction: "none",
+          overscrollBehavior: "contain",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+        }}
         onPointerDown={startStroke}
         onPointerMove={extendStroke}
         onPointerUp={finishStroke}
         onPointerCancel={finishStroke}
+        onLostPointerCapture={finishStroke}
       >
         {strokes.map((stroke, index) => (
           <polyline
@@ -695,7 +730,7 @@ export function InteractionPanel({
         role="dialog"
         aria-modal="true"
         aria-labelledby="interaction-title"
-        className="max-h-[92dvh] w-full max-w-xl overflow-y-auto -rotate-[0.3deg] rounded-2xl border-[3px] border-ink bg-panel-paper p-5 sticker-shadow"
+        className="max-h-[92dvh] w-full max-w-xl overflow-y-auto overscroll-contain -rotate-[0.3deg] rounded-2xl border-[3px] border-ink bg-panel-paper p-5 sticker-shadow"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
