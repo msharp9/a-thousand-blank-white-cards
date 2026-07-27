@@ -135,7 +135,7 @@
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.skip_turn('right_neighbor')"
+      "sandbox": "def apply(state, ctx):\n    state.skip_turn('left_neighbor')"
     }
   },
   {

@@ -138,7 +138,11 @@ def _summarize_state(
         lines.append(f"Phase: {phase}.")
     turn_order = get("turn_order")
     if turn_order:
-        lines.append(f"Turn order: {' -> '.join(turn_order)}.")
+        lines.append(
+            f"Turn order: {' -> '.join(turn_order)} "
+            "(each player's left_neighbor is the next id in this rotation; "
+            "right_neighbor is the previous)."
+        )
     deck = get("deck") or []
     try:
         lines.append(f"Deck size: {len(deck)} cards remaining.")

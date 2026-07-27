@@ -659,7 +659,7 @@
         {
           "op": "extra_turn",
           "args": {
-            "target": "left_neighbor"
+            "target": "right_neighbor"
           }
         },
         {
@@ -669,7 +669,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.extra_turn('left_neighbor')\n    state.note(\"The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage.\")"
+      "sandbox": "def apply(state, ctx):\n    state.extra_turn('right_neighbor')\n    state.note(\"The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage.\")"
     }
   },
   {

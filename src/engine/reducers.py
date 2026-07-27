@@ -93,7 +93,9 @@ def _resolve_targets(target: Target, ctx: HookContext, state: GameState) -> list
     ``left_neighbor``/``right_neighbor`` derive from the actor's position in
     ``state.effective_turn_order()`` (the mutable rotation list), not raw
     ``players`` list position — so reversing or scrambling the turn order
-    changes who counts as a neighbor.
+    changes who counts as a neighbor. ``left_neighbor`` is the turn-order
+    successor (the seat ``advance_turn`` moves to next); ``right_neighbor``
+    is the predecessor.
     """
     players = state.players
 
@@ -110,11 +112,11 @@ def _resolve_targets(target: Target, ctx: HookContext, state: GameState) -> list
         case "left_neighbor":
             order = state.effective_turn_order()
             pos = order.index(ctx.actor_id)
-            return [order[(pos - 1) % len(order)]]
+            return [order[(pos + 1) % len(order)]]
         case "right_neighbor":
             order = state.effective_turn_order()
             pos = order.index(ctx.actor_id)
-            return [order[(pos + 1) % len(order)]]
+            return [order[(pos - 1) % len(order)]]
         case "all":
             return [p.id for p in players]
         case "all_others":

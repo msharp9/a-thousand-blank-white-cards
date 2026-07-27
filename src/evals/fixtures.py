@@ -103,7 +103,7 @@ def _make_resolver(ctx: dict[str, Any], state: dict[str, Any] | None):
     """A target->player-ids resolver bound to the fixture, or None if unavailable.
 
     Lets ``normalise_ops`` canonicalise equivalent target vocabularies
-    (all_others vs enumerated ids, next_player vs right_neighbor) to the same
+    (all_others vs enumerated ids, next_player vs left_neighbor) to the same
     concrete players, so a faithful reading isn't scored a false 0.
     """
     if state is None:

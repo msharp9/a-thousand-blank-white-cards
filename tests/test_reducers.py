@@ -58,15 +58,52 @@ class TestResolveTargets:
     def test_self(self):
         assert _resolve_targets("self", make_ctx("p1"), make_state()) == ["p1"]
 
-    def test_right_neighbor_default_order(self):
-        assert _resolve_targets("right_neighbor", make_ctx("p1"), make_state()) == ["p2"]
+    def test_left_neighbor_is_turn_order_successor(self):
+        assert _resolve_targets("left_neighbor", make_ctx("p1"), make_state()) == ["p2"]
 
-    def test_left_neighbor_default_order(self):
-        assert _resolve_targets("left_neighbor", make_ctx("p1"), make_state()) == ["p3"]
+    def test_right_neighbor_is_turn_order_predecessor(self):
+        assert _resolve_targets("right_neighbor", make_ctx("p1"), make_state()) == ["p3"]
 
-    def test_right_neighbor_reversed_order(self):
-        reversed_order = make_state(turn_order=["p1", "p3", "p2"])
-        assert _resolve_targets("right_neighbor", make_ctx("p1"), reversed_order) == ["p3"]
+    def test_neighbors_from_middle_seat(self):
+        assert _resolve_targets("left_neighbor", make_ctx("p2"), make_state()) == ["p3"]
+        assert _resolve_targets("right_neighbor", make_ctx("p2"), make_state()) == ["p1"]
+
+    def test_neighbors_follow_reordered_turn_order(self):
+        reordered = make_state(turn_order=["p1", "p3", "p2"])
+        assert _resolve_targets("left_neighbor", make_ctx("p1"), reordered) == ["p3"]
+        assert _resolve_targets("right_neighbor", make_ctx("p1"), reordered) == ["p2"]
+
+    def test_neighbors_two_players_sole_opponent_both_sides(self):
+        players = [
+            Player(id="p1", name="Alice"),
+            Player(id="p2", name="Bob"),
+        ]
+        state = make_state(players=players)
+        assert _resolve_targets("left_neighbor", make_ctx("p1"), state) == ["p2"]
+        assert _resolve_targets("right_neighbor", make_ctx("p1"), state) == ["p2"]
+
+    def test_neighbors_single_player_wrap_to_self(self):
+        state = make_state(players=[Player(id="p1", name="Alice")])
+        assert _resolve_targets("left_neighbor", make_ctx("p1"), state) == ["p1"]
+        assert _resolve_targets("right_neighbor", make_ctx("p1"), state) == ["p1"]
+
+    def test_reverse_order_immediately_swaps_neighbors(self):
+        state = make_state()
+        ctx = make_ctx("p1")
+        assert _resolve_targets("left_neighbor", ctx, state) == ["p2"]
+        reversed_state = apply_op(state, ReverseOrderOp(), ctx)
+        assert _resolve_targets("left_neighbor", ctx, reversed_state) == ["p3"]
+        assert _resolve_targets("right_neighbor", ctx, reversed_state) == ["p2"]
+
+    def test_eliminated_player_still_counts_as_a_seat(self):
+        players = [
+            Player(id="p1", name="Alice"),
+            Player(id="p2", name="Bob", eliminated=True),
+            Player(id="p3", name="Carol"),
+        ]
+        state = make_state(players=players)
+        assert _resolve_targets("left_neighbor", make_ctx("p1"), state) == ["p2"]
+        assert _resolve_targets("right_neighbor", make_ctx("p3"), state) == ["p2"]
 
     def test_all(self):
         assert set(_resolve_targets("all", make_ctx("p1"), make_state())) == {"p1", "p2", "p3"}
