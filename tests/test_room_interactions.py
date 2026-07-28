@@ -410,6 +410,99 @@ def test_from_hand_pick_rejects_a_card_not_in_the_responders_hand() -> None:
     asyncio.run(scenario())
 
 
+def test_from_hand_pick_descriptor_carries_recipient_card_faces_only() -> None:
+    """Every card_pick request carries full faces for exactly its offered
+    cards, personalised per recipient; one player's hidden hand never rides
+    another player's request or any shared snapshot."""
+    plan = ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "discards",
+                    "request": {"kind": "card_pick", "prompt": "Discard a card", "audience": "all", "from_hand": True},
+                },
+                {"kind": "snippet", "code": "def apply(state, ctx):\n    return None\n"},
+            ]
+        }
+    )
+    room = _room_with_plan(plan)
+    cards = {
+        **room.state.cards,
+        "p1a": {"id": "p1a", "title": "P1-A", "description": "Alice secret rule"},
+        "p2a": {"id": "p2a", "title": "P2-A", "description": "Bob secret rule"},
+        "p2b": {"id": "p2b", "title": "P2-B", "description": "Bob other secret"},
+    }
+    players = [
+        p.model_copy(update={"hand": ["card", "p1a"]})
+        if p.id == "p1"
+        else p.model_copy(update={"hand": ["p2a", "p2b"]})
+        for p in room.state.players
+    ]
+    room.state = room.state.model_copy(update={"cards": cards, "players": players})
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="card")))
+
+    descriptors: dict[str, dict] = {}
+    for pid in ("p1", "p2"):
+        messages = [json.loads(c.args[0]) for c in room.connections._connections[pid].send_text.call_args_list]
+        reqs = [m for m in messages if m["type"] == "interaction_request"]
+        descriptors[pid] = reqs[-1]["descriptor"]
+    assert set(descriptors["p1"]["cards"]) == {"p1a"}
+    assert descriptors["p1"]["cards"]["p1a"]["description"] == "Alice secret rule"
+    assert set(descriptors["p2"]["cards"]) == {"p2a", "p2b"}
+    assert descriptors["p2"]["cards"]["p2b"]["title"] == "P2-B"
+
+    # p1's hidden hand never reaches p2's connection, nor any shared surface.
+    p2_wire = json.dumps([json.loads(c.args[0]) for c in room.connections._connections["p2"].send_text.call_args_list])
+    assert "Alice secret rule" not in p2_wire
+    assert "cards" not in json.dumps(room.snapshot()["pending_interaction"])
+    assert "Alice secret rule" not in json.dumps(room.snapshot_for("p2"))
+    assert "Alice secret rule" not in json.dumps(room.snapshot_for(None))
+
+
+def test_static_card_pick_descriptor_carries_faces() -> None:
+    """A card_pick with explicit card_ids also carries the offered faces."""
+    plan = ResolutionPlan.model_validate(
+        {
+            "steps": [
+                {
+                    "kind": "interaction",
+                    "result_key": "steal",
+                    "request": {
+                        "kind": "card_pick",
+                        "prompt": "Pick a treasure",
+                        "audience": "active",
+                        "card_ids": ["t1", "t2"],
+                    },
+                },
+                {"kind": "snippet", "code": "def apply(state, ctx):\n    return None\n"},
+            ]
+        }
+    )
+    room = _room_with_plan(plan)
+    room.state = room.state.model_copy(
+        update={
+            "cards": {
+                **room.state.cards,
+                "t1": {"id": "t1", "title": "Treasure One", "description": "Shiny."},
+                "t2": {"id": "t2", "title": "Treasure Two", "description": "Shinier."},
+            }
+        }
+    )
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="card")))
+
+    messages = [json.loads(c.args[0]) for c in room.connections._connections["p1"].send_text.call_args_list]
+    reqs = [m for m in messages if m["type"] == "interaction_request"]
+    descriptor = reqs[-1]["descriptor"]
+    assert descriptor["card_ids"] == ["t1", "t2"]
+    assert {cid: face["title"] for cid, face in descriptor["cards"].items()} == {
+        "t1": "Treasure One",
+        "t2": "Treasure Two",
+    }
+
+
 def test_from_hand_multi_pick_lets_each_player_discard_n_cards() -> None:
     """'Everyone discards 2 cards they choose': a from_hand card_pick with
     max_picks=2 collects a LIST per player, which the snippet destroys."""
