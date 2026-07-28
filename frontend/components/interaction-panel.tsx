@@ -25,6 +25,10 @@ import {
   CardFace,
   cardChoiceLabel,
 } from "@/components/card-choice-grid";
+import {
+  drawingSurfaceStyle,
+  useDrawingSurface,
+} from "@/lib/use-drawing-surface";
 import { cn } from "@/lib/utils";
 import type {
   CardSnapshot,
@@ -158,19 +162,8 @@ function DrawingInput({
   );
   const [strokes, setStrokes] = useState<DrawingStroke[]>([]);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const activePointerRef = useRef<number | null>(null);
-
-  // React registers touch listeners passively, so scroll/pull-to-refresh must
-  // be blocked with a native non-passive touchmove listener on the canvas.
-  useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const blockTouchScroll = (event: TouchEvent) => {
-      if (event.cancelable) event.preventDefault();
-    };
-    svg.addEventListener("touchmove", blockTouchScroll, { passive: false });
-    return () => svg.removeEventListener("touchmove", blockTouchScroll);
-  }, []);
+  const { capturePointer, movePointer, releasePointer } =
+    useDrawingSurface(svgRef);
 
   const pointFor = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -183,14 +176,9 @@ function DrawingInput({
 
   const startStroke = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (disabled || strokes.length >= maxStrokes) return;
-    if (activePointerRef.current !== null) return;
     const point = pointFor(event);
     if (!point) return;
-    event.preventDefault();
-    activePointerRef.current = event.pointerId;
-    if (typeof event.currentTarget.setPointerCapture === "function") {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
+    if (!capturePointer(event)) return;
     setStrokes((current) => [
       ...current,
       { color: DEFAULT_COLOR, width: DEFAULT_WIDTH, points: [point] },
@@ -198,8 +186,7 @@ function DrawingInput({
   };
 
   const extendStroke = (event: ReactPointerEvent<SVGSVGElement>) => {
-    if (activePointerRef.current !== event.pointerId) return;
-    event.preventDefault();
+    if (!movePointer(event)) return;
     const point = pointFor(event);
     if (!point) return;
     setStrokes((current) => {
@@ -212,19 +199,6 @@ function DrawingInput({
     });
   };
 
-  const finishStroke = (event: ReactPointerEvent<SVGSVGElement>) => {
-    if (activePointerRef.current !== event.pointerId) return;
-    activePointerRef.current = null;
-    const target = event.currentTarget;
-    if (
-      typeof target.hasPointerCapture === "function" &&
-      typeof target.releasePointerCapture === "function" &&
-      target.hasPointerCapture(event.pointerId)
-    ) {
-      target.releasePointerCapture(event.pointerId);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-3">
       <svg
@@ -233,17 +207,12 @@ function DrawingInput({
         role="img"
         aria-label="Drawing canvas"
         className="aspect-[4/3] w-full touch-none rounded-xl border-2 border-ink bg-card-face shadow-inner"
-        style={{
-          touchAction: "none",
-          overscrollBehavior: "contain",
-          userSelect: "none",
-          WebkitUserSelect: "none",
-        }}
+        style={drawingSurfaceStyle}
         onPointerDown={startStroke}
         onPointerMove={extendStroke}
-        onPointerUp={finishStroke}
-        onPointerCancel={finishStroke}
-        onLostPointerCapture={finishStroke}
+        onPointerUp={releasePointer}
+        onPointerCancel={releasePointer}
+        onLostPointerCapture={releasePointer}
       >
         {strokes.map((stroke, index) => (
           <polyline
