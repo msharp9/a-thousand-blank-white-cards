@@ -12,6 +12,7 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
+from models.effects import validate_move_cards_source
 from models.game_state import normalize_condition_key
 
 
@@ -319,10 +320,7 @@ class SandboxGame:
         """
         if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 50:
             raise ValueError(f"count must be an int in 1..50, got {count!r}")
-        if card_target is None and from_zone is None:
-            raise ValueError("move_cards requires card_target or from_zone (or both)")
-        if card_target is not None and from_zone is not None and (selector != "top" or count != 1):
-            raise ValueError("move_cards with card_target and from_zone does not apply selector/count")
+        validate_move_cards_source(card_target, from_zone, selector, count)
         if from_zone is not None and from_zone not in self._ZONES:
             raise ValueError(f"from_zone must be one of {self._ZONES}, got {from_zone!r}")
         if to_zone not in self._ZONES:

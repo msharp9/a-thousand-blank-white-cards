@@ -355,6 +355,22 @@ Zone = Literal["deck", "discard", "hand", "in_play", "center", "exile"]
 _PLAYER_ZONES: frozenset[str] = frozenset({"hand", "in_play"})
 
 
+def validate_move_cards_source(
+    card_target: str | None,
+    from_zone: str | None,
+    selector: str,
+    count: int,
+) -> None:
+    """Enforce the move_cards source contract shared by the op model and the
+    sandbox API: at least one of card_target/from_zone, and selector/count
+    stay at their defaults in addressed+zone mode (they are not applied)."""
+    if card_target is None and from_zone is None:
+        raise ValueError("move_cards requires card_target or from_zone (or both)")
+    if card_target is not None and from_zone is not None:
+        if selector != "top" or count != 1:
+            raise ValueError("move_cards with card_target and from_zone does not apply selector/count")
+
+
 class MoveCardsOp(BaseModel):
     """Move cards between zones without playing them (mill, tuck, unbury…).
 
@@ -386,11 +402,7 @@ class MoveCardsOp(BaseModel):
 
     @model_validator(mode="after")
     def _source_shape_and_player_zones(self) -> MoveCardsOp:
-        if self.card_target is None and self.from_zone is None:
-            raise ValueError("move_cards requires card_target or from_zone (or both)")
-        if self.card_target is not None and self.from_zone is not None:
-            if self.selector != "top" or self.count != 1:
-                raise ValueError("move_cards with card_target and from_zone does not apply selector/count")
+        validate_move_cards_source(self.card_target, self.from_zone, self.selector, self.count)
         if self.from_zone in _PLAYER_ZONES and self.from_player is None:
             raise ValueError(f"move_cards from_zone {self.from_zone!r} requires from_player")
         if self.from_player is not None and self.from_zone not in _PLAYER_ZONES:

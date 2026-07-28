@@ -1656,11 +1656,11 @@ class Room:
                 return p.name
         return player_id
 
-    def _card_title(self, card) -> str:
-        """A card's display title (falls back to a generic label)."""
+    def _card_title(self, card, default: str = "a card") -> str:
+        """A card's display title (falls back to ``default``)."""
         if isinstance(card, dict):
-            return card.get("title") or "a card"
-        return getattr(card, "title", None) or "a card"
+            return card.get("title") or default
+        return getattr(card, "title", None) or default
 
     def _format_score_deltas(self, deltas: dict[str, int]) -> str:
         """Render {player_id: change} as "Alice +5, Bob -2", in player order.
@@ -2771,12 +2771,13 @@ class Room:
     # ── play_on_draw auto-plays ──
     def _card_choice_payload(self, card_ids: list[str]) -> list[dict[str, str]]:
         """prompt_choice card entries, in candidate order (see board.rooms.choices)."""
-        entries: list[dict[str, str]] = []
-        for cid in card_ids:
-            card = self.state.cards.get(cid)
-            title = card.get("title") if isinstance(card, dict) else getattr(card, "title", None)
-            entries.append({"card_id": cid, "name": title or cid})
-        return entries
+        return [
+            {
+                "card_id": cid,
+                "name": self._card_title(self.state.cards.get(cid), default=cid),
+            }
+            for cid in card_ids
+        ]
 
     def _card_choice_snapshots(self, card_ids: list[str], *, cards: dict | None = None) -> dict[str, dict]:
         """Full card snapshots for exactly the offered candidates.
