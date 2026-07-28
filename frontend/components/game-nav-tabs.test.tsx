@@ -73,7 +73,7 @@ describe("GameNavTabs", () => {
       "History",
       "Gallery",
       "Scores",
-      "Status",
+      "Rules",
       "Host",
     ]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();

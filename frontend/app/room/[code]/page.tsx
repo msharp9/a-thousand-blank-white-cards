@@ -177,13 +177,9 @@ export default function RoomPage() {
       : -1;
   const activePlayer =
     activeIndex >= 0 ? gameState?.players[activeIndex] : undefined;
-  const isActive = useMemo(() => {
-    if (!gameState || !gameState.players.length || !myPlayerId) return false;
-    if (isSpectator) return false;
-    const active =
-      gameState.players[gameState.turn_index % gameState.players.length];
-    return active?.id === myPlayerId;
-  }, [gameState, myPlayerId, isSpectator]);
+  const isActive = Boolean(
+    myPlayerId && !isSpectator && activePlayer?.id === myPlayerId,
+  );
 
   const myHandCards: CardSnapshot[] = useMemo(() => {
     if (!gameState || !me) return [];

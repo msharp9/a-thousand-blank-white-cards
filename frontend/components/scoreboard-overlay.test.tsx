@@ -3,20 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ScoreboardOverlay } from "./scoreboard-overlay";
 import { playerColor } from "@/lib/players";
+import { makePlayer as player } from "@/lib/test-fixtures";
 import type { PlayerSnapshot } from "@/lib/types";
-
-function player(
-  overrides: Partial<PlayerSnapshot> & { id: string; name: string },
-): PlayerSnapshot {
-  return {
-    score: 0,
-    hand: [],
-    in_play: [],
-    connected: true,
-    conditions: {},
-    ...overrides,
-  };
-}
 
 describe("ScoreboardOverlay", () => {
   it("sorts rows by score descending and shows hand/in-play counts", () => {

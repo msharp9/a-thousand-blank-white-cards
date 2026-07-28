@@ -2,20 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { conditionLabel, GameTable } from "./game-table";
 import { playerColor } from "@/lib/players";
-import type { GameStateSnapshot, PlayerSnapshot } from "@/lib/types";
-
-function player(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
-  return {
-    id: "p1",
-    name: "Alice",
-    score: 0,
-    hand: [],
-    in_play: [],
-    connected: true,
-    conditions: {},
-    ...overrides,
-  };
-}
+import { makePlayer as player } from "@/lib/test-fixtures";
+import type { GameStateSnapshot } from "@/lib/types";
 
 function baseState(
   overrides: Partial<GameStateSnapshot> = {},
