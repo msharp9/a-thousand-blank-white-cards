@@ -1,6 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
+import { CurrentTurnBadge } from "@/components/current-turn-indicator";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { getCardArtUrl } from "@/lib/art";
 import { seatDropId } from "@/lib/dnd";
@@ -182,6 +183,7 @@ function OpponentPanel({
       ref={setNodeRef}
       data-seat-drop={player.id}
       data-seat-edge={edge ?? undefined}
+      data-active-turn={isActive || undefined}
       role="group"
       aria-label={
         edge ? `${player.name} — ${SEAT_EDGE_LABELS[edge]}` : player.name
@@ -193,25 +195,33 @@ function OpponentPanel({
         (!player.connected || player.eliminated) && "opacity-50",
       )}
       style={{
-        border: `2px dashed ${color}`,
-        boxShadow: isOver ? `0 0 0 3px ${color}, 0 0 16px ${color}` : undefined,
+        // Active turn: solid identity border + steady close ring. DnD hover
+        // stays distinct with its wider ring, outer glow, and scale-up.
+        border: `2px ${isActive ? "solid" : "dashed"} ${color}`,
+        boxShadow: isOver
+          ? `0 0 0 3px ${color}, 0 0 16px ${color}`
+          : isActive
+            ? `0 0 0 2px ${color}`
+            : undefined,
       }}
     >
-      {edge && (
-        <span
-          data-seat-edge-label
-          className="font-hand text-[11px] leading-none text-muted-foreground"
-        >
-          {SEAT_EDGE_LABELS[edge]}
+      {(edge || isActive) && (
+        <span className="flex items-center gap-1.5">
+          {isActive && <CurrentTurnBadge />}
+          {edge && (
+            <span
+              data-seat-edge-label
+              className="font-hand text-[11px] leading-none text-muted-foreground"
+            >
+              {SEAT_EDGE_LABELS[edge]}
+            </span>
+          )}
         </span>
       )}
       <div className="flex items-center gap-2">
         <PlayerAvatar name={player.name} color={color} size={34} />
         <span className="font-hand text-[19px] leading-none">
           {player.name}
-          {isActive && (
-            <span className="ml-1 text-[15px] text-primary">· playing</span>
-          )}
           {!player.connected && (
             <span className="ml-1 text-[13px] text-muted-foreground">
               · offline

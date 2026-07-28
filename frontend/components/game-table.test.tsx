@@ -194,14 +194,55 @@ describe("GameTable seat projection", () => {
     ).toBeTruthy();
   });
 
-  it("derives the playing marker from players[turn_index]", () => {
+  it("marks the players[turn_index] seat with a badge and solid border", () => {
+    const state = fourSeatState(["a", "b", "me", "c"]);
+    state.turn_index = 3;
+    const { container } = render(
+      <GameTable gameState={state} myPlayerId="me" />,
+    );
+    const cleoSeat = screen.getByRole("group", {
+      name: "Cleo — Left · next seat",
+    });
+    expect(cleoSeat.getAttribute("data-active-turn")).toBe("true");
+    expect(
+      cleoSeat.querySelector("[data-current-turn-badge]")?.textContent,
+    ).toBe("Current turn");
+    expect(cleoSeat.style.border).toContain("solid");
+    expect(cleoSeat.style.boxShadow).toContain(playerColor(3));
+    const inactiveSeats = [
+      ...container.querySelectorAll<HTMLElement>(
+        "[data-seat-drop]:not([data-active-turn])",
+      ),
+    ];
+    expect(inactiveSeats).toHaveLength(2);
+    for (const seat of inactiveSeats) {
+      expect(seat.style.border).toContain("dashed");
+      expect(seat.querySelector("[data-current-turn-badge]")).toBeNull();
+    }
+  });
+
+  it("keeps the badge distinct from the seat-edge label on one seat", () => {
     const state = fourSeatState(["a", "b", "me", "c"]);
     state.turn_index = 3;
     render(<GameTable gameState={state} myPlayerId="me" />);
     const cleoSeat = screen.getByRole("group", {
       name: "Cleo — Left · next seat",
     });
-    expect(cleoSeat.textContent).toContain("· playing");
+    expect(cleoSeat.querySelector("[data-seat-edge-label]")?.textContent).toBe(
+      "Left · next seat",
+    );
+    expect(cleoSeat.querySelector("[data-current-turn-badge]")).not.toBeNull();
+  });
+
+  it("keeps an offline active seat dimmed but still badged", () => {
+    const state = fourSeatState(["a", "b", "me", "c"]);
+    state.turn_index = 0;
+    state.players[0].connected = false;
+    render(<GameTable gameState={state} myPlayerId="me" />);
+    const aliceSeat = screen.getByRole("group", { name: "Alice" });
+    expect(aliceSeat.className).toContain("opacity-50");
+    expect(aliceSeat.textContent).toContain("· offline");
+    expect(aliceSeat.querySelector("[data-current-turn-badge]")).not.toBeNull();
   });
 
   it("keeps eliminated and offline seats visible", () => {
