@@ -39,7 +39,7 @@ function gameState(
     rules: {
       draw: 1,
       play: 1,
-      cannot_play: {},
+      cannot_play: { draw: 1 },
       end_condition: { type: "deck_empty" },
       win_condition: { kind: "highest_points" },
       extra: {},
@@ -79,6 +79,92 @@ function gameState(
 }
 
 describe("StatusConditionsOverlay", () => {
+  it("shows the Rules & Status framing with Core Rules before Players", () => {
+    render(
+      <StatusConditionsOverlay gameState={gameState()} onClose={() => {}} />,
+    );
+    expect(screen.getByText("Rules & Status")).toBeTruthy();
+    expect(
+      screen.getByText("The rules and effects shaping this game."),
+    ).toBeTruthy();
+    const headings = screen
+      .getAllByRole("heading", { level: 3 })
+      .map((heading) => heading.textContent);
+    expect(headings).toEqual(["Core Rules", "Players", "Reactionary Rules"]);
+    expect(screen.queryByText("Active Hooks")).toBeNull();
+    expect(screen.queryByText("Status Conditions")).toBeNull();
+  });
+
+  it("renders the default core rules in plain language", () => {
+    render(
+      <StatusConditionsOverlay gameState={gameState()} onClose={() => {}} />,
+    );
+    expect(
+      screen.getByText("Draw 1 card at the start of your turn."),
+    ).toBeTruthy();
+    expect(screen.getByText("Play 1 card on your turn.")).toBeTruthy();
+    expect(screen.getByText("If you cannot play, draw 1 card.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Game ends when the deck runs out, after the current turn.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Winner: highest score.")).toBeTruthy();
+  });
+
+  it("renders mutated rules with thresholds and modifiers readably", () => {
+    const state = gameState({
+      rules: {
+        draw: 2,
+        play: 0,
+        cannot_play: {},
+        end_condition: { type: "points_reached", threshold: 20 },
+        win_condition: { kind: "first_to", threshold: 20 },
+        hand_limit: 5,
+        turn_timer: 30,
+        skip_predicate: "skip_if_cursed",
+        extra: { gravity_reversed: true },
+      },
+    });
+    render(<StatusConditionsOverlay gameState={state} onClose={() => {}} />);
+    expect(
+      screen.getByText("Draw 2 cards at the start of your turn."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("No cards may be played on your turn."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Game ends when a player reaches 20 points."),
+    ).toBeTruthy();
+    expect(screen.getByText("Winner: first to 20 points.")).toBeTruthy();
+    expect(screen.getByText("Hand limit: 5 cards.")).toBeTruthy();
+    expect(
+      screen.getByText("Each turn has a 30-second time limit."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Some turns may be skipped (Skip If Cursed)."),
+    ).toBeTruthy();
+    expect(screen.getByText("Gravity Reversed is in effect.")).toBeTruthy();
+    expect(
+      screen.queryByText(/points_reached|first_to|skip_if_cursed/),
+    ).toBeNull();
+  });
+
+  it("renders core rules in the sidebar presentation too", () => {
+    render(
+      <StatusConditionsOverlay
+        gameState={gameState()}
+        presentation="sidebar"
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("Core Rules")).toBeTruthy();
+    expect(
+      screen.getByText("Draw 1 card at the start of your turn."),
+    ).toBeTruthy();
+    expect(screen.getByText("Reactionary Rules")).toBeTruthy();
+  });
+
   it("shows human-readable conditions, durations, values, and hook tags", () => {
     render(
       <StatusConditionsOverlay gameState={gameState()} onClose={() => {}} />,
@@ -128,9 +214,10 @@ describe("StatusConditionsOverlay", () => {
     });
     render(<StatusConditionsOverlay gameState={state} onClose={onClose} />);
     expect(screen.getByText("No active status conditions.")).toBeTruthy();
-    expect(screen.getByText("No active hooks.")).toBeTruthy();
+    expect(screen.getByText("No reactionary rules are active.")).toBeTruthy();
+    expect(screen.queryByText("No active hooks.")).toBeNull();
     await user.click(
-      screen.getByRole("button", { name: "Close status conditions" }),
+      screen.getByRole("button", { name: "Close rules and status" }),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
   });

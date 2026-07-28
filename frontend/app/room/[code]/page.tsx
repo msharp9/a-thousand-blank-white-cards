@@ -11,14 +11,11 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AdminProposalDialog } from "@/components/admin-proposal-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  CurrentTurnBadge,
+  CurrentTurnIndicator,
+} from "@/components/current-turn-indicator";
 import { DiscardPile } from "@/components/discard-pile";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
 import { EpilogueView } from "@/components/epilogue";
@@ -38,6 +35,7 @@ import { PlayerAvatar } from "@/components/player-avatar";
 import { ResultsScreen } from "@/components/results-screen";
 import { SetupPhase } from "@/components/setup-phase";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
+import { TargetPickerDialog } from "@/components/target-picker-dialog";
 import { TurnTimerChip } from "@/components/turn-timer";
 import { ViewportNoticeHost } from "@/components/viewport-notice";
 import { getCardArtUrl } from "@/lib/art";
@@ -47,12 +45,7 @@ import {
   useCompactViewport,
   useWideGameView,
 } from "@/lib/use-compact-viewport";
-import type {
-  CardSnapshot,
-  ClientMsg,
-  GameStateSnapshot,
-  PromptChoiceMsg,
-} from "@/lib/types";
+import type { CardSnapshot, ClientMsg, GameStateSnapshot } from "@/lib/types";
 import { getPlayerId, storePlayerId, useGameSocket } from "@/lib/ws";
 import { cn } from "@/lib/utils";
 
@@ -176,13 +169,17 @@ export default function RoomPage() {
   const isSpectator = Boolean(
     gameState?.spectators.some((s) => s.id === myPlayerId),
   );
-  const isActive = useMemo(() => {
-    if (!gameState || !gameState.players.length || !myPlayerId) return false;
-    if (isSpectator) return false;
-    const active =
-      gameState.players[gameState.turn_index % gameState.players.length];
-    return active?.id === myPlayerId;
-  }, [gameState, myPlayerId, isSpectator]);
+  // The authoritative active player: players[turn_index]. Its roster index
+  // also keys the identity color everywhere else at the table.
+  const activeIndex =
+    gameState && gameState.players.length
+      ? gameState.turn_index % gameState.players.length
+      : -1;
+  const activePlayer =
+    activeIndex >= 0 ? gameState?.players[activeIndex] : undefined;
+  const isActive = Boolean(
+    myPlayerId && !isSpectator && activePlayer?.id === myPlayerId,
+  );
 
   const myHandCards: CardSnapshot[] = useMemo(() => {
     if (!gameState || !me) return [];
@@ -370,6 +367,7 @@ export default function RoomPage() {
         request={interactionRequest}
         progressMessage={interactionProgress}
         cards={gameState?.cards ?? {}}
+        roomCode={code}
         onSubmit={(interactionId, payload) =>
           send(interactionResponseMessage(interactionId, payload))
         }
@@ -419,9 +417,13 @@ export default function RoomPage() {
         </span>
         {phase === "playing" && gameState && (
           <>
-            <span className="font-hand text-[17px] text-muted-foreground">
-              Turn {gameState.turn_number}
-            </span>
+            <CurrentTurnIndicator
+              activeName={activePlayer?.name}
+              isViewer={isActive}
+              turnNumber={gameState.turn_number}
+              color={activeIndex >= 0 ? playerColor(activeIndex) : undefined}
+              className="max-w-[55vw] sm:max-w-none"
+            />
             <TurnTimerChip timer={turnTimer} />
           </>
         )}
@@ -613,9 +615,22 @@ export default function RoomPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="min-w-0 border-t-[2.5px] border-ink bg-card px-3 pt-3 pb-4 sm:px-5">
+                  <div
+                    data-my-zone
+                    data-active-turn={isActive || undefined}
+                    className="min-w-0 border-t-[2.5px] border-ink bg-card px-3 pt-3 pb-4 sm:px-5"
+                    style={
+                      // Mirror of the active opponent seat's solid identity
+                      // treatment: a steady color band along the zone's top.
+                      isActive
+                        ? {
+                            boxShadow: `inset 0 4px 0 0 ${playerColor(myIndex)}`,
+                          }
+                        : undefined
+                    }
+                  >
                     <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2.5">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex flex-wrap items-center gap-2.5">
                         {me && (
                           <>
                             <PlayerAvatar
@@ -625,12 +640,8 @@ export default function RoomPage() {
                             />
                             <span className="font-hand text-[22px] leading-none">
                               {me.name}
-                              {isActive && (
-                                <span className="ml-1 text-[15px] text-primary">
-                                  · your turn
-                                </span>
-                              )}
                             </span>
+                            {isActive && <CurrentTurnBadge label="Your turn" />}
                             <span
                               className="font-marker text-2xl tabular-nums"
                               style={{ color: playerColor(myIndex) }}
@@ -714,6 +725,10 @@ export default function RoomPage() {
                 cards={epilogueCards}
                 send={send}
                 isHost={isHost}
+                canVote={Boolean(
+                  myPlayerId &&
+                  gameState.players.some((p) => p.id === myPlayerId),
+                )}
                 roomCode={code}
               />
             </div>
@@ -761,32 +776,33 @@ export default function RoomPage() {
             : ""
         }
         players={gameState?.players ?? []}
+        cards={gameState?.cards ?? {}}
+        roomCode={code}
         onPick={(choice) => {
           if (!promptChoice) return;
           // A prompt option carries either a player_id (player-target axis) or a
-          // card_id (card-target axis). Re-send the play with the picked target;
-          // the backend re-interprets, validates, applies, and advances.
-          // While a reaction window is open, a prompt for any card other than
-          // the suspended one is a REACTION needing a target — its follow-up
-          // must re-carry as_reaction so it routes back into the window.
-          const asReaction = Boolean(
-            pendingPlay && promptChoice.card_id !== pendingPlay.card_id,
-          );
-          if (choice.player_id) {
-            send({
-              type: "play",
-              card_id: promptChoice.card_id,
-              chosen_player_id: choice.player_id,
-              ...(asReaction ? { as_reaction: true } : {}),
-            });
-          } else if (choice.card_id) {
-            send({
-              type: "play",
-              card_id: promptChoice.card_id,
-              chosen_card_id: choice.card_id,
-              ...(asReaction ? { as_reaction: true } : {}),
-            });
-          }
+          // card_id (card-target axis). Merge the pick with the context the
+          // prompt carried from earlier steps (a two-axis card prompts twice)
+          // so the follow-up play re-sends the COMPLETE selection; the backend
+          // re-interprets, validates, applies, and advances.
+          // A reaction's prompt carries as_reaction; older servers omit it, so
+          // fall back to the open-window heuristic (a prompt for any card other
+          // than the suspended one is a reaction needing a target).
+          const asReaction =
+            promptChoice.as_reaction ??
+            Boolean(
+              pendingPlay && promptChoice.card_id !== pendingPlay.card_id,
+            );
+          const chosenPlayerId =
+            choice.player_id ?? promptChoice.chosen_player_id;
+          const chosenCardId = choice.card_id ?? promptChoice.chosen_card_id;
+          send({
+            type: "play",
+            card_id: promptChoice.card_id,
+            ...(chosenPlayerId ? { chosen_player_id: chosenPlayerId } : {}),
+            ...(chosenCardId ? { chosen_card_id: chosenCardId } : {}),
+            ...(asReaction ? { as_reaction: true } : {}),
+          });
           clearPromptChoice();
         }}
         onCancel={clearPromptChoice}
@@ -890,78 +906,5 @@ function LobbyRoster({
         </ul>
       )}
     </section>
-  );
-}
-
-// Renders the target picker when the server asks the active player to choose a
-// target for the card they just played. Picking sends a follow-up play carrying
-// the choice; cancelling abandons the pending play (the turn never advanced).
-function TargetPickerDialog({
-  prompt,
-  playedTitle,
-  players,
-  onPick,
-  onCancel,
-}: {
-  prompt: PromptChoiceMsg | null;
-  playedTitle: string;
-  players: { id: string }[];
-  onPick: (choice: PromptChoiceMsg["choices"][number]) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <Dialog
-      open={Boolean(prompt)}
-      onOpenChange={(open) => {
-        if (!open) onCancel();
-      }}
-    >
-      <DialogContent className="animate-popin border-2 border-dashed border-ink bg-panel-paper shadow-none">
-        <DialogHeader>
-          <DialogTitle className="font-hand text-xl font-normal">
-            {playedTitle ? (
-              <>
-                Play <b>“{playedTitle}”</b> to:
-              </>
-            ) : (
-              "Choose a target"
-            )}
-          </DialogTitle>
-          {prompt && (
-            <DialogDescription className="font-hand text-base">
-              {prompt.prompt}
-            </DialogDescription>
-          )}
-        </DialogHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          {prompt?.choices.map((choice) => {
-            const targetIndex = choice.player_id
-              ? players.findIndex((p) => p.id === choice.player_id)
-              : -1;
-            return (
-              <Button
-                key={choice.player_id ?? choice.card_id}
-                variant={targetIndex >= 0 ? "default" : "outline"}
-                style={
-                  targetIndex >= 0
-                    ? { backgroundColor: playerColor(targetIndex) }
-                    : undefined
-                }
-                onClick={() => onPick(choice)}
-              >
-                {choice.name}
-              </Button>
-            );
-          })}
-          <Button
-            variant="ghost"
-            className="text-muted-foreground"
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }

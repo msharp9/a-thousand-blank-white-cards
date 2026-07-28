@@ -66,7 +66,10 @@ function panel(
         pending={pending}
         request={interactionRequest}
         progressMessage={null}
-        cards={{ c1: { id: "c1", title: "The Card", description: "" } }}
+        cards={{
+          c1: { id: "c1", title: "The Card", description: "A shared rule." },
+        }}
+        roomCode="ROOM01"
         onSubmit={onSubmit}
       />,
     ),
@@ -76,6 +79,29 @@ function panel(
 afterEach(() => {
   vi.useRealTimers();
 });
+
+function drawingCanvas(capture?: {
+  set?: ReturnType<typeof vi.fn>;
+  release?: ReturnType<typeof vi.fn>;
+  has?: (pointerId: number) => boolean;
+}) {
+  const canvas = screen.getByRole("img", { name: "Drawing canvas" });
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 0, top: 0, width: 200, height: 100 }),
+  });
+  if (capture) {
+    Object.defineProperty(canvas, "setPointerCapture", {
+      value: capture.set ?? vi.fn(),
+    });
+    Object.defineProperty(canvas, "hasPointerCapture", {
+      value: capture.has ?? (() => true),
+    });
+    Object.defineProperty(canvas, "releasePointerCapture", {
+      value: capture.release ?? vi.fn(),
+    });
+  }
+  return canvas;
+}
 
 describe("InteractionPanel field renderers", () => {
   it("submits bounded choice selections", async () => {
@@ -129,7 +155,7 @@ describe("InteractionPanel field renderers", () => {
     text.view.unmount();
 
     const pick = panel(request({ kind: "card_pick", card_ids: ["c1"] }));
-    await user.click(screen.getByRole("button", { name: "The Card" }));
+    await user.click(screen.getByRole("button", { name: "Choose The Card" }));
     expect(pick.onSubmit).toHaveBeenCalledWith("interaction-1", {
       kind: "card_pick",
       card_id: "c1",
@@ -154,11 +180,7 @@ describe("InteractionPanel field renderers", () => {
     const { onSubmit } = panel(
       request({ kind: "drawing", max_strokes: 4, max_points_per_stroke: 8 }),
     );
-    const canvas = screen.getByRole("img", { name: "Drawing canvas" });
-    Object.defineProperty(canvas, "getBoundingClientRect", {
-      value: () => ({ left: 0, top: 0, width: 200, height: 100 }),
-    });
-    Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
+    const canvas = drawingCanvas();
     fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 20, clientY: 20 });
     fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 180, clientY: 90 });
     fireEvent.pointerUp(canvas, { pointerId: 1 });
@@ -199,6 +221,196 @@ describe("InteractionPanel field renderers", () => {
   });
 });
 
+describe("drawing gesture hardening", () => {
+  it("prevents default page gestures and captures the accepted pointer", () => {
+    const set = vi.fn();
+    const release = vi.fn();
+    panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas({ set, release });
+    expect(
+      fireEvent.pointerDown(canvas, { pointerId: 7, clientX: 20, clientY: 20 }),
+    ).toBe(false);
+    expect(set).toHaveBeenCalledWith(7);
+    expect(
+      fireEvent.pointerMove(canvas, { pointerId: 7, clientX: 60, clientY: 80 }),
+    ).toBe(false);
+    fireEvent.pointerUp(canvas, { pointerId: 7 });
+    expect(release).toHaveBeenCalledWith(7);
+    expect(
+      fireEvent.pointerMove(canvas, { pointerId: 7, clientX: 90, clientY: 90 }),
+    ).toBe(true);
+  });
+
+  it("applies gesture-blocking styles to the canvas and keeps the modal scrollable", () => {
+    panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas();
+    expect(canvas.style.touchAction).toBe("none");
+    expect(canvas.style.userSelect).toBe("none");
+    expect(canvas.getAttribute("style")).toContain(
+      "overscroll-behavior: contain",
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("overflow-y-auto");
+    expect(dialog.className).toContain("overscroll-contain");
+  });
+
+  it("blocks native touch scrolling on the canvas but not the modal", () => {
+    const { view } = panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas();
+    const touches = [{ clientX: 50, clientY: 50 }];
+    expect(fireEvent.touchMove(canvas, { touches })).toBe(false);
+    expect(fireEvent.touchMove(screen.getByRole("dialog"), { touches })).toBe(
+      true,
+    );
+    view.rerender(
+      <InteractionPanel
+        pending={pending}
+        request={request({ kind: "drawing" })}
+        progressMessage={null}
+        cards={{}}
+        roomCode="ROOM01"
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(fireEvent.touchMove(canvas, { touches })).toBe(false);
+    view.unmount();
+    expect(fireEvent.touchMove(canvas, { touches })).toBe(true);
+  });
+
+  it("ignores secondary pointers so a second finger cannot corrupt the stroke", () => {
+    const { onSubmit } = panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas({});
+    fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 20, clientY: 20 });
+    expect(
+      fireEvent.pointerDown(canvas, {
+        pointerId: 2,
+        clientX: 100,
+        clientY: 50,
+      }),
+    ).toBe(true);
+    fireEvent.pointerMove(canvas, { pointerId: 2, clientX: 140, clientY: 70 });
+    fireEvent.pointerUp(canvas, { pointerId: 2 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 180, clientY: 90 });
+    fireEvent.pointerUp(canvas, { pointerId: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Submit drawing" }));
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "drawing",
+      strokes: [
+        {
+          color: "#1a1a1a",
+          width: 0.01,
+          points: [
+            { x: 0.1, y: 0.2 },
+            { x: 0.9, y: 0.9 },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("ends the stroke on pointer cancel and lost pointer capture", () => {
+    const { onSubmit } = panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas({});
+    fireEvent.pointerDown(canvas, { pointerId: 3, clientX: 20, clientY: 20 });
+    fireEvent.pointerCancel(canvas, { pointerId: 3 });
+    fireEvent.pointerMove(canvas, { pointerId: 3, clientX: 180, clientY: 90 });
+    fireEvent.pointerDown(canvas, { pointerId: 4, clientX: 100, clientY: 50 });
+    fireEvent.lostPointerCapture(canvas, { pointerId: 4 });
+    fireEvent.pointerMove(canvas, { pointerId: 4, clientX: 180, clientY: 90 });
+    fireEvent.click(screen.getByRole("button", { name: "Submit drawing" }));
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "drawing",
+      strokes: [
+        { color: "#1a1a1a", width: 0.01, points: [{ x: 0.1, y: 0.2 }] },
+        { color: "#1a1a1a", width: 0.01, points: [{ x: 0.5, y: 0.5 }] },
+      ],
+    });
+  });
+
+  it("keeps Undo and Clear working after hardened strokes", () => {
+    panel(request({ kind: "drawing" }));
+    const canvas = drawingCanvas({});
+    for (const pointerId of [1, 2]) {
+      fireEvent.pointerDown(canvas, { pointerId, clientX: 20, clientY: 20 });
+      fireEvent.pointerUp(canvas, { pointerId });
+    }
+    expect(screen.getByText(/2\/64 strokes/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(screen.getByText(/1\/64 strokes/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText(/0\/64 strokes/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Submit drawing" }),
+    ).toBeDisabled();
+  });
+});
+
+describe("card_pick full-card rendering", () => {
+  it("renders full faces, preferring descriptor snapshots over shared state", () => {
+    panel(
+      request({
+        kind: "card_pick",
+        card_ids: ["c1", "h1"],
+        cards: {
+          h1: {
+            id: "h1",
+            title: "Hidden Card",
+            description: "A rule from a hidden hand.",
+          },
+        },
+      }),
+    );
+    expect(screen.getByText("A shared rule.")).toBeInTheDocument();
+    expect(screen.getByText("Hidden Card")).toBeInTheDocument();
+    expect(screen.getByText("A rule from a hidden hand.")).toBeInTheDocument();
+  });
+
+  it("toggles a multi pick with aria-pressed and submits the id set", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = panel(
+      request({
+        kind: "card_pick",
+        card_ids: ["c1", "h1"],
+        min_picks: 2,
+        max_picks: 2,
+        cards: {
+          h1: { id: "h1", title: "Hidden Card", description: "Hush." },
+        },
+      }),
+    );
+    const first = screen.getByRole("button", { name: "Choose The Card" });
+    const submit = screen.getByRole("button", { name: /Submit \d\/2/ });
+    expect(first).toHaveAttribute("aria-pressed", "false");
+    expect(submit).toBeDisabled();
+    await user.click(first);
+    expect(first).toHaveAttribute("aria-pressed", "true");
+    await user.click(
+      screen.getByRole("button", { name: "Choose Hidden Card" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Submit 2/2" }));
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "card_pick",
+      card_ids: ["c1", "h1"],
+    });
+  });
+
+  it("falls back to an accessible placeholder for a missing face", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = panel(
+      request({ kind: "card_pick", card_ids: ["ghost-9"] }),
+    );
+    expect(screen.getByText("Card details unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("ghost-9")).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Choose unknown card" }),
+    );
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "card_pick",
+      card_id: "ghost-9",
+    });
+  });
+});
+
 describe("card_order (scry) renderer", () => {
   const scryRequest = () =>
     request({
@@ -207,11 +419,18 @@ describe("card_order (scry) renderer", () => {
       count: 3,
       card_ids: ["d1", "d2", "d3"],
       cards: {
-        d1: { id: "d1", title: "First", description: "" },
-        d2: { id: "d2", title: "Second", description: "" },
-        d3: { id: "d3", title: "Third", description: "" },
+        d1: { id: "d1", title: "First", description: "Rule one." },
+        d2: { id: "d2", title: "Second", description: "Rule two." },
+        d3: { id: "d3", title: "Third", description: "Rule three." },
       },
     });
+
+  it("renders each offer as a full card face", () => {
+    panel(scryRequest());
+    for (const text of ["First", "Rule one.", "Second", "Rule two."]) {
+      expect(screen.getByText(text)).toBeInTheDocument();
+    }
+  });
 
   it("submits the untouched offer as the identity arrangement", async () => {
     const user = userEvent.setup();
@@ -281,6 +500,7 @@ describe("InteractionPanel lifecycle", () => {
         request={request({ kind: "confirm" })}
         progressMessage={null}
         cards={{}}
+        roomCode="ROOM01"
         onSubmit={vi.fn()}
       />,
     );
@@ -297,6 +517,7 @@ describe("InteractionPanel lifecycle", () => {
         request={next}
         progressMessage={null}
         cards={{}}
+        roomCode="ROOM01"
         onSubmit={onSubmit}
       />,
     );
@@ -319,6 +540,7 @@ describe("InteractionPanel lifecycle", () => {
         request={timed}
         progressMessage={null}
         cards={{}}
+        roomCode="ROOM01"
         onSubmit={vi.fn()}
       />,
     );

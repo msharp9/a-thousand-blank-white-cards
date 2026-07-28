@@ -19,6 +19,10 @@ import {
 } from "@/components/ui/popover";
 import { PLAYER_COLORS } from "@/lib/players";
 import { useCompactAuthoringViewport } from "@/lib/use-compact-viewport";
+import {
+  drawingSurfaceStyle,
+  useDrawingSurface,
+} from "@/lib/use-drawing-surface";
 import { cn } from "@/lib/utils";
 
 // Backend WS frame budget: a data-URL longer than this is rejected server-side,
@@ -142,6 +146,8 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     const [nib, setNib] = useState(NIBS[1].size);
     const [armedStamp, setArmedStamp] = useState<string | null>(null);
     const compact = useCompactAuthoringViewport();
+    const { capturePointer, movePointer, releasePointer } =
+      useDrawingSurface(canvasRef);
 
     const redraw = useCallback(() => {
       const canvas = canvasRef.current;
@@ -207,7 +213,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
         active.blur();
       }
       e.currentTarget.focus({ preventScroll: true });
-      e.preventDefault();
+      if (!capturePointer(e)) return;
       const p = canvasPos(e);
       if (armedStamp) {
         strokesRef.current.push({ type: "stamp", emoji: armedStamp, ...p });
@@ -216,7 +222,6 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
         redraw();
         return;
       }
-      e.currentTarget.setPointerCapture(e.pointerId);
       const stroke: Stroke = {
         type: "line",
         color: ink,
@@ -230,14 +235,15 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     }
 
     function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+      if (!movePointer(e)) return;
       const stroke = currentStrokeRef.current;
       if (!stroke || stroke.type !== "line") return;
-      e.preventDefault();
       stroke.points.push(canvasPos(e));
       redraw();
     }
 
-    function endStroke() {
+    function endStroke(e: React.PointerEvent<HTMLCanvasElement>) {
+      if (!releasePointer(e)) return;
       currentStrokeRef.current = null;
     }
 
@@ -541,7 +547,8 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
                 onPointerMove={handlePointerMove}
                 onPointerUp={endStroke}
                 onPointerCancel={endStroke}
-                onPointerLeave={endStroke}
+                onLostPointerCapture={endStroke}
+                style={drawingSurfaceStyle}
                 className="block aspect-[6/5] h-auto w-full cursor-crosshair touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               {canvasEmpty && (

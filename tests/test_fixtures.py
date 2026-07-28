@@ -62,15 +62,15 @@ def test_aggregate_target_matches_enumerated_ids() -> None:
 
 
 def test_neighbors_resolve_to_concrete_ids() -> None:
-    # left_neighbor of p1 is p3, right_neighbor is p2.
+    # left_neighbor of p1 is p2 (turn-order successor), right_neighbor is p3.
     assert _eq(
         [
             {"op": "add_points", "target": "left_neighbor", "amount": 3},
             {"op": "add_points", "target": "right_neighbor", "amount": 3},
         ],
         [
-            {"op": "add_points", "target": "id:p3", "amount": 3},
             {"op": "add_points", "target": "id:p2", "amount": 3},
+            {"op": "add_points", "target": "id:p3", "amount": 3},
         ],
     )
 

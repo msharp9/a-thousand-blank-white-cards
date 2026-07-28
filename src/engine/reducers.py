@@ -93,7 +93,9 @@ def _resolve_targets(target: Target, ctx: HookContext, state: GameState) -> list
     ``left_neighbor``/``right_neighbor`` derive from the actor's position in
     ``state.effective_turn_order()`` (the mutable rotation list), not raw
     ``players`` list position — so reversing or scrambling the turn order
-    changes who counts as a neighbor.
+    changes who counts as a neighbor. ``left_neighbor`` is the turn-order
+    successor (the seat ``advance_turn`` moves to next); ``right_neighbor``
+    is the predecessor.
     """
     players = state.players
 
@@ -110,11 +112,11 @@ def _resolve_targets(target: Target, ctx: HookContext, state: GameState) -> list
         case "left_neighbor":
             order = state.effective_turn_order()
             pos = order.index(ctx.actor_id)
-            return [order[(pos - 1) % len(order)]]
+            return [order[(pos + 1) % len(order)]]
         case "right_neighbor":
             order = state.effective_turn_order()
             pos = order.index(ctx.actor_id)
-            return [order[(pos + 1) % len(order)]]
+            return [order[(pos - 1) % len(order)]]
         case "all":
             return [p.id for p in players]
         case "all_others":
@@ -623,15 +625,33 @@ def _reduce_move_cards(
     retires its ongoing effect exactly like destroy_card: its persistent hooks
     unregister and any rule it set via set_rule reverts (see
     ``_release_rule_bindings``).
+
+    When BOTH ``card_target`` and ``from_zone`` are set (addressed mode), each
+    resolved card moves only if it actually sits in the declared zone — and,
+    for hand/in_play, belongs to a resolved ``from_player`` owner. A stale or
+    mismatched card is a logged per-card no-op (the Room rejects such choices
+    before commit; this guards direct reducer use).
     """
     rng = rng or random.Random()
 
     moves: list[tuple[str, str, str | None]] = []
     if op.card_target is not None:
+        allowed_owners = set(_resolve_targets(op.from_player, ctx, state)) if op.from_player is not None else None
         for cid in _resolve_card_targets(op.card_target, ctx, state):
             zone, owner = _locate_card_zone(state, cid)
-            if zone is not None:
-                moves.append((cid, zone, owner))
+            if zone is None:
+                continue
+            if op.from_zone is not None and zone != op.from_zone:
+                state = state.with_log(
+                    f"[move_cards no-op] {_log_card_name(state, cid)} is not in zone {op.from_zone!r}"
+                )
+                continue
+            if allowed_owners is not None and owner not in allowed_owners:
+                state = state.with_log(
+                    f"[move_cards no-op] {_log_card_name(state, cid)} does not belong to {op.from_player!r}"
+                )
+                continue
+            moves.append((cid, zone, owner))
     else:
         if op.from_zone in _PLAYER_ZONES:
             sources = [(op.from_zone, pid) for pid in _resolve_targets(op.from_player, ctx, state)]

@@ -1016,14 +1016,14 @@
                 {
                   "op": "draw_cards",
                   "args": {
-                    "target": "right_neighbor",
+                    "target": "left_neighbor",
                     "amount": 2
                   }
                 },
                 {
                   "op": "skip_turn",
                   "args": {
-                    "target": "right_neighbor"
+                    "target": "left_neighbor"
                   }
                 }
               ],
@@ -1042,14 +1042,14 @@
                 {
                   "op": "draw_cards",
                   "args": {
-                    "target": "right_neighbor",
+                    "target": "left_neighbor",
                     "amount": 4
                   }
                 },
                 {
                   "op": "skip_turn",
                   "args": {
-                    "target": "right_neighbor"
+                    "target": "left_neighbor"
                   }
                 }
               ],

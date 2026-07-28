@@ -96,7 +96,9 @@ def _build_reference() -> str:
     parts.append(
         "Valid player Target values: "
         + ", ".join(sorted(_VALID_TARGETS))
-        + ". Open prefixed forms are also valid: 'id:<player_id>' (one specific player) and "
+        + ". 'left_neighbor' is the NEXT player in turn order (the successor); "
+        "'right_neighbor' is the PREVIOUS player (the predecessor). "
+        "Open prefixed forms are also valid: 'id:<player_id>' (one specific player) and "
         "'has:<condition_key>' (every player whose conditions bag has a truthy key)."
     )
     parts.append(

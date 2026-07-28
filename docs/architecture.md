@@ -252,7 +252,9 @@ face-down piles and hand sizes.
 
 Snapshots expose the active data-driven game rather than a fixed board model:
 `turn_order`, `rules`, player `conditions`, card `attributes`, and registered
-hook metadata. The frontend mirrors the engine's active seat from `players[turn_index]` and
+hook metadata. The frontend mirrors the engine's active seat from `players[turn_index]`,
+projects opponents viewer-relative from `turn_order` (`lib/seating.ts`: the
+successor sits far-left, the predecessor far-right), and
 renders these values in a generic dynamic-state panel; there is no legacy
 direction flag. Cards also retain a bounded mechanical diagnostic (`pending`,
 `applied`, `fallback`, or `rejected`), a public reason, and a correlation id, so
@@ -353,7 +355,11 @@ Key behaviours enforced in `Room`:
   agent → deterministic `CustomNoteOp` fallback.
 - **End game → epilogue**: `resolve_end_of_game` applies any `on_game_end` card
   effects, `evaluate_win_condition` computes `winner_ids`, then voting opens
-  (`EpilogueManager`); kept cards are upserted back into the RAG corpus.
+  (`EpilogueManager`, seated players only — spectators are read-only); a card
+  survives only when its lifetime Keep total strictly exceeds its lifetime Cut
+  total (`engine/epilogue.py::tally_votes`), kept cards are upserted back into
+  the RAG corpus, and the kept cards with the most current-game Keep votes are
+  surfaced as game-local `favorite_card_ids` (never persisted to RAG).
 
 ### Card art (out-of-band transport)
 
@@ -418,7 +424,10 @@ discriminated union in `models/effects.py` (`add_points`, `subtract_points`,
 authoritative complete union). Each op addresses players via a `Target`
 (`self`, `left_neighbor`, `all_others`, `chooser`, `player_with_most_points`, …)
 and, for card manipulation, a `CardTarget` (`this`, `chosen_card`,
-`all_in_play`, `all_in_hand`, `all_in_center`).
+`all_in_play`, `all_in_hand`, `all_in_center`). Neighbors follow the effective
+turn order: `left_neighbor` is the turn-order successor (the next player;
+authoring alias `next_player`) and `right_neighbor` the predecessor (alias
+`previous_player`).
 
 Game rules are **data** (`GameState.rules`, per `docs/state-example.jsonc`):
 draw/play counts, the end condition (`deck_empty`/`empty_hand`/`points_reached`/`now`),

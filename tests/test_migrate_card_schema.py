@@ -67,10 +67,12 @@ class TestOpsToSandbox:
             [
                 {"op": "custom_note", "args": {"note": "Eat a handful of cereal."}},
                 {"op": "skip_turn", "args": {"target": "next_player"}},
+                {"op": "extra_turn", "args": {"target": "previous_player"}},
             ]
         )
         assert "state.note('Eat a handful of cereal.')" in code
-        assert "state.skip_turn('right_neighbor')" in code
+        assert "state.skip_turn('left_neighbor')" in code
+        assert "state.extra_turn('right_neighbor')" in code
 
     def test_refuses_to_guess_unknown_op(self) -> None:
         assert migrate.ops_to_sandbox([{"op": "summon_dragon", "args": {}}]) is None

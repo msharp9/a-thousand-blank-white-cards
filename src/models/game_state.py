@@ -159,6 +159,18 @@ class EpilogueResultSummary(BaseModel):
 
     kept: list[EpilogueCardOutcome] = Field(default_factory=list)
     destroyed: list[EpilogueCardOutcome] = Field(default_factory=list)
+    # "Table favorite" card ids: the final-kept cards tied for the most keep
+    # votes this game. Presentation-only and normalized below to a deduplicated
+    # subset of ``kept`` in kept order, so a destroyed id can never decorate.
+    favorite_card_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _normalize_favorites(self) -> EpilogueResultSummary:
+        favorites = set(self.favorite_card_ids)
+        normalized = [outcome.id for outcome in self.kept if outcome.id in favorites]
+        if normalized != self.favorite_card_ids:
+            self.favorite_card_ids = normalized
+        return self
 
 
 class HookSpec(BaseModel):

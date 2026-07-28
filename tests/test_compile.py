@@ -302,8 +302,14 @@ def test_steal_3_points_nets_a_real_transfer() -> None:
     assert prog.requires_choice is True
 
 
-def test_next_player_maps_to_right_neighbor() -> None:
+def test_next_player_maps_to_left_neighbor() -> None:
     prog = compile_card(_card([{"op": "skip_turn", "args": {"target": "next_player"}}]))
+    assert prog.ops[0].target == "left_neighbor"
+    assert prog.requires_choice is False
+
+
+def test_previous_player_maps_to_right_neighbor() -> None:
+    prog = compile_card(_card([{"op": "extra_turn", "args": {"target": "previous_player"}}]))
     assert prog.ops[0].target == "right_neighbor"
     assert prog.requires_choice is False
 

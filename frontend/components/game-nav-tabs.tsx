@@ -15,7 +15,7 @@ const PLAYER_VIEWS: {
   { id: "log", label: "History" },
   { id: "gallery", label: "Gallery" },
   { id: "scores", label: "Scores" },
-  { id: "status", label: "Status" },
+  { id: "status", label: "Rules" },
 ];
 
 interface GameNavTabsProps {

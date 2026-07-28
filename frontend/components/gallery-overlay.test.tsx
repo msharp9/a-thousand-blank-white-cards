@@ -2,25 +2,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { GalleryOverlay } from "./gallery-overlay";
+import { makePlayer as player } from "@/lib/test-fixtures";
 import type {
   CardSnapshot,
   GameStateSnapshot,
-  PlayerSnapshot,
   SpectatorSnapshot,
 } from "@/lib/types";
-
-function player(
-  overrides: Partial<PlayerSnapshot> & { id: string; name: string },
-): PlayerSnapshot {
-  return {
-    score: 0,
-    hand: [],
-    in_play: [],
-    connected: true,
-    conditions: {},
-    ...overrides,
-  };
-}
 
 function card(id: string, title: string, creator_id?: string): CardSnapshot {
   return { id, title, description: `Rule for ${title}`, creator_id };

@@ -134,7 +134,8 @@ def test_program_flat_sibling_wins_over_args() -> None:
         # the turn-order successor now have real aliases instead of silently
         # defaulting to "self".
         ("chosen_player", "chooser"),
-        ("next_player", "right_neighbor"),
+        ("next_player", "left_neighbor"),
+        ("previous_player", "right_neighbor"),
         # case / whitespace tolerance
         ("Player", "chooser"),
         ("  ALL  ", "all"),
@@ -150,6 +151,7 @@ def test_map_authoring_target_aliases(raw: str, expected: str) -> None:
         ("self", True),
         ("chosen_player", True),
         ("next_player", True),
+        ("previous_player", True),
         ("player", True),
         ("banana", False),
         ("center", False),

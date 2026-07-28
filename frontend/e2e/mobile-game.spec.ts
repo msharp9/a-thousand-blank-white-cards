@@ -391,6 +391,118 @@ test("large hands and navigation stay inside the phone viewport", async ({
   );
 });
 
+test("opponent rail follows viewer-relative turn order and reprojects on scramble", async ({
+  page,
+}) => {
+  const room = await openMockRoom(page);
+  const seats = page.locator("[data-opponent-rail] [data-seat-drop]");
+  const railOrder = () =>
+    seats.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("data-seat-drop")),
+    );
+
+  await expect
+    .poll(railOrder)
+    .toEqual(["p2", "p3", "p4", "p5", "p6", "p7", "p8"]);
+  await expect(seats.first()).toHaveAttribute("data-seat-edge", "left");
+  await expect(seats.last()).toHaveAttribute("data-seat-edge", "right");
+  await expect(page.getByText("Left · next seat")).toBeAttached();
+  await expect(page.getByText("Right · previous seat")).toBeAttached();
+
+  const scrambled = gameState();
+  scrambled.turn_order = ["p4", "p2", "p8", "p1", "p6", "p3", "p7", "p5"];
+  room.push({ type: "state", state: scrambled });
+  await expect
+    .poll(railOrder)
+    .toEqual(["p6", "p3", "p7", "p5", "p4", "p2", "p8"]);
+  await expect(seats.first()).toHaveAttribute("data-seat-edge", "left");
+  await expect(seats.last()).toHaveAttribute("data-seat-edge", "right");
+
+  const reversed = gameState();
+  reversed.turn_order = ["p8", "p7", "p6", "p5", "p4", "p3", "p2", "p1"];
+  room.push({ type: "state", state: reversed });
+  await expect
+    .poll(railOrder)
+    .toEqual(["p8", "p7", "p6", "p5", "p4", "p3", "p2"]);
+});
+
+test("current-turn indicators update together across the header, seats, and own zone", async ({
+  page,
+}) => {
+  const room = await openMockRoom(page);
+  const indicator = page.locator("[data-current-turn-indicator]");
+  const myZone = page.locator("[data-my-zone]");
+
+  await expect(indicator).toHaveText("YOUR TURN · Turn 12");
+  await expect(indicator).toHaveAttribute("role", "status");
+  await expect(indicator).toHaveAttribute("aria-live", "polite");
+  await expect(indicator).toHaveAttribute("aria-atomic", "true");
+  await expect(myZone).toHaveAttribute("data-active-turn", "true");
+  await expect(myZone.locator("[data-current-turn-badge]")).toHaveText(
+    /your turn/i,
+  );
+  await expect(
+    page.locator("[data-opponent-rail] [data-current-turn-badge]"),
+  ).toHaveCount(0);
+
+  const header = await page.evaluate(() => {
+    const bar = document
+      .querySelector<HTMLElement>("[data-game-header]")!
+      .getBoundingClientRect();
+    const pill = document
+      .querySelector<HTMLElement>("[data-current-turn-indicator]")!
+      .getBoundingClientRect();
+    const connection = document
+      .querySelector<HTMLElement>("[data-game-header] [title]")!
+      .getBoundingClientRect();
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const navVisible = [
+      ...document.querySelectorAll<HTMLElement>(
+        "nav[aria-label='Game views'] button",
+      ),
+    ].every((button) => button.offsetParent !== null);
+    return {
+      barTop: bar.top,
+      pillLeft: pill.left,
+      pillRight: pill.right,
+      connectionRight: connection.right,
+      viewportWidth,
+      navVisible,
+    };
+  });
+  expect(header.barTop).toBeLessThanOrEqual(1);
+  expect(header.pillLeft).toBeGreaterThanOrEqual(-1);
+  expect(header.pillRight).toBeLessThanOrEqual(header.viewportWidth + 1);
+  expect(header.connectionRight).toBeLessThanOrEqual(header.viewportWidth + 1);
+  expect(header.navVisible).toBe(true);
+
+  // Turn passes to the last-railed opponent: the sticky header still names
+  // them even though their seat needs a scroll to reach.
+  const next = gameState();
+  next.turn_index = 7;
+  next.turn_number = 13;
+  room.push({ type: "state", state: next });
+  await expect(indicator).toHaveText("Hana's turn · Turn 13");
+  const activeSeat = page.locator("[data-seat-drop='p8']");
+  await expect(activeSeat).toHaveAttribute("data-active-turn", "true");
+  await expect(activeSeat.locator("[data-current-turn-badge]")).toHaveText(
+    /current turn/i,
+  );
+  await expect(myZone).not.toHaveAttribute("data-active-turn", "true");
+  await expect(myZone.locator("[data-current-turn-badge]")).toHaveCount(0);
+  await expect(
+    page.locator("[data-opponent-rail] [data-active-turn]"),
+  ).toHaveCount(1);
+  const stickyTop = await page.evaluate(() => {
+    const game = document.querySelector<HTMLElement>("[data-game-scroll]")!;
+    game.scrollTop = game.scrollHeight;
+    return document
+      .querySelector<HTMLElement>("[data-game-header]")!
+      .getBoundingClientRect().top;
+  });
+  expect(stickyTop).toBeLessThanOrEqual(1);
+});
+
 test("live notices remain visible while the game is scrolled", async ({
   page,
 }) => {
@@ -624,6 +736,249 @@ test("adaptive panels and blank-card authoring remain compact and reachable", as
     (message) => message.type === "play" && message.title === "Pocket Volcano",
   );
   expect(String(play?.art)).toMatch(/^data:image\/png;base64,/);
+});
+
+test("drawing interaction gestures stay on the canvas without moving the page", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name === "desktop-chromium");
+  const room = await openMockRoom(page);
+  room.push({
+    type: "interaction_request",
+    schema_version: 1,
+    interaction_id: "draw-1",
+    deadline_at: "2099-01-01T00:00:00.000Z",
+    progress: {
+      expected_count: 1,
+      received_count: 0,
+      submitted: false,
+      complete: false,
+    },
+    descriptor: {
+      schema_version: 1,
+      prompt: "Draw a volcano",
+      audience: "all",
+      sealed: false,
+      timeout_seconds: 300,
+      kind: "drawing",
+      max_strokes: 8,
+      max_points_per_stroke: 32,
+    },
+  });
+
+  const canvas = page.getByRole("img", { name: "Drawing canvas" });
+  await expect(canvas).toBeVisible();
+  await expect(canvas).toHaveCSS("touch-action", "none");
+
+  const gesture = await canvas.evaluate((node) => {
+    const svg = node as Element;
+    const dialog = svg.closest<HTMLElement>("section[aria-modal='true']")!;
+    const box = svg.getBoundingClientRect();
+    const midX = box.left + box.width / 2;
+    const midY = box.top + box.height / 2;
+    const touchMoveOn = (target: Element, x: number, y: number) => {
+      let event: Event;
+      // WebKit exposes Touch/TouchEvent but marks their constructors illegal;
+      // a plain cancelable Event still exercises the native touchmove handler.
+      try {
+        const touch = new Touch({
+          identifier: 1,
+          target,
+          clientX: x,
+          clientY: y,
+        });
+        event = new TouchEvent("touchmove", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          touches: [touch],
+          targetTouches: [touch],
+          changedTouches: [touch],
+        });
+      } catch {
+        event = new Event("touchmove", { bubbles: true, cancelable: true });
+      }
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const before = { windowY: window.scrollY, dialogTop: dialog.scrollTop };
+    const verticalPrevented = touchMoveOn(svg, midX, midY + 120);
+    const horizontalPrevented = touchMoveOn(svg, midX - 120, midY);
+    const outsidePrevented = touchMoveOn(dialog, midX, midY + 120);
+    const styles = getComputedStyle(svg);
+    const dialogStyles = getComputedStyle(dialog);
+    return {
+      verticalPrevented,
+      horizontalPrevented,
+      outsidePrevented,
+      windowMoved: window.scrollY !== before.windowY,
+      dialogMoved: dialog.scrollTop !== before.dialogTop,
+      overscrollBehavior: styles.overscrollBehaviorY,
+      userSelect: styles.webkitUserSelect || styles.userSelect,
+      dialogOverflowY: dialogStyles.overflowY,
+      dialogOverscroll: dialogStyles.overscrollBehaviorY,
+    };
+  });
+  expect(gesture.verticalPrevented).toBe(true);
+  expect(gesture.horizontalPrevented).toBe(true);
+  expect(gesture.outsidePrevented).toBe(false);
+  expect(gesture.windowMoved).toBe(false);
+  expect(gesture.dialogMoved).toBe(false);
+  expect(gesture.overscrollBehavior).toBe("contain");
+  expect(gesture.userSelect).toBe("none");
+  expect(gesture.dialogOverflowY).toBe("auto");
+  expect(gesture.dialogOverscroll).toBe("contain");
+
+  const box = (await canvas.boundingBox())!;
+  if (testInfo.project.name.includes("chromium")) {
+    const cdp = await page.context().newCDPSession(page);
+    const midX = box.x + box.width / 2;
+    // A downward touch drag from the canvas is the pull-to-refresh gesture;
+    // it must feed the stroke instead of scrolling or refreshing the page.
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: midX, y: box.y + 20 }],
+    });
+    for (let step = 1; step <= 6; step += 1) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: midX, y: box.y + 20 + step * 25 }],
+      });
+    }
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await expect(page.getByText(/1\/8 strokes/)).toBeVisible();
+    const scrolled = await page.evaluate(() => ({
+      windowY: window.scrollY,
+      pageTop: window.visualViewport?.pageTop ?? 0,
+      dialogTop: document.querySelector<HTMLElement>(
+        "section[aria-modal='true']",
+      )!.scrollTop,
+    }));
+    expect(scrolled).toEqual({ windowY: 0, pageTop: 0, dialogTop: 0 });
+    await page.getByRole("button", { name: "Clear" }).click();
+    await expect(page.getByText(/0\/8 strokes/)).toBeVisible();
+  }
+
+  await page.mouse.move(box.x + 20, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 20, box.y + box.height - 20, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect(page.getByText(/1\/8 strokes/)).toBeVisible();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByText(/0\/8 strokes/)).toBeVisible();
+
+  await page.mouse.move(box.x + 30, box.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 30, box.y + 40, { steps: 3 });
+  await page.mouse.up();
+  await expect(page.getByText(/1\/8 strokes/)).toBeVisible();
+  await page.getByRole("button", { name: "Submit drawing" }).click();
+  await expect
+    .poll(() =>
+      room.clientMessages.find(
+        (message) => message.type === "interaction_response",
+      ),
+    )
+    .toMatchObject({
+      interaction_id: "draw-1",
+      payload: { kind: "drawing" },
+    });
+  const response = room.clientMessages.find(
+    (message) => message.type === "interaction_response",
+  ) as { payload: { strokes: { points: unknown[] }[] } };
+  expect(response.payload.strokes).toHaveLength(1);
+  expect(response.payload.strokes[0].points.length).toBeGreaterThan(1);
+});
+
+test("card ordering shows full card faces without overflowing the page", async ({
+  page,
+}) => {
+  const room = await openMockRoom(page);
+  room.push({
+    type: "interaction_request",
+    schema_version: 1,
+    interaction_id: "scry-1",
+    deadline_at: "2099-01-01T00:00:00.000Z",
+    progress: {
+      expected_count: 1,
+      received_count: 0,
+      submitted: false,
+      complete: false,
+    },
+    descriptor: {
+      schema_version: 1,
+      prompt: "Rearrange the top of the deck",
+      audience: "active",
+      sealed: false,
+      timeout_seconds: 300,
+      kind: "card_order",
+      source: "deck_top",
+      count: 3,
+      card_ids: ["d1", "d2", "d3"],
+      cards: {
+        d1: { id: "d1", title: "Deck Card One", description: "First rule." },
+        d2: { id: "d2", title: "Deck Card Two", description: "Second rule." },
+        d3: { id: "d3", title: "Deck Card Three", description: "Third rule." },
+      },
+    },
+  });
+
+  const dialog = page.locator("section[aria-modal='true']");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Deck Card Two")).toBeVisible();
+  await expect(dialog.getByText("Second rule.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Move Deck Card Two up" }).click();
+  await page
+    .getByRole("button", { name: "Send Deck Card Three to the deck bottom" })
+    .click();
+
+  const geometry = await page.evaluate(() => {
+    const dialog = document.querySelector<HTMLElement>(
+      "section[aria-modal='true']",
+    )!;
+    const controls = [...dialog.querySelectorAll<HTMLElement>("button")].filter(
+      (node) => node.offsetParent !== null,
+    );
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    return {
+      viewportWidth,
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      dialogClientWidth: dialog.clientWidth,
+      dialogScrollWidth: dialog.scrollWidth,
+      windowY: window.scrollY,
+      controlsInside: controls.every((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= -1 && box.right <= viewportWidth + 1;
+      }),
+    };
+  });
+  expect(geometry.documentScrollWidth).toBeLessThanOrEqual(
+    geometry.documentClientWidth + 1,
+  );
+  expect(geometry.dialogScrollWidth).toBeLessThanOrEqual(
+    geometry.dialogClientWidth + 1,
+  );
+  expect(geometry.windowY).toBe(0);
+  expect(geometry.controlsInside).toBe(true);
+
+  await page.getByRole("button", { name: "Submit order" }).click();
+  await expect
+    .poll(() =>
+      room.clientMessages.find(
+        (message) => message.type === "interaction_response",
+      ),
+    )
+    .toMatchObject({
+      interaction_id: "scry-1",
+      payload: { kind: "card_order", order: ["d2", "d1"], to_bottom: ["d3"] },
+    });
 });
 
 test("wide game panels share the viewport and preserve edits across the breakpoint", async ({

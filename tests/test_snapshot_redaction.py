@@ -143,11 +143,26 @@ def test_cards_registry_keeps_revealed_content() -> None:
     snap["epilogue_result"] = {
         "kept": [{"id": "a1", "title": "Title a1"}],
         "destroyed": [{"id": "d1", "title": "Title d1"}],
+        "favorite_card_ids": ["a1"],
     }
     view = redact_snapshot(snap, None)
     assert {"b1", "b2", "a1", "d1"} <= set(view["cards"])
     assert "b3" not in view["cards"]
     assert "d2" not in view["cards"]
+    assert view["epilogue_result"]["favorite_card_ids"] == ["a1"]
+
+
+def test_epilogue_result_without_favorites_redacts_safely() -> None:
+    # Old persisted snapshots predate favorite_card_ids; redaction must not
+    # require (or invent) the field.
+    snap = _snapshot()
+    snap["epilogue_result"] = {
+        "kept": [{"id": "a1", "title": "Title a1"}],
+        "destroyed": [],
+    }
+    view = redact_snapshot(snap, None)
+    assert "a1" in view["cards"]
+    assert "favorite_card_ids" not in view["epilogue_result"]
 
 
 def test_input_snapshot_is_not_mutated() -> None:

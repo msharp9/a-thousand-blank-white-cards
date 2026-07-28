@@ -135,7 +135,7 @@
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.skip_turn('right_neighbor')"
+      "sandbox": "def apply(state, ctx):\n    state.skip_turn('left_neighbor')"
     }
   },
   {
@@ -1010,10 +1010,13 @@
       "trigger": null,
       "ops": [
         {
-          "op": "transfer_card",
+          "op": "move_cards",
           "args": {
             "card_target": "chosen_card",
-            "to_target": "self"
+            "from_zone": "hand",
+            "from_player": "chooser",
+            "to_zone": "hand",
+            "to_player": "self"
           }
         },
         {
@@ -1024,7 +1027,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.transfer_card(\"id:\" + (ctx.get(\"chosen_card_id\") or \"\"), 'self')\n    state.subtract_points(chosen, 3)"
+      "sandbox": "def apply(state, ctx):\n    victim = ctx.get('chosen_player_id')\n    loot = ctx.get('chosen_card_id')\n    if victim and loot:\n        state.move_cards(card_target='id:' + loot, from_zone='hand', from_player='id:' + victim, to_zone='hand', to_player='self')\n        state.subtract_points('id:' + victim, 3)"
     }
   },
   {
@@ -1662,7 +1665,7 @@
   {
     "id": "seed-gold-100",
     "title": "Into the Void",
-    "description": "Choose any card in play or in a hand and remove it from the game entirely. It doesn't go to the discard pile — it's just gone.",
+    "description": "Choose a card in the center and exile it. It leaves the game instead of going to the discard pile.",
     "alt_text": "a small card being pulled into a swirling black hole",
     "canonical": {
       "target": "card",
@@ -1674,11 +1677,12 @@
           "op": "move_cards",
           "args": {
             "card_target": "chosen_card",
+            "from_zone": "center",
             "to_zone": "exile"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, to_zone='exile')\n"
+      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, from_zone='center', to_zone='exile')\n"
     }
   },
   {

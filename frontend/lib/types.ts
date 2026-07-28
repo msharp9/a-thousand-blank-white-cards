@@ -353,6 +353,9 @@ export type EpilogueCardOutcome = { id: string; title: string };
 export type EpilogueResultSummary = {
   kept: EpilogueCardOutcome[];
   destroyed: EpilogueCardOutcome[];
+  // "Table favorite" ids: kept cards tied for the most Keep votes this game.
+  // Always a subset of kept. Optional — old snapshots predate the field.
+  favorite_card_ids?: string[];
 };
 
 export type GameStateSnapshot = {
@@ -515,6 +518,17 @@ export type PromptChoiceMsg = {
   card_id: string;
   prompt: string;
   choices: PromptChoiceOption[];
+  // Full snapshots for exactly the offered card candidates — hidden-hand cards
+  // never ride the chooser's redacted state snapshot, so they ride here.
+  cards?: Record<string, CardSnapshot>;
+  // Context accumulated across a two-step (player then card) prompt chain. The
+  // follow-up play must merge these with the new pick so the final message
+  // carries the complete selection.
+  chosen_player_id?: string;
+  chosen_card_id?: string;
+  // True when this prompt belongs to a reaction play: the follow-up must
+  // re-send as_reaction so it routes back into the open window.
+  as_reaction?: boolean;
 };
 export type EpilogueMsg = { type: "epilogue"; cards: CardSnapshot[] };
 export type ErrorMsg = { type: "error"; message: string };
@@ -545,10 +559,13 @@ export type InteractionDescriptor = {
   // card_pick multi-select bounds (default 1/1 = single pick).
   min_picks?: number;
   max_picks?: number;
-  // card_order (scry) fields; the room also fills card_ids with the offered
-  // deck-top ids and `cards` with their faces for deck-top interactions.
+  // card_order (scry) fields; the room fills card_ids with the offered
+  // deck-top ids.
   source?: string;
   count?: number;
+  // Recipient-specific faces for the offered card_ids. The room attaches these
+  // to every card_pick and card_order request (hidden cards — deck top, own
+  // hand — never ride the shared snapshot, so they ride here, targeted only).
   cards?: Record<string, CardSnapshot>;
   confirm_label?: string;
   decline_label?: string;

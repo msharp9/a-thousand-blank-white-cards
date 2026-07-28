@@ -20,6 +20,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  CardChoiceGrid,
+  CardFace,
+  cardChoiceLabel,
+} from "@/components/card-choice-grid";
+import {
+  drawingSurfaceStyle,
+  useDrawingSurface,
+} from "@/lib/use-drawing-surface";
+import { cn } from "@/lib/utils";
 import type {
   CardSnapshot,
   DrawingPoint,
@@ -151,7 +161,9 @@ function DrawingInput({
     Math.max(2, Number.isFinite(requestedPoints) ? requestedPoints : 256),
   );
   const [strokes, setStrokes] = useState<DrawingStroke[]>([]);
-  const drawingRef = useRef(false);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const { capturePointer, movePointer, releasePointer } =
+    useDrawingSurface(svgRef);
 
   const pointFor = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -166,8 +178,7 @@ function DrawingInput({
     if (disabled || strokes.length >= maxStrokes) return;
     const point = pointFor(event);
     if (!point) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drawingRef.current = true;
+    if (!capturePointer(event)) return;
     setStrokes((current) => [
       ...current,
       { color: DEFAULT_COLOR, width: DEFAULT_WIDTH, points: [point] },
@@ -175,7 +186,7 @@ function DrawingInput({
   };
 
   const extendStroke = (event: ReactPointerEvent<SVGSVGElement>) => {
-    if (!drawingRef.current) return;
+    if (!movePointer(event)) return;
     const point = pointFor(event);
     if (!point) return;
     setStrokes((current) => {
@@ -188,21 +199,20 @@ function DrawingInput({
     });
   };
 
-  const finishStroke = () => {
-    drawingRef.current = false;
-  };
-
   return (
     <div className="flex flex-col gap-3">
       <svg
+        ref={svgRef}
         viewBox="0 0 100 100"
         role="img"
         aria-label="Drawing canvas"
         className="aspect-[4/3] w-full touch-none rounded-xl border-2 border-ink bg-card-face shadow-inner"
+        style={drawingSurfaceStyle}
         onPointerDown={startStroke}
         onPointerMove={extendStroke}
-        onPointerUp={finishStroke}
-        onPointerCancel={finishStroke}
+        onPointerUp={releasePointer}
+        onPointerCancel={releasePointer}
+        onLostPointerCapture={releasePointer}
       >
         {strokes.map((stroke, index) => (
           <polyline
@@ -259,11 +269,13 @@ function DrawingInput({
 function InteractionForm({
   request,
   cards,
+  roomCode,
   disabled,
   onSubmit,
 }: {
   request: InteractionRequestMsg;
   cards: Record<string, CardSnapshot>;
+  roomCode: string;
   disabled: boolean;
   onSubmit: (payload: InteractionResponsePayload) => void;
 }) {
@@ -413,22 +425,20 @@ function InteractionForm({
           </p>
         );
       }
-      // Single pick: one tap submits immediately (unchanged behavior).
+      const faces = { ...cards, ...(descriptor.cards ?? {}) };
+      // Single pick: one card activation submits immediately (unchanged
+      // behavior, ID-only payload).
       if (maxPicks <= 1) {
         return (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {cardIds.map((cardId) => (
-              <Button
-                type="button"
-                variant="outline"
-                key={cardId}
-                disabled={disabled}
-                onClick={() => onSubmit({ kind: "card_pick", card_id: cardId })}
-              >
-                {cards[cardId]?.title || cardId}
-              </Button>
-            ))}
-          </div>
+          <CardChoiceGrid
+            cardIds={cardIds}
+            faces={faces}
+            roomCode={roomCode}
+            disabled={disabled}
+            onChoose={(cardId) =>
+              onSubmit({ kind: "card_pick", card_id: cardId })
+            }
+          />
         );
       }
       // Multi pick: toggle a set, then submit (mirrors the choice case). The
@@ -442,29 +452,17 @@ function InteractionForm({
         });
       };
       return (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {cardIds.map((cardId) => {
-            const active = selected.includes(cardId);
-            return (
-              <button
-                type="button"
-                key={cardId}
-                aria-pressed={active}
-                disabled={disabled}
-                onClick={() => toggle(cardId)}
-                className={`rounded-xl border-2 p-3 text-left font-hand text-lg transition ${
-                  active
-                    ? "border-primary bg-primary/10"
-                    : "border-ink bg-card hover:bg-accent/30"
-                }`}
-              >
-                {cards[cardId]?.title || cardId}
-              </button>
-            );
-          })}
+        <div className="flex flex-col gap-3">
+          <CardChoiceGrid
+            cardIds={cardIds}
+            faces={faces}
+            roomCode={roomCode}
+            selected={selected}
+            disabled={disabled}
+            onChoose={toggle}
+          />
           <Button
             type="button"
-            className="sm:col-span-2"
             disabled={
               disabled || selected.length < floor || selected.length > maxPicks
             }
@@ -492,7 +490,7 @@ function InteractionForm({
       }
       const faces = { ...cards, ...(descriptor.cards ?? {}) };
       const current = arrangement ?? { order: offered, toBottom: [] };
-      const title = (cardId: string) => faces[cardId]?.title || cardId;
+      const title = (cardId: string) => cardChoiceLabel(faces[cardId]);
       const shift = (index: number, delta: number) => {
         const order = [...current.order];
         const [moved] = order.splice(index, 1);
@@ -523,9 +521,9 @@ function InteractionForm({
                 <span className="w-8 shrink-0 text-center font-hand text-sm text-muted-foreground">
                   #{index + 1}
                 </span>
-                <span className="min-w-0 flex-1 truncate font-hand text-lg">
-                  {title(cardId)}
-                </span>
+                <div className="flex min-w-0 flex-1 justify-start">
+                  <CardFace card={faces[cardId]} roomCode={roomCode} w={96} />
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -570,9 +568,13 @@ function InteractionForm({
                     key={cardId}
                     className="flex items-center gap-2 rounded-xl border-2 border-dashed border-ink/60 bg-card p-2"
                   >
-                    <span className="min-w-0 flex-1 truncate font-hand text-lg">
-                      {title(cardId)}
-                    </span>
+                    <div className="flex min-w-0 flex-1 justify-start">
+                      <CardFace
+                        card={faces[cardId]}
+                        roomCode={roomCode}
+                        w={96}
+                      />
+                    </div>
                     <Button
                       type="button"
                       variant="outline"
@@ -652,12 +654,14 @@ export function InteractionPanel({
   request,
   progressMessage,
   cards,
+  roomCode,
   onSubmit,
 }: {
   pending: PendingInteractionSummary | null | undefined;
   request: InteractionRequestMsg | null;
   progressMessage: InteractionProgressMsg | null;
   cards: Record<string, CardSnapshot>;
+  roomCode: string;
   onSubmit: (
     interactionId: string,
     payload: InteractionResponsePayload,
@@ -695,7 +699,14 @@ export function InteractionPanel({
         role="dialog"
         aria-modal="true"
         aria-labelledby="interaction-title"
-        className="max-h-[92dvh] w-full max-w-xl overflow-y-auto -rotate-[0.3deg] rounded-2xl border-[3px] border-ink bg-panel-paper p-5 sticker-shadow"
+        className={cn(
+          "max-h-[92dvh] w-full overflow-y-auto overscroll-contain -rotate-[0.3deg] rounded-2xl border-[3px] border-ink bg-panel-paper p-5 sticker-shadow",
+          // Card faces need more room than form fields to stay readable.
+          activeRequest?.descriptor.kind === "card_pick" ||
+            activeRequest?.descriptor.kind === "card_order"
+            ? "max-w-2xl"
+            : "max-w-xl",
+        )}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
@@ -746,6 +757,7 @@ export function InteractionPanel({
             key={activeRequest.interaction_id}
             request={activeRequest}
             cards={cards}
+            roomCode={roomCode}
             disabled={expired}
             onSubmit={(payload) => onSubmit(interactionId, payload)}
           />

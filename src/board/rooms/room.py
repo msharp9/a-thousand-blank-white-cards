@@ -53,6 +53,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
+from pydantic import ValidationError
+
 from engine.apply import apply_effect
 from engine.compile import compile_card_plan
 from engine.events import EventBus, GameEvent, HookContext
@@ -88,19 +90,22 @@ from models.interactions import (
     ChoiceResponse,
     ConfirmInteraction,
     ConfirmResponse,
+    MAX_INTERACTION_DESCRIPTOR_BYTES,
+    MAX_OPTION_PAYLOAD_BYTES,
     DrawingInteraction,
     DrawingResponse,
     InteractionDescriptor,
-    InteractionOption,
     InteractionProgress,
     InteractionResponsePayload,
     NumberInteraction,
     NumberResponse,
     TextInteraction,
     TextResponse,
+    compact_drawing_preview,
 )
 from board.rooms.interactions import PendingResolution
 from board.rooms.admin import apply_admin_actions
+from board.rooms.choices import chosen_card_candidates, plan_choice_needs
 from board.rooms.connections import ConnectionManager
 from board.rooms.deck import (
     BLANKS_PER_PLAYER,
@@ -140,6 +145,15 @@ REACTION_WINDOW_SECONDS = 15.0
 # hand tail is discarded for them.
 HAND_LIMIT_RESULT_KEY = "hand_limit_discards"
 HAND_LIMIT_TIMEOUT_SECONDS = 60
+
+# Headroom kept when budgeting dynamic-choice option payloads: the descriptor
+# cap is measured on pydantic's compact JSON while payloads are budgeted with
+# json.dumps' spaced encoding, so the margin absorbs any residual drift.
+_PREVIEW_SERIALIZATION_MARGIN = 1_024
+
+# Floor below which the preview budget stops halving; a budget this small means
+# even a minimal one-stroke preview cannot fit and the plan must fall back.
+_MIN_PREVIEW_BUDGET = 256
 
 # A host correction needs unanimous consent from every other seated player.
 ADMIN_PROPOSAL_TIMEOUT_SECONDS = 60
@@ -564,9 +578,9 @@ class Room:
         # Spectators (joined after the game started) may observe but not act:
         # reject every game-mutating / authoring message. They still receive all
         # broadcasts (state, brewing, effect_applied, …) over their socket.
-        # epilogue_vote is intentionally allowed through — spectators created no
-        # cards, so a stray vote is harmless and the epilogue guard handles it —
-        # but every write/authoring path is gated here.
+        # epilogue_vote/epilogue_done are blocked for every spectator, host
+        # included — only seated players decide a card's fate — while a
+        # spectator host keeps the start/finalize controls below.
         spectator_actions = {
             "start",
             "lobby_set_host",
@@ -585,6 +599,8 @@ class Room:
             "admin_view",
             "epilogue_start",
             "epilogue_finalize",
+            "epilogue_vote",
+            "epilogue_done",
         }
         spectator_host_actions = {
             "start",
@@ -1640,11 +1656,11 @@ class Room:
                 return p.name
         return player_id
 
-    def _card_title(self, card) -> str:
-        """A card's display title (falls back to a generic label)."""
+    def _card_title(self, card, default: str = "a card") -> str:
+        """A card's display title (falls back to ``default``)."""
         if isinstance(card, dict):
-            return card.get("title") or "a card"
-        return getattr(card, "title", None) or "a card"
+            return card.get("title") or default
+        return getattr(card, "title", None) or default
 
     def _format_score_deltas(self, deltas: dict[str, int]) -> str:
         """Render {player_id: change} as "Alice +5, Bob -2", in player order.
@@ -2437,18 +2453,17 @@ class Room:
         chosen_player_id = getattr(msg, "chosen_player_id", None)
         chosen_card_id = getattr(msg, "chosen_card_id", None)
         valid_player_ids = {p.id for p in self.state.players}
-        valid_card_ids = set(self.state.cards_in_play()) | set(self.state.get_player(player_id).hand)
-        needs_player_choice, needs_card_choice = self._plan_choice_needs(plan)
+        needs_player_choice, needs_card_choice = plan_choice_needs(plan)
 
         if needs_player_choice and chosen_player_id is None:
             await self.connections.send(
                 player_id,
-                {
-                    "type": "prompt_choice",
-                    "card_id": card_id,
-                    "prompt": f"Choose a target player for {title}",
-                    "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
-                },
+                self._prompt_choice_msg(
+                    card_id,
+                    f"Choose a target player for {title}",
+                    [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                    chosen_card_id=chosen_card_id,
+                ),
             )
             return
         if chosen_player_id is not None and chosen_player_id not in valid_player_ids:
@@ -2457,33 +2472,34 @@ class Room:
                 {"type": "error", "message": f"Invalid target player: {chosen_player_id}"},
             )
             return
-        if needs_card_choice and chosen_card_id is None:
-            await self.connections.send(
-                player_id,
-                {
-                    "type": "prompt_choice",
-                    "card_id": card_id,
-                    "prompt": f"Choose a target card for {title}",
-                    "choices": [
-                        {
-                            "card_id": cid,
-                            "name": (
-                                self.state.cards[cid].get("title", cid)
-                                if isinstance(self.state.cards.get(cid), dict)
-                                else getattr(self.state.cards.get(cid), "title", cid)
-                            ),
-                        }
-                        for cid in valid_card_ids
-                    ],
-                },
+        if needs_card_choice:
+            valid_card_ids = chosen_card_candidates(
+                self.state, plan, player_id, card_id, chosen_player_id=chosen_player_id
             )
-            return
-        if needs_card_choice and chosen_card_id not in valid_card_ids:
-            await self.connections.send(
-                player_id,
-                {"type": "error", "message": f"Invalid target card: {chosen_card_id}"},
-            )
-            return
+            if not valid_card_ids:
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": f"There is no eligible target card for {title}"},
+                )
+                return
+            if chosen_card_id is None:
+                await self.connections.send(
+                    player_id,
+                    self._prompt_choice_msg(
+                        card_id,
+                        f"Choose a target card for {title}",
+                        self._card_choice_payload(valid_card_ids),
+                        cards=self._card_choice_snapshots(valid_card_ids),
+                        chosen_player_id=chosen_player_id,
+                    ),
+                )
+                return
+            if chosen_card_id not in valid_card_ids:
+                await self.connections.send(
+                    player_id,
+                    {"type": "error", "message": f"Invalid target card: {chosen_card_id}"},
+                )
+                return
 
         ctx = HookContext(
             event=GameEvent.ON_PLAY,
@@ -2753,18 +2769,60 @@ class Room:
             )
 
     # ── play_on_draw auto-plays ──
-    def _plan_choice_needs(self, plan: ResolutionPlan) -> tuple[bool, bool]:
-        """(needs_player_choice, needs_card_choice) for a resolved plan's ops —
-        the prompt_choice preconditions shared by direct, reaction, and
-        auto-play resolution."""
-        ops = plan.operations()
-        needs_player = any(
-            getattr(op, field_name, None) in ("chooser", "target_player")
-            for op in ops
-            for field_name in ("target", "from_target", "to_target", "to")
-        )
-        needs_card = any(getattr(op, "card_target", None) == "chosen_card" for op in ops)
-        return needs_player, needs_card
+    def _card_choice_payload(self, card_ids: list[str]) -> list[dict[str, str]]:
+        """prompt_choice card entries, in candidate order (see board.rooms.choices)."""
+        return [
+            {
+                "card_id": cid,
+                "name": self._card_title(self.state.cards.get(cid), default=cid),
+            }
+            for cid in card_ids
+        ]
+
+    def _card_choice_snapshots(self, card_ids: list[str], *, cards: dict | None = None) -> dict[str, dict]:
+        """Full card snapshots for exactly the offered candidates.
+
+        Rides the targeted card prompt/interaction because the chooser's
+        redacted state snapshot never carries another player's hidden hand
+        content (same rationale as HandRevealedMsg.cards). Must only ever be
+        sent to the chooser — never broadcast, never persisted. ``cards``
+        overrides the registry snapshots are read from (interactions read the
+        paused resolution's working state).
+        """
+        source = self.state.cards if cards is None else cards
+        snapshots: dict[str, dict] = {}
+        for cid in card_ids:
+            card = source.get(cid)
+            if isinstance(card, dict):
+                snapshots[cid] = dict(card)
+            elif card is not None:
+                snapshots[cid] = card.model_dump()
+        return snapshots
+
+    def _prompt_choice_msg(
+        self,
+        card_id: str,
+        prompt: str,
+        choices: list[dict],
+        *,
+        cards: dict[str, dict] | None = None,
+        chosen_player_id: str | None = None,
+        chosen_card_id: str | None = None,
+        as_reaction: bool = False,
+    ) -> dict:
+        """One prompt_choice envelope carrying the accumulated two-step context
+        (see PromptChoiceMsg) — the follow-up play must re-send every choice
+        made so far, so each prompt echoes what is already decided."""
+        return {
+            "type": "prompt_choice",
+            "card_id": card_id,
+            "prompt": prompt,
+            "choices": choices,
+            "cards": cards or {},
+            "chosen_player_id": chosen_player_id,
+            "chosen_card_id": chosen_card_id,
+            "as_reaction": as_reaction,
+        }
 
     def _is_play_on_draw(self, card) -> bool:
         """True when the card carries the ``play_on_draw`` attribute — it never
@@ -2874,7 +2932,7 @@ class Room:
             # reaction window like any other reaction card.
             self._auto_play_deferred.add(card_id)
             return
-        needs_player_choice, needs_card_choice = self._plan_choice_needs(plan)
+        needs_player_choice, needs_card_choice = plan_choice_needs(plan)
         if needs_player_choice or needs_card_choice:
             self._pending_auto_play = PendingAutoPlay(
                 owner_id=owner_id, card_id=card_id, plan=plan, correlation_id=correlation_id
@@ -2887,37 +2945,53 @@ class Room:
 
     async def _send_auto_play_prompt(self) -> None:
         """prompt_choice the pending auto-play's owner for the next missing
-        choice (player axis first, then card — the normal two-prompt order)."""
+        choice (player axis first, then card — the normal two-prompt order).
+
+        A card axis with NO eligible candidates never falls back to a hand:
+        the auto-play is abandoned as a logged safe no-op (card deferred in
+        hand) and the suspended chain resumes."""
         pending = self._pending_auto_play
         if pending is None:
             return
         card = self.state.cards.get(pending.card_id, {})
         title = self._card_title(card)
-        needs_player_choice, needs_card_choice = self._plan_choice_needs(pending.plan)
+        needs_player_choice, needs_card_choice = plan_choice_needs(pending.plan)
         if needs_player_choice and pending.chosen_player_id is None:
             await self.connections.send(
                 pending.owner_id,
-                {
-                    "type": "prompt_choice",
-                    "card_id": pending.card_id,
-                    "prompt": f"Choose a target player for {title}",
-                    "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
-                },
+                self._prompt_choice_msg(
+                    pending.card_id,
+                    f"Choose a target player for {title}",
+                    [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                    chosen_card_id=pending.chosen_card_id,
+                ),
             )
             return
         if needs_card_choice and pending.chosen_card_id is None:
-            valid_card_ids = set(self.state.cards_in_play()) | set(self._from_hand_options(pending.owner_id))
+            valid_card_ids = chosen_card_candidates(
+                self.state,
+                pending.plan,
+                pending.owner_id,
+                pending.card_id,
+                chosen_player_id=pending.chosen_player_id,
+            )
+            if not valid_card_ids:
+                self._pending_auto_play = None
+                self._auto_play_deferred.add(pending.card_id)
+                await self._log_and_broadcast(
+                    f"{self._name(pending.owner_id)}'s {title} has no eligible target card — it stays in hand"
+                )
+                await self._finish_auto_play_chain()
+                return
             await self.connections.send(
                 pending.owner_id,
-                {
-                    "type": "prompt_choice",
-                    "card_id": pending.card_id,
-                    "prompt": f"Choose a target card for {title}",
-                    "choices": [
-                        {"card_id": cid, "name": self._card_title(self.state.cards.get(cid, {}))}
-                        for cid in valid_card_ids
-                    ],
-                },
+                self._prompt_choice_msg(
+                    pending.card_id,
+                    f"Choose a target card for {title}",
+                    self._card_choice_payload(valid_card_ids),
+                    cards=self._card_choice_snapshots(valid_card_ids),
+                    chosen_player_id=pending.chosen_player_id,
+                ),
             )
 
     async def _resume_auto_play(self, player_id: str, msg) -> None:
@@ -2943,15 +3017,18 @@ class Room:
                 player_id, {"type": "error", "message": f"Invalid target player: {chosen_player_id}"}
             )
             return
-        valid_card_ids = set(self.state.cards_in_play()) | set(hand)
-        if chosen_card_id is not None and chosen_card_id not in valid_card_ids:
-            await self.connections.send(
-                player_id, {"type": "error", "message": f"Invalid target card: {chosen_card_id}"}
+        if chosen_card_id is not None:
+            valid_card_ids = chosen_card_candidates(
+                self.state, pending.plan, pending.owner_id, pending.card_id, chosen_player_id=chosen_player_id
             )
-            return
+            if chosen_card_id not in valid_card_ids:
+                await self.connections.send(
+                    player_id, {"type": "error", "message": f"Invalid target card: {chosen_card_id}"}
+                )
+                return
         pending.chosen_player_id = chosen_player_id
         pending.chosen_card_id = chosen_card_id
-        needs_player_choice, needs_card_choice = self._plan_choice_needs(pending.plan)
+        needs_player_choice, needs_card_choice = plan_choice_needs(pending.plan)
         if (needs_player_choice and chosen_player_id is None) or (needs_card_choice and chosen_card_id is None):
             await self._send_auto_play_prompt()
             return
@@ -3043,21 +3120,38 @@ class Room:
             source = refs["options"]
             if not isinstance(source, dict):
                 raise PlanExecutionError("choice options reference must resolve to an object")
-            options = [
-                InteractionOption(
-                    id=str(player_id),
-                    label=self._name(str(player_id)),
-                    payload=value,
-                )
-                for player_id, value in source.items()
-            ]
-            request = ChoiceInteraction.model_validate(
-                {
-                    **request.model_dump(mode="python"),
-                    "options": [option.model_dump(mode="python") for option in options],
-                    "max_selections": min(request.max_selections, len(options)),
-                }
+            base = request.model_dump(mode="python")
+            base["max_selections"] = min(request.max_selections, len(source))
+            labels = {str(player_id): self._name(str(player_id)) for player_id in source}
+            skeleton = ChoiceInteraction.model_validate(
+                {**base, "options": [{"id": option_id, "label": label} for option_id, label in labels.items()]}
             )
+            available = (
+                MAX_INTERACTION_DESCRIPTOR_BYTES
+                - len(skeleton.model_dump_json().encode())
+                - _PREVIEW_SERIALIZATION_MARGIN
+            )
+            budget = min(MAX_OPTION_PAYLOAD_BYTES, available // max(len(source), 1))
+            while True:
+                try:
+                    request = ChoiceInteraction.model_validate(
+                        {
+                            **base,
+                            "options": [
+                                {
+                                    "id": str(player_id),
+                                    "label": labels[str(player_id)],
+                                    "payload": compact_drawing_preview(value, budget),
+                                }
+                                for player_id, value in source.items()
+                            ],
+                        }
+                    )
+                    break
+                except ValidationError:
+                    if budget <= _MIN_PREVIEW_BUDGET:
+                        raise
+                    budget //= 2
         if isinstance(request, CardPickInteraction) and "card_ids" in refs:
             if not isinstance(refs["card_ids"], list) or not refs["card_ids"]:
                 raise PlanExecutionError("card_ids reference must resolve to a non-empty list")
@@ -3150,9 +3244,12 @@ class Room:
         which mirrors this by validating against the responder's hand).
 
         Deck-top interactions (``card_order``, ``from_deck_top`` card_pick) get
-        the actual top-N card ids AND their faces filled in here — and only
-        here. Deck contents are hidden information, so the faces ride this
-        targeted interaction_request (whose recipients are exactly the resolved
+        the actual top-N card ids filled in here — and only here.
+
+        Every card_pick and card_order additionally carries full faces for
+        exactly its offered ``card_ids`` so choosers always see complete cards.
+        Hidden information (deck contents, hand contents) rides this targeted
+        interaction_request only (whose recipients are exactly the resolved
         audience; see :meth:`_send_interaction_request`) and never the shared
         snapshot; the audience's redacted snapshot keeps just those registry
         entries while the interaction is pending (see board.rooms.redaction).
@@ -3167,8 +3264,11 @@ class Room:
                 claimed = self._claimed_deck_top_picks(player_id)
                 offered = [cid for cid in offered if cid not in claimed]
             descriptor["card_ids"] = list(offered)
-            cards = self._interaction_state().cards
-            descriptor["cards"] = {cid: cards[cid] for cid in offered if cid in cards}
+        if deck_top_count is not None or isinstance(request, CardPickInteraction):
+            descriptor["cards"] = self._card_choice_snapshots(
+                list(descriptor.get("card_ids") or []),
+                cards=self._interaction_state().cards,
+            )
         return descriptor
 
     @staticmethod
@@ -3782,23 +3882,48 @@ class Room:
             return
         chosen_player_id = getattr(msg, "chosen_player_id", None)
         chosen_card_id = getattr(msg, "chosen_card_id", None)
-        needs_player_choice, _ = self._plan_choice_needs(plan)
+        needs_player_choice, needs_card_choice = plan_choice_needs(plan)
         if needs_player_choice and chosen_player_id is None:
             # Same suspend/resume as a normal play: the follow-up play message
             # re-enters here carrying as_reaction + the choice.
             await self.connections.send(
                 player_id,
-                {
-                    "type": "prompt_choice",
-                    "card_id": card_id,
-                    "prompt": f"Choose a target player for {self._card_title(card)}",
-                    "choices": [{"player_id": p.id, "name": p.name} for p in self.state.players],
-                },
+                self._prompt_choice_msg(
+                    card_id,
+                    f"Choose a target player for {self._card_title(card)}",
+                    [{"player_id": p.id, "name": p.name} for p in self.state.players],
+                    chosen_card_id=chosen_card_id,
+                    as_reaction=True,
+                ),
             )
             return
         if chosen_player_id is not None and chosen_player_id not in {p.id for p in self.state.players}:
             await err(f"Invalid target player: {chosen_player_id}")
             return
+        if needs_card_choice:
+            valid_card_ids = chosen_card_candidates(
+                self.state, plan, player_id, card_id, chosen_player_id=chosen_player_id
+            )
+            if not valid_card_ids:
+                pending.claimed_by = None  # unclaim; they may pass instead
+                await err(f"There is no eligible target card for {self._card_title(card)}")
+                return
+            if chosen_card_id is None:
+                await self.connections.send(
+                    player_id,
+                    self._prompt_choice_msg(
+                        card_id,
+                        f"Choose a target card for {self._card_title(card)}",
+                        self._card_choice_payload(valid_card_ids),
+                        cards=self._card_choice_snapshots(valid_card_ids),
+                        chosen_player_id=chosen_player_id,
+                        as_reaction=True,
+                    ),
+                )
+                return
+            if chosen_card_id not in valid_card_ids:
+                await err(f"Invalid target card: {chosen_card_id}")
+                return
 
         try:
             mode = await self._execute_reaction(player_id, card_id, card, plan, chosen_player_id, chosen_card_id)
@@ -4384,7 +4509,10 @@ class Room:
         if self._epilogue is None:
             await self.connections.send(player_id, {"type": "error", "message": "No epilogue in progress"})
             return
-        self._epilogue.record_vote(player_id, msg.card_id, msg.keep)
+        if not self._epilogue.record_vote(player_id, msg.card_id, msg.keep):
+            await self.connections.send(
+                player_id, {"type": "error", "message": "Vote rejected: not an eligible voter or unknown card"}
+            )
 
     async def _handle_epilogue_done(self, player_id: str) -> None:
         """A player is done voting — cards they never voted on abstain.
@@ -4414,9 +4542,10 @@ class Room:
     async def _finalize_epilogue(self) -> None:
         """Tally votes, persist kept cards, and transition to ``ended``.
 
-        Surfaces the outcome as ``state.epilogue_result`` (id+title per card)
-        so the final results screen — and a client reconnecting after the
-        vote — can render kept/destroyed lists straight from the snapshot.
+        Surfaces the outcome as ``state.epilogue_result`` (id+title per card,
+        plus the table-favorite ids) so the final results screen — and a client
+        reconnecting after the vote — can render kept/destroyed lists and the
+        favorite highlight straight from the snapshot.
         """
         result = await self._epilogue.tally_and_persist(card_art=self.card_art)
         epilogue_result = EpilogueResultSummary(
@@ -4428,6 +4557,7 @@ class Room:
                 EpilogueCardOutcome(id=cid, title=self._card_title(self.state.cards.get(cid, {})))
                 for cid in result.destroyed
             ],
+            favorite_card_ids=list(result.favorites),
         )
         self.state = self.state.model_copy(update={"phase": "ended", "epilogue_result": epilogue_result})
         await self._broadcast_state()
