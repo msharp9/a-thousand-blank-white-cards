@@ -818,6 +818,92 @@ test("drawing interaction gestures stay on the canvas without moving the page", 
   expect(response.payload.strokes[0].points.length).toBeGreaterThan(1);
 });
 
+test("card ordering shows full card faces without overflowing the page", async ({
+  page,
+}) => {
+  const room = await openMockRoom(page);
+  room.push({
+    type: "interaction_request",
+    schema_version: 1,
+    interaction_id: "scry-1",
+    deadline_at: "2099-01-01T00:00:00.000Z",
+    progress: {
+      expected_count: 1,
+      received_count: 0,
+      submitted: false,
+      complete: false,
+    },
+    descriptor: {
+      schema_version: 1,
+      prompt: "Rearrange the top of the deck",
+      audience: "active",
+      sealed: false,
+      timeout_seconds: 300,
+      kind: "card_order",
+      source: "deck_top",
+      count: 3,
+      card_ids: ["d1", "d2", "d3"],
+      cards: {
+        d1: { id: "d1", title: "Deck Card One", description: "First rule." },
+        d2: { id: "d2", title: "Deck Card Two", description: "Second rule." },
+        d3: { id: "d3", title: "Deck Card Three", description: "Third rule." },
+      },
+    },
+  });
+
+  const dialog = page.locator("section[aria-modal='true']");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Deck Card Two")).toBeVisible();
+  await expect(dialog.getByText("Second rule.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Move Deck Card Two up" }).click();
+  await page
+    .getByRole("button", { name: "Send Deck Card Three to the deck bottom" })
+    .click();
+
+  const geometry = await page.evaluate(() => {
+    const dialog = document.querySelector<HTMLElement>(
+      "section[aria-modal='true']",
+    )!;
+    const controls = [...dialog.querySelectorAll<HTMLElement>("button")].filter(
+      (node) => node.offsetParent !== null,
+    );
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    return {
+      viewportWidth,
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      dialogClientWidth: dialog.clientWidth,
+      dialogScrollWidth: dialog.scrollWidth,
+      windowY: window.scrollY,
+      controlsInside: controls.every((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= -1 && box.right <= viewportWidth + 1;
+      }),
+    };
+  });
+  expect(geometry.documentScrollWidth).toBeLessThanOrEqual(
+    geometry.documentClientWidth + 1,
+  );
+  expect(geometry.dialogScrollWidth).toBeLessThanOrEqual(
+    geometry.dialogClientWidth + 1,
+  );
+  expect(geometry.windowY).toBe(0);
+  expect(geometry.controlsInside).toBe(true);
+
+  await page.getByRole("button", { name: "Submit order" }).click();
+  await expect
+    .poll(() =>
+      room.clientMessages.find(
+        (message) => message.type === "interaction_response",
+      ),
+    )
+    .toMatchObject({
+      interaction_id: "scry-1",
+      payload: { kind: "card_order", order: ["d2", "d1"], to_bottom: ["d3"] },
+    });
+});
+
 test("wide game panels share the viewport and preserve edits across the breakpoint", async ({
   page,
 }, testInfo) => {

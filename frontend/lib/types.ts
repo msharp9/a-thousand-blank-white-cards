@@ -559,10 +559,13 @@ export type InteractionDescriptor = {
   // card_pick multi-select bounds (default 1/1 = single pick).
   min_picks?: number;
   max_picks?: number;
-  // card_order (scry) fields; the room also fills card_ids with the offered
-  // deck-top ids and `cards` with their faces for deck-top interactions.
+  // card_order (scry) fields; the room fills card_ids with the offered
+  // deck-top ids.
   source?: string;
   count?: number;
+  // Recipient-specific faces for the offered card_ids. The room attaches these
+  // to every card_pick and card_order request (hidden cards — deck top, own
+  // hand — never ride the shared snapshot, so they ride here, targeted only).
   cards?: Record<string, CardSnapshot>;
   confirm_label?: string;
   decline_label?: string;

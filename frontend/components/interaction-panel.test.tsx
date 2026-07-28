@@ -66,7 +66,10 @@ function panel(
         pending={pending}
         request={interactionRequest}
         progressMessage={null}
-        cards={{ c1: { id: "c1", title: "The Card", description: "" } }}
+        cards={{
+          c1: { id: "c1", title: "The Card", description: "A shared rule." },
+        }}
+        roomCode="ROOM01"
         onSubmit={onSubmit}
       />,
     ),
@@ -152,7 +155,7 @@ describe("InteractionPanel field renderers", () => {
     text.view.unmount();
 
     const pick = panel(request({ kind: "card_pick", card_ids: ["c1"] }));
-    await user.click(screen.getByRole("button", { name: "The Card" }));
+    await user.click(screen.getByRole("button", { name: "Choose The Card" }));
     expect(pick.onSubmit).toHaveBeenCalledWith("interaction-1", {
       kind: "card_pick",
       card_id: "c1",
@@ -265,6 +268,7 @@ describe("drawing gesture hardening", () => {
         request={request({ kind: "drawing" })}
         progressMessage={null}
         cards={{}}
+        roomCode="ROOM01"
         onSubmit={vi.fn()}
       />,
     );
@@ -341,6 +345,72 @@ describe("drawing gesture hardening", () => {
   });
 });
 
+describe("card_pick full-card rendering", () => {
+  it("renders full faces, preferring descriptor snapshots over shared state", () => {
+    panel(
+      request({
+        kind: "card_pick",
+        card_ids: ["c1", "h1"],
+        cards: {
+          h1: {
+            id: "h1",
+            title: "Hidden Card",
+            description: "A rule from a hidden hand.",
+          },
+        },
+      }),
+    );
+    expect(screen.getByText("A shared rule.")).toBeInTheDocument();
+    expect(screen.getByText("Hidden Card")).toBeInTheDocument();
+    expect(screen.getByText("A rule from a hidden hand.")).toBeInTheDocument();
+  });
+
+  it("toggles a multi pick with aria-pressed and submits the id set", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = panel(
+      request({
+        kind: "card_pick",
+        card_ids: ["c1", "h1"],
+        min_picks: 2,
+        max_picks: 2,
+        cards: {
+          h1: { id: "h1", title: "Hidden Card", description: "Hush." },
+        },
+      }),
+    );
+    const first = screen.getByRole("button", { name: "Choose The Card" });
+    const submit = screen.getByRole("button", { name: /Submit \d\/2/ });
+    expect(first).toHaveAttribute("aria-pressed", "false");
+    expect(submit).toBeDisabled();
+    await user.click(first);
+    expect(first).toHaveAttribute("aria-pressed", "true");
+    await user.click(
+      screen.getByRole("button", { name: "Choose Hidden Card" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Submit 2/2" }));
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "card_pick",
+      card_ids: ["c1", "h1"],
+    });
+  });
+
+  it("falls back to an accessible placeholder for a missing face", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = panel(
+      request({ kind: "card_pick", card_ids: ["ghost-9"] }),
+    );
+    expect(screen.getByText("Card details unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("ghost-9")).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Choose unknown card" }),
+    );
+    expect(onSubmit).toHaveBeenCalledWith("interaction-1", {
+      kind: "card_pick",
+      card_id: "ghost-9",
+    });
+  });
+});
+
 describe("card_order (scry) renderer", () => {
   const scryRequest = () =>
     request({
@@ -349,11 +419,18 @@ describe("card_order (scry) renderer", () => {
       count: 3,
       card_ids: ["d1", "d2", "d3"],
       cards: {
-        d1: { id: "d1", title: "First", description: "" },
-        d2: { id: "d2", title: "Second", description: "" },
-        d3: { id: "d3", title: "Third", description: "" },
+        d1: { id: "d1", title: "First", description: "Rule one." },
+        d2: { id: "d2", title: "Second", description: "Rule two." },
+        d3: { id: "d3", title: "Third", description: "Rule three." },
       },
     });
+
+  it("renders each offer as a full card face", () => {
+    panel(scryRequest());
+    for (const text of ["First", "Rule one.", "Second", "Rule two."]) {
+      expect(screen.getByText(text)).toBeInTheDocument();
+    }
+  });
 
   it("submits the untouched offer as the identity arrangement", async () => {
     const user = userEvent.setup();
@@ -423,6 +500,7 @@ describe("InteractionPanel lifecycle", () => {
         request={request({ kind: "confirm" })}
         progressMessage={null}
         cards={{}}
+        roomCode="ROOM01"
         onSubmit={vi.fn()}
       />,
     );
@@ -439,6 +517,7 @@ describe("InteractionPanel lifecycle", () => {
         request={next}
         progressMessage={null}
         cards={{}}
+        roomCode="ROOM01"
         onSubmit={onSubmit}
       />,
     );
@@ -461,6 +540,7 @@ describe("InteractionPanel lifecycle", () => {
         request={timed}
         progressMessage={null}
         cards={{}}
+        roomCode="ROOM01"
         onSubmit={vi.fn()}
       />,
     );

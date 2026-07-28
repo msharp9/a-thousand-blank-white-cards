@@ -11,13 +11,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AdminProposalDialog } from "@/components/admin-proposal-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { DiscardPile } from "@/components/discard-pile";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
@@ -38,6 +31,7 @@ import { PlayerAvatar } from "@/components/player-avatar";
 import { ResultsScreen } from "@/components/results-screen";
 import { SetupPhase } from "@/components/setup-phase";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
+import { TargetPickerDialog } from "@/components/target-picker-dialog";
 import { TurnTimerChip } from "@/components/turn-timer";
 import { ViewportNoticeHost } from "@/components/viewport-notice";
 import { getCardArtUrl } from "@/lib/art";
@@ -47,12 +41,7 @@ import {
   useCompactViewport,
   useWideGameView,
 } from "@/lib/use-compact-viewport";
-import type {
-  CardSnapshot,
-  ClientMsg,
-  GameStateSnapshot,
-  PromptChoiceMsg,
-} from "@/lib/types";
+import type { CardSnapshot, ClientMsg, GameStateSnapshot } from "@/lib/types";
 import { getPlayerId, storePlayerId, useGameSocket } from "@/lib/ws";
 import { cn } from "@/lib/utils";
 
@@ -370,6 +359,7 @@ export default function RoomPage() {
         request={interactionRequest}
         progressMessage={interactionProgress}
         cards={gameState?.cards ?? {}}
+        roomCode={code}
         onSubmit={(interactionId, payload) =>
           send(interactionResponseMessage(interactionId, payload))
         }
@@ -765,6 +755,8 @@ export default function RoomPage() {
             : ""
         }
         players={gameState?.players ?? []}
+        cards={gameState?.cards ?? {}}
+        roomCode={code}
         onPick={(choice) => {
           if (!promptChoice) return;
           // A prompt option carries either a player_id (player-target axis) or a
@@ -893,78 +885,5 @@ function LobbyRoster({
         </ul>
       )}
     </section>
-  );
-}
-
-// Renders the target picker when the server asks the active player to choose a
-// target for the card they just played. Picking sends a follow-up play carrying
-// the choice; cancelling abandons the pending play (the turn never advanced).
-function TargetPickerDialog({
-  prompt,
-  playedTitle,
-  players,
-  onPick,
-  onCancel,
-}: {
-  prompt: PromptChoiceMsg | null;
-  playedTitle: string;
-  players: { id: string }[];
-  onPick: (choice: PromptChoiceMsg["choices"][number]) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <Dialog
-      open={Boolean(prompt)}
-      onOpenChange={(open) => {
-        if (!open) onCancel();
-      }}
-    >
-      <DialogContent className="animate-popin border-2 border-dashed border-ink bg-panel-paper shadow-none">
-        <DialogHeader>
-          <DialogTitle className="font-hand text-xl font-normal">
-            {playedTitle ? (
-              <>
-                Play <b>“{playedTitle}”</b> to:
-              </>
-            ) : (
-              "Choose a target"
-            )}
-          </DialogTitle>
-          {prompt && (
-            <DialogDescription className="font-hand text-base">
-              {prompt.prompt}
-            </DialogDescription>
-          )}
-        </DialogHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          {prompt?.choices.map((choice) => {
-            const targetIndex = choice.player_id
-              ? players.findIndex((p) => p.id === choice.player_id)
-              : -1;
-            return (
-              <Button
-                key={choice.player_id ?? choice.card_id}
-                variant={targetIndex >= 0 ? "default" : "outline"}
-                style={
-                  targetIndex >= 0
-                    ? { backgroundColor: playerColor(targetIndex) }
-                    : undefined
-                }
-                onClick={() => onPick(choice)}
-              >
-                {choice.name}
-              </Button>
-            );
-          })}
-          <Button
-            variant="ghost"
-            className="text-muted-foreground"
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }

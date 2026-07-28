@@ -2778,17 +2778,20 @@ class Room:
             entries.append({"card_id": cid, "name": title or cid})
         return entries
 
-    def _card_choice_snapshots(self, card_ids: list[str]) -> dict[str, dict]:
+    def _card_choice_snapshots(self, card_ids: list[str], *, cards: dict | None = None) -> dict[str, dict]:
         """Full card snapshots for exactly the offered candidates.
 
-        Rides the targeted card prompt because the chooser's redacted state
-        snapshot never carries another player's hidden hand content (same
-        rationale as HandRevealedMsg.cards). Must only ever be sent to the
-        chooser — never broadcast, never persisted.
+        Rides the targeted card prompt/interaction because the chooser's
+        redacted state snapshot never carries another player's hidden hand
+        content (same rationale as HandRevealedMsg.cards). Must only ever be
+        sent to the chooser — never broadcast, never persisted. ``cards``
+        overrides the registry snapshots are read from (interactions read the
+        paused resolution's working state).
         """
+        source = self.state.cards if cards is None else cards
         snapshots: dict[str, dict] = {}
         for cid in card_ids:
-            card = self.state.cards.get(cid)
+            card = source.get(cid)
             if isinstance(card, dict):
                 snapshots[cid] = dict(card)
             elif card is not None:
@@ -3240,9 +3243,12 @@ class Room:
         which mirrors this by validating against the responder's hand).
 
         Deck-top interactions (``card_order``, ``from_deck_top`` card_pick) get
-        the actual top-N card ids AND their faces filled in here — and only
-        here. Deck contents are hidden information, so the faces ride this
-        targeted interaction_request (whose recipients are exactly the resolved
+        the actual top-N card ids filled in here — and only here.
+
+        Every card_pick and card_order additionally carries full faces for
+        exactly its offered ``card_ids`` so choosers always see complete cards.
+        Hidden information (deck contents, hand contents) rides this targeted
+        interaction_request only (whose recipients are exactly the resolved
         audience; see :meth:`_send_interaction_request`) and never the shared
         snapshot; the audience's redacted snapshot keeps just those registry
         entries while the interaction is pending (see board.rooms.redaction).
@@ -3257,8 +3263,11 @@ class Room:
                 claimed = self._claimed_deck_top_picks(player_id)
                 offered = [cid for cid in offered if cid not in claimed]
             descriptor["card_ids"] = list(offered)
-            cards = self._interaction_state().cards
-            descriptor["cards"] = {cid: cards[cid] for cid in offered if cid in cards}
+        if deck_top_count is not None or isinstance(request, CardPickInteraction):
+            descriptor["cards"] = self._card_choice_snapshots(
+                list(descriptor.get("card_ids") or []),
+                cards=self._interaction_state().cards,
+            )
         return descriptor
 
     @staticmethod
