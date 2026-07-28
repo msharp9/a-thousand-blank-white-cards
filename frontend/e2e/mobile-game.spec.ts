@@ -426,6 +426,83 @@ test("opponent rail follows viewer-relative turn order and reprojects on scrambl
     .toEqual(["p8", "p7", "p6", "p5", "p4", "p3", "p2"]);
 });
 
+test("current-turn indicators update together across the header, seats, and own zone", async ({
+  page,
+}) => {
+  const room = await openMockRoom(page);
+  const indicator = page.locator("[data-current-turn-indicator]");
+  const myZone = page.locator("[data-my-zone]");
+
+  await expect(indicator).toHaveText("YOUR TURN · Turn 12");
+  await expect(indicator).toHaveAttribute("role", "status");
+  await expect(indicator).toHaveAttribute("aria-live", "polite");
+  await expect(indicator).toHaveAttribute("aria-atomic", "true");
+  await expect(myZone).toHaveAttribute("data-active-turn", "true");
+  await expect(myZone.locator("[data-current-turn-badge]")).toHaveText(
+    /your turn/i,
+  );
+  await expect(
+    page.locator("[data-opponent-rail] [data-current-turn-badge]"),
+  ).toHaveCount(0);
+
+  const header = await page.evaluate(() => {
+    const bar = document
+      .querySelector<HTMLElement>("[data-game-header]")!
+      .getBoundingClientRect();
+    const pill = document
+      .querySelector<HTMLElement>("[data-current-turn-indicator]")!
+      .getBoundingClientRect();
+    const connection = document
+      .querySelector<HTMLElement>("[data-game-header] [title]")!
+      .getBoundingClientRect();
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const navVisible = [
+      ...document.querySelectorAll<HTMLElement>(
+        "nav[aria-label='Game views'] button",
+      ),
+    ].every((button) => button.offsetParent !== null);
+    return {
+      barTop: bar.top,
+      pillLeft: pill.left,
+      pillRight: pill.right,
+      connectionRight: connection.right,
+      viewportWidth,
+      navVisible,
+    };
+  });
+  expect(header.barTop).toBeLessThanOrEqual(1);
+  expect(header.pillLeft).toBeGreaterThanOrEqual(-1);
+  expect(header.pillRight).toBeLessThanOrEqual(header.viewportWidth + 1);
+  expect(header.connectionRight).toBeLessThanOrEqual(header.viewportWidth + 1);
+  expect(header.navVisible).toBe(true);
+
+  // Turn passes to the last-railed opponent: the sticky header still names
+  // them even though their seat needs a scroll to reach.
+  const next = gameState();
+  next.turn_index = 7;
+  next.turn_number = 13;
+  room.push({ type: "state", state: next });
+  await expect(indicator).toHaveText("Hana's turn · Turn 13");
+  const activeSeat = page.locator("[data-seat-drop='p8']");
+  await expect(activeSeat).toHaveAttribute("data-active-turn", "true");
+  await expect(activeSeat.locator("[data-current-turn-badge]")).toHaveText(
+    /current turn/i,
+  );
+  await expect(myZone).not.toHaveAttribute("data-active-turn", "true");
+  await expect(myZone.locator("[data-current-turn-badge]")).toHaveCount(0);
+  await expect(
+    page.locator("[data-opponent-rail] [data-active-turn]"),
+  ).toHaveCount(1);
+  const stickyTop = await page.evaluate(() => {
+    const game = document.querySelector<HTMLElement>("[data-game-scroll]")!;
+    game.scrollTop = game.scrollHeight;
+    return document
+      .querySelector<HTMLElement>("[data-game-header]")!
+      .getBoundingClientRect().top;
+  });
+  expect(stickyTop).toBeLessThanOrEqual(1);
+});
+
 test("live notices remain visible while the game is scrolled", async ({
   page,
 }) => {

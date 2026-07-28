@@ -12,6 +12,10 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AdminProposalDialog } from "@/components/admin-proposal-dialog";
 import { Input } from "@/components/ui/input";
+import {
+  CurrentTurnBadge,
+  CurrentTurnIndicator,
+} from "@/components/current-turn-indicator";
 import { DiscardPile } from "@/components/discard-pile";
 import { DynamicStatePanel } from "@/components/dynamic-state-panel";
 import { EpilogueView } from "@/components/epilogue";
@@ -165,6 +169,14 @@ export default function RoomPage() {
   const isSpectator = Boolean(
     gameState?.spectators.some((s) => s.id === myPlayerId),
   );
+  // The authoritative active player: players[turn_index]. Its roster index
+  // also keys the identity color everywhere else at the table.
+  const activeIndex =
+    gameState && gameState.players.length
+      ? gameState.turn_index % gameState.players.length
+      : -1;
+  const activePlayer =
+    activeIndex >= 0 ? gameState?.players[activeIndex] : undefined;
   const isActive = useMemo(() => {
     if (!gameState || !gameState.players.length || !myPlayerId) return false;
     if (isSpectator) return false;
@@ -409,9 +421,13 @@ export default function RoomPage() {
         </span>
         {phase === "playing" && gameState && (
           <>
-            <span className="font-hand text-[17px] text-muted-foreground">
-              Turn {gameState.turn_number}
-            </span>
+            <CurrentTurnIndicator
+              activeName={activePlayer?.name}
+              isViewer={isActive}
+              turnNumber={gameState.turn_number}
+              color={activeIndex >= 0 ? playerColor(activeIndex) : undefined}
+              className="max-w-[55vw] sm:max-w-none"
+            />
             <TurnTimerChip timer={turnTimer} />
           </>
         )}
@@ -603,9 +619,22 @@ export default function RoomPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="min-w-0 border-t-[2.5px] border-ink bg-card px-3 pt-3 pb-4 sm:px-5">
+                  <div
+                    data-my-zone
+                    data-active-turn={isActive || undefined}
+                    className="min-w-0 border-t-[2.5px] border-ink bg-card px-3 pt-3 pb-4 sm:px-5"
+                    style={
+                      // Mirror of the active opponent seat's solid identity
+                      // treatment: a steady color band along the zone's top.
+                      isActive
+                        ? {
+                            boxShadow: `inset 0 4px 0 0 ${playerColor(myIndex)}`,
+                          }
+                        : undefined
+                    }
+                  >
                     <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2.5">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex flex-wrap items-center gap-2.5">
                         {me && (
                           <>
                             <PlayerAvatar
@@ -615,12 +644,8 @@ export default function RoomPage() {
                             />
                             <span className="font-hand text-[22px] leading-none">
                               {me.name}
-                              {isActive && (
-                                <span className="ml-1 text-[15px] text-primary">
-                                  · your turn
-                                </span>
-                              )}
                             </span>
+                            {isActive && <CurrentTurnBadge label="Your turn" />}
                             <span
                               className="font-marker text-2xl tabular-nums"
                               style={{ color: playerColor(myIndex) }}
