@@ -252,7 +252,9 @@ face-down piles and hand sizes.
 
 Snapshots expose the active data-driven game rather than a fixed board model:
 `turn_order`, `rules`, player `conditions`, card `attributes`, and registered
-hook metadata. The frontend mirrors the engine's active seat from `players[turn_index]` and
+hook metadata. The frontend mirrors the engine's active seat from `players[turn_index]`,
+projects opponents viewer-relative from `turn_order` (`lib/seating.ts`: the
+successor sits far-left, the predecessor far-right), and
 renders these values in a generic dynamic-state panel; there is no legacy
 direction flag. Cards also retain a bounded mechanical diagnostic (`pending`,
 `applied`, `fallback`, or `rejected`), a public reason, and a correlation id, so
@@ -353,7 +355,11 @@ Key behaviours enforced in `Room`:
   agent → deterministic `CustomNoteOp` fallback.
 - **End game → epilogue**: `resolve_end_of_game` applies any `on_game_end` card
   effects, `evaluate_win_condition` computes `winner_ids`, then voting opens
-  (`EpilogueManager`); kept cards are upserted back into the RAG corpus.
+  (`EpilogueManager`, seated players only — spectators are read-only); a card
+  survives only when its lifetime Keep total strictly exceeds its lifetime Cut
+  total (`engine/epilogue.py::tally_votes`), kept cards are upserted back into
+  the RAG corpus, and the kept cards with the most current-game Keep votes are
+  surfaced as game-local `favorite_card_ids` (never persisted to RAG).
 
 ### Card art (out-of-band transport)
 
