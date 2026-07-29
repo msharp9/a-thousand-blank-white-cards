@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, patch
 from agent.contract import InterpretResult
 from models.effects import AddPointsOp, EffectProgram, SetCardAttributeOp
 from models.ws_messages import PlayMsg
+from board.rooms.deck import _normalise_card
 from board.rooms.room import MAX_AUTO_PLAYS_PER_TURN, Room
 
 
@@ -239,6 +240,38 @@ def test_minted_cards_auto_play_deterministically_without_llm() -> None:
     minted = [cid for cid in room.state.discard if cid.startswith("created-")]
     assert len(minted) == 1
     assert room.state.active_player().id == "p2"  # only the minting play consumed the turn
+
+
+def test_seed_landmine_auto_plays_on_draw_via_deck_normalisation() -> None:
+    # Regression for bead 100.3: a fresh-deck seed card (built via
+    # board.rooms.deck, never played before) must still auto-play on draw.
+    # Its play_on_draw attribute only exists as a set_card_attribute op inside
+    # canonical["ops"] — deck._normalise_card must hoist it the same way
+    # Room._canonical_payload does for LLM-interpreted cards.
+    raw_landmine = {
+        "id": "seed-gold-072",
+        "title": "Landmine",
+        "description": "This card plays itself the moment it is drawn.",
+        "canonical": {
+            "target": "self",
+            "placement": "discard",
+            "venue": "all",
+            "ops": [
+                {"op": "set_card_attribute", "args": {"card_target": "this", "key": "play_on_draw", "value": True}},
+                {"op": "add_points", "args": {"target": "self", "amount": -3}},
+            ],
+        },
+    }
+    landmine = _normalise_card(raw_landmine, 0)
+    assert landmine["attributes"] == {"play_on_draw": True}
+
+    room = _room({landmine["id"]: landmine, "filler": _plain_card("filler", ADD3)}, deck=[landmine["id"], "filler"])
+
+    asyncio.run(room._start_turn("p1"))
+
+    assert room.state.get_player("p1").score == -3
+    assert landmine["id"] in room.state.discard
+    assert room._plays_this_turn == 0  # the auto-play took no action
 
 
 def test_interpretation_canonicalizes_play_on_draw_attribute() -> None:
