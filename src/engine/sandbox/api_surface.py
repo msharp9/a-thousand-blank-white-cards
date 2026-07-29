@@ -8,8 +8,27 @@ it through the engine's own reducers.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Any
+
+from models.effects import validate_move_cards_source
+from models.game_state import normalize_condition_key
+
+
+class _ConditionView(dict[str, Any]):
+    """Detached condition mapping with case-insensitive string lookups."""
+
+    def __getitem__(self, key: str) -> Any:
+        return super().__getitem__(normalize_condition_key(key))
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            key = normalize_condition_key(key)
+        return super().__contains__(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return super().get(normalize_condition_key(key), default)
 
 
 @dataclass
@@ -20,7 +39,9 @@ class _PlayerView:
     name: str
     score: int
     hand_size: int
+    in_play: tuple[str, ...]
     connected: bool
+    eliminated: bool
 
 
 class SandboxGame:
@@ -31,10 +52,16 @@ class SandboxGame:
     state/ctx; records ops which the child serialises to stdout for the parent.
     """
 
-    def __init__(self, state_dict: dict[str, Any], ctx_dict: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        state_dict: dict[str, Any],
+        ctx_dict: dict[str, Any],
+        rng_seed: int | None = None,
+    ) -> None:
         self._state = state_dict
         self._ctx = ctx_dict
         self._ops: list[dict[str, Any]] = []
+        self._rng = random.Random(rng_seed)
 
     # ------------------------------------------------------------------
     # Read-only views
@@ -70,7 +97,9 @@ class SandboxGame:
             name=p["name"],
             score=p["score"],
             hand_size=len(p.get("hand", [])),
+            in_play=tuple(p.get("in_play", [])),
             connected=p.get("connected", True),
+            eliminated=p.get("eliminated", False),
         )
 
     @property
@@ -99,7 +128,9 @@ class SandboxGame:
         """A player's open conditions bag (poisoned, skip_next, …)."""
         for p in self._state["players"]:
             if p["id"] == player_id:
-                return dict(p.get("conditions") or {})
+                return _ConditionView(
+                    (normalize_condition_key(key), value) for key, value in (p.get("conditions") or {}).items()
+                )
         raise KeyError(f"Player {player_id!r} not found")
 
     def card(self, card_id: str) -> dict[str, Any] | None:
@@ -222,9 +253,111 @@ class SandboxGame:
         self._require_nonneg_int(amount)
         self._ops.append({"op": "draw_cards", "target": target, "amount": amount})
 
+    def roll_die(
+        self,
+        sides: int = 6,
+        count: int = 1,
+        target: str = "self",
+        outcome: str = "none",
+    ) -> int:
+        """Roll `count` dice (1-10) of `sides` sides (2-1000); returns the TOTAL.
+
+        The roll happens HERE, immediately, and the recorded op carries the
+        rolled values in `result` — so revalidation replays this exact roll
+        instead of re-rolling. Callers can never supply the values: the engine
+        alone rolls. `outcome` feeds the total into "add_points",
+        "subtract_points" or "draw_cards" for `target`; "none" is a bare roll
+        whose returned total your code can branch on.
+        """
+        if not isinstance(sides, int) or isinstance(sides, bool) or not 2 <= sides <= 1000:
+            raise ValueError(f"sides must be an int in 2..1000, got {sides!r}")
+        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 10:
+            raise ValueError(f"count must be an int in 1..10, got {count!r}")
+        if outcome not in ("add_points", "subtract_points", "draw_cards", "none"):
+            raise ValueError(f"outcome must be add_points/subtract_points/draw_cards/none, got {outcome!r}")
+        values = [self._rng.randint(1, sides) for _ in range(count)]
+        self._ops.append(
+            {"op": "roll_die", "sides": sides, "count": count, "target": target, "outcome": outcome, "result": values}
+        )
+        return sum(values)
+
+    def discard_random(self, target: str = "self", count: int = 1) -> None:
+        """Discard `count` (1-10) random cards from each `target` player's hand.
+
+        Unlike roll_die, the picks are NOT resolved here: snippets cannot read
+        other players' hands, so the engine draws the cards at apply time (a
+        player holding fewer than `count` discards their whole hand). There is
+        no return value to branch on.
+        """
+        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 10:
+            raise ValueError(f"count must be an int in 1..10, got {count!r}")
+        self._ops.append({"op": "discard_random", "target": target, "count": count})
+
+    _ZONES = ("deck", "discard", "hand", "in_play", "center", "exile")
+
+    def move_cards(
+        self,
+        card_target: str | None = None,
+        from_zone: str | None = None,
+        selector: str = "top",
+        count: int = 1,
+        from_player: str | None = None,
+        to_zone: str = "discard",
+        to_position: str = "top",
+        to_player: str | None = None,
+        match_attributes: dict[str, str | int | float | bool | None] | None = None,
+    ) -> None:
+        """Move cards between zones (deck/discard/hand/in_play/center/exile) without playing them.
+
+        Give an explicit `card_target`, a `from_zone` with `selector`
+        ("top"/"bottom"/"all"/"random") and `count` (1-50), or BOTH — the
+        addressed card moves only if it actually sits in the declared zone
+        (`selector`/`count` are not applied there and must stay defaults).
+        `from_player`/`to_player` are required exactly when the corresponding
+        zone is "hand" or "in_play"; `to_player` also accepts "card_owner"
+        (each moved card routes to its own owner). `to_position` applies only
+        to a deck destination: "top", "bottom", or "shuffle" (random
+        positions). Random picks happen in the ENGINE at apply time and
+        nothing is returned — your code can never learn which hidden card
+        moved.
+        """
+        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 50:
+            raise ValueError(f"count must be an int in 1..50, got {count!r}")
+        validate_move_cards_source(card_target, from_zone, selector, count)
+        if from_zone is not None and from_zone not in self._ZONES:
+            raise ValueError(f"from_zone must be one of {self._ZONES}, got {from_zone!r}")
+        if to_zone not in self._ZONES:
+            raise ValueError(f"to_zone must be one of {self._ZONES}, got {to_zone!r}")
+        if selector not in ("top", "bottom", "all", "random"):
+            raise ValueError(f"selector must be top/bottom/all/random, got {selector!r}")
+        if to_position not in ("top", "bottom", "shuffle"):
+            raise ValueError(f"to_position must be top/bottom/shuffle, got {to_position!r}")
+        if (from_zone in ("hand", "in_play")) != (from_player is not None):
+            raise ValueError("from_player is required exactly when from_zone is 'hand' or 'in_play'")
+        if (to_zone in ("hand", "in_play")) != (to_player is not None):
+            raise ValueError("to_player is required exactly when to_zone is 'hand' or 'in_play'")
+        op = {
+            "op": "move_cards",
+            "card_target": card_target,
+            "from_zone": from_zone,
+            "selector": selector,
+            "count": count,
+            "from_player": from_player,
+            "to_zone": to_zone,
+            "to_position": to_position,
+            "to_player": to_player,
+        }
+        if match_attributes:
+            op["match_attributes"] = dict(match_attributes)
+        self._ops.append(op)
+
+    def shuffle_deck(self, include_discard: bool = False) -> None:
+        """Shuffle the draw pile; include_discard=True reshuffles the discard pile into it."""
+        self._ops.append({"op": "shuffle_deck", "include_discard": bool(include_discard)})
+
     def destroy_card(self, card_id: str | None = None, card_target: str | None = None) -> None:
-        """Destroy cards by CardTarget address ('this', 'all_in_play', 'id:…', 'attr:k=v')."""
-        legacy_targets = {"all_in_hand", "all_in_play", "chosen_card", "this"}
+        """Destroy cards by CardTarget address ('this', 'last_played', 'all_in_play', 'all_in_center', 'id:…', 'attr:k=v')."""
+        legacy_targets = {"all_in_hand", "all_in_play", "all_in_center", "chosen_card", "this", "last_played"}
         if (
             card_target is None
             and card_id is not None
@@ -239,8 +372,35 @@ class SandboxGame:
         self._ops.append(op)
 
     def transfer_card(self, card_target: str = "this", to_target: str = "self") -> None:
-        """Move selected cards from their current zone into one player's hand."""
+        """Move selected cards from their current zone into a player's hand.
+
+        `to_target` names one player, or "card_owner" to route each card to
+        its own owner (current holder, else who played it, else its creator).
+        "Return the last card played to its owner's hand" =
+        transfer_card('last_played', 'card_owner').
+        """
         self._ops.append({"op": "transfer_card", "card_target": card_target, "to_target": to_target})
+
+    def reveal_hand(
+        self, target: str = "self", to: str = "all", persistent: bool = False, mode: str = "reveal"
+    ) -> None:
+        """Reveal a hand (`target` = whose, `to` = who may see it) or conceal it again.
+
+        persistent=False is a one-shot peek; persistent=True keeps the hand
+        face-up (to="all") or visible to the resolved players until
+        mode="conceal" hides it again.
+        """
+        if mode not in ("reveal", "conceal"):
+            raise ValueError(f"reveal_hand mode must be reveal/conceal, got {mode!r}")
+        self._ops.append(
+            {"op": "reveal_hand", "target": target, "to": to, "persistent": bool(persistent), "mode": mode}
+        )
+
+    def eliminate_player(self, target: str) -> None:
+        """Knock the targeted player(s) out of the game: their hand is discarded and
+        they take no more turns, but their in-play cards stay in effect. The last
+        player still standing can never be eliminated."""
+        self._ops.append({"op": "eliminate_player", "target": target})
 
     def set_win_condition(self, kind: str, threshold: int | None = None) -> None:
         self._ops.append({"op": "set_win_condition", "kind": kind, "threshold": threshold})
@@ -262,9 +422,16 @@ class SandboxGame:
         """Write a rules path: draw, play, end_condition.type, win_condition.kind, extra.<key>…"""
         self._ops.append({"op": "set_rule", "path": str(path), "value": value})
 
-    def set_condition(self, target: str, key: str, value: Any = True) -> None:
-        """Set a free-form condition on targeted players (value=None removes it)."""
-        self._ops.append({"op": "set_condition", "target": target, "key": str(key), "value": value})
+    def set_condition(self, target: str, key: str, value: Any = True, duration_turns: int | None = None) -> None:
+        """Set a free-form condition on targeted players (value=None removes it).
+
+        ``duration_turns`` makes it expire: the TTL ticks down at each targeted
+        player's turn start and the condition is removed when it reaches 0.
+        """
+        op: dict[str, Any] = {"op": "set_condition", "target": target, "key": str(key), "value": value}
+        if duration_turns is not None:
+            op["duration_turns"] = int(duration_turns)
+        self._ops.append(op)
 
     def set_card_attribute(self, card_target: str, key: str, value: Any) -> None:
         """Tag targeted cards with open metadata (e.g. a color)."""
@@ -282,13 +449,14 @@ class SandboxGame:
     ) -> None:
         """Mint `count` copies of a new card (authoring ops compile when it is later played).
 
-        `destination` is "deck_shuffle" (default), "deck_top", or "hand". With
-        "hand" the copies go to the `target` player(s) — default "self" (the
-        actor); pass a player Target (e.g. "id:<player_id>") to hand cards to a
-        specific player. Passing a player Target as `destination` (e.g.
-        `destination="id:X"`) is treated as `destination="hand", target="X"`.
+        `destination` is "deck_shuffle" (default), "deck_top", "deck_bottom",
+        "hand", "discard", or "center". With "hand" the copies go to the
+        `target` player(s) — default "self" (the actor); pass a player Target
+        (e.g. "id:<player_id>") to hand cards to a specific player. Passing a
+        player Target as `destination` (e.g. `destination="id:X"`) is treated
+        as `destination="hand", target="X"`.
         """
-        _DESTINATIONS = {"deck_shuffle", "deck_top", "hand"}
+        _DESTINATIONS = {"deck_shuffle", "deck_top", "deck_bottom", "hand", "discard", "center"}
         if target is None and destination not in _DESTINATIONS:
             target, destination = destination, "hand"
         self._ops.append(
@@ -310,13 +478,35 @@ class SandboxGame:
         """Convenience alias: create_card with destination='deck_shuffle'."""
         self.create_card(title, description, ops, destination="deck_shuffle", count=count)
 
-    def register_hook(self, event: str, scope: str = "center", code: str | None = None) -> None:
+    def register_hook(
+        self,
+        event: str,
+        scope: str = "center",
+        code: str | None = None,
+        *,
+        title: str = "",
+        condition_keys: list[str] | None = None,
+    ) -> None:
         """Install a persistent sandboxed hook (rejected inside hook-produced diffs)."""
         if code is None:
             if "def apply" not in scope:
                 raise ValueError("register_hook requires sandbox code; pass code=... with scope='player' or 'center'")
             code, scope = scope, "center"
-        self._ops.append({"op": "register_hook", "event": str(event), "scope": scope, "code": str(code)})
+        normalized_keys: list[str] = []
+        for value in condition_keys or []:
+            key = normalize_condition_key(value)
+            if key and key not in normalized_keys:
+                normalized_keys.append(key)
+        self._ops.append(
+            {
+                "op": "register_hook",
+                "event": str(event),
+                "scope": scope,
+                "code": str(code),
+                "title": str(title),
+                "condition_keys": normalized_keys,
+            }
+        )
 
     def unregister_hook(self, source_card_id: str) -> None:
         """Remove hooks registered by `source_card_id`."""

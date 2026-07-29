@@ -78,6 +78,20 @@ def test_interpret_result_lowers_program_before_snippet() -> None:
     assert ResolutionPlan.model_validate(plan.model_dump()) == plan
 
 
+def test_triggered_snippet_carries_player_facing_hook_metadata() -> None:
+    result = InterpretResult(
+        snippet=SnippetEffect(
+            code=SNIPPET,
+            explanation="Cursed players discard at the end of their turn.",
+            trigger="on_turn_end",
+            condition_keys=["Cursed"],
+        )
+    )
+    hook = result.to_plan().steps[0].ops[0]
+    assert hook.title == "Cursed players discard at the end of their turn."
+    assert hook.condition_keys == ["cursed"]
+
+
 def test_explicit_interpretation_plan_wins() -> None:
     explicit = ResolutionPlan(steps=[OpsStep(ops=[AddPointsOp(target="self", amount=9)])])
     result = InterpretResult(

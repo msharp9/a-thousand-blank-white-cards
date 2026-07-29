@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import pathlib
+
 import evals.scorers as scorers
 from evals.eval_core import EvalItem, ScorerContext
 from evals.judge import Verdict
@@ -14,6 +17,8 @@ from evals.scorers import (
     executability,
     intent_match_judge,
     magnitude_sign,
+    magnitude_value,
+    placement_accuracy,
     persistence_accuracy,
     reset_run_caches,
     sandbox_behavior,
@@ -31,7 +36,7 @@ def _ops_plan(*ops: dict) -> dict:
 
 
 def test_all_scorers_count() -> None:
-    assert len(ALL_SCORERS) == 8
+    assert len(ALL_SCORERS) == 10
     assert set(ALL_SCORERS) == set(JUDGE_SCORERS) | set(DETERMINISTIC_SCORERS)
     for scorer in (
         sandbox_behavior,
@@ -39,14 +44,37 @@ def test_all_scorers_count() -> None:
         target_accuracy,
         persistence_accuracy,
         magnitude_sign,
+        magnitude_value,
+        placement_accuracy,
         executability,
         did_something,
     ):
         assert scorer in ALL_SCORERS
 
 
+class TestPlacementAccuracy:
+    def test_exact_match_scores_one(self):
+        score = placement_accuracy.evaluate(_ctx({"placement": "player"}, {"placement": "player"}))
+        assert score.score == 1.0
+        assert score.metadata["expected"] == "player"
+
+    def test_mismatch_scores_zero(self):
+        score = placement_accuracy.evaluate(_ctx({"placement": "discard"}, {"placement": "center"}))
+        assert score.score == 0.0
+        assert score.metadata["reason"] == "placement mismatch"
+
+    def test_missing_or_invalid_prediction_scores_zero(self):
+        assert placement_accuracy.evaluate(_ctx({}, {"placement": "center"})).score == 0.0
+        assert placement_accuracy.evaluate(_ctx({"placement": "CENTER"}, {"placement": "center"})).score == 0.0
+
+    def test_missing_expected_abstains(self):
+        score = placement_accuracy.evaluate(_ctx({"placement": "center"}, {}))
+        assert score.score is None
+        assert "skipped" in score.metadata
+
+
 class TestJudgeScorers:
-    """The four judge scorers share ONE LLM call per output and map distinct Verdict fields."""
+    """The judge scorers share ONE LLM call per output and map distinct Verdict fields."""
 
     def _install_counting_judge(self, monkeypatch) -> list[int]:
         calls: list[int] = []
@@ -60,6 +88,7 @@ class TestJudgeScorers:
                     target_placement_correct=0.7,
                     trigger_event_correct=1.0,
                     magnitude_sign_correct=0.6,
+                    magnitude_value_correct=0.5,
                     overall=0.75,
                     reason="stubbed",
                 )
@@ -68,7 +97,7 @@ class TestJudgeScorers:
         reset_run_caches()
         return calls
 
-    def test_one_llm_call_shared_across_all_four_scorers(self, monkeypatch) -> None:
+    def test_one_llm_call_shared_across_all_judge_scorers(self, monkeypatch) -> None:
         calls = self._install_counting_judge(monkeypatch)
         ctx = _ctx(_ops_plan({"op": "add_points", "target": "self", "amount": 5}))
 
@@ -76,6 +105,7 @@ class TestJudgeScorers:
         assert target_accuracy.evaluate(ctx).score == 0.7
         assert persistence_accuracy.evaluate(ctx).score == 0.8
         assert magnitude_sign.evaluate(ctx).score == 0.6
+        assert magnitude_value.evaluate(ctx).score == 0.5
         assert len(calls) == 1
 
     def test_reset_run_caches_forces_a_fresh_judgement(self, monkeypatch) -> None:
@@ -92,6 +122,74 @@ class TestJudgeScorers:
         score = intent_match_judge.evaluate(_ctx({"verdict": "invalid", "comment": "no idea"}))
         assert len(calls) == 1
         assert score.metadata["reason"] == "stubbed"
+
+
+class TestVerdictCacheKeying:
+    """Regression: _VERDICT_CACHE must be keyed on (output, card, expected)
+    content, not id(output), so a recycled object address can never serve
+    another row's cached verdict (CPython reuses freed dict addresses)."""
+
+    def _install_counting_judge(self, monkeypatch) -> list[int]:
+        calls: list[int] = []
+
+        class FakeJudge:
+            def evaluate(self, **kwargs) -> Verdict:
+                calls.append(1)
+                return Verdict(
+                    intent_match=0.9,
+                    persistence_correct=0.8,
+                    target_placement_correct=0.7,
+                    trigger_event_correct=1.0,
+                    magnitude_sign_correct=0.6,
+                    magnitude_value_correct=0.5,
+                    overall=0.75,
+                    reason="stubbed",
+                )
+
+        monkeypatch.setattr(scorers, "_judge", lambda: FakeJudge())
+        reset_run_caches()
+        return calls
+
+    def test_recycled_id_never_serves_a_stale_verdict(self, monkeypatch) -> None:
+        self._install_counting_judge(monkeypatch)
+        output_a = _ops_plan({"op": "add_points", "target": "self", "amount": 5})
+        verdict_a = scorers._run_judge(_ctx(output_a, {"placement": "player"}))
+        assert verdict_a.reason == "stubbed"
+
+        output_b = _ops_plan({"op": "custom_note", "note": "different content"})
+        ctx_b = _ctx(output_b, {"placement": "center"})
+        stale_marker = Verdict(
+            intent_match=0.0,
+            persistence_correct=0.0,
+            target_placement_correct=0.0,
+            trigger_event_correct=0.0,
+            magnitude_sign_correct=0.0,
+            magnitude_value_correct=0.0,
+            overall=0.0,
+            reason="STALE: belongs to a different row",
+        )
+        # Simulate the pre-fix bug: if output_b's address recycled output_a's
+        # freed id, an id()-keyed cache would have this entry under
+        # id(output_b) and serve it back unchanged.
+        scorers._VERDICT_CACHE[id(output_b)] = stale_marker
+
+        verdict_b = scorers._run_judge(ctx_b)
+
+        assert verdict_b != stale_marker
+        assert verdict_b.reason == "stubbed"
+        reset_run_caches()
+
+    def test_identical_output_different_card_or_expected_gets_fresh_judgement(self, monkeypatch) -> None:
+        calls = self._install_counting_judge(monkeypatch)
+        output = _ops_plan({"op": "add_points", "target": "self", "amount": 5})
+        item_a = EvalItem(id="a", input={"title": "Card A", "description": "x"}, expected={"placement": "player"})
+        item_b = EvalItem(id="b", input={"title": "Card B", "description": "y"}, expected={"placement": "center"})
+
+        scorers._run_judge(ScorerContext(item=item_a, output=output))
+        scorers._run_judge(ScorerContext(item=item_b, output=output))
+
+        assert len(calls) == 2  # byte-identical output, different card/expected -> no cache collision
+        reset_run_caches()
 
 
 class TestDslValidity:
@@ -145,6 +243,22 @@ class TestExecutability:
         assert score.score == 0.0
         assert "reason" in score.metadata
 
+    def test_chosen_card_target_runs(self) -> None:
+        output = {
+            "verdict": "needs_choice",
+            **_ops_plan({"op": "transfer_card", "card_target": "chosen_card", "to_target": "self"}),
+        }
+        assert executability.evaluate(_ctx(output)).score == 1.0
+
+    def test_real_choice_based_canonical_dry_runs(self) -> None:
+        from engine.compile import compile_card_plan
+
+        cards = json.loads((pathlib.Path(__file__).parent.parent / "data" / "seed_cards.json").read_text())
+        borrow = next(c for c in cards if c["id"] == "seed-filler-015")
+        plan = compile_card_plan({**borrow, "id": "gold", "origin": "seed"})
+        output = {"verdict": "needs_choice", "resolution_plan": plan.model_dump()}
+        assert executability.evaluate(_ctx(output)).score == 1.0
+
 
 class TestDidSomething:
     def test_real_effect_scores_one(self) -> None:
@@ -159,6 +273,10 @@ class TestDidSomething:
         score = did_something.evaluate(_ctx(output))
         assert score.score == 0.0
         assert "no-op" in score.metadata["reason"]
+
+    def test_chooser_target_with_needs_choice_scores_one(self) -> None:
+        output = {"verdict": "needs_choice", **_ops_plan({"op": "add_points", "target": "chooser", "amount": 5})}
+        assert did_something.evaluate(_ctx(output)).score == 1.0
 
     def test_shares_one_dry_run_with_executability(self, monkeypatch) -> None:
         calls: list[int] = []
@@ -177,6 +295,37 @@ class TestDidSomething:
         assert len(calls) == 1
 
 
+class TestDryRunCacheKeying:
+    """Regression: _DRY_RUN_CACHE must be keyed on output content, not
+    id(output), so a recycled object address can never serve another
+    output's cached report (CPython reuses freed dict addresses)."""
+
+    def test_recycled_id_never_serves_a_stale_report(self) -> None:
+        reset_run_caches()
+        output_a = {"verdict": "ok", **_ops_plan({"op": "add_points", "target": "self", "amount": 5})}
+        report_a = scorers._dry_run_output(output_a)
+        assert report_a["ok"] is True
+
+        output_b = {"verdict": "ok", **_ops_plan({"op": "custom_note", "note": "different content"})}
+        stale_marker = {"ok": False, "error": "STALE: belongs to output_a, not output_b", "emitted_ops": []}
+        # Simulate the pre-fix bug: if output_b's address recycled output_a's
+        # freed id, an id()-keyed cache would have this entry under
+        # id(output_b) and serve it back unchanged.
+        scorers._DRY_RUN_CACHE[id(output_b)] = stale_marker
+
+        report_b = scorers._dry_run_output(output_b)
+
+        assert report_b != stale_marker
+        assert report_b["ok"] is True
+        assert report_b is not report_a
+        reset_run_caches()
+
+    def test_output_key_differs_for_different_content(self) -> None:
+        output_a = {"verdict": "ok", **_ops_plan({"op": "add_points", "target": "self", "amount": 5})}
+        output_b = {"verdict": "ok", **_ops_plan({"op": "add_points", "target": "self", "amount": 6})}
+        assert scorers._output_key(output_a) != scorers._output_key(output_b)
+
+
 class TestSandboxBehavior:
     def _ctx(self, output: dict, expected: dict) -> ScorerContext:
         item = EvalItem(id="sb", input={"title": "x", "description": "y"}, expected=expected)
@@ -191,6 +340,32 @@ class TestSandboxBehavior:
         expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
         score = sandbox_behavior.evaluate(self._ctx({}, expected))
         assert score.score == 0.0
+
+    def test_skips_interaction_plans(self) -> None:
+        # A free play-time choice can't be aligned with the fixed canonical, so
+        # abstain (N/A) rather than score a false 0.
+        expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
+        output = {
+            "resolution_plan": {
+                "steps": [
+                    {
+                        "kind": "interaction",
+                        "result_key": "who",
+                        "request": {
+                            "kind": "choice",
+                            "prompt": "pick",
+                            "audience": "active",
+                            "options": [{"id": "a", "label": "A"}],
+                        },
+                        "input_refs": {},
+                    },
+                    {"kind": "snippet", "code": "def apply(state, ctx):\n    state.add_points('self', 5)"},
+                ]
+            }
+        }
+        score = sandbox_behavior.evaluate(self._ctx(output, expected))
+        assert score.score == 1.0
+        assert "interaction" in score.metadata["skipped"]
 
     def test_matching_ops_plan_scores_one(self) -> None:
         expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
@@ -225,3 +400,58 @@ class TestSandboxBehavior:
         }
         output = _ops_plan({"op": "add_points", "target": "chooser", "amount": 3})
         assert sandbox_behavior.evaluate(self._ctx(output, expected)).score == 1.0
+
+
+class TestDeliberateNoOpCards:
+    """Cards whose OWN canonical is a no-op (pure flavour): did_something
+    abstains instead of zeroing an unreachable metric, and a plan-less output
+    matches an empty expected diff (empty == empty)."""
+
+    _NOOP_EXPECTED = {
+        "target": "self",
+        "placement": "discard",
+        "ops": [{"op": "custom_note", "args": {"note": "flavor only"}}],
+        "trigger": None,
+        "venue": "all",
+        "sandbox": "def apply(state, ctx):\n    state.note('flavor only')",
+    }
+
+    def test_did_something_abstains_on_noop_canonical(self) -> None:
+        output = {"verdict": "ok", **_ops_plan({"op": "custom_note", "note": "flavor"})}
+        score = did_something.evaluate(_ctx(output, expected=self._NOOP_EXPECTED))
+        assert score.score is None
+        assert "no-op" in score.metadata["skipped"]
+
+    def test_did_something_still_zeroes_noop_answer_to_mechanical_card(self) -> None:
+        expected = {
+            "target": "self",
+            "placement": "discard",
+            "ops": [{"op": "add_points", "args": {"target": "self", "amount": 5}}],
+            "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)",
+        }
+        output = {"verdict": "ok", **_ops_plan({"op": "custom_note", "note": "nothing"})}
+        assert did_something.evaluate(_ctx(output, expected=expected)).score == 0.0
+
+    def test_sandbox_behavior_scores_no_plan_as_match_when_expected_diff_empty(self) -> None:
+        score = sandbox_behavior.evaluate(_ctx({"verdict": "ok"}, expected=self._NOOP_EXPECTED))
+        assert score.score == 1.0
+
+    def test_sandbox_behavior_still_zeroes_no_plan_against_mechanical_sandbox(self) -> None:
+        expected = {"sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"}
+        assert sandbox_behavior.evaluate(_ctx({"verdict": "ok"}, expected=expected)).score == 0.0
+
+
+class TestReactionCards:
+    """Reaction plans (counter_play / pending_* reads) dry-run in a synthesized
+    reaction window; counter_play counts as a mechanical op."""
+
+    def test_counter_play_ops_plan_executes_and_did_something(self) -> None:
+        output = {"verdict": "ok", **_ops_plan({"op": "counter_play", "mode": "steal_hand"})}
+        assert executability.evaluate(_ctx(output)).score == 1.0
+        assert did_something.evaluate(_ctx(output)).score == 1.0
+
+    def test_reaction_snippet_form_scores_like_ops_form(self) -> None:
+        code = "def apply(state, ctx):\n    if ctx.get('pending_card_id'):\n        state.counter_play('steal_hand')\n"
+        output = {"verdict": "ok", "resolution_plan": {"steps": [{"kind": "snippet", "code": code}]}}
+        assert executability.evaluate(_ctx(output)).score == 1.0
+        assert did_something.evaluate(_ctx(output)).score == 1.0

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import random
+from pathlib import Path
 
 import pytest
 
@@ -109,6 +111,55 @@ def test_collect_cards_empty_canonical_string_is_ignored() -> None:
     assert "canonical" not in card
 
 
+def test_collect_cards_hoists_play_on_draw_attribute() -> None:
+    # A card that stages set_card_attribute(this, play_on_draw) on itself must
+    # carry that attribute from the moment it enters state.cards — it fires
+    # ops only run when the card is PLAYED, so a fresh-deck Landmine would
+    # never auto-play on draw without this hoist (bead 100.3).
+    def source() -> list[dict]:
+        return [
+            {
+                "id": "seed-gold-072",
+                "title": "Landmine",
+                "description": "Whoever drew it loses 3 points.",
+                "canonical": {
+                    "target": "self",
+                    "placement": "discard",
+                    "venue": "all",
+                    "ops": [
+                        {
+                            "op": "set_card_attribute",
+                            "args": {"card_target": "this", "key": "play_on_draw", "value": True},
+                        },
+                        {"op": "add_points", "args": {"target": "self", "amount": -3}},
+                    ],
+                },
+            }
+        ]
+
+    (card,) = collect_cards(source)
+    assert card["attributes"] == {"play_on_draw": True}
+
+
+def test_collect_cards_without_static_attribute_op_has_no_attributes_key() -> None:
+    def source() -> list[dict]:
+        return [
+            {
+                "id": "plain",
+                "title": "Plain",
+                "description": "d",
+                "canonical": {
+                    "target": "self",
+                    "placement": "discard",
+                    "ops": [{"op": "add_points", "args": {"target": "self", "amount": 3}}],
+                },
+            }
+        ]
+
+    (card,) = collect_cards(source)
+    assert "attributes" not in card
+
+
 def test_build_deck_meets_minimum_with_small_source() -> None:
     # Only 4 unique cards, but the deck must still reach MIN_DECK via padding.
     rng = random.Random(1)
@@ -203,10 +254,11 @@ def test_venue_allowed_truth_table(card_venue: str, mode: str, expected: bool) -
     assert venue_allowed(card_venue, mode) is expected
 
 
-def test_venue_allowed_unknown_venue_defaults_to_all() -> None:
-    # An unrecognised venue is treated as "all" (always allowed).
-    assert venue_allowed("teleport", "online") is True
-    assert venue_allowed("", "in_person") is True
+def test_venue_allowed_filtered_modes_reject_unknown_or_missing_venue() -> None:
+    for venue in ("teleport", "", None):
+        assert venue_allowed(venue, "online") is False
+        assert venue_allowed(venue, "in_person") is False
+        assert venue_allowed(venue, "both") is True
 
 
 def _mixed_venue_source():
@@ -226,12 +278,12 @@ def _mixed_venue_source():
 
 def test_collect_cards_venue_mode_online_drops_in_person() -> None:
     ids = [c["id"] for c in collect_cards(_mixed_venue_source(), venue_mode="online")]
-    assert ids == ["a", "o", "f"]  # in_person dropped
+    assert ids == ["a", "o"]  # in_person and venue-less cards dropped
 
 
 def test_collect_cards_venue_mode_in_person_drops_online() -> None:
     ids = [c["id"] for c in collect_cards(_mixed_venue_source(), venue_mode="in_person")]
-    assert ids == ["a", "p", "f"]  # online dropped
+    assert ids == ["a", "p"]  # online and venue-less cards dropped
 
 
 def test_collect_cards_venue_mode_both_keeps_all() -> None:
@@ -255,14 +307,13 @@ def test_build_deck_online_contains_no_in_person_cards() -> None:
     assert all(c.get("venue", "all") != "in_person" for c in cards.values())
 
 
-def test_venue_less_card_is_always_kept() -> None:
-    # Filler/blank-shaped card without a venue survives even a filtered mode.
+def test_venue_less_card_is_rejected_by_filtered_modes() -> None:
     def source() -> list[dict]:
         return [{"id": "nv", "title": "NoVenue", "description": "d"}]
 
-    for mode in ("online", "in_person", "both"):
-        (card,) = collect_cards(source, venue_mode=mode)
-        assert card["id"] == "nv"
+    assert collect_cards(source, venue_mode="online") == []
+    assert collect_cards(source, venue_mode="in_person") == []
+    assert collect_cards(source, venue_mode="both")[0]["id"] == "nv"
 
 
 def test_seed_data_has_an_in_person_card() -> None:
@@ -274,6 +325,22 @@ def test_seed_data_has_an_in_person_card() -> None:
     seed = json.loads(Path("data/seed_cards.json").read_text())
     venues = [c.get("canonical", {}).get("venue") for c in seed]
     assert "in_person" in venues
+
+
+def test_online_premade_pool_from_full_seed_corpus_has_only_allowed_venues() -> None:
+    import json
+    from pathlib import Path
+
+    seed = json.loads(Path("data/seed_cards.json").read_text())
+    cards, pool = build_premade_pool(
+        count=PREMADE_POOL_SIZE,
+        card_source=lambda: seed,
+        rng=random.Random(0),
+        venue_mode="online",
+    )
+
+    assert len(pool) == PREMADE_POOL_SIZE
+    assert {cards[card_id]["venue"] for card_id in pool} <= {"all", "online"}
 
 
 def test_default_source_prefers_rag_when_populated() -> None:
@@ -292,19 +359,37 @@ def test_default_source_prefers_rag_when_populated() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_build_premade_pool_simple_has_30_cards_no_blanks() -> None:
-    # The simple (point-only) seed deck yields exactly PREMADE_POOL_SIZE pool ids
-    # with no blank cards, and every id resolves in the registry.
-    cards, pool = build_premade_pool(count=30, simple=True, rng=random.Random(0))
+def test_build_premade_pool_samples_30_cards_from_full_source() -> None:
+    cards, pool = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(0))
     assert len(pool) == PREMADE_POOL_SIZE == 30
-    assert not any("blank" in cid for cid in pool)
+    assert len(set(pool)) == 30
     assert all(cid in cards for cid in pool)
+    # Membership comes from the whole source, not only the first 30 entries.
+    assert any(int(cid.removeprefix("c")) >= 30 for cid in pool)
 
 
 def test_build_premade_pool_is_deterministic_with_seeded_rng() -> None:
-    p1 = build_premade_pool(count=30, simple=True, rng=random.Random(3))[1]
-    p2 = build_premade_pool(count=30, simple=True, rng=random.Random(3))[1]
+    p1 = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(3))[1]
+    p2 = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(3))[1]
     assert p1 == p2
+
+
+def test_build_premade_pool_different_rng_changes_membership() -> None:
+    p1 = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(1))[1]
+    p2 = build_premade_pool(count=30, card_source=_fake_source(50), rng=random.Random(2))[1]
+    assert set(p1) != set(p2)
+
+
+def test_build_premade_pool_treats_simple_cards_like_other_cards() -> None:
+    def source() -> list[dict]:
+        return [
+            {"id": "seed-simple-001", "title": "Simple", "description": "Gain 1 point."},
+            {"id": "seed-gold-001", "title": "Gold", "description": "Reverse order."},
+        ]
+
+    cards, pool = build_premade_pool(count=2, card_source=source, rng=random.Random(0))
+    assert set(pool) == {"seed-simple-001", "seed-gold-001"}
+    assert set(cards) == set(pool)
 
 
 def test_build_premade_pool_pads_small_source_with_copies() -> None:
@@ -328,6 +413,22 @@ def test_build_premade_pool_venue_mode_online_excludes_in_person() -> None:
 def test_build_premade_pool_empty_source_raises() -> None:
     with pytest.raises(ValueError, match="no cards available"):
         build_premade_pool(card_source=lambda: [])
+
+
+def test_simple_starter_deck_uses_historical_first_30() -> None:
+    source = json.loads(Path("data/seed_cards_simple.json").read_text())
+    cards, pool = build_premade_pool(starter_deck="simple", rng=random.Random(7))
+    assert len(pool) == 30
+    assert set(pool) == {card["id"] for card in source[:30]}
+    assert set(cards) == set(pool)
+
+
+def test_pet_starter_deck_uses_all_30_pet_cards() -> None:
+    source = json.loads(Path("data/seed_cards_pets.json").read_text())
+    cards, pool = build_premade_pool(starter_deck="pets", rng=random.Random(7))
+    assert len(pool) == 30
+    assert set(pool) == {card["id"] for card in source}
+    assert set(cards) == set(pool)
 
 
 def test_finalize_deck_composition_for_two_players() -> None:
@@ -361,3 +462,23 @@ def test_build_blanks_returns_distinct_blank_ids() -> None:
         assert card["blank"] is True
         assert card["title"] == ""
         assert card["description"] == ""
+
+
+def test_build_blanks_namespace_prevents_cross_game_id_collisions() -> None:
+    first = build_blanks(5, namespace="ROOM01")
+    second = build_blanks(5, namespace="ROOM02")
+    assert set(first).isdisjoint(second)
+    assert set(first) == {f"blank-ROOM01-{i}" for i in range(5)}
+
+
+def test_finalize_deck_uses_blank_namespace() -> None:
+    blanks, deck = finalize_deck(
+        ["premade"],
+        ["authored"],
+        1,
+        blanks_per_player=1,
+        blank_namespace="ROOM01",
+        rng=random.Random(0),
+    )
+    assert set(blanks) == {"blank-ROOM01-0"}
+    assert "blank-ROOM01-0" in deck

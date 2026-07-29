@@ -8,7 +8,7 @@ and the RAG pipeline that grounds the interpretation agent.
 
 > Scope note: this file is the technical reference. Narrative / submission
 > context lives in `docs/WRITEUP.md`; setup lives in the README. The two
-> hand-authored diagrams `docs/agent.excalidraw.svg` and `docs/game.excalidraw.svg`
+> hand-authored diagrams `docs/diagrams/agent.excalidraw.svg` and `docs/diagrams/game.excalidraw.svg`
 > are the owner's authoritative design sketches — the Mermaid diagrams below
 > complement them, and any place the code has since diverged is called out
 > under [Diagram reconciliation](#7-diagrams).
@@ -77,8 +77,8 @@ top-level `config` / `logging_config` modules. Run the backend with
 | **`config`** (`src/config.py`) | Single source of truth for all settings: the one OpenAI-compatible LLM gateway (`llm_base_url` / `llm_api_key` / `llm_extra_headers`, driving BOTH chat and embeddings), embedding dimensions, the `vision_enabled` flag (attach card art to the arbiter's model input), Qdrant, LangSmith, CORS, sandbox flag, and the `dev_mode` flag (gates room persistence + `/dev` endpoints). Cached `get_settings()` singleton. | `config.py` (`Settings`, `get_settings`, `warn_if_no_llm_credentials`) |
 | **`models`** | Pure data models, no game logic. `GameState`/`Player`/`WinCondition`; the runtime `ResolutionPlan`/step and `Op` discriminated unions + `EffectProgram` + `Target`/`CardTarget` + `map_authoring_target`; card authoring models; the client/server WebSocket envelopes. | `game_state.py`, `effects.py`, `card.py`, `cards.py`, `ws_messages.py` |
 | **`engine`** | The game "physics": pure reducers over `GameState`, the turn loop, scoring/win-condition, card compilation, the event bus + persistent hooks, and the untrusted-snippet execution sandbox. Never calls the LLM. | `facade.py` (`GameEngine`), `reducers.py` (`apply_op`), `apply.py` (`apply_effect`), `compile.py` (`compile_card`), `loop.py` (`advance_turn`, `draw_step`), `scoring.py`, `events.py`, `hooks.py`, `epilogue.py` (`tally_votes`), `sandbox/` |
-| **`agent`** | The single tool-calling interpretation agent: the persona system prompt, the interpretation result contract, the LLM factory, the RAG pipeline, and the bound toolbox. Reaches down into `engine`/`models` but never up into `board`. | `runtime.py` (`build_agent`, `run_agent`), `contract.py` (`InterpretResult`), `persona.py`, `llm.py` (`get_chat_model`), `rag/` (`embeddings`, `store`, `retrievers`, `seed`), `tools/` |
-| **`board`** | The server surface: FastAPI app factory + REST routes, the WebSocket endpoint, and the room state machine (turn enforcement, deck building, epilogue voting, connection registry). The only layer that orchestrates engine + agent together. | `app.py` (`create_app`), `ws.py` (`ws_handler`), `rooms/` (`room.py`, `manager.py`, `connections.py`, `deck.py`, `epilogue.py`, `store.py`) |
+| **`agent`** | Card interpretation: a legacy single tool-calling agent and a three-stage LangGraph pipeline (intent → planner → coder) behind `Settings.interpret_pipeline_enabled`, plus the persona/stage prompts, the result contract, the LLM factory, the RAG pipeline, and the bound toolbox. Reaches down into `engine`/`models` but never up into `board`. | `runtime.py` (`run_agent` dispatcher, `build_agent`), `pipeline.py` (`run_pipeline`, `build_interpret_graph`), `stage_runner.py` (`run_stage`), `stage_prompts.py`, `contract.py` (`InterpretResult`, `CardIntent`, `MechanicsPlan`), `persona.py`, `llm.py` (`get_chat_model`), `rag/`, `tools/` |
+| **`board`** | The server surface: FastAPI app factory + REST routes, the WebSocket endpoint, and the room state machine (turn enforcement, deck building, epilogue voting, connection registry). The only layer that orchestrates engine + agent together. | `app.py` (`create_app`), `ws.py` (`ws_handler`), `rooms/` (`room.py`, `manager.py`, `connections.py`, `deck.py`, `epilogue.py`, `redaction.py`, `store.py`) |
 | **`evals`** | Offline evaluation of the interpretation pipeline: the production-faithful benchmark runner (per-run config, `enabled_tools` filtering, cost/latency instrumentation, persisted runs), an LLM-as-judge, scorers, and the legacy standalone harness. Not part of the serving path. | `runner.py`, `judge.py`, `scorers.py`, `harness.py`, `eval_core.py`, `store.py`, `analysis.py`, `viz.py`, `conclusions.py` |
 
 ---
@@ -154,14 +154,18 @@ Rooms are created and joined over REST (`board.app.create_app`):
   `player_id` (an opaque UUID the client stores per-room in `sessionStorage`)
   and a `spectator` flag. **Join policy**: a joiner arriving while the room is
   in the `lobby` phase becomes a real player; a joiner arriving after the game
-  has started becomes a spectator (observes, cannot act).
+  has started becomes a spectator (observes, cannot act). During the lobby, the
+  current host may transfer `GameState.host_id` to any participant and move
+  participants reversibly between player and spectator roles. These operations
+  are rejected after game start, and at least one player must remain.
 - `GET /rooms/{code}/state` → read-only debug snapshot.
 - `GET /rooms/{code}/cards/{card_id}/art` → a card's hand-drawn art as PNG
   bytes (see [Card art](#card-art-out-of-band-transport)).
 - `GET /health` → liveness.
 - `POST /rooms/{code}/dev/skip-setup`, `POST /rooms/{code}/dev/end-game` →
   dev-loop shortcuts, active only when `DEV_MODE` is set (they 404 otherwise).
-  Skip-setup auto-authors each player's cards and fast-forwards to `playing`;
+  Skip-setup waits for submitted setup drafts, preserves successful cards,
+  replaces missing/failed authoring slots with blanks, and fast-forwards to `playing`;
   end-game forces the current game through the real `_end_game` path so
   end-game triggers, scoring, and the epilogue can be exercised on demand.
 
@@ -187,12 +191,37 @@ discriminated union (`ClientMsg`, keyed on `type`) validated by a single
 `TypeAdapter`; outbound messages are the `ServerMsg` set.
 
 - **Client → server**: `join`, `start`, `play`, `pass` / `end_turn`,
-  `create_card`, `preview_card`, `interaction_response`, `epilogue_vote`. There
+  `create_card`, `redraft_card`, `preview_card`, `interaction_response`,
+  `lobby_set_host`, `lobby_set_role`, `admin_view`, `admin_propose`,
+  `admin_vote`, `admin_cancel`, `epilogue_start`,
+  `epilogue_vote`, `epilogue_done`, `epilogue_finalize`. There
   is no client `draw` message: drawing is auto-triggered server-side at the
   start of each turn (see `_start_turn` in `board/rooms/room.py`).
 - **Server → client**: `state`, `brewing`, `card_interpreted`, `effect_applied`,
   `preview_result`, `prompt_choice`, `interaction_request`,
-  `interaction_progress`, `epilogue`, `error`.
+  `interaction_progress`, targeted `admin_state`, `admin_proposal_result`,
+  `epilogue`, `error`.
+
+Host correction proposals are typed action bundles rather than arbitrary state
+patches. The room validates and previews the full bundle against a copy of the
+current state, pauses gameplay and the turn timer, then requires unanimous
+acceptance from every seated player except a player-host proposer. Spectators do
+not vote, so a spectator-host proposal requires every player. Any rejection or
+the 60-second deadline cancels the proposal; unanimous acceptance applies the
+bundle atomically without firing gameplay hooks. The reconnect snapshot includes
+only the viewer's privacy-safe preview and named vote status, never the raw
+action payload. For a hidden-card move, only the spectator host and affected
+hand owner receive the exact card detail; other players, spectators, and audit
+history receive a generic description.
+
+A spectator host may open the Host panel during play to subscribe to a targeted,
+transient `admin_state` projection containing all hands and exact deck order.
+Ordinary `state` broadcasts remain redacted, including for that same spectator,
+so privileged data is not rendered on the table or retained after the panel
+closes, the socket disconnects, a proposal starts, or the phase changes. Player
+hosts never receive this projection and may only target public cards or the
+deck's top/bottom card. Sealed interaction responses remain outside every
+`GameState` projection.
 
 **Handshake and close codes** (`board/ws.py`): the socket is accepted, then the
 first message MUST be a `join` carrying a valid `player_id`. The frontend
@@ -209,13 +238,33 @@ On (re)connect the server immediately replays a full `state` snapshot, so a
 refresh restores the whole game (including `state.log`, which is why every
 effect line is persisted there and not only broadcast live).
 
+Snapshots are **redacted per viewer** before they leave the server
+(`board.rooms.redaction.redact_snapshot`): opponents' hand contents and —
+outside the setup phase, where the deck is the shared authoring pool — the
+deck's contents/order are stripped server-side, never merely hidden
+client-side. The exceptions are a hand played face-up (`reveal_hand` with
+`to: "all"`, `persistent: true` → `hand_public`) or a hand persistently
+revealed to that specific viewer (`hand_revealed_to`); a one-shot
+`reveal_hand` (`persistent: false`) instead pushes the hand's contents to the
+resolved audience once (`hand_revealed` message) without changing state. Every
+snapshot still carries `hand_count`/`deck_count` so the UI can render
+face-down piles and hand sizes.
+
 Snapshots expose the active data-driven game rather than a fixed board model:
 `turn_order`, `rules`, player `conditions`, card `attributes`, and registered
-hook metadata. The frontend mirrors the engine's active seat from `players[turn_index]` and
+hook metadata. The frontend mirrors the engine's active seat from `players[turn_index]`,
+projects opponents viewer-relative from `turn_order` (`lib/seating.ts`: the
+successor sits far-left, the predecessor far-right), and
 renders these values in a generic dynamic-state panel; there is no legacy
 direction flag. Cards also retain a bounded mechanical diagnostic (`pending`,
 `applied`, `fallback`, or `rejected`), a public reason, and a correlation id, so
 failures remain visible after reconnect and can be matched to server logs.
+During setup, submitted cards additionally carry `draft_status`
+(`drafting`/`ready`/`failed`), a revision, and a safe failure reason. Drafting
+runs outside the room lock; completion is applied under the lock only when its
+revision still matches. A failed slot stays visible to its author for
+`redraft_card`, while game start requires every setup slot to have a compiled
+plan. Blank cards remain the sole author-on-play path.
 
 ### Anatomy of an action
 
@@ -227,7 +276,7 @@ turn order. Spectators are rejected from all game-mutating message types.
 
 `ResolutionPlan` can interleave `ops`, `snippet`, and `interaction` steps.
 Interaction descriptors are versioned, bounded data for `choice`, `number`,
-`text`, `card_pick`, `confirm`, or normalized vector `drawing` input, addressed
+`text`, `card_pick`, `confirm`, `card_order`, or normalized vector `drawing` input, addressed
 to `active`, `all`, `all_others`, or `player:<id>`. The legacy
 `prompt_choice` target flow remains readable and operational.
 
@@ -306,7 +355,11 @@ Key behaviours enforced in `Room`:
   agent → deterministic `CustomNoteOp` fallback.
 - **End game → epilogue**: `resolve_end_of_game` applies any `on_game_end` card
   effects, `evaluate_win_condition` computes `winner_ids`, then voting opens
-  (`EpilogueManager`); kept cards are upserted back into the RAG corpus.
+  (`EpilogueManager`, seated players only — spectators are read-only); a card
+  survives only when its lifetime Keep total strictly exceeds its lifetime Cut
+  total (`engine/epilogue.py::tally_votes`), kept cards are upserted back into
+  the RAG corpus, and the kept cards with the most current-game Keep votes are
+  surfaced as game-local `favorite_card_ids` (never persisted to RAG).
 
 ### Card art (out-of-band transport)
 
@@ -315,8 +368,9 @@ PNG data-URL, and it deliberately never rides `GameState` or any WebSocket
 broadcast — a few sketches would otherwise multiply every `state` snapshot sent
 to every client on every action.
 
-- **Inbound** (`models/ws_messages.py` → `models/card.py`): `create_card` and
-  `play` (author-on-play) accept an optional `art` field, validated at the
+- **Inbound** (`models/ws_messages.py` → `models/card.py`): `create_card`,
+  `redraft_card`, and `play` (author-on-play) accept an optional `art` field,
+  validated at the
   message boundary — `data:image/png;base64,` prefix, ≤ `MAX_CARD_ART_BYTES`
   (128 KiB) for the whole data-URL, and a base64-decode + PNG magic-byte check
   (`decode_card_art`, the single decode path), so a prefix claim alone never
@@ -330,9 +384,9 @@ to every client on every action.
 - **Serving** (`board/app.py`): clients fetch
   `GET /rooms/{code}/cards/{card_id}/art`, which decodes the registry entry and
   returns raw `image/png` with `X-Content-Type-Options: nosniff` and
-  `Cache-Control: public, max-age=31536000, immutable` — card ids are immutable
-  and art is written once at authoring time, so the browser cache does all
-  repeat work (the frontend uses a plain `<img src>`, `lib/art.ts`).
+  `Cache-Control: public, max-age=31536000, immutable`. The frontend appends a
+  setup draft revision to the art URL, so revising a failed card safely
+  invalidates its prior drawing while stable cards remain cacheable.
 - **RAG carry** (`board/rooms/epilogue.py`, `board/rooms/deck.py`): a kept
   card's data-URL rides its Qdrant payload at the epilogue upsert, and a
   prior-game card re-entering a new deck surfaces it as a transient `art` key
@@ -362,15 +416,27 @@ A card resolves as a `ResolutionPlan`: an ordered sequence of `OpsStep` and
 list of `Op`s from the
 discriminated union in `models/effects.py` (`add_points`, `subtract_points`,
 `set_points`, `steal_points`, `skip_turn`, `extra_turn`, `reverse_order`,
-`scramble_order`, `change_draw_count`, `draw_cards`, `destroy_card`, `transfer_card`,
-`set_win_condition`, `set_rule`, `custom_note`, `end_game`). Each op addresses players via a `Target`
+`scramble_order`, `change_draw_count`, `draw_cards`, `roll_die`, `discard_random`,
+`destroy_card`, `transfer_card`, `move_cards`, `shuffle_deck`, `reveal_hand`,
+`eliminate_player`, `set_win_condition`, `set_rule`, `set_condition`,
+`set_card_attribute`, `create_card`, `register_hook`, `unregister_hook`,
+`custom_note`, `counter_play`, `end_game` — `models/effects.py` is the
+authoritative complete union). Each op addresses players via a `Target`
 (`self`, `left_neighbor`, `all_others`, `chooser`, `player_with_most_points`, …)
 and, for card manipulation, a `CardTarget` (`this`, `chosen_card`,
-`all_in_play`, `all_in_hand`).
+`all_in_play`, `all_in_hand`, `all_in_center`). Neighbors follow the effective
+turn order: `left_neighbor` is the turn-order successor (the next player;
+authoring alias `next_player`) and `right_neighbor` the predecessor (alias
+`previous_player`).
 
 Game rules are **data** (`GameState.rules`, per `docs/state-example.jsonc`):
 draw/play counts, the end condition (`deck_empty`/`empty_hand`/`points_reached`/`now`),
-the win condition, and an open `extra` bag for card-invented rules. `set_rule`
+the win condition, and an open `extra` bag for card-invented rules. Two further
+rule fields are enforced by the Room rather than a reducer: `hand_limit` caps
+hand size (an over-limit active player discards down to it at end of turn) and
+`turn_timer` runs a pausable per-turn clock — paused while the room is
+suspended on brewing, a reaction window, or an interaction barrier — that ends
+the turn for the active player if they don't act in time. `set_rule`
 writes any of these paths; `change_draw_count`/`set_win_condition` are
 specialized writers into the same structure; `end_game` sets
 `end_condition={type: "now"}`. The Room evaluates `evaluate_end_condition` /
@@ -420,6 +486,16 @@ a **new** `GameState`, never mutating the input:
   `draw`, `resolve_card`, `check_end_game`, `determine_winner`,
   `update_history`). Every method delegates to the underlying pure function and
   reimplements no logic; `resolve_card` is deterministic-only by design.
+
+Two lifecycle mechanics ride these reducers. `set_condition` accepts a
+`duration_turns` TTL (stored in `Player.condition_ttls`); `engine.loop`'s
+`tick_condition_ttls` ticks it down at the owning player's turn start and
+removes the condition at zero, so temporary statuses (poisoned, cursed, …)
+expire on their own. And `destroy_card` releases the destroyed card's own
+registrations: any persistent hooks it registered are unregistered, and any
+`set_rule` writes it made are reverted via its `RuleBinding` stack
+(`GameState.rule_bindings`) — the rule path falls back to the pre-write value,
+or to the next binding down if a later card already re-wrote the same path.
 
 ### Structured mechanics history
 
@@ -684,6 +760,39 @@ flowchart LR
   never character-sliced. Lower-ranked canonicals are omitted whole when the
   response budget is exhausted.
 
+The **three-stage interpret pipeline** (`agent/pipeline.py`, behind
+`Settings.interpret_pipeline_enabled`, default off) splits interpretation into a
+LangGraph `StateGraph` whose nodes each run a bounded ReAct agent through the
+shared `stage_runner.run_stage` machinery:
+
+- **intent** (120s / 6 tool calls: `web_search`, `mtg_lookup`, `card_rag_hybrid`,
+  `game_rules`, `read_game_state`) figures out what the player *wants* — resolving
+  memes and MTG jargon (`mtg_lookup` carries a bundled `data/mtg_glossary.json`
+  so rules terms like "trample" resolve offline) — and owns the persona: its
+  `CardIntent` carries the `comment` and `persona_action` that survive onto the
+  final result even when later stages fail.
+- **planner** (180s / 8: `game_rules`, `read_engine_methods`, `read_game_state`,
+  `read_game_history`, `card_rag_hybrid`) turns the intent into a `MechanicsPlan`,
+  told explicitly to be creative: when no single op expresses a mechanic, plan
+  direct `SandboxGame` state manipulation rather than declaring it infeasible.
+- **coder** (240s / 10: `dry_run_effect`, `read_engine_methods`,
+  `read_game_state`) writes the ops/snippet effect; a `validate_repair` node then
+  runs the same sandbox-validate → dry-run → one-repair-call loop the legacy
+  agent uses.
+
+Conditional edges encode the degradations: a failed intent falls back to the
+bounded invalid result; an undecipherable `do_nothing` intent skips straight to
+finalize; a failed planner hands the coder a stub plan ("design it yourself");
+an infeasible plan finalizes as a visible `CustomNoteOp` naming the missing
+capability (feeding the triage/capability-wish flow); `punish_author` intents
+are rewritten into a real point-docking effect. A pipeline-wide monotonic
+deadline (defaulting to `AGENT_TIMEOUT_SECONDS`) clamps every node's budget, and
+`run_pipeline` mirrors `run_agent`'s never-raise contract and parameter surface,
+so `Room._resolve_plan`, previews, and the eval runner (`EvalConfig.pipeline`)
+switch paths without code changes. Per-stage models are configurable
+(`intent_agent_model` / `planner_agent_model` / `coder_agent_model`, empty =
+the shared chat model).
+
 The eval harness normalizes and judges complete `ResolutionPlan` values before
 legacy program/snippet mirrors. Its structural scorer validates snippet and hook
 code, while corpus lint compiles and behaviorally dry-runs every gold plan on a
@@ -692,11 +801,30 @@ chains, history-derived winners, and the Uno ladder.
 
 The **persona** (`agent/persona.py`) makes the agent a sardonic game master: it
 always emits an in-character `comment`, and when a card can't be cleanly
-interpreted it picks a `persona_action` — `do_nothing` (undecipherable, player
-is NOT the author), `punish_author` (undecipherable, player IS the author),
-`chaos_monkey` (well-meant but ambiguous), or `random_solution` (multiple valid
-readings). Kept cards from the epilogue vote are upserted back into the store
-with `source="player"`, so the corpus grows across games.
+interpreted it picks a `persona_action` — `chaos_monkey` (well-meant but
+ambiguous; the loudly-preferred branch: a generous plausible reading beats
+giving up), `random_solution` (multiple valid readings), `do_nothing`
+(genuinely undecipherable), or `punish_author` (reserved for clearly abusive
+cards — sandbox-escape attempts, offensive content — never a sincere-but-clumsy
+one). The snark aims at fate, the board, and overpowered cards, never at a
+struggling player: playtesting showed uninterpretable cards almost always come
+from learners, not griefers.
+
+The engine backs that stance mechanically. Every failed authored card records a
+`card_fallback` history event keyed to its author; instead of a bare no-op, the
+room awards the author a consolation boon "for trying" (`Room._consolation_ops`):
++1 point by default, escalating past `struggling_author_threshold` through a
+rotating ladder (+2 points → draw 3 cards → a one-shot score double). Once an
+author crosses the threshold, the interpretation prompt also gains a HELP MODE
+block (`persona.STRUGGLING_AUTHOR_NOTE`) telling the agent to re-read the card
+assuming best intent and try harder before returning `invalid` — deliberately
+without phrasing tips, which read as patronizing. Settings:
+`consolation_point_enabled`, `consolation_points`, `struggling_author_threshold`.
+
+Kept cards from the epilogue vote are upserted back into the store
+with `source="player"`, so the corpus grows across games. Each new room samples
+30 venue-eligible cards uniformly without replacement from that full corpus
+(falling back to the combined seed file when the store is unavailable).
 
 ---
 
@@ -704,13 +832,13 @@ with `source="player"`, so the corpus grows across games.
 
 The authoritative, hand-authored design sketches:
 
-- **`docs/game.excalidraw.svg`** — the game-system shape: **Board** (player UI,
+- **`docs/diagrams/game.excalidraw.svg`** — the game-system shape: **Board** (player UI,
   renders visuals, manages game state, handles multiplayer connection) ↔ **Game
   Engine** (applies game "physics": `add_points()`, `subtract_points()`,
   `check_end_game()`, `determine_winner()`, `update_history()`, `draw()`,
   `resolve_card()`) with the **Agent** interpreting cards during the
   `resolve_card()` step.
-- **`docs/agent.excalidraw.svg`** — the agent shape: the **Game Engine** asks the
+- **`docs/diagrams/agent.excalidraw.svg`** — the agent shape: the **Game Engine** asks the
   **Agent** to interpret a new card; the agent has tools (**Web Search**, **Read
   Game Engine Methods**, **Memory**, **Game Rules**, **Read Game State**, **Card
   Database**), an LLM, LangGraph as framework, LangSmith for observability, and a
@@ -786,6 +914,7 @@ studio — title input, freehand pointer-drawn canvas (vector strokes redrawn at
 device pixel ratio), ink/nib pickers, undo/clear, and an emoji stamp grid.
 `getArt()` exports a PNG data-URL, retrying at smaller scales until it fits the
 backend's 128 KiB art cap. It is a pure authoring surface with no WS knowledge;
-`CreateCardDialog` (setup-only authoring; the server rejects `create_card`
-outside the setup phase) and `PlayBlankDialog` (author-on-play of a blank, the
-only mid-game authoring path) own submission and pass a flow-specific caption.
+`CreateCardDialog` (setup-only creation plus revision/retry of failed drafts;
+the server rejects these messages outside setup) and `PlayBlankDialog`
+(author-on-play of a blank, the only mid-game authoring path) own submission and
+pass a flow-specific caption.

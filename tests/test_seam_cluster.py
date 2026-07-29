@@ -130,6 +130,16 @@ def test_read_game_state_none_snapshot():
     assert "not provided" in out
 
 
+def test_read_game_state_surfaces_game_mode():
+    state = _sample_state().model_copy(update={"mode": "online"})
+    assert "Game mode: online." in make_read_game_state_tool(state, actor_id="p1").invoke({})
+    assert "Game mode: online." in make_read_game_state_tool(state.model_dump(), actor_id="p1").invoke({})
+    # A snapshot without a mode omits the line rather than raising.
+    snapshot = state.model_dump()
+    del snapshot["mode"]
+    assert "Game mode" not in make_read_game_state_tool(snapshot, actor_id="p1").invoke({})
+
+
 # ---------------------------------------------------------------------------
 # read_engine_methods — introspection
 # ---------------------------------------------------------------------------

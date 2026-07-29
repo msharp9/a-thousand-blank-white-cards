@@ -58,7 +58,7 @@ def _is_placeholder(url: str) -> bool:
 
 def test_gold_count_in_range() -> None:
     cards = _load(GOLD)
-    assert 30 <= len(cards) <= 50
+    assert 30 <= len(cards) <= 80
 
 
 def test_gold_has_no_image_url() -> None:
@@ -99,8 +99,11 @@ def test_gold_diversity() -> None:
     assert any(h["magnitude_sign"] == "neutral" for h in hcs)
 
 
-def test_gold_titles_unique() -> None:
-    titles = [c["title"] for c in _load(GOLD)]
+def test_gold_ids_and_titles_unique() -> None:
+    cards = _load(GOLD)
+    ids = [c["id"] for c in cards]
+    titles = [c["title"] for c in cards]
+    assert len(ids) == len(set(ids))
     assert len(titles) == len(set(titles))
 
 
@@ -112,13 +115,37 @@ def test_gold_includes_ordered_plan_and_game_altering_capability_cases() -> None
     assert any(card["human_canonical"].get("steps") for card in cards)
 
 
-def test_wild_uno_eval_mechanics_match_room_tested_seed_plan() -> None:
-    """Keep the scored Wild Uno plan tied to the exemplar exercised in Room tests."""
-    evaluated = {card["title"]: card for card in _load(GOLD)}["Wild Uno"]["human_canonical"]
-    seeds = _load(DATA_DIR.parent / "seed_cards_gold.json")
-    executable = {card["title"]: card for card in seeds}["Wild Uno"]["canonical"]
+def test_migrated_seed_titles_exist_once_in_scored_evals() -> None:
+    migrated = {
+        "Win the Game",
+        "Person with Fewest Points Wins",
+        "Red Card Rule",
+        "Spicy Uno",
+        "Sudden Death",
+        "Total Chaos",
+        "Wild Uno",
+        "Going Once, Going Twice",
+        "The Big Finish",
+        "The Ejector Seat",
+        "Boomerang",
+    }
+    cards = _load(GOLD) + _load(HARD)
+    titles = [card["title"] for card in cards]
 
-    assert evaluated["steps"] == executable["steps"]
+    assert {title for title in migrated if titles.count(title) != 1} == set()
+    assert "Going Once, Going Twice" in {card["title"] for card in _load(HARD)}
+
+
+def test_uno_eval_labels_keep_the_complete_mechanics() -> None:
+    cards = {card["title"]: card["human_canonical"] for card in _load(GOLD)}
+    spicy_ops = cards["Spicy Uno"]["steps"][0]["ops"]
+    wild_ops = cards["Wild Uno"]["steps"][0]["ops"]
+
+    assert sum(op["op"] == "create_card" for op in spicy_ops) == 3
+    assert any(op["op"] == "set_card_attribute" and op["card_target"] == "all_in_hand" for op in spicy_ops)
+    assert sum(op["op"] == "register_hook" for op in wild_ops) == 2
+    assert cards["Spicy Uno"]["trigger"] is None
+    assert cards["Wild Uno"]["trigger"] is None
 
 
 # --------------------------------------------------------------------------- #
@@ -225,6 +252,37 @@ def _representative_state() -> GameState:
     )
 
 
+def test_migrated_eval_cards_compile_and_dry_run_end_to_end() -> None:
+    migrated_titles = {
+        "Win the Game",
+        "Person with Fewest Points Wins",
+        "Red Card Rule",
+        "Spicy Uno",
+        "Sudden Death",
+        "Total Chaos",
+        "Wild Uno",
+        "Going Once, Going Twice",
+        "The Big Finish",
+        "The Ejector Seat",
+        "Boomerang",
+    }
+    cards = {card["title"]: card for card in _load(GOLD) + _load(HARD) if card["title"] in migrated_titles}
+
+    for title in migrated_titles:
+        card = cards[title]
+        plan = compile_card_plan({**card, "canonical": card["human_canonical"]})
+        assert plan is not None and plan.steps, title
+        report = dry_run_resolution_plan(
+            _representative_state(),
+            plan,
+            "p1",
+            "played-card",
+            chosen_player_id="p2",
+        )
+        assert report["ok"] is True, f"{title}: {report}"
+        assert report["emitted_ops"], title
+
+
 def test_real_upgraded_interaction_subset_is_nonempty() -> None:
     assert len(_real_steps_cards()) >= 20
 
@@ -308,8 +366,8 @@ def _has_interaction_steps(hc: dict) -> bool:
 class TestHardEvalCards:
     """The hard set is sandbox/steps-only by design: every ops slot is null."""
 
-    def test_exactly_25_cards(self) -> None:
-        assert len(_load(HARD)) == 25
+    def test_exactly_35_cards(self) -> None:
+        assert len(_load(HARD)) == 35
 
     def test_ids_and_titles_unique(self) -> None:
         cards = _load(HARD)

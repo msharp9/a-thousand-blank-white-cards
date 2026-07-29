@@ -39,6 +39,9 @@ class HookContext:
     event: GameEvent
     actor_id: str  # player who triggered the event
     card_id: str | None = None  # card being played / destroyed
+    source_card_id: str | None = None  # card whose snippet emitted the ops being applied (attribution)
+    source_controller_id: str | None = None  # live controller of source_card_id for player-scoped hooks
+    event_actor_id: str | None = None  # original event actor when actor_id is rebound to a hook controller
     chosen_player_id: str | None = None  # resolution of Target.chooser
     chosen_card_id: str | None = None  # resolution of CardTarget.chosen_card
     amount: int | None = None  # points delta, draw count, etc.

@@ -47,6 +47,11 @@ class EvalConfig:
     stochastic consistency. ``concurrency`` > 1 runs that many cards in parallel
     worker threads — each card is fully isolated (own state, callback, agent),
     matching how production rooms already invoke run_agent concurrently.
+    ``pipeline`` True calls :func:`agent.pipeline.run_pipeline` directly (the
+    three-stage interpret pipeline, regardless of the
+    ``interpret_pipeline_enabled`` setting); False (the default) keeps the
+    legacy ``run_agent`` call byte-identical — so one notebook can A/B the two
+    paths under the same knobs.
     """
 
     benchmark: str = "eval"
@@ -56,6 +61,7 @@ class EvalConfig:
     max_tool_calls: int | None = None
     timeout: float | None = None
     vision: bool = False
+    pipeline: bool = False
     n_samples: int = 1
     sample_size: int | None = None
     concurrency: int = 1
@@ -73,6 +79,7 @@ class EvalConfig:
             "max_tool_calls": self.max_tool_calls,
             "timeout": self.timeout,
             "vision": self.vision,
+            "pipeline": self.pipeline,
             "n_samples": self.n_samples,
             "sample_size": self.sample_size,
             "concurrency": self.concurrency,
@@ -94,7 +101,7 @@ class CardResult:
     metrics: RunMetrics
     latency_ms: float
     cost_usd: float | None
-    scores: dict[str, float]
+    scores: dict[str, float | None]  # None = the scorer abstained (metric not applicable)
     score_meta: dict[str, dict[str, Any]]
 
 
@@ -175,9 +182,13 @@ def available_tool_names(allow_persistent_tools: bool = True) -> list[str]:
 # --------------------------------------------------------------------------- #
 def _run_one(config: EvalConfig, card: dict[str, Any], sample_index: int, scorers: list[Any]) -> CardResult:
     from agent.llm import get_chat_model
-    from agent.runtime import run_agent
     from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, EVAL_CREATOR_ID, build_eval_state
     from evals.harness import normalise_agent_output
+
+    if config.pipeline:
+        from agent.pipeline import run_pipeline as interpret
+    else:
+        from agent.runtime import run_agent as interpret
 
     title = str(card.get("title", ""))
     description = str(card.get("description", ""))
@@ -190,7 +201,7 @@ def _run_one(config: EvalConfig, card: dict[str, Any], sample_index: int, scorer
     trace_ctx = nullcontext() if config.tracing else tracing_context(enabled=False)
     with trace_ctx:
         t0 = perf_counter()
-        result = run_agent(
+        result = interpret(
             title,
             description,
             state,
@@ -214,7 +225,7 @@ def _run_one(config: EvalConfig, card: dict[str, Any], sample_index: int, scorer
 
         item = EvalItem(id=str(card.get("id", "card")), input=card, expected=expected)
         ctx = ScorerContext(item=item, output=output)
-        scores: dict[str, float] = {}
+        scores: dict[str, float | None] = {}
         score_meta: dict[str, dict[str, Any]] = {}
         for scorer in scorers:
             try:
@@ -336,13 +347,71 @@ def _aggregate(run: EvalRunResult) -> dict[str, Any]:
         "agent_error_rate": sum(1 for r in rows if r.output.get("agent_error")) / len(rows),
     }
     for name in run.scorer_names:
-        vals = [r.scores[name] for r in rows if name in r.scores]
+        vals = [r.scores[name] for r in rows if r.scores.get(name) is not None]
         summary[name] = fmean(vals) if vals else None
+    _add_placement_breakdown(rows, summary)
+
+    summary["sandbox_interaction_skipped"] = sum(
+        1 for r in rows if "interaction" in (r.score_meta.get("sandbox_behavior", {}) or {}).get("skipped", "")
+    )
+    _add_ceilings(run, summary)
 
     # Consistency: only meaningful when a card is sampled more than once.
     if run.config.n_samples > 1:
         summary["consistency"] = _consistency(run)
     return summary
+
+
+def _add_placement_breakdown(rows: tuple[CardResult, ...], summary: dict[str, Any]) -> None:
+    zones = ("discard", "center", "player")
+    confusion = {expected: {predicted: 0 for predicted in (*zones, "missing")} for expected in zones}
+    recalls: dict[str, float | None] = {}
+    labeled = 0
+    missing = 0
+    for row in rows:
+        meta = row.score_meta.get("placement_accuracy", {})
+        expected = meta.get("expected")
+        if expected not in zones:
+            continue
+        labeled += 1
+        predicted = meta.get("predicted")
+        bucket = predicted if predicted in zones else "missing"
+        missing += int(bucket == "missing")
+        confusion[expected][bucket] += 1
+    for zone in zones:
+        total = sum(confusion[zone].values())
+        recalls[zone] = confusion[zone][zone] / total if total else None
+    present = [value for value in recalls.values() if value is not None]
+    summary["placement_recall"] = recalls
+    summary["placement_balanced_accuracy"] = fmean(present) if present else None
+    summary["placement_missing_rate"] = missing / labeled if labeled else None
+    summary["placement_confusion"] = confusion
+
+
+def _add_ceilings(run: EvalRunResult, summary: dict[str, Any]) -> None:
+    """Annotate the summary with each deterministic metric's achievable ceiling.
+
+    executability/did_something are capped by card nature (a no-op card can't
+    "do something"), so the raw mean is misleading without its ceiling. Computed
+    from the actually-run cards' own canonicals; best-effort — a benchmark whose
+    labels aren't executable canonicals simply gets no ceiling fields.
+    """
+    from evals.ceilings import benchmark_ceilings
+
+    try:
+        by_id = {str(card.get("id")): card for card in load_cards(run.config.benchmark)}
+    except Exception:  # noqa: BLE001 — ceilings are advisory; never break a run's summary
+        return
+    run_cards = [by_id[cid] for cid in {r.card_id for r in run.rows} if cid in by_id]
+    ceilings = benchmark_ceilings(run_cards)
+    if not ceilings:
+        return
+    summary.update(ceilings)
+    for metric in ("executability", "did_something"):
+        ceiling = ceilings.get(f"{metric}_ceiling")
+        actual = summary.get(metric)
+        if ceiling and actual is not None:
+            summary[f"{metric}_pct_of_ceiling"] = actual / ceiling
 
 
 def _consistency(run: EvalRunResult) -> dict[str, float]:
@@ -358,9 +427,9 @@ def _consistency(run: EvalRunResult) -> dict[str, float]:
     out: dict[str, float] = {}
     for probe in ("intent_match", "executability", "did_something"):
         spreads = [
-            pstdev([r.scores[probe] for r in group if probe in r.scores])
+            pstdev([r.scores[probe] for r in group if r.scores.get(probe) is not None])
             for group in by_card.values()
-            if len([r for r in group if probe in r.scores]) > 1
+            if len([r for r in group if r.scores.get(probe) is not None]) > 1
         ]
         if spreads:
             out[f"{probe}_stdev"] = fmean(spreads)

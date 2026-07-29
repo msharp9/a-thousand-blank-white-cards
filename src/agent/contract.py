@@ -15,6 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from models.card import CardPlacement, PlacementOwner
 from models.effects import EffectProgram, OpsStep, RegisterHookOp, ResolutionPlan, SnippetStep
 
 
@@ -37,6 +38,14 @@ class SnippetEffect(BaseModel):
         )
     )
     explanation: str = Field(description="Plain-English explanation of what the snippet does.")
+    condition_keys: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description=(
+            "Persistent hooks only: condition keys whose players are affected by this hook, "
+            "for example ['cursed']. Empty when the hook is unrelated to a condition."
+        ),
+    )
     trigger: str | None = Field(
         default=None,
         description=(
@@ -79,7 +88,7 @@ class InterpretResult(BaseModel):
     )
     verdict: str = Field(
         default="invalid",
-        description="Overall interpretation verdict: 'ok', 'invalid', or 'needs_choice'.",
+        description="Overall interpretation verdict: 'ok' or 'invalid'. Choice-bearing plans are 'ok'.",
     )
     comment: str = Field(
         default="",
@@ -102,6 +111,35 @@ class InterpretResult(BaseModel):
             "unparseable final message), not a genuine judgment of the card."
         ),
     )
+    placement: CardPlacement | None = Field(
+        default=None,
+        description=(
+            "Where the played card lives afterwards ('discard', 'center', or 'player'), "
+            "predicted from the card's semantic role. Successful production interpretations "
+            "supply this; bounded runtime failures may leave it unset."
+        ),
+    )
+    placement_owner: PlacementOwner | None = Field(
+        default=None,
+        description=(
+            "For player placement, 'actor' keeps the card with its player even when "
+            "the effect chooses a victim; 'chosen_player' attaches it to the chosen player."
+        ),
+    )
+    venue: str | None = Field(
+        default=None,
+        description=(
+            "Where the card's action can physically happen ('all', 'in_person', or "
+            "'online'), copied from the intent stage. None = legacy single-agent result."
+        ),
+    )
+    trigger: str | None = Field(
+        default=None,
+        description=(
+            "Static trigger metadata for the card. In particular, 'on_reaction' "
+            "must be available before the card is played so the room can open a reaction window."
+        ),
+    )
 
     def to_plan(self) -> ResolutionPlan:
         if self.plan is not None:
@@ -121,6 +159,8 @@ class InterpretResult(BaseModel):
                                 event=self.snippet.trigger,
                                 scope=self.snippet.scope,
                                 code=self.snippet.code,
+                                title=self.snippet.explanation,
+                                condition_keys=self.snippet.condition_keys,
                             )
                         ]
                     )
@@ -128,3 +168,125 @@ class InterpretResult(BaseModel):
             else:
                 steps.append(SnippetStep(code=self.snippet.code, explanation=self.snippet.explanation))
         return ResolutionPlan(steps=steps)
+
+
+class CardIntent(BaseModel):
+    """Structured reading of what a card's text wants to do.
+
+    Produced by the interpret stage and consumed by the planning stage. Captures
+    the player's apparent intent in plain terms before any mechanical strategy
+    is chosen — ``comment`` (the arbiter's in-character remark) is OWNED here,
+    not by later stages.
+    """
+
+    summary: str = Field(description="1-2 sentences: what the player wants the card to do.")
+    effects: list[str] = Field(
+        default_factory=list,
+        description="Discrete intended effects, in order.",
+    )
+    targets: str = Field(default="", description="Who/what is affected, in plain terms.")
+    persistence: Literal["immediate", "persistent", "reaction", "validation"] = Field(
+        default="immediate",
+        description="When the effect takes hold: a one-shot now, a standing hook, a counterspell-style reaction, or a play-validation rule.",
+    )
+    venue: Literal["all", "in_person", "online"] = Field(
+        default="all",
+        description=(
+            "Where the card's action can physically happen: 'in_person' when it demands "
+            "physical presence (touching, speaking aloud, physical objects, gestures); "
+            "'all' when it is purely digital-expressible; 'online' when it only makes "
+            "sense in an online game."
+        ),
+    )
+    placement: CardPlacement = Field(
+        description=(
+            "Where the physical card lives afterwards: discard when it has no continuing "
+            "identity; center for a shared rule/reminder/object; player for an owned "
+            "pet/item or personal boon/curse/status. Semantic role wins over casual zone wording."
+        ),
+    )
+    placement_owner: PlacementOwner | None = Field(
+        default=None,
+        description=(
+            "Required when placement is player: actor for an owned permanent, "
+            "chosen_player for a gift, boon, curse, or monster attached to the chosen player."
+        ),
+    )
+    resolved_references: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Named-game or pop-culture references resolved to plain mechanics, e.g. "
+            "'trample (MTG): excess damage carries over -> here: excess point loss "
+            "spills to next player'."
+        ),
+    )
+    ambiguity: Literal["clear", "ambiguous", "undecipherable"] = Field(
+        default="clear",
+        description="How well-defined the card's text is.",
+    )
+    complexity: Literal["trivial", "standard", "complex"] = Field(
+        default="standard",
+        description="Expected mechanical complexity of implementing this intent.",
+    )
+    comment: str = Field(
+        default="",
+        description="A short, in-character funny comment about the card / game state.",
+    )
+    persona_action: Literal["none", "do_nothing", "punish_author", "chaos_monkey", "random_solution"] = Field(
+        default="none",
+        description="The in-character branch chosen when a card can't be cleanly interpreted.",
+    )
+
+
+class PlanStep(BaseModel):
+    """One step of a :class:`MechanicsPlan`.
+
+    A prompt-shaped hint to the coder, not an executable instruction: ``kind``
+    only says which of the loosely-typed fields to read.
+    """
+
+    kind: Literal["ops", "snippet", "interaction"] = Field(
+        description="Which of the fields below carries this step's content."
+    )
+    description: str = Field(description="Plain-English description of what this step does.")
+    engine_ops: list[str] = Field(
+        default_factory=list,
+        description="Candidate op names/shapes for kind='ops', in prose (not a real op program).",
+    )
+    snippet_outline: str = Field(
+        default="",
+        description="Prose outline of the Python hook body to generate, for kind='snippet'.",
+    )
+    interaction: str = Field(
+        default="",
+        description="Prose description of the interaction/choice barrier needed, for kind='interaction'.",
+    )
+
+
+class MechanicsPlan(BaseModel):
+    """A prompt artifact bridging intent and code.
+
+    Produced by the planning stage from a :class:`CardIntent` and consumed only
+    by the coder stage. It is deliberately prose-heavy and loosely typed — a
+    scratchpad the coder reads, not a second effects DSL. Fields are permissive
+    with defaults so partial/malformed LLM output still parses.
+    """
+
+    strategy: str = Field(description="High-level approach in plain English.")
+    steps: list[PlanStep] = Field(default_factory=list, description="Ordered plan steps.")
+    trigger: str | None = Field(
+        default=None,
+        description="Mirrors SnippetEffect.trigger: None for immediate, else a GameEvent value.",
+    )
+    scope: Literal["player", "center"] = Field(
+        default="center",
+        description="Persistent hooks only: 'center' = table-wide house rule; 'player' = bound to the actor.",
+    )
+    feasible: bool = Field(
+        default=True,
+        description="Whether the planner judged this card implementable at all.",
+    )
+    infeasible_reason: str = Field(
+        default="",
+        description="Plain-English reason when feasible=False, else empty.",
+    )

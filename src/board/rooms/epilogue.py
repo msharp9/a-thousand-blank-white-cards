@@ -36,13 +36,19 @@ class EpilogueManager:
         await connections.broadcast({"type": "epilogue", "cards": cards})
         logger.info("epilogue started: %d cards to vote on", len(cards))
 
-    def record_vote(self, player_id: str, card_id: str, keep: bool) -> None:
+    def record_vote(self, player_id: str, card_id: str, keep: bool) -> bool:
         """Record a keep/destroy vote for one card. Completion is driven
         separately by :meth:`mark_done` — a vote no longer implicitly finalizes
-        anything, so a player can vote on some cards and skip the rest."""
+        anything, so a player can vote on some cards and skip the rest.
+
+        Returns False (vote rejected) for a voter outside the eligible player
+        list or an unknown card; True once the vote is recorded."""
+        if player_id not in self._player_ids:
+            return False
         if card_id not in self._votes:
-            return
+            return False
         self._votes[card_id][player_id] = "keep" if keep else "destroy"
+        return True
 
     def mark_done(self, player_id: str) -> bool:
         """Mark ``player_id`` as finished voting; any card they didn't vote on
@@ -81,11 +87,22 @@ class EpilogueManager:
 
         This restores an already-in-progress vote (a reload), so it must NOT
         re-broadcast the 'epilogue' envelope the way :meth:`start` does.
+        Restored votes are sanitized to known cards and eligible players, and
+        ``done`` is intersected with the eligible ids, so a stale/hand-edited
+        snapshot can't smuggle in outsider votes or phantom completions.
         """
         mgr = cls(player_ids=data.get("player_ids", []))
-        mgr._votes = {card_id: dict(player_votes) for card_id, player_votes in data.get("votes", {}).items()}
-        mgr._done = set(data.get("done", []))
+        eligible = set(mgr._player_ids)
         mgr._cards = list(data.get("cards", []))
+        known_cards = {card["id"] for card in mgr._cards}
+        mgr._votes = {
+            card_id: {pid: vote for pid, vote in player_votes.items() if pid in eligible}
+            for card_id, player_votes in data.get("votes", {}).items()
+            if card_id in known_cards
+        }
+        for card_id in known_cards:
+            mgr._votes.setdefault(card_id, {})
+        mgr._done = set(data.get("done", [])) & eligible
         mgr._connections = connections
         return mgr
 
@@ -95,9 +112,11 @@ class EpilogueManager:
         Keep/destroy is decided on CUMULATIVE totals, not this game's votes
         alone: a card's prior keep/destroy counts (if it's already in the RAG
         corpus from an earlier game) are loaded, this game's votes are added on
-        top, and the verdict follows the combined total (ties keep). Kept cards
-        are upserted with their updated running totals; destroyed cards are
-        removed from the corpus so they stop re-entering future decks.
+        top, and the verdict follows the combined total (strict keep majority;
+        ties destroy). Kept cards are upserted with their updated running
+        totals; destroyed cards are removed from the corpus so they stop
+        re-entering future decks. Favorite status (result.favorites) is
+        game-local presentation only — it is never persisted to the corpus.
 
         ``card_art`` is the room's out-of-band art registry (card_id -> PNG
         data-URL, see Room.card_art); a kept card's art rides the Qdrant payload
@@ -126,7 +145,7 @@ class EpilogueManager:
             if totals is not None:
                 prior_totals[card_id] = totals
 
-        result = tally_votes(per_player, card_ids, prior_totals=prior_totals)
+        result = tally_votes(per_player, card_ids, prior_totals=prior_totals, eligible_player_ids=self._player_ids)
         tallies_by_id = {t.card_id: t for t in result.tallies}
 
         kept_cards = [c for c in self._cards if c["id"] in result.kept]

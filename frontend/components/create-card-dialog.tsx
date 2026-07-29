@@ -11,8 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
-import type { ClientMsg, PreviewResult } from "@/lib/types";
+import type { CardSnapshot, ClientMsg, PreviewResult } from "@/lib/types";
 
 interface CreateCardDialogProps {
   open: boolean;
@@ -20,6 +26,7 @@ interface CreateCardDialogProps {
   send: (msg: ClientMsg) => void;
   previewResult: PreviewResult | null;
   caption?: string;
+  card?: CardSnapshot | null;
 }
 
 export function CreateCardDialog({
@@ -28,9 +35,10 @@ export function CreateCardDialog({
   send,
   previewResult,
   caption = "This card joins the shared deck.",
+  card,
 }: CreateCardDialogProps) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(card?.title ?? "");
+  const [description, setDescription] = useState(card?.description ?? "");
   const [previewing, setPreviewing] = useState(false);
   const [lastResult, setLastResult] = useState(previewResult);
   const creatorRef = useRef<CardCreatorHandle>(null);
@@ -57,12 +65,23 @@ export function CreateCardDialog({
 
   function handleSubmit() {
     if (!title.trim() || !description.trim()) return;
-    send({
-      type: "create_card",
-      title: title.trim(),
-      description: description.trim(),
-      art: creatorRef.current?.getArt() ?? undefined,
-    });
+    const art = creatorRef.current?.getArt() ?? undefined;
+    send(
+      card
+        ? {
+            type: "redraft_card",
+            card_id: card.id,
+            title: title.trim(),
+            description: description.trim(),
+            art,
+          }
+        : {
+            type: "create_card",
+            title: title.trim(),
+            description: description.trim(),
+            art,
+          },
+    );
     setTitle("");
     setDescription("");
     creatorRef.current?.reset();
@@ -71,11 +90,14 @@ export function CreateCardDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Create a card</DialogTitle>
+      <DialogContent
+        data-authoring-dialog
+        className="authoring-dialog grid-rows-[auto_minmax(0,1fr)_min-content] overflow-hidden sm:max-w-3xl"
+      >
+        <DialogHeader data-authoring-header className="pr-10">
+          <DialogTitle>{card ? "Revise card" : "Create a card"}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+        <div data-authoring-scroll className="min-h-0 overflow-hidden px-1">
           <CardCreator
             ref={creatorRef}
             title={title}
@@ -84,64 +106,89 @@ export function CreateCardDialog({
             onDescriptionChange={setDescription}
             caption={caption}
           />
+        </div>
+        <DialogFooter className="authoring-footer shrink-0 flex-col">
           {previewing && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Spinner /> Interpreting…
             </div>
           )}
           {previewResult && !previewing && (
-            <div className="flex flex-col gap-1 rounded-lg border bg-muted/20 p-2 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Preview:</span>
-                <Badge
-                  variant={
-                    previewStatus === "applied" || previewStatus === "ok"
-                      ? "default"
-                      : "destructive"
-                  }
-                >
-                  {previewStatus}
-                </Badge>
-              </div>
-              {previewResult.mechanical_reason && (
-                <p className="text-muted-foreground">
-                  {previewResult.mechanical_reason}
-                </p>
-              )}
-              {previewResult.correlation_id && (
-                <p className="font-mono text-[10px] text-muted-foreground">
-                  Reference: {previewResult.correlation_id}
-                </p>
-              )}
-              {previewResult.program && (
-                <pre className="whitespace-pre-wrap">
-                  {previewResult.program}
-                </pre>
-              )}
-              {previewResult.snippet && (
-                <pre className="whitespace-pre-wrap">
-                  {previewResult.snippet}
-                </pre>
-              )}
+            <div
+              data-preview-status
+              className="flex w-full min-w-0 items-center justify-center gap-2 text-xs sm:justify-end"
+            >
+              <span className="font-medium">Preview:</span>
+              <Badge
+                variant={
+                  previewStatus === "applied" || previewStatus === "ok"
+                    ? "default"
+                    : "destructive"
+                }
+              >
+                {previewStatus ?? "unknown"}
+              </Badge>
+              <PreviewDetails result={previewResult} />
             </div>
           )}
-        </div>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handlePreview}
-            disabled={!title.trim() || !description.trim()}
-          >
-            Preview
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!title.trim() || !description.trim()}
-          >
-            Submit
-          </Button>
+          <div className="flex w-full gap-2 sm:justify-end">
+            <Button
+              className="min-w-0 flex-1 sm:flex-none"
+              variant="outline"
+              onClick={handlePreview}
+              disabled={!title.trim() || !description.trim()}
+            >
+              Preview
+            </Button>
+            <Button
+              className="min-w-0 flex-1 sm:flex-none"
+              onClick={handleSubmit}
+              disabled={!title.trim() || !description.trim()}
+            >
+              Submit
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PreviewDetails({ result }: { result: PreviewResult }) {
+  const hasDetails = Boolean(
+    result.mechanical_reason ||
+    result.correlation_id ||
+    result.program ||
+    result.snippet,
+  );
+  if (!hasDetails) return null;
+
+  return (
+    <Popover>
+      <PopoverTrigger className="font-bold text-link underline underline-offset-2">
+        Details
+      </PopoverTrigger>
+      <PopoverContent
+        data-preview-details
+        side="top"
+        className="scrollbar-hidden max-h-[min(70dvh,28rem)] w-[min(32rem,calc(100vw-1.5rem))] overflow-y-auto text-xs"
+      >
+        <PopoverTitle className="mb-2">Preview details</PopoverTitle>
+        <div className="flex flex-col gap-2">
+          {result.mechanical_reason && <p>{result.mechanical_reason}</p>}
+          {result.correlation_id && (
+            <p className="font-mono text-[10px] text-muted-foreground">
+              Reference: {result.correlation_id}
+            </p>
+          )}
+          {result.program && (
+            <pre className="whitespace-pre-wrap">{result.program}</pre>
+          )}
+          {result.snippet && (
+            <pre className="whitespace-pre-wrap">{result.snippet}</pre>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

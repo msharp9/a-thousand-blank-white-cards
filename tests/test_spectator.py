@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from engine.loop import advance_turn
 from engine.scoring import evaluate_win_condition
 from models.game_state import GameState, Player, Spectator, WinCondition
-from conftest import drive_to_playing
+from conftest import drive_to_playing, ready_card_result
 
 from models.ws_messages import CreateCardMsg, PassMsg, PlayMsg
 from board.rooms.manager import RoomManager
@@ -177,7 +177,13 @@ def test_non_spectator_create_card_still_allowed_during_setup() -> None:
     room = _playing_room_with_spectator()
     room.state = room.state.model_copy(update={"phase": "setup"})
     room.connections.connect("p2", AsyncMock())
-    asyncio.run(room.handle_action("p2", CreateCardMsg(title="Wild", description="x")))
+
+    async def scenario() -> None:
+        await room.handle_action("p2", CreateCardMsg(title="Wild", description="x"))
+        await room.wait_for_card_drafts()
+
+    with patch("agent.runtime.run_agent", return_value=ready_card_result()):
+        asyncio.run(scenario())
     assert len(room.state.cards) == 1
 
 

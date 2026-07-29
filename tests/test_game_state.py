@@ -14,8 +14,35 @@ def test_constructs_with_defaults() -> None:
     assert state.turn_order == []
     assert state.draw_count == 1
     assert state.phase == "lobby"
+    assert state.host_id is None
     assert isinstance(state.win_condition, WinCondition)
     assert state.win_condition.kind == "highest_points"
+
+
+def test_legacy_state_backfills_first_player_as_host() -> None:
+    state = GameState.model_validate(
+        {
+            "room_code": "AAAA",
+            "players": [{"id": "p1", "name": "A"}, {"id": "p2", "name": "B"}],
+        }
+    )
+    assert state.host_id == "p1"
+
+
+def test_host_may_be_a_spectator_but_must_be_a_participant() -> None:
+    state = GameState(
+        room_code="AAAA",
+        players=[Player(id="p1", name="A")],
+        spectators=[Spectator(id="s1", name="S")],
+        host_id="s1",
+    )
+    assert state.participant_name("s1") == "S"
+    with pytest.raises(ValueError, match="host_id"):
+        GameState(
+            room_code="AAAA",
+            players=[Player(id="p1", name="A")],
+            host_id="missing",
+        )
 
 
 def test_effective_turn_order_falls_back_to_turn_players() -> None:
@@ -57,6 +84,27 @@ def test_with_log_is_immutable() -> None:
 
 def test_conditions_default_empty() -> None:
     state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")])
+    assert state.get_player("p1").conditions == {}
+
+
+def test_condition_keys_are_case_insensitive_and_normalized_on_load() -> None:
+    player = Player(
+        id="p1",
+        name="A",
+        conditions={"Cursed": True, "CURSED": 2, " stunned ": True},
+        condition_ttls={"cUrSeD": 3, "STUNNED": 1},
+    )
+    assert player.conditions == {"cursed": 2, "stunned": True}
+    assert player.condition_ttls == {"cursed": 3, "stunned": 1}
+
+
+def test_condition_helpers_match_keys_without_regard_to_case() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")])
+    state = state.with_condition("p1", " Cursed ", True, ttl=3)
+    state = state.with_condition("p1", "CURSED", 2)
+    assert state.get_player("p1").conditions == {"cursed": 2}
+    assert state.get_player("p1").condition_ttls == {}
+    state = state.without_condition("p1", "CuRsEd")
     assert state.get_player("p1").conditions == {}
 
 
@@ -182,3 +230,42 @@ def test_move_card_requires_player_id_for_player_zone() -> None:
     state = GameState(room_code="AAAA", players=[Player(id="p1", name="A", hand=["c1"])])
     with pytest.raises(ValueError):
         state.move_card("c1", "hand", "center")
+
+
+def test_move_card_hand_to_exiled_is_immutable() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A", hand=["c1", "c2"])])
+    new = state.move_card("c1", "hand", "exiled", from_player_id="p1")
+    assert new.get_player("p1").hand == ["c2"]
+    assert new.exiled == ["c1"]
+    # Source untouched.
+    assert state.get_player("p1").hand == ["c1", "c2"]
+    assert state.exiled == []
+
+
+def test_move_card_deck_to_exiled() -> None:
+    state = GameState(room_code="AAAA", deck=["c1", "c2"])
+    new = state.move_card("c1", "deck", "exiled")
+    assert new.deck == ["c2"]
+    assert new.exiled == ["c1"]
+
+
+def test_move_card_discard_to_exiled() -> None:
+    state = GameState(room_code="AAAA", discard=["c1"])
+    new = state.move_card("c1", "discard", "exiled")
+    assert new.discard == []
+    assert new.exiled == ["c1"]
+
+
+def test_move_card_exiled_back_to_hand() -> None:
+    state = GameState(room_code="AAAA", players=[Player(id="p1", name="A")], exiled=["c1"])
+    new = state.move_card("c1", "exiled", "hand", to_player_id="p1")
+    assert new.exiled == []
+    assert new.get_player("p1").hand == ["c1"]
+
+
+def test_exiled_serializes_and_round_trips() -> None:
+    state = GameState(room_code="AAAA", exiled=["c1", "c2"])
+    dump = state.model_dump()
+    assert dump["exiled"] == ["c1", "c2"]
+    assert GameState(**dump).exiled == ["c1", "c2"]
+    assert GameState(room_code="BBBB").exiled == []

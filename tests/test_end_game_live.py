@@ -182,6 +182,39 @@ def test_post_end_actions_are_rejected_and_end_scoring_applies_once() -> None:
     assert room.state.phase == "results"
 
 
+def test_deck_emptied_by_effect_latches_and_ends_after_the_turn() -> None:
+    """Deck-removal semantics (b8x.1): a play whose EFFECT empties the deck —
+    milling/exiling/moving its last cards, not a draw — never ends the game
+    mid-turn. ``_after_play_effects`` latches ``_deck_exhausted`` and the
+    player finishes their turn before ``_advance_turn`` ends the game."""
+    mill = {
+        "id": "mill",
+        "title": "Take The Deck",
+        "description": "Move the last deck card into your hand.",
+        "canonical": {"ops": [{"op": "transfer_card", "args": {"card_target": "id:d1", "to_target": "self"}}]},
+    }
+    filler = {
+        "id": "f1",
+        "title": "Gain 1",
+        "description": "Gain 1 point.",
+        "canonical": {"ops": [{"op": "add_points", "args": {"target": "self", "amount": 1}}]},
+    }
+    last = {"id": "d1", "title": "Last Card", "description": "x"}
+    room = _mid_deck_room(["mill", "f1"], {"mill": mill, "f1": filler, "d1": last}, deck=["d1"])
+    room.state = room.state.model_copy(update={"rules": room.state.rules.model_copy(update={"play": 2})})
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="mill")))
+
+    assert room.state.deck == []
+    assert "d1" in room.state.get_player("p1").hand
+    assert room._deck_exhausted is True
+    assert room.state.phase == "playing"  # NOT an instant end — the turn continues
+
+    asyncio.run(room.handle_action("p1", PlayMsg(card_id="f1")))
+
+    assert room.state.phase in ("results", "ended")
+
+
 def test_uno_v1_as_pure_rule_ops() -> None:
     # The Uno exemplar expressed entirely as data: win = empty hand, end = empty
     # hand, draw step 0. Playing the card flips the rules; the actor then plays

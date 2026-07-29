@@ -59,6 +59,11 @@ def test_destroy_card_op_accepts_card_target() -> None:
     assert op.card_id is None
 
 
+def test_destroy_card_op_accepts_all_in_center() -> None:
+    op = DestroyCardOp(card_target="all_in_center")
+    assert op.card_target == "all_in_center"
+
+
 def test_destroy_card_op_rejects_bad_card_target() -> None:
     with pytest.raises(ValidationError):
         DestroyCardOp(card_target="not_a_card_target")
@@ -129,7 +134,8 @@ def test_program_flat_sibling_wins_over_args() -> None:
         # the turn-order successor now have real aliases instead of silently
         # defaulting to "self".
         ("chosen_player", "chooser"),
-        ("next_player", "right_neighbor"),
+        ("next_player", "left_neighbor"),
+        ("previous_player", "right_neighbor"),
         # case / whitespace tolerance
         ("Player", "chooser"),
         ("  ALL  ", "all"),
@@ -145,6 +151,7 @@ def test_map_authoring_target_aliases(raw: str, expected: str) -> None:
         ("self", True),
         ("chosen_player", True),
         ("next_player", True),
+        ("previous_player", True),
         ("player", True),
         ("banana", False),
         ("center", False),
@@ -190,3 +197,27 @@ def test_map_authoring_target_unknown_default() -> None:
     assert map_authoring_target("banana", default="chooser") == "chooser"
     # center also falls back to the default rather than raising
     assert map_authoring_target("center", default="chooser") == "chooser"
+
+
+def test_last_played_is_a_valid_card_target() -> None:
+    prog = EffectProgram.model_validate({"ops": [{"op": "destroy_card", "card_target": "last_played"}]})
+    assert isinstance(prog.ops[0], DestroyCardOp)
+    assert prog.ops[0].card_target == "last_played"
+    assert prog.requires_choice is False
+
+
+def test_card_owner_valid_only_as_card_flow_destination() -> None:
+    """card_owner is a transfer_card/move_cards destination, never a player Target."""
+    prog = EffectProgram.model_validate(
+        {"ops": [{"op": "transfer_card", "card_target": "last_played", "to_target": "card_owner"}]}
+    )
+    assert prog.ops[0].to_target == "card_owner"
+    EffectProgram.model_validate(
+        {"ops": [{"op": "move_cards", "card_target": "last_played", "to_zone": "hand", "to_player": "card_owner"}]}
+    )
+    with pytest.raises(ValidationError):
+        EffectProgram.model_validate({"ops": [{"op": "add_points", "target": "card_owner", "amount": 1}]})
+    with pytest.raises(ValidationError):
+        EffectProgram.model_validate(
+            {"ops": [{"op": "move_cards", "from_zone": "hand", "from_player": "card_owner", "to_zone": "discard"}]}
+        )

@@ -40,6 +40,7 @@ FAILURE_BUCKETS = [
     "wrong_target",  # judge: hits the wrong player(s)/placement
     "wrong_persistence",  # judge: one-shot vs ongoing / trigger wrong
     "wrong_magnitude",  # judge: helps/hurts in the wrong direction
+    "wrong_amount",  # judge: right direction, wrong numeric amount
 ]
 
 _JUDGE_BUCKETS = {
@@ -47,6 +48,7 @@ _JUDGE_BUCKETS = {
     "wrong_target": "target_accuracy",
     "wrong_persistence": "persistence_accuracy",
     "wrong_magnitude": "magnitude_sign",
+    "wrong_amount": "magnitude_value",
 }
 
 
@@ -152,6 +154,13 @@ def runs_frame(payloads: list[dict[str, Any]]) -> Any:
                 "n_samples": summary.get("n_samples"),
                 "quality": quality_score(summary),
                 **{m: summary.get(m) for m in ALL_METRICS},
+                "executability_ceiling": summary.get("executability_ceiling"),
+                "executability_pct_of_ceiling": summary.get("executability_pct_of_ceiling"),
+                "did_something_ceiling": summary.get("did_something_ceiling"),
+                "did_something_pct_of_ceiling": summary.get("did_something_pct_of_ceiling"),
+                "did_something_noop_count": summary.get("did_something_noop_count"),
+                "sandbox_na_count": summary.get("sandbox_na_count"),
+                "sandbox_interaction_skipped": summary.get("sandbox_interaction_skipped"),
                 "invalid_rate": summary.get("invalid_rate"),
                 "agent_error_rate": summary.get("agent_error_rate"),
                 "mean_tool_calls": summary.get("mean_tool_calls"),
@@ -169,8 +178,8 @@ def runs_frame(payloads: list[dict[str, Any]]) -> Any:
 def rows_frame(payloads: list[dict[str, Any]]) -> Any:
     """One row per (run, card, sample): scores, costs, tool usage, failure buckets.
 
-    ``judge_reason`` carries the judge's free-text critique (shared across its
-    four metrics), ``mech_reason`` the first deterministic scorer complaint —
+    ``judge_reason`` carries the judge's free-text critique (shared across the
+    judge metrics), ``mech_reason`` the first deterministic scorer complaint —
     together they are the raw material for failure-pattern aggregation.
     """
     import pandas as pd

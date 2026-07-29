@@ -6,8 +6,8 @@ order. It deliberately does **not** repeat the deep technical reference: for mod
 boundaries, the import-layering contract, the WebSocket flow, the engine + sandbox
 model, and the full RAG pipeline, see [`docs/architecture.md`](architecture.md). The
 two authoritative hand-authored design sketches are
-[`docs/game.excalidraw.svg`](game.excalidraw.svg) (the game-system shape) and
-[`docs/agent.excalidraw.svg`](agent.excalidraw.svg) (the agent shape); the Mermaid
+[`docs/diagrams/game.excalidraw.svg`](diagrams/game.excalidraw.svg) (the game-system shape) and
+[`docs/diagrams/agent.excalidraw.svg`](diagrams/agent.excalidraw.svg) (the agent shape); the Mermaid
 diagrams here complement them.
 
 ---
@@ -77,11 +77,11 @@ Simplified diagrams of core mechanics.
 
 This shows the overall interaction and design of the game.
 
-![High level game design](game.excalidraw.svg)
+![High level game design](diagrams/game.excalidraw.svg)
 
 This shows the agent design. It's a simple single agent with custom crafted tools.
 
-![High level agent design](agent.excalidraw.svg)
+![High level agent design](diagrams/agent.excalidraw.svg)
 
 A more detailed mapping of the larger architecture.
 
@@ -140,7 +140,7 @@ flowchart TB
 - **Tools (`web_search`, `card_rag_hybrid`, `game_rules`, `mtg_lookup`,
   `read_engine_methods`, `read_game_state`, `agent_memory`, `dry_run`)** — A custom set of tools is the main driver to card interpretation accuracy. Several tools are aimed at helping the model understand what code to write by giving the model access to known good cards and their code via RAG, the game engine methods, game state, etc. Access to web search and the Magic the Gathering api were added to help it understand obscure references and memes, since understanding the game mechanics isn't useful if the agent can't interpret the users intent. The most valuable addition though, is the `dry_run` tool that allows it test code it writes before submitting which helps it catch syntax errors and adjust assumptions. Learn more here: [`src/agent/tools/`](../src/agent/tools/).
 - **Embedding model** — turns card text into vectors so we can retrieve
-  structurally-similar exemplars; it runs through the one gateway so a single credential drives both chat and embeddings. Production is using `titan-embed-text-v2`, 1024-dim. I've changed it depending on which gateway I hit, OpenAI, ollama, bifrost, but I haven't noticed a difference based on model because I currently only load a small seed dataset of 69 cards.
+  structurally-similar exemplars; it runs through the one gateway so a single credential drives both chat and embeddings. Production is using `titan-embed-text-v2`, 1024-dim. I've changed it depending on which gateway I hit, OpenAI, ollama, bifrost, but I haven't noticed a difference based on model because I currently only load a small seed dataset of 149 cards (the gold, filler, and simple decks combined).
 - **Vector DB (Qdrant, in-memory `cards` collection)** — stores the exemplar-card
   corpus and serves cosine top-k retrieval; in-memory keeps the prototype
   zero-infra while the same client can point at a hosted Qdrant later.
@@ -297,11 +297,11 @@ is in-memory (see the persistence caveats in
 
 ### Dataset
 
-A **35-card hand-annotated gold set** ([`data/eval/eval_cards.json`](../data/eval/eval_cards.json)).
+A **73-card hand-annotated gold set** ([`data/eval/eval_cards.json`](../data/eval/eval_cards.json)).
 Each card carries a structured `human_canonical` label (timing, target, placement,
 trigger_event, ops, magnitude_sign) that spot-checks as correct and consistent with the
-engine's op vocabulary. It is small (n=35) — good for a directional baseline, too small
-for tight confidence intervals. It is joined by a 25-card compositional [`eval_hard` suite](../data/eval/eval_cards_hard.json) that tests for complex mechanics, as well as a large 700 card dataset created from [real cards](../data/eval/real_cards.json), and the 69-card seed corpus as additional benchmarks (`config.EVAL_BENCHMARKS`).
+engine's op vocabulary. It is small (n=73) — good for a directional baseline, too small
+for tight confidence intervals. It is joined by a 35-card compositional [`eval_hard` suite](../data/eval/eval_cards_hard.json), a balanced 24-card placement suite, a large 698-card dataset created from [real cards](../data/eval/real_cards.json), and the 149-card seed corpus as additional benchmarks (`config.EVAL_BENCHMARKS`).
 
 ### Harness and scorers
 
@@ -337,7 +337,7 @@ searchable immediately, and both legs see the identical corpus.
 
 The A/B uses the production eval harness with the `enabled_tools` filter: two arms
 identical except for which card-RAG tool the agent gets (dense `card_rag` vs.
-`card_rag_hybrid`). Benchmark: **seed** (69 cards — the corpus with real precedent
+`card_rag_hybrid`). Benchmark: **seed** (131 cards — the corpus with real precedent
 overlap, and where the agent actually calls card-RAG), haiku-4-5, tool cap 12,
 LLM judge on:
 
@@ -370,26 +370,74 @@ pick the serving model and bound the agent's tool budget. The model sweep
 cost, gemma-4-31b collapses (≈0.50 intent_match, ~0.48 invalid rate), and haiku-4-5
 is the price/quality sweet spot.
 
-![Cost vs Quality](cost_vs_quality_eval_results.png)
+![Cost vs Quality](diagrams/cost_vs_quality_eval_results.png)
 
 I had been using Sonnet up to this point, but switched to Haiku as it had comparitive performance but much better cost savings. Fixing haiku and sweeping `max_tool_calls` on
 `eval_hard` (`MAX_TOOL_CALLS` in [`src/agent/runtime.py`](../src/agent/runtime.py),
-default was 24):
+default was 24). The first pass ran each config once; at n=1 the per-metric run-to-run
+noise (`intent_match` stdev ≈ 0.12–0.16) swamped the cap deltas, so the sweep and the
+tool ablations were re-run at **n=3** (three samples per card, 34 cards → 102 cases per
+config) to separate signal from noise:
 
-| Metric | cap 6 | cap 12 | cap 18 | uncapped (24) |
+| Metric (n=3) | cap 6 | cap 12 | cap 18 | uncapped (24) |
 | --- | ---: | ---: | ---: | ---: |
-| intent_match | 0.680 | 0.840 | 0.694 | **0.852** |
-| target_accuracy | 0.700 | **0.874** | 0.692 | 0.840 |
-| persistence_accuracy | 0.772 | **0.936** | 0.772 | 0.844 |
-| dsl_validity | 0.880 | **0.960** | 0.840 | 0.880 |
-| executability | 0.880 | **0.960** | 0.840 | 0.880 |
-| invalid rate | 0.200 | **0.040** | 0.120 | **0.040** |
+| composite quality | 0.784 | 0.871 | 0.882 | **0.891** |
+| intent_match | 0.723 | 0.804 | 0.847 | **0.857** |
+| sandbox_behavior | 0.546 | 0.604 | **0.655** | 0.596 |
+| did_something | 0.857 | 0.976 | 0.988 | **1.000** |
+| executability | 0.912 | 0.990 | 0.990 | **1.000** |
+| invalid rate | 0.167 | 0.029 | 0.039 | **0.000** |
+| agent_error rate | 0.078 | 0.020 | 0.029 | **0.000** |
+| mean tool calls | 3.74 | 4.62 | 4.66 | 4.85 |
+| mean cost / card | $0.029 | **$0.049** | $0.050 | $0.053 |
 
-A cap of 12 dominates: versus the old 24 it lifts `dsl_validity`/`executability`
-0.88 → 0.96 and `persistence_accuracy` 0.844 → 0.936 at equal intent, while 6 starves
-the agent (invalid rate 0.04 → 0.20) and 18 lets it wander. 
+The n=3 picture is more honest than the n=1 one: **cap 6 clearly starves the agent**
+(composite 0.784, 16.7% invalid, 7.8% hard errors), but **12 → 18 → 24 is a shallow,
+mostly-monotone climb of ~0.02 composite** — smaller than the intent_match stdev band.
+The uncapped run edges the top raw scores, but only by spending more tool calls and
+tokens for a difference inside the noise, and `sandbox_behavior` actually peaks at 18,
+not 24. Production stays at **cap 12**: it clears the cliff at 6, sits within noise of
+the higher caps on every quality metric, and does so at roughly half the token budget of
+uncapped. The cap is enforced end-to-end and demonstrated by the harness rather than
+asserted.
 
-Tool-ablation runs backed the full toolbox: cutting the agent down to just state/engine/dry-run tools dropped `intent_match` to 0.766 (and to 0.508 without `read_engine_methods`). The cap is now 12 in production, demonstrated end-to-end by the eval harness rather than asserted.
+Tool ablations were re-run at n=3 too (haiku, `eval_hard`, cap 12):
+
+| Toolbox (n=3, cap 12) | composite | intent_match | sandbox_behavior | invalid rate |
+| --- | ---: | ---: | ---: | ---: |
+| full production toolbox | 0.871 | 0.804 | 0.604 | 0.029 |
+| dry_run + engine_methods + game_state | **0.911** | **0.901** | **0.614** | **0.020** |
+| dry_run + game_state (no engine_methods) | 0.770 | 0.674 | 0.440 | 0.137 |
+
+Two things hold up under n=3. First, `read_engine_methods` is load-bearing: removing it
+drops composite 0.871 → 0.770 and intent_match 0.804 → 0.674 while nearly 5×-ing the
+invalid rate — the earlier "≈ −0.2" read was real. Second, and more surprising, the
+**leanest useful box** (dry-run + engine introspection + state, dropping card-RAG,
+game-rules, and history) actually *beats* the full toolbox at n=3 (composite 0.911 vs
+0.871), suggesting the extra retrieval tools add more distraction than signal on
+`eval_hard` specifically — consistent with the earlier finding that card-RAG barely gets
+called on the hard set.
+
+To check whether that was an artifact of `eval_hard` under-exercising card-RAG, the
+lean-vs-full comparison was re-run on the **seed** benchmark (69-card sample, n=3), where
+card-RAG *is* called (19 times for the full box, matching historical adoption):
+
+| Toolbox (seed, n=3, cap 12) | composite | intent_match | sandbox_behavior | invalid | tool calls | card-RAG calls |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| full production toolbox | 0.900 | **0.884** | 0.701 | 0.058 | 4.41 | 19 |
+| dry_run + engine_methods + game_state | **0.908** | 0.883 | **0.735** | **0.039** | **3.72** | 0 |
+
+Even where card-RAG is exercised, the two boxes are a statistical tie (0.908 vs 0.900,
+inside the ≈0.08 `intent_match` stdev), with the lean box marginally ahead on a smaller
+tool budget. So the `eval_hard` result was not a fluke: across both benchmarks the
+retrieval tools (card-RAG, game-rules, history) add cost without measurable quality.
+**Production keeps the full toolbox anyway** — deliberately, not by inertia. The seed and
+`eval_hard` sets score independent static cards against fixed canonicals; card-RAG was
+added for a use case neither benchmark captures: interpreting a *live* game's novel
+player cards consistently with the table's earlier rulings (precedent retrieval). Trimming
+the toolbox is a one-way change to live play, so the bar is evidence on that live
+precedent-consistency axis, not on static single-card accuracy — which is future
+benchmark work, not a change to make on these numbers.
 
 ---
 

@@ -8,8 +8,21 @@ import {
   useRef,
   useState,
 } from "react";
+import { Trash2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { PLAYER_COLORS } from "@/lib/players";
+import { useCompactAuthoringViewport } from "@/lib/use-compact-viewport";
+import {
+  drawingSurfaceStyle,
+  useDrawingSurface,
+} from "@/lib/use-drawing-surface";
 import { cn } from "@/lib/utils";
 
 // Backend WS frame budget: a data-URL longer than this is rejected server-side,
@@ -132,6 +145,9 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     const [ink, setInk] = useState(INKS[0].color);
     const [nib, setNib] = useState(NIBS[1].size);
     const [armedStamp, setArmedStamp] = useState<string | null>(null);
+    const compact = useCompactAuthoringViewport();
+    const { capturePointer, movePointer, releasePointer } =
+      useDrawingSurface(canvasRef);
 
     const redraw = useCallback(() => {
       const canvas = canvasRef.current;
@@ -189,7 +205,15 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     }
 
     function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
-      e.preventDefault();
+      const active = e.currentTarget.ownerDocument.activeElement;
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement
+      ) {
+        active.blur();
+      }
+      e.currentTarget.focus({ preventScroll: true });
+      if (!capturePointer(e)) return;
       const p = canvasPos(e);
       if (armedStamp) {
         strokesRef.current.push({ type: "stamp", emoji: armedStamp, ...p });
@@ -198,7 +222,6 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
         redraw();
         return;
       }
-      e.currentTarget.setPointerCapture(e.pointerId);
       const stroke: Stroke = {
         type: "line",
         color: ink,
@@ -212,14 +235,15 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     }
 
     function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+      if (!movePointer(e)) return;
       const stroke = currentStrokeRef.current;
       if (!stroke || stroke.type !== "line") return;
-      e.preventDefault();
       stroke.points.push(canvasPos(e));
       redraw();
     }
 
-    function endStroke() {
+    function endStroke(e: React.PointerEvent<HTMLCanvasElement>) {
+      if (!releasePointer(e)) return;
       currentStrokeRef.current = null;
     }
 
@@ -240,81 +264,273 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
     const canvasEmpty = strokeCount === 0;
 
     return (
-      <div className="flex flex-wrap items-start justify-center gap-4">
-        <div className="flex flex-row flex-wrap items-center gap-2 rounded-2xl border-[2.5px] border-ink bg-card p-2.5 panel-shadow sm:flex-col sm:items-stretch">
-          <div className="font-marker text-center text-xs">Ink</div>
-          {INKS.map((pen) => (
-            <button
-              key={pen.color}
-              type="button"
-              title={pen.name}
-              aria-pressed={ink === pen.color && !armedStamp}
-              onClick={() => {
-                setInk(pen.color);
-                setArmedStamp(null);
-              }}
-              className={cn(
-                "size-8 cursor-pointer rounded-full border-2 border-ink",
-                ink === pen.color &&
-                  !armedStamp &&
-                  "ring-[3px] ring-ring ring-offset-1",
-              )}
-              style={{ background: pen.color }}
-            />
-          ))}
-          <div className="mx-0.5 h-6 w-0.5 bg-muted sm:mx-0 sm:my-0.5 sm:h-0.5 sm:w-auto" />
-          <div className="font-marker text-center text-xs">Nib</div>
-          {NIBS.map((n) => (
-            <button
-              key={n.size}
-              type="button"
-              title={`${n.size}px`}
-              aria-pressed={nib === n.size}
-              onClick={() => {
-                setNib(n.size);
-                setArmedStamp(null);
-              }}
-              className={cn(
-                "flex size-8 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-card",
-                nib === n.size && "ring-[3px] ring-ring ring-offset-1",
-              )}
-            >
-              <span
-                className="block w-4.5 rounded-full bg-ink"
-                style={{ height: n.dot }}
-              />
-            </button>
-          ))}
-          <div className="mx-0.5 h-6 w-0.5 bg-muted sm:mx-0 sm:my-0.5 sm:h-0.5 sm:w-auto" />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            title="Undo"
-            onClick={undo}
+      <div
+        data-card-creator
+        data-layout={compact ? "compact" : "expanded"}
+        className={cn(
+          "grid min-w-0 items-start gap-3",
+          compact
+            ? "h-full w-full grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-2"
+            : "grid-cols-[auto_minmax(0,400px)_190px] justify-center gap-4",
+        )}
+      >
+        {compact ? (
+          <div
+            data-card-tools
+            className="flex min-w-0 items-center justify-center gap-1"
           >
-            ↺
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            title="Clear"
-            onClick={clear}
-          >
-            🗑
-          </Button>
-        </div>
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-11"
+                    title="Choose ink color"
+                  />
+                }
+              >
+                <span
+                  className="size-5 rounded-full border-2 border-ink"
+                  style={{ background: ink }}
+                />
+                <span className="sr-only">
+                  Ink color: {INKS.find((pen) => pen.color === ink)?.name}
+                </span>
+              </PopoverTrigger>
+              <PopoverContent data-card-ink-palette>
+                <PopoverTitle className="mb-2">Ink color</PopoverTitle>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {INKS.map((pen) => (
+                    <PopoverClose
+                      key={pen.color}
+                      type="button"
+                      aria-label={pen.name}
+                      aria-pressed={ink === pen.color && !armedStamp}
+                      onClick={() => {
+                        setInk(pen.color);
+                        setArmedStamp(null);
+                      }}
+                      className={cn(
+                        "size-11 cursor-pointer rounded-full border-2 border-ink outline-none focus-visible:ring-3 focus-visible:ring-ring",
+                        ink === pen.color &&
+                          !armedStamp &&
+                          "ring-[3px] ring-ring ring-offset-1",
+                      )}
+                      style={{ background: pen.color }}
+                    />
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
-        <div className="flex min-w-0 flex-col items-center gap-2">
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-11"
+                    title="Choose nib size"
+                  />
+                }
+              >
+                <span
+                  className="block w-5 rounded-full bg-ink"
+                  style={{ height: Math.min(nib, 8) }}
+                />
+                <span className="sr-only">Nib size: {nib}px</span>
+              </PopoverTrigger>
+              <PopoverContent data-card-nib-palette>
+                <PopoverTitle className="mb-2">Nib size</PopoverTitle>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {NIBS.map((option) => (
+                    <PopoverClose
+                      key={option.size}
+                      type="button"
+                      aria-label={`${option.size}px nib`}
+                      aria-pressed={nib === option.size}
+                      onClick={() => {
+                        setNib(option.size);
+                        setArmedStamp(null);
+                      }}
+                      className={cn(
+                        "flex size-11 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-card outline-none focus-visible:ring-3 focus-visible:ring-ring",
+                        nib === option.size &&
+                          "ring-[3px] ring-ring ring-offset-1",
+                      )}
+                    >
+                      <span
+                        className="block w-5 rounded-full bg-ink"
+                        style={{ height: option.dot }}
+                      />
+                    </PopoverClose>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-11 text-xl"
+                    title="Choose a stamp"
+                  />
+                }
+              >
+                <span aria-hidden>{armedStamp ?? "★"}</span>
+                <span className="sr-only">
+                  {armedStamp ? `Stamp armed: ${armedStamp}` : "Choose a stamp"}
+                </span>
+              </PopoverTrigger>
+              <PopoverContent data-card-stamp-palette>
+                <PopoverTitle className="mb-2">Choose a stamp</PopoverTitle>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {STAMPS.map((emoji) => (
+                    <PopoverClose
+                      key={emoji}
+                      type="button"
+                      aria-label={`Stamp ${emoji}`}
+                      aria-pressed={armedStamp === emoji}
+                      onClick={() => setArmedStamp(emoji)}
+                      className={cn(
+                        "flex size-11 cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-card text-lg outline-none focus-visible:ring-3 focus-visible:ring-ring",
+                        armedStamp === emoji &&
+                          "border-2 border-ring bg-accent",
+                      )}
+                    >
+                      {emoji}
+                    </PopoverClose>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-11"
+              title="Undo"
+              aria-label="Undo"
+              onClick={undo}
+            >
+              <Undo2 />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-11"
+              title="Clear"
+              aria-label="Clear"
+              onClick={clear}
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        ) : (
+          <div
+            data-card-tools
+            className="flex flex-col items-stretch gap-2 rounded-2xl border-[2.5px] border-ink bg-card p-2.5 panel-shadow"
+          >
+            <div className="font-marker text-center text-xs">Ink</div>
+            {INKS.map((pen) => (
+              <button
+                key={pen.color}
+                type="button"
+                title={pen.name}
+                aria-label={pen.name}
+                aria-pressed={ink === pen.color && !armedStamp}
+                onClick={() => {
+                  setInk(pen.color);
+                  setArmedStamp(null);
+                }}
+                className={cn(
+                  "size-8 cursor-pointer rounded-full border-2 border-ink",
+                  ink === pen.color &&
+                    !armedStamp &&
+                    "ring-[3px] ring-ring ring-offset-1",
+                )}
+                style={{ background: pen.color }}
+              />
+            ))}
+            <div className="my-0.5 h-0.5 w-auto bg-muted" />
+            <div className="font-marker text-center text-xs">Nib</div>
+            {NIBS.map((option) => (
+              <button
+                key={option.size}
+                type="button"
+                title={`${option.size}px`}
+                aria-label={`${option.size}px nib`}
+                aria-pressed={nib === option.size}
+                onClick={() => {
+                  setNib(option.size);
+                  setArmedStamp(null);
+                }}
+                className={cn(
+                  "flex size-8 cursor-pointer items-center justify-center rounded-lg border-2 border-ink bg-card",
+                  nib === option.size && "ring-[3px] ring-ring ring-offset-1",
+                )}
+              >
+                <span
+                  className="block w-4.5 rounded-full bg-ink"
+                  style={{ height: option.dot }}
+                />
+              </button>
+            ))}
+            <div className="my-0.5 h-0.5 w-auto bg-muted" />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title="Undo"
+              aria-label="Undo"
+              onClick={undo}
+            >
+              <Undo2 />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title="Clear"
+              aria-label="Clear"
+              onClick={clear}
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        )}
+
+        <div
+          data-card-stage
+          className={cn(
+            "flex min-w-0 flex-col items-center gap-2",
+            compact &&
+              "card-creator-stage h-full min-h-0 w-full justify-center",
+          )}
+        >
           {/* The card being authored is a physical paper artifact: its face
               stays white and its ink tokens stay dark in both themes. */}
-          <div className="paper-scope bg-card-face relative w-full max-w-[400px] rounded-xl border-[2.5px] border-ink p-4 shadow-[0_12px_30px_rgba(20,18,14,0.22)]">
+          <div
+            className={cn(
+              "card-creator-card paper-scope bg-card-face relative w-full max-w-[400px] rounded-xl border-[2.5px] border-ink p-3 shadow-[0_12px_30px_rgba(20,18,14,0.22)] sm:p-4",
+              compact && "card-creator-card-compact",
+            )}
+          >
             <div className="bg-tape absolute -top-2.5 left-[20%] h-5 w-20 rotate-[-6deg]" />
             <div className="bg-tape absolute -top-2.5 right-[20%] h-5 w-20 rotate-[5deg]" />
             <div className="pointer-events-none absolute inset-2 rounded-lg border border-dashed border-ink/25" />
 
             <input
+              aria-label="Card title"
               value={title}
               onChange={(e) => onTitleChange(e.target.value)}
               placeholder="Card title…"
@@ -325,12 +541,15 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
             <div className="relative my-3 overflow-hidden rounded-md border-[1.5px] border-ink bg-card-face">
               <canvas
                 ref={canvasRef}
+                tabIndex={0}
+                aria-label="Card drawing canvas"
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={endStroke}
                 onPointerCancel={endStroke}
-                onPointerLeave={endStroke}
-                className="block h-[300px] w-full cursor-crosshair touch-none"
+                onLostPointerCapture={endStroke}
+                style={drawingSurfaceStyle}
+                className="block aspect-[6/5] h-auto w-full cursor-crosshair touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               {canvasEmpty && (
                 <div className="font-hand pointer-events-none absolute inset-0 flex items-center justify-center text-xl text-ink/25">
@@ -340,6 +559,7 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
             </div>
 
             <textarea
+              aria-label="Card rules"
               value={description}
               onChange={(e) => onDescriptionChange(e.target.value)}
               placeholder="What does this card DO?"
@@ -349,36 +569,47 @@ export const CardCreator = forwardRef<CardCreatorHandle, CardCreatorProps>(
             />
           </div>
           {caption && (
-            <p className="font-hand text-[15px] text-muted-foreground">
+            <p
+              className={cn(
+                "font-hand text-[15px] text-muted-foreground",
+                compact && "sr-only",
+              )}
+            >
               {caption}
             </p>
           )}
         </div>
 
-        <div className="w-full max-w-[400px] rounded-2xl border-[2.5px] border-ink bg-card p-3 panel-shadow sm:w-[190px]">
-          <div className="font-marker mb-1 text-sm">Stamps</div>
-          <div className="mb-2 text-[11px] font-bold text-muted-foreground">
-            Tap one, then tap the card to stamp it.
+        {!compact && (
+          <div
+            data-card-stamps
+            className="w-[190px] rounded-2xl border-[2.5px] border-ink bg-card p-3 panel-shadow"
+          >
+            <div className="font-marker mb-1 text-sm">Stamps</div>
+            <div className="mb-2 text-[11px] font-bold text-muted-foreground">
+              Tap one, then tap the card to stamp it.
+            </div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {STAMPS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  aria-label={`Stamp ${emoji}`}
+                  aria-pressed={armedStamp === emoji}
+                  onClick={() =>
+                    setArmedStamp((cur) => (cur === emoji ? null : emoji))
+                  }
+                  className={cn(
+                    "flex aspect-square cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-card text-lg",
+                    armedStamp === emoji && "border-2 border-ring bg-accent",
+                  )}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-5 gap-1.5">
-            {STAMPS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                aria-pressed={armedStamp === emoji}
-                onClick={() =>
-                  setArmedStamp((cur) => (cur === emoji ? null : emoji))
-                }
-                className={cn(
-                  "flex aspect-square cursor-pointer items-center justify-center rounded-lg border-[1.5px] border-ink bg-card text-lg",
-                  armedStamp === emoji && "border-2 border-ring bg-accent",
-                )}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     );
   },

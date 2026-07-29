@@ -47,6 +47,7 @@ class RegisteredHook(BaseModel):
     source_card_id: str  # the card that registered this hook
     event: str  # GameEvent string, e.g. "on_score_change"
     scope: Literal["player", "center"]  # "center" = table-wide house rule
+    owner_mode: Literal["global", "fixed", "source_controller", "legacy"] = "legacy"
     owner_id: str | None = None  # player id for player-scoped hooks; None for center
 
 
@@ -94,6 +95,7 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
     cache_snippet(card_id, code)
 
     def _handler(state: Any, ctx: Any) -> Any:
+        import dataclasses
         import json
 
         from config import get_settings
@@ -107,6 +109,8 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
         state_dict = json.loads(state.model_dump_json())
         ctx_dict = {
             "actor_id": getattr(ctx, "actor_id", None),
+            "event_actor_id": getattr(ctx, "event_actor_id", None) or getattr(ctx, "actor_id", None),
+            "source_controller_id": getattr(ctx, "source_controller_id", None),
             "event": str(getattr(ctx, "event", "")),
             "card_id": getattr(ctx, "card_id", None),
             "amount": getattr(ctx, "amount", None),
@@ -117,7 +121,8 @@ def make_snippet_handler(card_id: str, code: str) -> HookHandler:
             ctx_dict["deltas"] = dict(deltas)
         try:
             raw_ops = execute_snippet(code, state_dict, ctx_dict)
-            return apply_snippet_diff(state, raw_ops, ctx, origin="hook")
+            apply_ctx = dataclasses.replace(ctx, source_card_id=card_id)
+            return apply_snippet_diff(state, raw_ops, apply_ctx, origin="hook")
         except (SnippetExecutionError, DiffValidationError) as exc:
             drain = _hook_error_drain.get()
             if drain is not None:
@@ -153,6 +158,7 @@ def build_registry(state: Any) -> HookRegistry:
                 source_card_id=spec.source_card_id,
                 event=spec.event,
                 scope=spec.scope,
+                owner_mode=spec.owner_mode,
                 owner_id=spec.owner_id,
             ),
             handler,
@@ -198,14 +204,22 @@ def fire_hooks(
         return state
 
     relevant_ids = ctx.target_player_ids or ([ctx.actor_id] if ctx.actor_id else [])
-    player_hooks = [h for h in matching if h.scope == "player" and h.owner_id in relevant_ids]
+
+    def controller(hook: RegisteredHook) -> str | None:
+        live = state.controller_of(hook.source_card_id)
+        if hook.owner_mode == "source_controller" or (hook.owner_mode == "legacy" and live is not None):
+            return live
+        return hook.owner_id
+
+    player_hooks = [(hook, controller(hook)) for hook in matching if hook.scope == "player"]
+    player_hooks = [(hook, owner) for hook, owner in player_hooks if owner in relevant_ids]
     center_hooks = [h for h in matching if h.scope == "center"]
-    ordered = player_hooks + center_hooks
+    ordered = [*player_hooks, *((hook, None) for hook in center_hooks)]
     if max_hooks is not None and len(ordered) > max_hooks:
         state = state.with_log(f"[hook] {len(ordered) - max_hooks} hook(s) skipped on {event} (cap {max_hooks})")
         ordered = ordered[:max_hooks]
 
-    for hook in ordered:
+    for hook, source_controller_id in ordered:
         handler = reg.get_handler(hook.id)
         if handler is None:
             continue
@@ -214,9 +228,29 @@ def fire_hooks(
         props = card.get("properties") if isinstance(card, dict) else getattr(card, "properties", None)
         is_uncounterable = bool((props or {}).get("uncounterable", False))
 
-        state = handler(state, ctx)
+        hook_ctx = ctx
+        if source_controller_id is not None:
+            import dataclasses
+
+            hook_ctx = dataclasses.replace(
+                ctx,
+                actor_id=source_controller_id,
+                source_controller_id=source_controller_id,
+                event_actor_id=ctx.event_actor_id or ctx.actor_id,
+            )
+        state = handler(state, hook_ctx)
 
         if is_uncounterable:
             break
 
     return state
+
+
+def hook_applies_to_player(state: Any, hook: Any, player_id: str) -> bool:
+    """Return whether a serialized hook applies to a prospective actor."""
+    if hook.scope == "center":
+        return True
+    live = state.controller_of(hook.source_card_id)
+    if hook.owner_mode == "source_controller" or (hook.owner_mode == "legacy" and live is not None):
+        return live == player_id
+    return hook.owner_id == player_id

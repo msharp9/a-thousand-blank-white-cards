@@ -15,6 +15,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from models.ws_messages import ClientMsg, JoinMsg
 from board.rooms.manager import room_manager
+from board.rooms.redaction import redact_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +36,9 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
          issued by POST /rooms/{code}/join (else 4000/4001). A second socket for
          the same player replaces the older one (4009).
       3. Server replays a full `state` snapshot, then loops: it validates each
-         client message (join/start/pass/play/create_card/preview_card/
+         client message (join/start/pass/play/create_card/redraft_card/preview_card/
          interaction_response/epilogue_vote — drawing is automatic at turn
-         start, so there is no `draw` message, and create_card/preview_card are
+         start, so there is no `draw` message, and setup authoring messages are
          SETUP-ONLY, rejected in any other phase) and dispatches to the room,
          broadcasting server messages
          (state, brewing, card_interpreted, effect_applied, preview_result,
@@ -87,11 +88,17 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
         except Exception:
             pass
 
+    # Privileged admin card state never survives a reconnect/replaced socket.
+    room.clear_admin_view(player_id)
     room.connections.connect(player_id, websocket)
     logger.info("player %s connected to room %s", player_id, code)
 
-    # Replay full state (covers reconnect).
-    await room.connections.broadcast_state(room.snapshot())
+    # Replay state (covers reconnect); each connection gets its own redacted view
+    # of ONE snapshot — building per-connection snapshots would let state mutated
+    # by a task scheduled between sends (e.g. an interaction timeout) leak into
+    # later recipients of the same broadcast round.
+    snap = room.snapshot()
+    await room.connections.broadcast_state(lambda pid: redact_snapshot(snap, pid))
     await room.replay_pending_interaction(player_id)
 
     try:
@@ -113,4 +120,6 @@ async def ws_handler(websocket: WebSocket, room_code: str) -> None:
         if websocket.application_state == WebSocketState.CONNECTED:
             raise
     logger.info("player %s disconnected from room %s", player_id, code)
+    if room.connections.get(player_id) is websocket:
+        room.clear_admin_view(player_id)
     room.connections.disconnect(player_id, websocket)

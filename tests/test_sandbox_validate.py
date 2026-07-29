@@ -139,3 +139,10 @@ def test_invalid_sandbox_method_arguments_rejected() -> None:
 
     assert result.ok is False
     assert "invalid call" in result.error
+
+
+def test_roll_die_forged_result_kwarg_rejected() -> None:
+    result = validate_snippet("def apply(state, ctx):\n    state.roll_die(sides=6, count=1, result=[6])\n")
+
+    assert result.ok is False
+    assert "roll_die" in result.error

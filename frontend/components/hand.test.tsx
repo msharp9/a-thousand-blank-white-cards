@@ -65,6 +65,14 @@ describe("Hand", () => {
     expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 
+  it("never wires the card-inspector overlay onto own-hand cards — clicking only selects", async () => {
+    const user = userEvent.setup();
+    const { send } = handUi();
+    await user.click(screen.getByText("Zap"));
+    expect(screen.queryByRole("button", { name: /^inspect/i })).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+  });
+
   // Drag-to-play gates on exactly the same conditions as click-to-select:
   // active turn, nothing brewing, not a reaction card. Blanks ARE draggable
   // (dropping one opens the author-on-play dialog in PlayDndContext).

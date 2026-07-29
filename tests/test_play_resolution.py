@@ -89,8 +89,9 @@ def test_agent_failure_falls_back_to_custom_note_and_advances() -> None:
     start_turn = room.state.turn_index
     with patch("agent.runtime.run_agent", side_effect=RuntimeError("boom")):
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c3")))
-    # No score change, but the card was consumed and a log line was recorded.
-    assert room.state.get_player("p1").score == 0
+    # The author collects a consolation point; the card was consumed and a
+    # log line was recorded.
+    assert room.state.get_player("p1").score == 1
     assert "c3" in room.state.discard
     assert any("no mechanical effect" in line for line in room.state.log)
     assert room.state.turn_index != start_turn

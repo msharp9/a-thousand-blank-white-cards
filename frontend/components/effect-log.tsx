@@ -10,6 +10,7 @@ const ARBITER_PREFIX = "🤖 ";
 interface EffectLogProps {
   log: string[];
   brewing: string | null;
+  variant?: "embedded" | "panel";
   className?: string;
 }
 
@@ -19,19 +20,34 @@ interface EffectLogProps {
  * top edge (the visible edge) rather than appending at the bottom — no
  * auto-scroll is needed to see the latest play.
  */
-export function EffectLog({ log, brewing, className }: EffectLogProps) {
+export function EffectLog({
+  log,
+  brewing,
+  variant = "embedded",
+  className,
+}: EffectLogProps) {
   const isEmpty = log.length === 0 && !brewing;
+  const embedded = variant === "embedded";
 
   return (
     <div
       className={cn(
-        "border-t-2 border-ink bg-panel-paper px-4 py-2",
+        embedded
+          ? "border-t-2 border-ink bg-panel-paper px-4 py-2"
+          : "min-h-full",
         className,
       )}
     >
       <div className="flex items-start gap-2.5">
-        <span className="shrink-0 pt-1.5 font-marker text-sm">Play Log</span>
-        <div className="flex max-h-[180px] min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto py-1">
+        {embedded && (
+          <span className="shrink-0 pt-1.5 font-marker text-sm">Play Log</span>
+        )}
+        <div
+          className={cn(
+            "flex min-w-0 flex-1 flex-col gap-1.5 py-1",
+            embedded && "max-h-[180px] overflow-y-auto",
+          )}
+        >
           {brewing && (
             <span className="flex items-center gap-1.5 self-start rounded-[10px] border-[1.5px] border-dashed border-ink/50 bg-card/60 px-2.5 py-1 font-hand text-[15px] text-muted-foreground">
               <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />

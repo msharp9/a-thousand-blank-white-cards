@@ -65,7 +65,7 @@ class CardOp(BaseModel):
             "models.effects (not every name here maps 1:1 to a reducer)."
         )
     )
-    args: dict[str, int | str | bool | None] = Field(
+    args: dict[str, Any] = Field(
         default_factory=dict,
         description="Op-specific arguments, e.g. {'amount': 5, 'target': 'self'}.",
     )
@@ -85,6 +85,8 @@ CardTrigger = Literal[
     "on_game_end",
     "on_reaction",
 ]
+CardPlacement = Literal["discard", "center", "player"]
+PlacementOwner = Literal["actor", "chosen_player"]
 
 # v1 → v2 trigger value remaps (spec appendix, data/eval/CANONICAL_SPEC.md).
 _TRIGGER_REMAP = {
@@ -97,7 +99,7 @@ _TRIGGER_REMAP = {
 # notes/set_rule ops, not a trigger.
 _DROPPED_TRIGGERS = {"on_physical_action"}
 
-_V2_PLACEMENTS = {"discard", "center", "player"}
+_V2_PLACEMENTS = frozenset({"discard", "center", "player"})
 _V2_TARGETS = {"self", "player", "all", "all_others", "card", "all_cards", "none"}
 
 
@@ -162,6 +164,43 @@ def normalise_canonical(raw: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+# Attribute keys a card can stamp on ITSELF (card_target="this") that must be
+# visible before the card is ever played — see hoist_static_attributes.
+STATIC_CARD_ATTRIBUTE_KEYS = frozenset({"play_on_draw", "uncounterable"})
+
+
+def hoist_static_attributes(ops: Any) -> dict[str, Any]:
+    """Pull self-targeted ``set_card_attribute`` writes out of a card's ops.
+
+    A card that stages ``set_card_attribute(card_target="this", key=...)`` for
+    a key in :data:`STATIC_CARD_ATTRIBUTE_KEYS` means the attribute (e.g.
+    ``play_on_draw``) must hold from the moment the card exists, not only
+    after it is played — ops otherwise only run on play. Shared by
+    ``Room._canonical_payload`` (runtime ``Op`` instances from a compiled
+    ``ResolutionPlan``) and ``board.rooms.deck._normalise_card`` (authoring
+    ``{"op": ..., "args": {...}}`` dicts straight off a card's canonical
+    ``ops`` list), so both the LLM-interpreted and seed/RAG card paths hoist
+    the same way. Returns ``{}`` when ``ops`` has no matching entry.
+    """
+    attributes: dict[str, Any] = {}
+    for entry in ops or ():
+        if isinstance(entry, dict):
+            args = entry.get("args") if isinstance(entry.get("args"), dict) else entry
+            op_name = entry.get("op")
+            card_target = args.get("card_target", "this")
+            key = args.get("key")
+            value = args.get("value")
+        else:
+            op_name = getattr(entry, "op", None)
+            card_target = getattr(entry, "card_target", None)
+            key = getattr(entry, "key", None)
+            value = getattr(entry, "value", None)
+        if op_name != "set_card_attribute" or card_target != "this" or key not in STATIC_CARD_ATTRIBUTE_KEYS:
+            continue
+        attributes[key] = value
+    return attributes
+
+
 class CardCanonical(BaseModel):
     """Structured annotation describing how a card behaves in the game engine.
 
@@ -173,12 +212,19 @@ class CardCanonical(BaseModel):
     target: Literal["self", "player", "all", "all_others", "card", "all_cards", "none"] = Field(
         description="Who or what the card's primary effect targets."
     )
-    placement: Literal["discard", "center", "player"] = Field(
+    placement: CardPlacement = Field(
         description=(
-            "Where the card goes after play: 'discard' = one-shot, resolves and is done; "
-            "'center' = stays on the table as a game-wide modifier; 'player' = stays in "
-            "front of one player as a modifier attached to them."
+            "Where the physical card goes after play: 'discard' when it has no continuing "
+            "identity; 'center' for a shared rule, reminder, or table-wide object; "
+            "'player' for an owned pet/item or personal boon, curse, or status."
         )
+    )
+    placement_owner: PlacementOwner | None = Field(
+        default=None,
+        description=(
+            "For placement='player', whether the card sits in front of its actor or "
+            "the chosen player. None preserves legacy placement behavior."
+        ),
     )
     venue: Literal["all", "in_person", "online"] = Field(
         default="all",

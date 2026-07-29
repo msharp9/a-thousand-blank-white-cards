@@ -157,6 +157,7 @@ def test_epilogue_vote_completion_reaches_ended() -> None:
     assert [c.id for c in room.state.epilogue_result.kept] == ["a1"]
     assert room.state.epilogue_result.kept[0].title == "Custom"
     assert room.state.epilogue_result.destroyed == []
+    assert room.state.epilogue_result.favorite_card_ids == ["a1"]
 
 
 def test_reconnect_snapshot_carries_epilogue_result() -> None:
@@ -199,6 +200,24 @@ def test_reconnect_snapshot_carries_epilogue_result() -> None:
     assert snap_after["phase"] == "ended"
     assert snap_after["epilogue_result"]["kept"] == [{"id": "keep-me", "title": "Keep Me"}]
     assert snap_after["epilogue_result"]["destroyed"] == [{"id": "cut-me", "title": "Cut Me"}]
+    assert snap_after["epilogue_result"]["favorite_card_ids"] == ["keep-me"]
+
+
+def test_epilogue_result_summary_normalizes_favorites() -> None:
+    # favorite_card_ids is normalized to a deduplicated subset of kept ids in
+    # kept order — a destroyed or unknown id can never decorate, and an old
+    # snapshot without the field loads safely.
+    from models.game_state import EpilogueCardOutcome, EpilogueResultSummary
+
+    summary = EpilogueResultSummary(
+        kept=[EpilogueCardOutcome(id="k1", title="A"), EpilogueCardOutcome(id="k2", title="B")],
+        destroyed=[EpilogueCardOutcome(id="d1", title="C")],
+        favorite_card_ids=["k2", "d1", "k2", "ghost", "k1"],
+    )
+    assert summary.favorite_card_ids == ["k1", "k2"]
+
+    legacy = EpilogueResultSummary.model_validate({"kept": [{"id": "k1", "title": "A"}], "destroyed": []})
+    assert legacy.favorite_card_ids == []
 
 
 def test_epilogue_start_rejected_before_results_and_for_non_host() -> None:

@@ -84,12 +84,13 @@ Do these against the **live Vercel URL** with two devices.
 - [ ] **Real-time state sync** — Take an action on one device (e.g. change name,
       ready up, advance phase) and confirm the other device updates within a
       second or two without a manual refresh.
-- [ ] **Play a card** — Play a card from a hand and confirm the **effect log**
-      updates on **both** devices with the resulting effect.
+- [ ] **Play a card** — Play a card from a hand, open **History** from the top
+      navigation, and confirm the **Play Log** updates on **both** devices with
+      the resulting effect.
 - [ ] **Author a wild card** — Write a new custom (wild) card and submit it.
       Confirm the **brewing indicator** appears while the agent interprets it,
       then a **verdict** is returned and applied. The card's effect should be
-      reflected in game state / the effect log.
+      reflected in game state / the Play Log.
 - [ ] **Reconnect** — Refresh one device mid-game and confirm it reconnects to
       the same room and restores state (no lost session).
 The next four checks exercise specific card behaviors. What matters is the
@@ -102,14 +103,14 @@ seed card if you happen to draw it).
       happens once and the score uses the post-draw hand size.
 - [ ] **Rule replacement** — Author a card described like: *"Use Uno's
       empty-hand ending and zero-draw rule. Track the color of each played
-      card and reject plays that do not match the current color."* (seed deck:
-      "Wild Uno"). Confirm draw count 0, the empty-hand end/win rules, and the
+      card and reject plays that do not match the current color."* (eval
+      reference: "Wild Uno"). Confirm draw count 0, the empty-hand end/win rules, and the
       color-alignment rule appear in the dynamic-state panel and affect later
       turns.
 - [ ] **Sealed auction** — Author a card described like: *"Everyone secretly
       bids points for this card. The highest bidder pays their bid and takes
       this card into their hand. Ties go to the earliest player in turn
-      order."* (seed deck: "Going Once, Going Twice"). Bid from both devices
+      order."* (hard eval reference: "Going Once, Going Twice"). Bid from both devices
       and confirm no values leak before completion. Confirm the winner pays,
       receives the played card, and tied bids follow visible turn order.
 - [ ] **Drawing and vote chain** — Author a card described like: *"Everyone

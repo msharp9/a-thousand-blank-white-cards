@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 import pytest
 
@@ -12,6 +14,14 @@ from agent.tools import mtg_lookup as mod
 def _no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     """Neutralise the rate-limit sleep so tests stay fast."""
     monkeypatch.setattr(mod.time, "sleep", lambda *_a, **_k: None)
+
+
+@pytest.fixture(autouse=True)
+def _reset_glossary_cache() -> None:
+    """Avoid glossary cache leakage between tests that monkeypatch its path."""
+    mod.reset_glossary_cache()
+    yield
+    mod.reset_glossary_cache()
 
 
 class _FakeResponse:
@@ -139,3 +149,81 @@ def test_tool_metadata() -> None:
     assert tool_obj.name == "mtg_lookup"
     assert bool(tool_obj.description)
     assert tool_obj is mod.mtg_lookup
+
+
+def test_glossary_exact_match_short_circuits_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_get(*_a, **_k):  # pragma: no cover - must not be called
+        raise AssertionError("network should not be hit for a glossary hit")
+
+    monkeypatch.setattr(mod.httpx, "get", fail_get)
+
+    result = mod.mtg_lookup.invoke({"card_name": "trample"})
+
+    assert result.startswith("trample (MTG keyword):")
+    assert "excess combat damage" in result
+
+
+def test_glossary_exact_match_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mod.httpx, "get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no network")))
+
+    result = mod.mtg_lookup.invoke({"card_name": "Split Second"})
+
+    assert result.startswith("split second (MTG keyword):")
+
+
+def test_glossary_fuzzy_match_before_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_get(*_a, **_k):  # pragma: no cover - must not be called
+        raise AssertionError("network should not be hit for a fuzzy glossary hit")
+
+    monkeypatch.setattr(mod.httpx, "get", fail_get)
+
+    result = mod.mtg_lookup.invoke({"card_name": "tramplle"})
+
+    assert result.startswith("trample (MTG keyword):")
+
+
+def test_scryfall_404_falls_back_to_glossary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mod.httpx, "get", lambda *a, **k: _FakeResponse(status_code=404))
+
+    result = mod.mtg_lookup.invoke({"card_name": "tramp"})
+
+    assert result.startswith("trample (MTG keyword):")
+
+
+def test_scryfall_404_without_glossary_fallback_returns_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mod.httpx, "get", lambda *a, **k: _FakeResponse(status_code=404))
+
+    result = mod.mtg_lookup.invoke({"card_name": "definitely not a card"})
+
+    assert result == "no MTG card found for 'definitely not a card'"
+
+
+def test_missing_glossary_file_degrades_to_card_only_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    missing_path = mod._glossary_path().with_name("does-not-exist.json")
+    monkeypatch.setattr(mod, "_glossary_path", lambda: missing_path)
+
+    def fake_get(url, *, params, **_k):  # noqa: ANN001
+        if params.get("fuzzy") == "lightning bolt":
+            return _FakeResponse(json_data=_LIGHTNING_BOLT)
+        return _FakeResponse(status_code=404)
+
+    monkeypatch.setattr(mod.httpx, "get", fake_get)
+
+    # No glossary to consult, so "trample" now falls all the way through to a
+    # Scryfall miss instead of resolving as a keyword.
+    trample_result = mod.mtg_lookup.invoke({"card_name": "trample"})
+    assert trample_result == "no MTG card found for 'trample'"
+
+    card_result = mod.mtg_lookup.invoke({"card_name": "lightning bolt"})
+    assert "Lightning Bolt" in card_result
+
+
+def test_corrupt_glossary_file_degrades_to_card_only_lookup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bad_file = tmp_path / "mtg_glossary.json"
+    bad_file.write_text("not json", encoding="utf-8")
+    monkeypatch.setattr(mod, "_glossary_path", lambda: bad_file)
+    monkeypatch.setattr(mod.httpx, "get", lambda *a, **k: _FakeResponse(status_code=404))
+
+    result = mod.mtg_lookup.invoke({"card_name": "trample"})
+
+    assert result == "no MTG card found for 'trample'"

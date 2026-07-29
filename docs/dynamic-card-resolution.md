@@ -33,15 +33,17 @@ and the agent must dry-run the complete plan before it can be committed.
 | --- | --- | --- |
 | Draw, then score from the resulting hand | `Card Counter` (the Chess Master shape) | `tests/test_gold_exemplars.py::test_card_counter_compiles_draw_then_scores_hand_via_snippet` |
 | Replace draw/end/win rules with Uno rules | `Basic Uno` | `tests/test_gold_exemplars.py::test_basic_uno_expresses_empty_hand_end_and_zero_draw`, `::test_basic_uno_gold_ends_when_a_player_empties_their_hand` |
-| Add colors and mint Draw 2/Draw 4/Reverse cards | `Spicy Uno` | `tests/test_gold_exemplars.py::test_spicy_uno_gold_executes_rules_attributes_and_created_cards` |
-| Enforce color alignment on future plays | `Wild Uno` | `tests/test_gold_exemplars.py::test_wild_uno_gold_registers_and_enforces_color_alignment` |
+| Add colors and mint Draw 2/Draw 4/Reverse cards | `Spicy Uno` (gold eval) | `tests/test_gold_exemplars.py::test_spicy_uno_gold_executes_rules_attributes_and_created_cards` |
+| Enforce color alignment on future plays | `Wild Uno` (gold eval) | `tests/test_gold_exemplars.py::test_wild_uno_gold_registers_and_enforces_color_alignment` |
 | End with every player tied for the most draws | `Most Cards Drawn Wins` | `tests/test_structured_history.py::test_most_cards_drawn_snippet_sets_all_tied_winner_overrides` |
-| Sealed auction, charge winner, transfer played card, deterministic ties | `Going Once, Going Twice` | `tests/test_room_interactions.py::test_sealed_auction_pauses_atomically_and_resumes_once`, `::test_auction_tie_uses_effective_turn_order` |
+| Sealed auction, charge winner, transfer played card, deterministic ties | `Going Once, Going Twice` (hard eval) | `tests/test_room_interactions.py::test_sealed_auction_pauses_atomically_and_resumes_once`, `::test_auction_tie_uses_effective_turn_order` |
 | Draw cats, reveal after the barrier, vote, award tied winners | `Cat Show` | `tests/test_room_interactions.py::test_drawing_then_vote_materializes_sealed_submissions_and_tied_winners` |
+| Look at the deck top, secretly reorder/bury, keep the arrangement hidden | `Crystal Ball` (scry via `card_order`) / `Window Shopping` (draw-N-keep-1 via `card_pick` `from_deck_top`) | `tests/test_scry_interactions.py` |
 | Resume safely after reconnect/restart | every generic interaction | `tests/test_room_interactions.py::test_pending_resolution_persists_and_request_replays_without_values`, `::test_pending_resolution_persists_turn_bookkeeping`, `::test_restored_timeout_runs_at_manager_start_without_reconnect` |
 | Keep sandbox and op APIs aligned | all generated snippets and hooks | `tests/test_sandbox_api_surface.py::TestWideFacade::test_mutators_record_full_op_parity`, `::test_canonical_mutators_match_op_names_and_parameters` |
 
-The gold exemplars live in `data/seed_cards_gold.json`. Run
+Executable exemplars live across `data/seed_cards_gold.json`,
+`data/eval/eval_cards.json`, and `data/eval/eval_cards_hard.json`. Run
 `scripts/data_prep/build_seed_corpus.py --check` to prove that the served
 `data/seed_cards.json` has not drifted from the reviewed sources. The eval
 corpus contains the same capability ladder and scores complete ordered plans,
@@ -53,8 +55,8 @@ The server sends `interaction_request` with schema version 1, a unique
 interaction id, a typed descriptor, an authoritative deadline, and safe
 progress. The client answers once with `interaction_response`, repeating the
 schema version and id and supplying a payload discriminated by kind. Supported
-kinds are `choice`, `number`, `text`, `card_pick`, `confirm`, and normalized
-vector `drawing`.
+kinds are `choice`, `number`, `text`, `card_pick`, `confirm`, `card_order`, and
+normalized vector `drawing`.
 
 Responses are authenticated against the resolved audience. Sealed values stay
 private until the barrier completes; shared snapshots and progress contain only

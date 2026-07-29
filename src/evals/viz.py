@@ -26,6 +26,8 @@ QUALITY_METRICS = [
     "target_accuracy",
     "persistence_accuracy",
     "magnitude_sign",
+    "magnitude_value",
+    "placement_accuracy",
     "sandbox_behavior",
     "executability",
     "did_something",

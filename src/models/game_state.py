@@ -8,9 +8,29 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, computed_field, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
-HistoryKind = Literal["draw", "play", "score_change", "rule_change", "interaction", "game_end"]
+StarterDeck = Literal["random", "simple", "pets"]
+
+HistoryKind = Literal[
+    "draw",
+    "play",
+    "score_change",
+    "rule_change",
+    "interaction",
+    "reveal",
+    "game_end",
+    "card_fallback",
+    "dice_roll",
+    "discard",
+    "admin_change",
+    "permanent_transfer",
+]
+
+
+def normalize_condition_key(key: str) -> str:
+    """Return the canonical identity used for every open-ended condition."""
+    return key.strip().casefold()
 
 
 class WinCondition(BaseModel):
@@ -54,6 +74,16 @@ class Rules(BaseModel):
     cannot_play: dict[str, Any] = Field(default_factory=lambda: {"draw": 1})
     end_condition: EndCondition = Field(default_factory=EndCondition)
     win_condition: WinCondition = Field(default_factory=WinCondition)
+    # Maximum hand size, ENFORCED by the room at end of turn: an over-limit
+    # active player picks cards to discard down to the limit (timeout discards
+    # from the hand tail). None = no limit.
+    hand_limit: int | None = Field(default=None, ge=0)
+    # Seconds the active player has to end their turn before the room ends it
+    # for them (pausable turn clock, ENFORCED by board.rooms.room.TurnTimer:
+    # the clock pauses while the room is suspended on brewing, a reaction
+    # window, or an interaction). Read once at turn start, so a mid-turn
+    # change applies from the next turn. None = no time limit.
+    turn_timer: int | None = Field(default=None, ge=1)
     # None or a registered predicate name (see engine.loop.register_skip_predicate).
     skip_predicate: str | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
@@ -67,11 +97,52 @@ class Player(BaseModel):
     # Cards played and persisting "in front of" this player (the in-play zone).
     in_play: list[str] = Field(default_factory=list)  # card ids
     connected: bool = True
+    # Knocked out of the game (eliminate_player op). STRUCTURAL like
+    # ``connected``, not a conditions key: the turn loop and win scoring must
+    # consult it reliably, and the conditions bag is free-form state any card
+    # can clobber. An eliminated player takes no turns and cannot win, but
+    # their in_play cards (and any hooks/rules those set) remain in effect.
+    eliminated: bool = False
     # Open-ended per-player status bag, e.g. {"skip_next": True, "poisoned": 2}.
     # "skip_next" and "extra_turn" are reserved keys consumed by
     # engine.loop.advance_turn; any other key is free-form status with no
     # engine-side meaning yet, surfaced as-is to the UI/agent via model_dump().
     conditions: dict[str, Any] = Field(default_factory=dict)
+    # Remaining lifetime (in this player's turn starts) for expiring
+    # conditions, keyed like ``conditions``. Kept OUT of the conditions bag so
+    # condition values stay shape-stable for "has:<key>" targets and hook
+    # snippets. Ticked by ``engine.loop.tick_condition_ttls``; 0 means the
+    # condition is on its last active turn. A key here always has a live
+    # entry in ``conditions``.
+    condition_ttls: dict[str, int] = Field(default_factory=dict)
+    # Hand visibility (reveal_hand op). STRUCTURAL fields, not conditions: the
+    # snapshot redactor must consult them reliably, and the conditions bag is
+    # free-form state any card can clobber. ``hand_public`` = the hand is
+    # played face-up (everyone, spectators included, sees its contents);
+    # ``hand_revealed_to`` = player ids allowed to see the hand's contents.
+    hand_public: bool = False
+    hand_revealed_to: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_condition_maps(cls, data: Any) -> Any:
+        """Canonicalize persisted condition keys while preserving last-write wins."""
+        if not isinstance(data, dict):
+            return data
+        normalized = dict(data)
+        conditions: dict[str, Any] = {}
+        for key, value in (data.get("conditions") or {}).items():
+            canonical = normalize_condition_key(str(key))
+            if canonical:
+                conditions[canonical] = value
+        ttls: dict[str, int] = {}
+        for key, value in (data.get("condition_ttls") or {}).items():
+            canonical = normalize_condition_key(str(key))
+            if canonical and canonical in conditions:
+                ttls[canonical] = value
+        normalized["conditions"] = conditions
+        normalized["condition_ttls"] = ttls
+        return normalized
 
 
 class EpilogueCardOutcome(BaseModel):
@@ -91,6 +162,18 @@ class EpilogueResultSummary(BaseModel):
 
     kept: list[EpilogueCardOutcome] = Field(default_factory=list)
     destroyed: list[EpilogueCardOutcome] = Field(default_factory=list)
+    # "Table favorite" card ids: the final-kept cards tied for the most keep
+    # votes this game. Presentation-only and normalized below to a deduplicated
+    # subset of ``kept`` in kept order, so a destroyed id can never decorate.
+    favorite_card_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _normalize_favorites(self) -> EpilogueResultSummary:
+        favorites = set(self.favorite_card_ids)
+        normalized = [outcome.id for outcome in self.kept if outcome.id in favorites]
+        if normalized != self.favorite_card_ids:
+            self.favorite_card_ids = normalized
+        return self
 
 
 class HookSpec(BaseModel):
@@ -107,8 +190,91 @@ class HookSpec(BaseModel):
     source_card_id: str
     event: str  # a GameEvent value, e.g. "on_turn_start"
     scope: Literal["player", "center"] = "center"
+    owner_mode: Literal["global", "fixed", "source_controller", "legacy"] = "legacy"
     owner_id: str | None = None  # player id for player-scoped hooks
     code: str  # sandbox-validated snippet: def apply(state, ctx)
+    title: str = Field(default="", max_length=300)
+    condition_keys: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("condition_keys")
+    @classmethod
+    def _normalize_condition_keys(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            key = normalize_condition_key(value)
+            if key and key not in normalized:
+                normalized.append(key)
+        return normalized
+
+
+class RuleBinding(BaseModel):
+    """One card's recorded ``set_rule`` write: which rule path it set and the
+    value that path held just before.
+
+    Bindings are STATE (they ride ``model_dump`` into snapshots) and form a
+    per-path stack in list order (oldest first). Destroying a card releases its
+    bindings: if the destroyed binding was the most recent write for its path,
+    the rule reverts to ``previous_value``; otherwise the binding above it
+    inherits ``previous_value`` and the live value is untouched (see
+    ``engine.reducers._release_rule_bindings``). ``set_rule`` without a source
+    card in ctx (house-rule flows) records no binding.
+    """
+
+    source_card_id: str
+    path: str
+    previous_value: Any = None
+
+
+class ConditionBinding(BaseModel):
+    """One board card's write to a player's open condition map."""
+
+    source_card_id: str
+    player_id: str
+    key: str
+    had_previous: bool = False
+    previous_value: Any = None
+    previous_ttl: int | None = None
+    # The condition follows the card's current in-play controller when control
+    # changes. Fixed/chosen/global condition writes leave this false.
+    controller_relative: bool = False
+    applied_value: Any = None
+    applied_ttl: int | None = None
+
+    @field_validator("key")
+    @classmethod
+    def _normalize_key(cls, value: str) -> str:
+        key = normalize_condition_key(value)
+        if not key:
+            raise ValueError("condition key cannot be blank")
+        return key
+
+
+class TurnOrderBinding(BaseModel):
+    """A board card's reversible write to the explicit turn-order list."""
+
+    source_card_id: str
+    previous_order: list[str]
+
+
+class RevealBinding(BaseModel):
+    """One board card's persistent ``reveal_hand`` write to a player's hand
+    visibility, released when the card leaves the board.
+
+    ``viewer_id`` None means the write set ``hand_public`` (``previous_public``
+    records the value it replaced; per-player stack, released like
+    ``RuleBinding``). Otherwise the write added ``viewer_id`` to
+    ``hand_revealed_to`` and release removes that viewer again. Concealing
+    drops the matching bindings, so a later card retirement can never
+    resurrect a reveal the players already concealed.
+    """
+
+    source_card_id: str
+    player_id: str
+    viewer_id: str | None = None
+    previous_public: bool = False
+    # True when the revealed hand was addressed as the source card's current
+    # controller; such visibility follows an in-play control transfer.
+    controller_relative: bool = False
 
 
 class HistoryEvent(BaseModel):
@@ -127,6 +293,11 @@ class HistoryEvent(BaseModel):
     # every caller. Lets a client group/label history entries by turn (e.g.
     # the "Everything Played" history modal) without re-deriving it.
     turn: int | None = None
+    # Kind-specific structured detail, privacy-safe like every other field
+    # (never hand contents or prose). "dice_roll" carries
+    # {sides, values, total}; "discard" carries {card_ids} (the discard pile
+    # is public); other kinds leave it None.
+    data: dict[str, Any] | None = None
 
 
 class Spectator(BaseModel):
@@ -158,6 +329,9 @@ class GameState(BaseModel):
                             ``house_rules`` (kept for backward compat); use the
                             ``center_cards()`` accessor to read it by zone name.
     - ``discard``         — global discard pile, on ``GameState``.
+    - ``exiled``          — global removed-from-game pile, on ``GameState``.
+                            Public like ``discard``, but nothing brings a card
+                            back from it in normal play.
 
     Zone read/move helpers (``cards_in_play``, ``cards_in_play_for``,
     ``center_cards``, ``move_card``) exist for a future CardTarget resolver.
@@ -170,14 +344,22 @@ class GameState(BaseModel):
     # bead uses it to filter the deck by card venue; here it just rides in every
     # snapshot via model_dump().
     mode: Literal["online", "in_person", "both"] = "both"
+    # Host-selected source for the 30-card pre-made setup pool. "random"
+    # preserves the historical behavior of sampling the full seed/RAG corpus.
+    starter_deck: StarterDeck = "random"
     players: list[Player] = Field(default_factory=list)
     # Watchers who joined after the game left the lobby (see Spectator). Kept
     # separate from ``players`` rather than merged in as a flagged Player.
     spectators: list[Spectator] = Field(default_factory=list)
+    # The participant with room-management authority. The host may be either a
+    # player or a spectator; spectator hosts remain structurally excluded from
+    # gameplay while retaining host-only room/admin controls.
+    host_id: str | None = None
 
     # Card registry grows during play as new cards are invented
     deck: list[str] = Field(default_factory=list)  # card ids (ordered)
     discard: list[str] = Field(default_factory=list)  # card ids
+    exiled: list[str] = Field(default_factory=list)  # card ids removed from the game
     cards: dict[str, Any] = Field(default_factory=dict)  # card_id -> Card
 
     turn_index: int = 0  # index into players list
@@ -212,6 +394,16 @@ class GameState(BaseModel):
     # Persistent hooks registered by card plays, in registration order.
     hooks: list[HookSpec] = Field(default_factory=list)
 
+    # set_rule writes attributed to a source card, oldest first — per-path
+    # stacks consumed when the card is destroyed (see RuleBinding).
+    rule_bindings: list[RuleBinding] = Field(default_factory=list)
+
+    # Persistent condition and turn-order writes attributed to visible source
+    # cards. They mirror rule_bindings so removing a reminder removes its effect.
+    condition_bindings: list[ConditionBinding] = Field(default_factory=list)
+    turn_order_bindings: list[TurnOrderBinding] = Field(default_factory=list)
+    reveal_bindings: list[RevealBinding] = Field(default_factory=list)
+
     # Machine-readable history for game logic and reconnects. Unlike ``log``,
     # events never contain private hand contents or generated prose.
     history_events: list[HistoryEvent] = Field(default_factory=list)
@@ -234,6 +426,23 @@ class GameState(BaseModel):
     epilogue_result: EpilogueResultSummary | None = None
 
     log: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_legacy_host(cls, data: Any) -> Any:
+        """Give pre-host persisted states their historical first-player host."""
+        if not isinstance(data, dict) or "host_id" in data:
+            return data
+        players = data.get("players") or []
+        if not players:
+            return data
+        first = players[0]
+        host_id = first.get("id") if isinstance(first, dict) else getattr(first, "id", None)
+        if host_id is None:
+            return data
+        updated = dict(data)
+        updated["host_id"] = host_id
+        return updated
 
     @model_validator(mode="before")
     @classmethod
@@ -263,6 +472,17 @@ class GameState(BaseModel):
             rules.setdefault(legacy[key], data.pop(key))
         data["rules"] = rules
         return data
+
+    @model_validator(mode="after")
+    def _validate_participant_identity(self) -> GameState:
+        player_ids = [player.id for player in self.players]
+        spectator_ids = [spectator.id for spectator in self.spectators]
+        all_ids = [*player_ids, *spectator_ids]
+        if len(all_ids) != len(set(all_ids)):
+            raise ValueError("participant ids must be unique across players and spectators")
+        if self.host_id is not None and self.host_id not in all_ids:
+            raise ValueError("host_id must identify a player or spectator")
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -311,6 +531,21 @@ class GameState(BaseModel):
                 return p
         raise KeyError(f"Player {player_id!r} not found")
 
+    def get_spectator(self, spectator_id: str) -> Spectator:
+        for spectator in self.spectators:
+            if spectator.id == spectator_id:
+                return spectator
+        raise KeyError(f"Spectator {spectator_id!r} not found")
+
+    def has_participant(self, participant_id: str) -> bool:
+        return any(player.id == participant_id for player in self.players) or self.is_spectator(participant_id)
+
+    def participant_name(self, participant_id: str) -> str:
+        try:
+            return self.get_player(participant_id).name
+        except KeyError:
+            return self.get_spectator(participant_id).name
+
     def is_spectator(self, player_id: str) -> bool:
         """True if ``player_id`` is a watcher (present in ``spectators``)."""
         return any(s.id == player_id for s in self.spectators)
@@ -324,6 +559,13 @@ class GameState(BaseModel):
         """Return the in-play (in-front-of) cards for a single player."""
         return list(self.get_player(player_id).in_play)
 
+    def controller_of(self, card_id: str) -> str | None:
+        """Return the player currently controlling an in-play card."""
+        for player in self.players:
+            if card_id in player.in_play:
+                return player.id
+        return None
+
     def center_cards(self) -> list[str]:
         """Return the cards in the shared center zone (stored in house_rules)."""
         return list(self.house_rules)
@@ -331,19 +573,22 @@ class GameState(BaseModel):
     def move_card(
         self,
         card_id: str,
-        from_zone: Literal["hand", "in_play", "center", "discard", "deck"],
-        to_zone: Literal["hand", "in_play", "center", "discard", "deck"],
+        from_zone: Literal["hand", "in_play", "center", "discard", "deck", "exiled"],
+        to_zone: Literal["hand", "in_play", "center", "discard", "deck", "exiled"],
         *,
         from_player_id: str | None = None,
         to_player_id: str | None = None,
+        deck_index: int | None = None,
     ) -> GameState:
         """Return a copy of this state with card_id moved between zones.
 
         Player-scoped zones (``hand``, ``in_play``) require the corresponding
-        ``*_player_id``; global zones (``center``, ``discard``, ``deck``) ignore
-        them. The card is removed from every occurrence in the source zone and
-        appended to the destination zone. This is immutable: the source state,
-        its players and its lists are never mutated.
+        ``*_player_id``; global zones (``center``, ``discard``, ``deck``,
+        ``exiled``) ignore them. The card is removed from every occurrence in the source zone and
+        appended to the destination zone — except a ``deck`` destination with
+        ``deck_index`` set, which inserts at that index of the post-removal
+        deck (0 = top; the default append is the bottom). This is immutable:
+        the source state, its players and its lists are never mutated.
         """
         players = list(self.players)
         update: dict[str, Any] = {}
@@ -367,6 +612,8 @@ class GameState(BaseModel):
             update["discard"] = [c for c in self.discard if c != card_id]
         elif from_zone == "deck":
             update["deck"] = [c for c in self.deck if c != card_id]
+        elif from_zone == "exiled":
+            update["exiled"] = [c for c in self.exiled if c != card_id]
 
         # ── add to destination ──
         if to_zone in ("hand", "in_play"):
@@ -382,8 +629,15 @@ class GameState(BaseModel):
             base = update.get("discard", list(self.discard))
             update["discard"] = [*base, card_id]
         elif to_zone == "deck":
-            base = update.get("deck", list(self.deck))
-            update["deck"] = [*base, card_id]
+            base = list(update.get("deck", self.deck))
+            if deck_index is None:
+                base.append(card_id)
+            else:
+                base.insert(deck_index, card_id)
+            update["deck"] = base
+        elif to_zone == "exiled":
+            base = update.get("exiled", list(self.exiled))
+            update["exiled"] = [*base, card_id]
 
         update["players"] = players
         return self.model_copy(update=update)
@@ -409,25 +663,43 @@ class GameState(BaseModel):
             }
         )
 
-    def with_condition(self, player_id: str, key: str, value: Any) -> "GameState":
+    def with_condition(self, player_id: str, key: str, value: Any, *, ttl: int | None = None) -> "GameState":
         """Return a copy with ``player_id``'s ``conditions[key]`` set to ``value``.
 
         Generic: ``key`` may be a reserved condition (``skip_next``,
-        ``extra_turn``) or any free-form status a card invents.
+        ``extra_turn``) or any free-form status a card invents. ``ttl`` (in
+        the owner's turn starts) is stored in ``condition_ttls``; writing
+        without a ttl clears any stale ttl for the key, so the condition
+        persists until removed.
         """
-        players = [
-            p.model_copy(update={"conditions": {**p.conditions, key: value}}) if p.id == player_id else p
-            for p in self.players
-        ]
+        key = normalize_condition_key(key)
+        if not key:
+            raise ValueError("condition key cannot be blank")
+        players: list[Player] = []
+        for p in self.players:
+            if p.id != player_id:
+                players.append(p)
+                continue
+            ttls = {k: v for k, v in p.condition_ttls.items() if k != key}
+            if ttl is not None:
+                ttls[key] = ttl
+            players.append(p.model_copy(update={"conditions": {**p.conditions, key: value}, "condition_ttls": ttls}))
         return self.model_copy(update={"players": players})
 
     def without_condition(self, player_id: str, key: str) -> "GameState":
-        """Return a copy with ``player_id``'s ``conditions[key]`` removed.
+        """Return a copy with ``player_id``'s ``conditions[key]`` (and any TTL
+        for it) removed.
 
         A no-op (still returns a fresh copy) if the key is absent.
         """
+        key = normalize_condition_key(key)
         players = [
-            p.model_copy(update={"conditions": {k: v for k, v in p.conditions.items() if k != key}})
+            p.model_copy(
+                update={
+                    "conditions": {k: v for k, v in p.conditions.items() if k != key},
+                    "condition_ttls": {k: v for k, v in p.condition_ttls.items() if k != key},
+                }
+            )
             if p.id == player_id
             else p
             for p in self.players

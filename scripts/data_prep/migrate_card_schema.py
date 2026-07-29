@@ -37,8 +37,10 @@ DATASETS: tuple[tuple[Path, str, str], ...] = (
     (ROOT / "data" / "seed_cards_gold.json", "canonical", "seed-gold"),
     (ROOT / "data" / "seed_cards_fillers.json", "canonical", "seed-filler"),
     (ROOT / "data" / "seed_cards_simple.json", "canonical", "seed-simple"),
+    (ROOT / "data" / "seed_cards_pets.json", "canonical", "seed-pets"),
     (ROOT / "data" / "eval" / "eval_cards.json", "human_canonical", "eval"),
     (ROOT / "data" / "eval" / "eval_cards_hard.json", "human_canonical", "hard"),
+    (ROOT / "data" / "eval" / "eval_cards_placement.json", "human_canonical", "placement"),
     (ROOT / "data" / "eval" / "real_cards.json", "human_canonical", "real"),
 )
 
@@ -61,7 +63,8 @@ _SANDBOX_TARGETS: dict[str, object] = {
     "opponent": _CHOSEN,
     "target_player": _CHOSEN,
     "chooser": _CHOSEN,
-    "next_player": "right_neighbor",
+    "next_player": "left_neighbor",
+    "previous_player": "right_neighbor",
     "left_neighbor": "left_neighbor",
     "right_neighbor": "right_neighbor",
     "player_with_most_points": "player_with_most_points",
@@ -176,7 +179,11 @@ def ops_to_sandbox(ops: list[dict]) -> str | None:
                     raise _Unmappable(f"destroy_card target {card_target!r}")
             elif name == "transfer_card":
                 dst = _target_expr(args.get("to_target", "self"), uses_chosen=uses_chosen)
-                lines.append(f"    state.transfer_card({args.get('card_target', 'this')!r}, {dst})")
+                card_target = args.get("card_target", "this")
+                if card_target in ("card", "chosen_card"):
+                    lines.append(f'    state.transfer_card("id:" + (ctx.get("chosen_card_id") or ""), {dst})')
+                else:
+                    lines.append(f"    state.transfer_card({card_target!r}, {dst})")
             elif name == "counter_play":
                 lines.append(f"    state.counter_play({args.get('mode', 'negate')!r})")
             elif name == "end_game":
@@ -194,7 +201,12 @@ def ops_to_sandbox(ops: list[dict]) -> str | None:
                 if not isinstance(event, str) or not isinstance(code, str):
                     raise _Unmappable("register_hook without event/code")
                 scope = args.get("scope", "center")
-                lines.append(f"    state.register_hook({event!r}, scope={scope!r}, code={code!r})")
+                title = args.get("title", "")
+                condition_keys = args.get("condition_keys", [])
+                lines.append(
+                    f"    state.register_hook({event!r}, scope={scope!r}, code={code!r}, "
+                    f"title={title!r}, condition_keys={condition_keys!r})"
+                )
             else:
                 raise _Unmappable(f"op {name!r}")
     except _Unmappable:

@@ -10,11 +10,13 @@ from models.effects import (
     ChangeDrawCountOp,
     CustomNoteOp,
     DestroyCardOp,
+    DiscardRandomOp,
     DrawCardsOp,
     EffectProgram,
     EndGameOp,
     ExtraTurnOp,
     ReverseOrderOp,
+    RollDieOp,
     SetPointsOp,
     SetWinConditionOp,
     SkipTurnOp,
@@ -101,6 +103,65 @@ def test_draw_cards_default_amount() -> None:
 def test_draw_cards_explicit_amount() -> None:
     prog = compile_card(_card([{"op": "draw_cards", "args": {"amount": 2}}]))
     assert prog.ops[0].amount == 2
+
+
+def test_roll_die_defaults() -> None:
+    prog = compile_card(_card([{"op": "roll_die", "args": {}}]))
+    op = prog.ops[0]
+    assert isinstance(op, RollDieOp)
+    assert (op.sides, op.count, op.target, op.outcome, op.result) == (6, 1, "self", "none", None)
+
+
+def test_roll_die_full_args() -> None:
+    prog = compile_card(
+        _card(
+            [
+                {
+                    "op": "roll_die",
+                    "args": {"sides": 20, "count": 2, "target": "opponent", "outcome": "add_points"},
+                }
+            ]
+        )
+    )
+    op = prog.ops[0]
+    assert isinstance(op, RollDieOp)
+    assert (op.sides, op.count, op.outcome) == (20, 2, "add_points")
+    assert op.target == "chooser"  # authoring alias mapped
+    assert prog.requires_choice is True
+
+
+def test_roll_die_result_stripped() -> None:
+    # A `result` smuggled into persisted authoring ops (e.g. via create_card's
+    # raw op dicts) must not freeze the die — pre-resolved rolls are only for
+    # the transient sandbox-diff replay path, which bypasses _compile_op.
+    prog = compile_card(_card([{"op": "roll_die", "args": {"count": 2, "result": [3, 5]}}]))
+    assert prog.ops[0].result is None
+
+
+def test_roll_die_malformed_args_skipped() -> None:
+    prog = compile_card(_card([{"op": "roll_die", "args": {"sides": 1}}]))
+    assert prog is None  # invalid sides -> op skipped -> empty program
+
+
+def test_discard_random_defaults() -> None:
+    prog = compile_card(_card([{"op": "discard_random", "args": {}}]))
+    op = prog.ops[0]
+    assert isinstance(op, DiscardRandomOp)
+    assert (op.target, op.count) == ("self", 1)
+
+
+def test_discard_random_full_args() -> None:
+    prog = compile_card(_card([{"op": "discard_random", "args": {"target": "opponent", "count": 2}}]))
+    op = prog.ops[0]
+    assert isinstance(op, DiscardRandomOp)
+    assert op.count == 2
+    assert op.target == "chooser"  # authoring alias mapped
+    assert prog.requires_choice is True
+
+
+def test_discard_random_malformed_count_skipped() -> None:
+    prog = compile_card(_card([{"op": "discard_random", "args": {"count": 0}}]))
+    assert prog is None
 
 
 def test_set_win_condition() -> None:
@@ -241,8 +302,14 @@ def test_steal_3_points_nets_a_real_transfer() -> None:
     assert prog.requires_choice is True
 
 
-def test_next_player_maps_to_right_neighbor() -> None:
+def test_next_player_maps_to_left_neighbor() -> None:
     prog = compile_card(_card([{"op": "skip_turn", "args": {"target": "next_player"}}]))
+    assert prog.ops[0].target == "left_neighbor"
+    assert prog.requires_choice is False
+
+
+def test_previous_player_maps_to_right_neighbor() -> None:
+    prog = compile_card(_card([{"op": "extra_turn", "args": {"target": "previous_player"}}]))
     assert prog.ops[0].target == "right_neighbor"
     assert prog.requires_choice is False
 

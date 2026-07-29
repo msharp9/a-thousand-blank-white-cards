@@ -2,25 +2,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { GalleryOverlay } from "./gallery-overlay";
+import { makePlayer as player } from "@/lib/test-fixtures";
 import type {
   CardSnapshot,
   GameStateSnapshot,
-  PlayerSnapshot,
   SpectatorSnapshot,
 } from "@/lib/types";
-
-function player(
-  overrides: Partial<PlayerSnapshot> & { id: string; name: string },
-): PlayerSnapshot {
-  return {
-    score: 0,
-    hand: [],
-    in_play: [],
-    connected: true,
-    conditions: {},
-    ...overrides,
-  };
-}
 
 function card(id: string, title: string, creator_id?: string): CardSnapshot {
   return { id, title, description: `Rule for ${title}`, creator_id };
@@ -29,6 +16,7 @@ function card(id: string, title: string, creator_id?: string): CardSnapshot {
 function state(overrides: Partial<GameStateSnapshot> = {}): GameStateSnapshot {
   return {
     room_code: "ABCD",
+    mode: "online",
     phase: "playing",
     players: [],
     spectators: [],
@@ -70,6 +58,7 @@ describe("GalleryOverlay", () => {
     };
     const { container } = render(
       <GalleryOverlay
+        presentation="modal"
         gameState={state({
           cards,
           players: [
@@ -110,6 +99,7 @@ describe("GalleryOverlay", () => {
     };
     render(
       <GalleryOverlay
+        presentation="modal"
         gameState={state({
           cards,
           players: [
@@ -139,6 +129,7 @@ describe("GalleryOverlay", () => {
     };
     render(
       <GalleryOverlay
+        presentation="modal"
         gameState={state({
           phase: "setup",
           cards,
@@ -161,6 +152,7 @@ describe("GalleryOverlay", () => {
     ];
     render(
       <GalleryOverlay
+        presentation="modal"
         gameState={state({
           cards,
           players: [player({ id: "p1", name: "Alice", in_play: ["a"] })],
@@ -176,6 +168,7 @@ describe("GalleryOverlay", () => {
   it("shows an empty state with no public cards", () => {
     render(
       <GalleryOverlay
+        presentation="modal"
         gameState={state({})}
         roomCode="ABCD"
         onClose={() => {}}
@@ -183,6 +176,23 @@ describe("GalleryOverlay", () => {
     );
     expect(screen.getByText("No cards played yet.")).toBeTruthy();
     expect(screen.getByText("0 cards played so far")).toBeTruthy();
+  });
+
+  it("renders in the page flow when presented as a sidebar", () => {
+    render(
+      <GalleryOverlay
+        presentation="sidebar"
+        gameState={state({})}
+        roomCode="ABCD"
+        onClose={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("complementary", { name: "The Deck" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByTestId("gallery-scrim")).toBeNull();
   });
 
   it("caps initial render and reveals more on demand", async () => {
@@ -196,6 +206,7 @@ describe("GalleryOverlay", () => {
     const user = userEvent.setup();
     render(
       <GalleryOverlay
+        presentation="modal"
         gameState={state({
           cards,
           players: [player({ id: "p1", name: "Alice", in_play: inPlay })],
@@ -220,6 +231,7 @@ describe("GalleryOverlay", () => {
     const onClose = vi.fn();
     render(
       <GalleryOverlay
+        presentation="modal"
         gameState={state({
           cards: { a: card("a", "A Card") },
           players: [player({ id: "p1", name: "Alice", in_play: ["a"] })],
@@ -239,6 +251,7 @@ describe("GalleryOverlay", () => {
     const onClose = vi.fn();
     render(
       <GalleryOverlay
+        presentation="modal"
         gameState={state({
           cards: { a: card("a", "A Card") },
           players: [player({ id: "p1", name: "Alice", in_play: ["a"] })],

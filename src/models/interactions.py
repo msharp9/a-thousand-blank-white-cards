@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import re
@@ -12,6 +13,62 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
 MAX_INTERACTION_DESCRIPTOR_BYTES = 131_072
 MAX_INTERACTION_VALUE_BYTES = 65_536
+MAX_OPTION_PAYLOAD_BYTES = 32_768
+
+
+def encoded_payload_size(payload: Any) -> int:
+    """Byte size of an option payload as :class:`InteractionOption` measures it."""
+    return len(json.dumps(payload, default=str).encode())
+
+
+def _is_drawing_payload(payload: Any) -> bool:
+    return (
+        isinstance(payload, list)
+        and bool(payload)
+        and all(
+            isinstance(stroke, dict)
+            and isinstance(stroke.get("points"), list)
+            and bool(stroke["points"])
+            and all(
+                isinstance(point, dict)
+                and isinstance(point.get("x"), int | float)
+                and isinstance(point.get("y"), int | float)
+                for point in stroke["points"]
+            )
+            for stroke in payload
+        )
+    )
+
+
+def compact_drawing_preview(payload: Any, budget: int) -> Any:
+    """Deterministically shrink a drawing payload for use as a vote-option preview.
+
+    Non-drawing payloads pass through unchanged. Drawing payloads are deep-copied
+    (the submitted original is never mutated), coordinates and widths are rounded
+    to 4 decimal places, then the longest reducible polyline is repeatedly
+    downsampled (first and last points preserved) and, if still oversized, strokes
+    are thinned fairly — always keeping at least one stroke — until the encoding
+    fits within ``budget`` bytes.
+    """
+    if not _is_drawing_payload(payload):
+        return payload
+    preview = copy.deepcopy(payload)
+    for stroke in preview:
+        if isinstance(stroke.get("width"), float):
+            stroke["width"] = round(stroke["width"], 4)
+        stroke["points"] = [
+            {**point, "x": round(point["x"], 4), "y": round(point["y"], 4)} for point in stroke["points"]
+        ]
+    while encoded_payload_size(preview) > budget:
+        longest = max(range(len(preview)), key=lambda i: len(preview[i]["points"]))
+        points = preview[longest]["points"]
+        if len(points) > 2:
+            preview[longest]["points"] = [*points[:-1:2], points[-1]]
+        elif len(preview) > 1:
+            preview = preview[::2]
+        else:
+            break
+    return preview
 
 
 def _identifier(value: str) -> str:
@@ -43,8 +100,8 @@ class InteractionOption(StrictModel):
 
     @model_validator(mode="after")
     def bounded_payload(self):
-        if len(json.dumps(self.payload, default=str).encode()) > 32_768:
-            raise ValueError("option payload exceeds 32768 bytes")
+        if encoded_payload_size(self.payload) > MAX_OPTION_PAYLOAD_BYTES:
+            raise ValueError(f"option payload exceeds {MAX_OPTION_PAYLOAD_BYTES} bytes")
         return self
 
 
@@ -105,6 +162,15 @@ class CardPickInteraction(_Descriptor):
     # only way to run a simultaneous "everyone discards a card they choose" —
     # a shared ``card_ids`` list can't, and snippets can't read other hands.
     from_hand: bool = False
+    # When set, ignore the static ``card_ids`` and offer the top N cards of the
+    # draw pile instead ("draw 3, keep 1"). Like ``from_hand``, the room fills
+    # the concrete ids/faces at send time — and ONLY for the audience, since
+    # deck contents are hidden information (see Room._descriptor_for and
+    # board.rooms.redaction). Mutually exclusive with ``from_hand``. Unlike
+    # from_hand's disjoint hands, the offered top N is ONE shared pool: across
+    # a multi-player audience picks are first-come-first-served unique (the
+    # room rejects a card another responder already claimed).
+    from_deck_top: int | None = Field(default=None, ge=1, le=10)
     # How many cards each responder must pick. Defaults 1/1 (single pick). With
     # max_picks > 1 the responder picks a SET ("discard 2 cards"); min_picks 0
     # allows "up to N". The stored value follows suit: a single card_id string
@@ -119,11 +185,32 @@ class CardPickInteraction(_Descriptor):
     def valid_pick_range(self):
         if self.min_picks > self.max_picks:
             raise ValueError("min_picks exceeds max_picks")
+        if self.from_hand and self.from_deck_top is not None:
+            raise ValueError("card_pick accepts from_hand or from_deck_top, not both")
         # A static candidate list can't satisfy a floor larger than itself. Skip
-        # this when the options are filled elsewhere (from_hand / input_ref).
-        if self.card_ids and not self.from_hand and self.min_picks > len(self.card_ids):
+        # this when the options are filled elsewhere (from_hand / from_deck_top /
+        # input_ref).
+        if self.card_ids and not self.from_hand and self.from_deck_top is None and self.min_picks > len(self.card_ids):
             raise ValueError("min_picks exceeds the number of candidate cards")
         return self
+
+
+class CardOrderInteraction(_Descriptor):
+    """Scry: look at the top ``count`` cards of the deck and put them back.
+
+    The descriptor itself never carries card ids — the room materializes the
+    actual top-N ids AND their faces at send time, per recipient, so hidden
+    deck content only ever travels to the resolved audience (typically the
+    single active player). The validated response is a permutation of the
+    offered ids split into ``order`` (back on top, first entry topmost) and an
+    optional ``to_bottom`` remainder. ``sealed`` defaults True: what the scryer
+    saw and how they arranged it is their secret.
+    """
+
+    kind: Literal["card_order"] = "card_order"
+    source: Literal["deck_top"] = "deck_top"
+    count: int = Field(ge=1, le=10)
+    sealed: bool = True
 
 
 class ConfirmInteraction(_Descriptor):
@@ -155,6 +242,7 @@ InteractionDescriptor = Annotated[
         NumberInteraction,
         TextInteraction,
         CardPickInteraction,
+        CardOrderInteraction,
         ConfirmInteraction,
         DrawingInteraction,
     ],
@@ -206,6 +294,22 @@ class CardPickResponse(StrictModel):
         return [self.card_id] if self.card_id is not None else list(self.card_ids or [])
 
 
+class CardOrderResponse(StrictModel):
+    kind: Literal["card_order"] = "card_order"
+    # New deck-top order for cards staying on top; order[0] is the next draw.
+    order: list[Identifier] = Field(default_factory=list, max_length=200)
+    # Cards sent to the deck bottom instead (kept in list order, topmost of
+    # the bottomed stack first).
+    to_bottom: list[Identifier] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def unique_across_split(self):
+        combined = [*self.order, *self.to_bottom]
+        if len(combined) != len(set(combined)):
+            raise ValueError("card_order entries must be unique across order and to_bottom")
+        return self
+
+
 class ConfirmResponse(StrictModel):
     kind: Literal["confirm"] = "confirm"
     confirmed: bool
@@ -223,7 +327,15 @@ class DrawingResponse(StrictModel):
 
 
 InteractionResponsePayload = Annotated[
-    Union[ChoiceResponse, NumberResponse, TextResponse, CardPickResponse, ConfirmResponse, DrawingResponse],
+    Union[
+        ChoiceResponse,
+        NumberResponse,
+        TextResponse,
+        CardPickResponse,
+        CardOrderResponse,
+        ConfirmResponse,
+        DrawingResponse,
+    ],
     Field(discriminator="kind"),
 ]
 

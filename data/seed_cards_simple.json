@@ -285,7 +285,7 @@
         }
       ],
       "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 5)"
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 5)"
     }
   },
   {
@@ -308,7 +308,7 @@
         }
       ],
       "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 8)"
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 8)"
     }
   },
   {
@@ -406,7 +406,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "venue": "all",
       "ops": [
         {
@@ -428,7 +428,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "venue": "all",
       "ops": [
         {
@@ -450,7 +450,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "venue": "all",
       "ops": [
         {
@@ -472,7 +472,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "venue": "all",
       "ops": [
         {
@@ -494,7 +494,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "venue": "all",
       "ops": [
         {
@@ -701,11 +701,13 @@
           "args": {
             "event": "on_score_change",
             "scope": "center",
+            "title": "The player who causes a score change gains 1 bonus point.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    actor = ctx.get(\"actor_id\")\n    if actor:\n        state.add_points(\"id:\" + actor, 1)\n"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.register_hook(\"on_score_change\", scope=\"center\", code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor:\\n        state.add_points('id:' + actor, 1)\\n\")"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook(\"on_score_change\", scope=\"center\", code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor:\\n        state.add_points('id:' + actor, 1)\\n\", title=\"The player who causes a score change gains 1 bonus point.\", condition_keys=[])"
     }
   }
 ]

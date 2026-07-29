@@ -22,22 +22,45 @@ def test_load_eval_items(tmp_path: Path) -> None:
     assert items[0].expected == {"placement": "discard"}
 
 
-def test_load_suite_items_all_combines_gold_and_hard() -> None:
+def test_load_suite_items_all_combines_every_scored_suite() -> None:
     from evals.harness import load_suite_items
 
     items = load_suite_items("all", limit=2)
-    assert len(items) == 4
-    assert {t for item in items for t in item.tags} == {"real_card", "hard_card"}
+    assert len(items) == 8
+    assert {t for item in items for t in item.tags} == {
+        "real_card",
+        "hard_card",
+        "placement_card",
+        "pet_card",
+    }
+
+
+def test_placement_suite_is_balanced_and_contains_regressions() -> None:
+    from collections import Counter
+
+    from evals.harness import load_suite_items
+
+    items = load_suite_items("placement")
+    assert len(items) == 24
+    assert Counter(item.expected["placement"] for item in items) == {
+        "discard": 8,
+        "center": 8,
+        "player": 8,
+    }
+    by_title = {item.input["title"]: item.expected["placement"] for item in items}
+    assert by_title["Cat"] == "player"
+    assert by_title["Testing"] == "center"
 
 
 def test_normalise_folds_legacy_program_into_resolution_plan() -> None:
     prog = EffectProgram(ops=[AddPointsOp(target="self", amount=3)])
-    result = InterpretResult(program=prog, verdict="ok")
+    result = InterpretResult(program=prog, verdict="ok", placement="player")
     out = normalise_agent_output(result)
     steps = out["resolution_plan"]["steps"]
     assert steps[0]["kind"] == "ops"
     assert steps[0]["ops"][0]["op"] == "add_points"
     assert out["verdict"] == "ok"
+    assert out["placement"] == "player"
     assert "effect_program" not in out
     assert "snippet_effect" not in out
 
@@ -68,6 +91,54 @@ def test_normalise_preserves_complete_mixed_resolution_plan() -> None:
     assert "state.add_points" in out["resolution_plan"]["steps"][1]["code"]
 
 
+class TestRecoverPlanFromComment:
+    _PLAN_JSON = '{"steps": [{"kind": "ops", "ops": [{"op": "add_points", "target": "self", "amount": 5}]}]}'
+
+    def _out(self, comment: str, verdict: str = "invalid") -> dict:
+        return normalise_agent_output(InterpretResult(verdict=verdict, comment=comment, agent_error=True))
+
+    def test_recovers_bare_plan_object(self) -> None:
+        out = self._out(f'{{"plan": {self._PLAN_JSON}}}')
+        assert out["resolution_plan"]["steps"][0]["ops"][0]["op"] == "add_points"
+        assert out["plan_recovered_from_comment"] is True
+        assert out["verdict"] == "ok"
+        assert out["raw_verdict"] == "invalid"
+
+    def test_recovers_from_fenced_block_with_prose(self) -> None:
+        comment = f'Here is my answer:\n```json\n{{"resolution_plan": {self._PLAN_JSON}}}\n```\nHope that helps!'
+        out = self._out(comment)
+        assert out["resolution_plan"]["steps"][0]["ops"][0]["op"] == "add_points"
+        assert out["plan_recovered_from_comment"] is True
+
+    def test_recovers_bare_steps_shape(self) -> None:
+        out = self._out(self._PLAN_JSON)
+        assert out["resolution_plan"]["steps"][0]["ops"][0]["op"] == "add_points"
+
+    def test_truncated_json_recovers_nothing(self) -> None:
+        out = self._out('{"plan": {"steps": [{"kind": "ops", "ops": [{"op": "add_poi')
+        assert "resolution_plan" not in out
+        assert "plan_recovered_from_comment" not in out
+        assert out["verdict"] == "invalid"
+
+    def test_plain_prose_is_untouched(self) -> None:
+        out = self._out("This card does nothing interesting.")
+        assert "resolution_plan" not in out
+        assert out["verdict"] == "invalid"
+
+    def test_real_plan_wins_over_comment_json(self) -> None:
+        prog = EffectProgram(ops=[AddPointsOp(target="self", amount=1)])
+        result = InterpretResult(program=prog, verdict="ok", comment=f'{{"plan": {self._PLAN_JSON}}}')
+        out = normalise_agent_output(result)
+        assert out["resolution_plan"]["steps"][0]["ops"][0]["amount"] == 1
+        assert "plan_recovered_from_comment" not in out
+
+    def test_verdict_preserved_when_not_invalid(self) -> None:
+        out = self._out(f'{{"plan": {self._PLAN_JSON}}}', verdict="needs_choice")
+        assert out["plan_recovered_from_comment"] is True
+        assert out["verdict"] == "needs_choice"
+        assert "raw_verdict" not in out
+
+
 def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
     data = [
         {
@@ -80,7 +151,7 @@ def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
     p.write_text(json.dumps(data))
 
     prog = EffectProgram(ops=[AddPointsOp(target="self", amount=3)])
-    fake_result = InterpretResult(program=prog, snippet=None, verdict="ok")
+    fake_result = InterpretResult(program=prog, snippet=None, verdict="ok", placement="discard")
 
     # mock run_agent so no LLM runs; mock the judge-based scorers to avoid API.
     with (
@@ -95,6 +166,7 @@ def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
             target_placement_correct=1.0,
             trigger_event_correct=1.0,
             magnitude_sign_correct=1.0,
+            magnitude_value_correct=1.0,
             overall=1.0,
             reason="ok",
         )
@@ -103,3 +175,6 @@ def test_run_harness_with_mocked_agent(tmp_path: Path) -> None:
     summary = report.summary()
     assert summary["cases"] == 1
     assert summary["dsl_validity"] == 1.0
+    assert summary["placement_accuracy"] == 1.0
+    assert summary["magnitude_sign"] == 1.0
+    assert summary["magnitude_value"] == 1.0

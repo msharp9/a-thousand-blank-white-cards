@@ -11,6 +11,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import AfterValidator, BaseModel, Field
 
+from models.admin import AdminAction
 from models.card import CARD_ART_PREFIX, MAX_CARD_ART_BYTES, MAX_CARD_DESCRIPTION, MAX_CARD_TITLE, decode_card_art
 from models.interactions import (
     Identifier,
@@ -18,6 +19,7 @@ from models.interactions import (
     InteractionProgress,
     InteractionResponsePayload,
 )
+from models.game_state import StarterDeck
 
 # Length-bounded card text, enforced on every inbound authoring message via the
 # ClientMsg TypeAdapter in board.ws. Limits live in models.card (single source).
@@ -56,6 +58,22 @@ class JoinMsg(BaseModel):
 
 class StartMsg(BaseModel):
     type: Literal["start"] = "start"
+
+
+class LobbySetHostMsg(BaseModel):
+    type: Literal["lobby_set_host"] = "lobby_set_host"
+    participant_id: str = Field(min_length=1, max_length=80)
+
+
+class LobbySetRoleMsg(BaseModel):
+    type: Literal["lobby_set_role"] = "lobby_set_role"
+    participant_id: str = Field(min_length=1, max_length=80)
+    role: Literal["player", "spectator"]
+
+
+class LobbySetDeckMsg(BaseModel):
+    type: Literal["lobby_set_deck"] = "lobby_set_deck"
+    deck: StarterDeck
 
 
 class PassMsg(BaseModel):
@@ -125,6 +143,17 @@ class CreateCardMsg(BaseModel):
     art: CardArt | None = None
 
 
+class RedraftCardMsg(BaseModel):
+    """Retry or revise a failed setup-time card draft."""
+
+    type: Literal["redraft_card"] = "redraft_card"
+    card_id: str
+    title: CardTitle
+    description: CardDescription
+    # Omitted preserves the existing art; supplied replaces it for this revision.
+    art: CardArt | None = None
+
+
 class PreviewCardMsg(BaseModel):
     type: Literal["preview_card"] = "preview_card"
     title: CardTitle
@@ -164,21 +193,52 @@ class InteractionResponseMsg(BaseModel):
     payload: InteractionResponsePayload
 
 
+class AdminProposeMsg(BaseModel):
+    type: Literal["admin_propose"] = "admin_propose"
+    actions: list[AdminAction] = Field(min_length=1, max_length=20)
+
+
+class AdminVoteMsg(BaseModel):
+    type: Literal["admin_vote"] = "admin_vote"
+    proposal_id: str = Field(min_length=1, max_length=80)
+    accept: bool
+
+
+class AdminCancelMsg(BaseModel):
+    type: Literal["admin_cancel"] = "admin_cancel"
+    proposal_id: str = Field(min_length=1, max_length=80)
+
+
+class AdminViewMsg(BaseModel):
+    """Open/close the spectator host's temporary privileged admin view."""
+
+    type: Literal["admin_view"] = "admin_view"
+    open: bool
+
+
 ClientMsg = Annotated[
     Union[
         JoinMsg,
         StartMsg,
+        LobbySetHostMsg,
+        LobbySetRoleMsg,
+        LobbySetDeckMsg,
         PassMsg,
         EndTurnMsg,
         PlayMsg,
         PassReactionMsg,
         CreateCardMsg,
+        RedraftCardMsg,
         PreviewCardMsg,
         EpilogueStartMsg,
         EpilogueVoteMsg,
         EpilogueDoneMsg,
         EpilogueFinalizeMsg,
         InteractionResponseMsg,
+        AdminProposeMsg,
+        AdminVoteMsg,
+        AdminCancelMsg,
+        AdminViewMsg,
     ],
     Field(discriminator="type"),
 ]
@@ -192,6 +252,13 @@ class StateMsg(BaseModel):
 
     type: Literal["state"] = "state"
     state: dict  # serialized GameState snapshot; typed further in frontend
+
+
+class AdminStateMsg(BaseModel):
+    """Targeted full card-state snapshot for an open spectator-host panel."""
+
+    type: Literal["admin_state"] = "admin_state"
+    state: dict
 
 
 class EffectAppliedMsg(BaseModel):
@@ -224,12 +291,25 @@ class PreviewResultMsg(BaseModel):
 
 
 class PromptChoiceMsg(BaseModel):
-    """Server asks the active player to pick a target."""
+    """Server asks one chooser to pick a target (targeted send, never broadcast).
+
+    A card needing BOTH axes prompts twice: player first, then card. Each
+    prompt carries the context accumulated so far (``chosen_player_id`` /
+    ``chosen_card_id``) so the follow-up play can re-send the full selection,
+    plus ``as_reaction`` so a reaction's follow-up routes back into the open
+    window. ``cards`` carries full snapshots for exactly the offered card
+    candidates — the chooser's redacted state snapshot never includes another
+    player's hidden hand content.
+    """
 
     type: Literal["prompt_choice"] = "prompt_choice"
     card_id: str
     prompt: str
-    choices: list[dict]  # list of {player_id, name}
+    choices: list[dict]  # list of {player_id, name} or {card_id, name}
+    cards: dict[str, dict] = Field(default_factory=dict)  # card_id -> card snapshot
+    chosen_player_id: str | None = None
+    chosen_card_id: str | None = None
+    as_reaction: bool = False
 
 
 class InteractionRequestMsg(BaseModel):
@@ -266,6 +346,22 @@ class BrewingMsg(BaseModel):
     card_id: str
 
 
+class HandRevealedMsg(BaseModel):
+    """Targeted push: a one-shot ``reveal_hand`` showed ``player_id``'s hand.
+
+    Sent ONLY to the reveal's resolved audience — never broadcast. Modal like
+    the reaction window: not state, so it is lost on reconnect (acceptable by
+    design). ``cards`` carries the revealed card bodies because the audience's
+    redacted snapshots never include hidden hand content.
+    """
+
+    type: Literal["hand_revealed"] = "hand_revealed"
+    player_id: str
+    player_name: str = ""
+    card_ids: list[str]
+    cards: dict[str, dict] = Field(default_factory=dict)  # card_id -> card snapshot
+
+
 class ReactionWindowMsg(BaseModel):
     """Broadcast when a play opens a reaction window. Public info only — each
     client decides its own eligibility from the hand canonicals it already has
@@ -280,6 +376,37 @@ class ReactionWindowMsg(BaseModel):
     deadline_epoch_ms: int
 
 
+class DiceRollMsg(BaseModel):
+    """Broadcast once per resolved roll_die so clients can animate the roll.
+
+    Immediacy push only — the matching "dice_roll" history event in the state
+    snapshot is the reconnect-safe record (same split as reaction_window vs
+    ``pending_play``). Privacy-safe: sides/values/total, never hand contents.
+    """
+
+    type: Literal["dice_roll"] = "dice_roll"
+    actor_id: str
+    sides: int
+    values: list[int]
+    total: int
+    card_id: str | None = None
+
+
+class TurnTimerMsg(BaseModel):
+    """Broadcast whenever the pausable turn clock (rules.turn_timer) starts,
+    pauses, resumes, or clears. Clients render the countdown from
+    ``deadline_epoch_ms`` and re-sync on every push; the state snapshot's
+    ``turn_timer`` entry is the reconnect-safe source of truth."""
+
+    type: Literal["turn_timer"] = "turn_timer"
+    # Absolute expiry (epoch ms). Null while paused (the banked remainder is
+    # server-side only) and when the clock is cleared.
+    deadline_epoch_ms: int | None = None
+    paused: bool = False
+    # Whose turn the clock times; null when the clock is cleared.
+    player_id: str | None = None
+
+
 class ReactionResultMsg(BaseModel):
     """Broadcast when a reaction window closes, however it closed."""
 
@@ -291,8 +418,16 @@ class ReactionResultMsg(BaseModel):
     reaction_card_id: str | None = None
 
 
+class AdminProposalResultMsg(BaseModel):
+    type: Literal["admin_proposal_result"] = "admin_proposal_result"
+    proposal_id: str
+    outcome: Literal["applied", "rejected", "expired", "cancelled"]
+    message: str
+
+
 ServerMsg = Union[
     StateMsg,
+    AdminStateMsg,
     EffectAppliedMsg,
     CardInterpretedMsg,
     PreviewResultMsg,
@@ -302,6 +437,10 @@ ServerMsg = Union[
     EpilogueMsg,
     ErrorMsg,
     BrewingMsg,
+    DiceRollMsg,
+    HandRevealedMsg,
     ReactionWindowMsg,
     ReactionResultMsg,
+    TurnTimerMsg,
+    AdminProposalResultMsg,
 ]

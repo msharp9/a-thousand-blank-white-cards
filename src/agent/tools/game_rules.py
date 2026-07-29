@@ -1,22 +1,21 @@
-"""agent.tools.game_rules — consult the real-world rules of '1000 Blank White Cards'.
+"""agent.tools.game_rules — consult the house rules of '1000 Blank White Cards'.
 
 Exposes a single ``game_rules`` @tool the interpretation agent can call to look
-up how the tabletop game "1000 Blank White Cards" actually works, so it can
-resolve edge cases when deciding what a played card should do.
+up how THIS digital edition works — scoring (negative scores are legal), effect
+timing (everything is instantaneous), zones, turn/end-of-game shape, what the
+engine supports and what it does not yet — so it can resolve edge cases without
+inventing constraints.
 
-The rules text is a bundled plain-text snapshot of the game's Wikipedia article
-(``data/game_rules.txt``), read once and cached in a module-level variable —
-deterministic, zero-latency, and immune to network flakiness or the article
-being renamed (which silently broke the previous live-API version). To refresh
-the snapshot:
+The rules text is a hand-maintained mechanics reference (``data/game_rules.txt``),
+read once and cached in a module-level variable. It is written FOR this lookup
+tool: one self-contained, keyword-rich fact per line (the empty-query overview
+returns the first ``_OVERVIEW_CHARS`` chars — the "Core facts" block is sized to
+fit it), with "NOT YET SUPPORTED" lines kept in sync with the engine-gap beads.
 
-    curl -s "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&format=json&redirects=1&titles=1000%20Blank%20White%20Cards" \\
-      | python3 -c "import json,sys; print(next(iter(json.load(sys.stdin)['query']['pages'].values()))['extract'].strip())" > data/game_rules.txt
-
-When a ``query`` keyword is supplied the tool returns only the paragraphs
-mentioning that keyword; otherwise it returns a trimmed overview. It NEVER
-raises: if the snapshot file is missing or empty it falls back to a built-in
-short summary of the game's core rules.
+When a ``query`` keyword is supplied the tool returns only the lines mentioning
+that keyword; otherwise it returns the trimmed overview. It NEVER raises: if
+the rules file is missing or empty it falls back to a built-in short summary
+of the game's core rules.
 
 Layering: this module imports only ``logging`` / stdlib — no board, no network.
 """
@@ -33,7 +32,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-# Bundled article snapshot, resolved from the project root (like the seed-cards
+# Bundled rules reference, resolved from the project root (like the seed-cards
 # and embedding-cache paths) so the tool works regardless of CWD.
 RULES_FILENAME = "data/game_rules.txt"
 
@@ -42,15 +41,16 @@ RULES_FILENAME = "data/game_rules.txt"
 _OVERVIEW_CHARS = 1200
 
 # Built-in, hand-written fallback so the tool is useful even without the
-# snapshot file. Exposed as a module constant so tests can assert on it.
+# rules file. Exposed as a module constant so tests can assert on it.
 FALLBACK_SUMMARY = (
     "1,000 Blank White Cards is a party game played with a deck the players make "
     "themselves: you start with blank white cards and write a title, artwork, and "
     "an effect on each one. Cards can do almost anything — award or subtract "
     "points, change the rules, or invent new mechanics on the spot — and blank "
     "cards drawn during play are authored by the player before being played. "
-    "Players keep score with points, informal House Rules resolve disputes, and "
-    "the player with the highest score when the deck runs out wins."
+    "Apply card text literally and immediately: scores are unbounded integers "
+    "(negative scores are legal), all effects resolve instantly, and the player "
+    "with the highest score when the deck runs out wins."
 )
 
 # Module-level cache for the loaded snapshot. ``None`` = not yet read.
@@ -64,15 +64,15 @@ def reset_cache() -> None:
 
 
 def _rules_path() -> Path:
-    """Return the snapshot path at the project root (four levels up from this file)."""
+    """Return the rules-file path at the project root (four levels up from this file)."""
     return Path(__file__).resolve().parents[3] / RULES_FILENAME
 
 
 def _read_extract() -> str:
-    """Read the bundled rules snapshot, or raise on a missing/empty file."""
+    """Read the bundled rules reference, or raise on a missing/empty file."""
     extract = _rules_path().read_text(encoding="utf-8")
     if not extract.strip():
-        raise ValueError(f"rules snapshot at {RULES_FILENAME} is empty")
+        raise ValueError(f"rules file at {RULES_FILENAME} is empty")
     return extract.strip()
 
 
@@ -115,7 +115,7 @@ def _focus(extract: str, query: str) -> str:
 
 @tool
 def game_rules(query: str = "") -> str:
-    """Look up the official rules of the tabletop game '1000 Blank White Cards' to clarify how a card or edge case should work. Optionally pass a keyword to focus on a section/sentence."""
+    """Look up the house rules of this game of '1000 Blank White Cards' — scoring (negative scores are legal), effect timing (everything is instant), zones, game end, and which mechanics the engine does or does not support — to clarify how a card or edge case should work. Optionally pass a keyword (e.g. 'discard', 'dice', 'negative') to focus on the matching rules."""
     try:
         extract = _get_extract()
     except Exception as exc:

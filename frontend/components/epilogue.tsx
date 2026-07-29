@@ -11,12 +11,21 @@ interface EpilogueProps {
   cards: CardSnapshot[];
   send: (msg: ClientMsg) => void;
   isHost: boolean;
+  // True for seated players (membership in gameState.players). Spectators —
+  // host or not — get a read-only view; a spectator host keeps Finalize.
+  canVote: boolean;
   roomCode?: string;
 }
 
 type VoteChoice = "keep" | "destroy";
 
-export function EpilogueView({ cards, send, isHost, roomCode }: EpilogueProps) {
+export function EpilogueView({
+  cards,
+  send,
+  isHost,
+  canVote,
+  roomCode,
+}: EpilogueProps) {
   const [votes, setVotes] = useState<Record<string, VoteChoice>>({});
   const [done, setDone] = useState(false);
 
@@ -43,14 +52,17 @@ export function EpilogueView({ cards, send, isHost, roomCode }: EpilogueProps) {
           The Epilogue
         </h2>
         <p className="mx-auto mt-1 max-w-[560px] text-center font-hand text-[19px] text-muted-foreground">
-          Game over. Decide which cards deserve to live in the deck forever —
-          and which get retired.
+          {canVote
+            ? "Game over. Decide which cards deserve to live in the deck forever — and which get retired."
+            : "Game over. The players are deciding which cards live in the deck forever — you're watching the vote."}
         </p>
-        <p className="mt-2 text-center font-hand text-base text-muted-foreground">
-          <span className="text-marker-green">{keepCount} kept</span> ·{" "}
-          <span className="text-primary">{cutCount} cut</span> · {unvotedCount}{" "}
-          to decide
-        </p>
+        {canVote && (
+          <p className="mt-2 text-center font-hand text-base text-muted-foreground">
+            <span className="text-marker-green">{keepCount} kept</span> ·{" "}
+            <span className="text-primary">{cutCount} cut</span> ·{" "}
+            {unvotedCount} to decide
+          </p>
+        )}
       </div>
 
       {!done && (
@@ -74,31 +86,33 @@ export function EpilogueView({ cards, send, isHost, roomCode }: EpilogueProps) {
                     artUrl={roomCode ? getCardArtUrl(roomCode, card) : null}
                   />
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "font-hand text-base font-normal sticker-shadow-sm",
-                      choice === "keep" &&
-                        "bg-marker-green text-white hover:bg-marker-green",
-                    )}
-                    onClick={() => vote(card.id, "keep")}
-                  >
-                    Keep
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "font-hand text-base font-normal sticker-shadow-sm",
-                      isCut && "bg-primary text-white hover:bg-primary",
-                    )}
-                    onClick={() => vote(card.id, "destroy")}
-                  >
-                    Cut
-                  </Button>
-                </div>
+                {canVote && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "font-hand text-base font-normal sticker-shadow-sm",
+                        choice === "keep" &&
+                          "bg-marker-green text-white hover:bg-marker-green",
+                      )}
+                      onClick={() => vote(card.id, "keep")}
+                    >
+                      Keep
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "font-hand text-base font-normal sticker-shadow-sm",
+                        isCut && "bg-primary text-white hover:bg-primary",
+                      )}
+                      onClick={() => vote(card.id, "destroy")}
+                    >
+                      Cut
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -106,7 +120,7 @@ export function EpilogueView({ cards, send, isHost, roomCode }: EpilogueProps) {
       )}
 
       <div className="flex items-center justify-center gap-3">
-        {!done && (
+        {canVote && !done && (
           <Button size="lg" className="font-marker text-lg" onClick={markDone}>
             {unvotedCount > 0 ? "Skip remaining" : "Done voting"}
           </Button>

@@ -16,11 +16,13 @@ the end wins (unless they don't), but the real fun is inventing the cards.
 
 A game runs in these steps:
 
-1. **Join the lobby.** Everyone opens the room and enters a name. One player is
-   the host.
+1. **Join the lobby.** Everyone opens the room and enters a name. The host can
+   transfer hosting and move attendees between player and spectator roles until
+   the game starts.
 2. **Start the game.** The host starts it once everyone's in.
 3. **Build the deck.** The deck is assembled from three sources:
-   - **30 pre-made cards** are shuffled in.
+   - **30 pre-made cards** are sampled from the shared card corpus, which starts
+     with the seed cards and gains cards kept in earlier games' epilogues.
    - **Each player writes 5 cards** — title and description
      (e.g. *"Gain 5 points"*, *"Everyone else loses 2"*).
    - **5 blank cards per player** are shuffled in, to be written later.
@@ -48,6 +50,27 @@ A game runs in these steps:
 8. **Epilogue.** Players vote on which of the newly-written cards are good enough
    to keep in the pile for future games. The rest are discarded.
    - **Note:** Many players agree that creating a card that gets the most votes during the Epilogue phase is the true victory.
+
+### Voted host corrections
+
+During play, the host has a mobile-friendly **Host** panel for resolving
+table-policed rules and correcting mistakes. It can adjust scores, move public
+cards or the top/bottom deck card between zones, shuffle or reshuffle, add or
+remove player conditions, remove hooks, eliminate players, or end the game.
+The results screen also lets the host correct scores and winners.
+
+If the lobby assigns hosting to a spectator, the Host panel enters **God
+mode**. Only that panel receives the complete hands and ordered deck, allowing
+the spectator host to propose exact hidden-card moves. A host who is also a
+player remains subject to ordinary hidden-information redaction.
+
+Corrections are never silent: the server previews the complete bundle, pauses
+gameplay, and asks every seated player other than a player-host proposer to
+approve it. A spectator-host proposal therefore requires every player. The
+whole bundle is applied atomically only after unanimous acceptance; one
+rejection or a 60-second timeout cancels it. Spectators can follow the vote but
+do not vote. Hidden-card details are shown only to the spectator host and the
+affected hand owner; everyone else sees a generic description.
 
 **The basic game.** In the simplest game, every card just **adds or subtracts
 points** from one or more players — no special rules needed. That's all it takes

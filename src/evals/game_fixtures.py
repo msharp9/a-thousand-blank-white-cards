@@ -11,8 +11,13 @@ Two deliberate choices make this exercise the full production path:
   fixed ``EVAL_CARD_ID`` so ``dry_run_resolution_plan`` can model its removal to
   discard (mirroring ``Room._resolve_plan``).
 * The actor (``EVAL_ACTOR_ID``) is NOT the author (``EVAL_CREATOR_ID``), so the
-  persona branch that distinguishes "played my own card" from "played someone
-  else's" (do_nothing vs punish_author) is actually reachable.
+  authorship-driven persona logic — who receives the consolation boon when a card
+  fizzles (do_nothing), and whether the rare abusive-card punish_author branch
+  could even apply — is actually exercised.
+* A deterministic choice context (``EVAL_CHOSEN_PLAYER_ID`` / ``EVAL_CHOSEN_CARD_ID``)
+  mirrors the production ``prompt_choice`` flow so plans that resolve ``chooser`` /
+  ``chosen_card`` targets are executable — without it the reducers raise and every
+  choice-based card looks broken.
 """
 
 from __future__ import annotations
@@ -24,6 +29,9 @@ from models.game_state import GameState, Player
 EVAL_ACTOR_ID = "p1"
 EVAL_CREATOR_ID = "p2"  # author ≠ actor, so persona branching is exercised
 EVAL_CARD_ID = "eval-played-card"
+EVAL_CHOSEN_PLAYER_ID = "p2"  # a player other than the actor, for chooser/target_player
+EVAL_CHOSEN_CARD_ID = "hand-c"  # a real card in another player's hand, for chosen_card
+EVAL_LAST_PLAYED_ID = "last-played"  # a completed prior play, so "the last card played" has a referent
 
 
 def build_eval_state(title: str = "Eval Card", description: str = "", alt_text: str | None = None) -> GameState:
@@ -33,7 +41,14 @@ def build_eval_state(title: str = "Eval Card", description: str = "", alt_text: 
     new states but tools read the passed snapshot). ``alt_text`` rides the card
     registry so the sandbox / read_game_state path can surface the card's art
     description exactly as production does.
+
+    The state is mid-game, not turn one: a prior play (``EVAL_LAST_PLAYED_ID``,
+    played by Bob, now on the discard) exists in the history so cards that
+    reference "the last card played" have a concrete referent, and reaction
+    dry-runs can synthesize a pending play from it.
     """
+    from engine.history import append_history_event
+
     played: dict[str, Any] = {
         "id": EVAL_CARD_ID,
         "title": title,
@@ -42,7 +57,7 @@ def build_eval_state(title: str = "Eval Card", description: str = "", alt_text: 
         "attributes": {},
         "creator_id": EVAL_CREATOR_ID,
     }
-    return GameState(
+    state = GameState(
         room_code="EVAL",
         players=[
             Player(id="p1", name="Alice", score=7, hand=[EVAL_CARD_ID, "hand-a", "hand-b"]),
@@ -54,7 +69,17 @@ def build_eval_state(title: str = "Eval Card", description: str = "", alt_text: 
             "hand-a": {"id": "hand-a", "title": "Spare", "description": "", "alt_text": None, "attributes": {}},
             "hand-b": {"id": "hand-b", "title": "Spare", "description": "", "alt_text": None, "attributes": {}},
             "hand-c": {"id": "hand-c", "title": "Spare", "description": "", "alt_text": None, "attributes": {}},
+            EVAL_LAST_PLAYED_ID: {
+                "id": EVAL_LAST_PLAYED_ID,
+                "title": "Yesterday's News",
+                "description": "Gain 2 points.",
+                "alt_text": None,
+                "attributes": {},
+                "creator_id": "p3",
+            },
         },
         deck=[f"deck-{index}" for index in range(10)],
+        discard=[EVAL_LAST_PLAYED_ID],
         phase="playing",
     )
+    return append_history_event(state, "play", actor_id="p2", card_id=EVAL_LAST_PLAYED_ID)

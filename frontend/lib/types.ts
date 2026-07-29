@@ -3,6 +3,7 @@
 // Room play mode chosen by the host on create. Mirrors the backend's
 // POST /rooms body ({"mode": ...}); the backend defaults to "both" when omitted.
 export type Mode = "online" | "in_person" | "both";
+export type StarterDeck = "random" | "simple" | "pets";
 
 // ─── client → server ──────────────────────────────────────────────────────
 
@@ -13,6 +14,19 @@ export type Placement = {
 
 export type JoinMsg = { type: "join"; player_id: string | null; name: string };
 export type StartMsg = { type: "start" };
+export type LobbySetHostMsg = {
+  type: "lobby_set_host";
+  participant_id: string;
+};
+export type LobbySetRoleMsg = {
+  type: "lobby_set_role";
+  participant_id: string;
+  role: "player" | "spectator";
+};
+export type LobbySetDeckMsg = {
+  type: "lobby_set_deck";
+  deck: StarterDeck;
+};
 // A turn begins with an automatic server-side draw (there is no client `draw`
 // message); the active player then plays a card OR ends their turn.
 // A turn ends by playing a card OR ending the turn. `pass` and `end_turn` are
@@ -54,6 +68,14 @@ export type CreateCardMsg = {
   // Optional card art: same PNG data-URL contract as PlayMsg.art.
   art?: string;
 };
+export type RedraftCardMsg = {
+  type: "redraft_card";
+  card_id: string;
+  title: string;
+  description: string;
+  // Omitted preserves the failed card's existing art.
+  art?: string;
+};
 export type PreviewCardMsg = {
   type: "preview_card";
   title: string;
@@ -73,6 +95,47 @@ export type EpilogueFinalizeMsg = { type: "epilogue_finalize" };
 // vote. Only valid while phase === "results".
 export type EpilogueStartMsg = { type: "epilogue_start" };
 
+export type AdminAction =
+  | { kind: "set_score"; player_id: string; score: number }
+  | {
+      kind: "move_card";
+      source_zone: "deck" | "discard" | "center" | "exile" | "in_play" | "hand";
+      card_id?: string;
+      source_player_id?: string;
+      selector?: "top" | "bottom";
+      to_zone: "deck" | "discard" | "center" | "exile" | "in_play" | "hand";
+      to_player_id?: string;
+      deck_position?: "top" | "bottom" | "shuffle";
+    }
+  | { kind: "shuffle_deck"; include_discard: boolean }
+  | {
+      kind: "set_condition";
+      player_id: string;
+      key: string;
+      value: string | number | boolean;
+      duration_turns?: number;
+    }
+  | { kind: "remove_condition"; player_id: string; key: string }
+  | { kind: "remove_hook"; hook_id: string }
+  | { kind: "eliminate_players"; player_ids: string[] }
+  | { kind: "end_game"; winner_ids?: string[] }
+  | { kind: "set_result_winners"; winner_ids: string[] };
+
+export type AdminProposeMsg = {
+  type: "admin_propose";
+  actions: AdminAction[];
+};
+export type AdminVoteMsg = {
+  type: "admin_vote";
+  proposal_id: string;
+  accept: boolean;
+};
+export type AdminCancelMsg = {
+  type: "admin_cancel";
+  proposal_id: string;
+};
+export type AdminViewMsg = { type: "admin_view"; open: boolean };
+
 export type DrawingPoint = { x: number; y: number };
 export type DrawingStroke = {
   color: string;
@@ -86,6 +149,9 @@ export type InteractionResponsePayload =
   | { kind: "text"; value: string }
   // Single-pick sends card_id; multi-pick (max_picks > 1) sends card_ids.
   | { kind: "card_pick"; card_id?: string; card_ids?: string[] }
+  // Scry: a full permutation of the offered deck-top ids, split into the
+  // cards going back on top (order[0] = next draw) and the cards bottomed.
+  | { kind: "card_order"; order: string[]; to_bottom: string[] }
   | { kind: "confirm"; confirmed: boolean }
   | { kind: "drawing"; strokes: DrawingStroke[] };
 
@@ -99,16 +165,24 @@ export type InteractionResponseMsg = {
 export type ClientMsg =
   | JoinMsg
   | StartMsg
+  | LobbySetHostMsg
+  | LobbySetRoleMsg
+  | LobbySetDeckMsg
   | PassMsg
   | EndTurnMsg
   | PlayMsg
   | PassReactionMsg
   | CreateCardMsg
+  | RedraftCardMsg
   | PreviewCardMsg
   | EpilogueStartMsg
   | EpilogueVoteMsg
   | EpilogueDoneMsg
   | EpilogueFinalizeMsg
+  | AdminProposeMsg
+  | AdminVoteMsg
+  | AdminCancelMsg
+  | AdminViewMsg
   | InteractionResponseMsg;
 
 // ─── server → client ──────────────────────────────────────────────────────
@@ -126,6 +200,9 @@ export type CardSnapshot = {
   mechanical_status?: MechanicalStatus;
   mechanical_reason?: string | null;
   correlation_id?: string | null;
+  draft_status?: "drafting" | "ready" | "failed";
+  draft_reason?: string | null;
+  draft_revision?: number;
   // True while this is an un-authored blank card (empty title/description). The
   // game seeds blanks into the deck; a blank sits in hand as blank and is
   // authored when played. Cleared once the player fills it in on play.
@@ -150,12 +227,33 @@ export type PlayerSnapshot = {
   id: string;
   name: string;
   score: number;
+  // Card ids in this player's hand. The server redacts snapshots per viewer:
+  // only YOUR OWN entry carries real ids — every other player's hand arrives
+  // empty, with hand_count as the only public fact. Render opponents' fans
+  // from hand_count, never hand.length.
   hand: string[];
+  // Number of cards in this player's hand (present for every player, including
+  // redacted ones). Optional only for back-compat with older servers.
+  hand_count?: number;
   // Cards this player has played in front of them (visible to everyone on the
   // table). Resolve ids against GameStateSnapshot.cards to render them.
   in_play: string[];
   connected: boolean;
+  // Knocked out of the game (eliminate_player op): takes no more turns and
+  // cannot win; their in-play cards stay on the table. Optional only for
+  // back-compat with older servers.
+  eliminated?: boolean;
   conditions: Record<string, unknown>;
+  // Remaining lifetime (in this player's turn starts) for expiring conditions,
+  // keyed like `conditions` (Player.condition_ttls on the backend). Optional
+  // for back-compat with servers that predate condition TTLs.
+  condition_ttls?: Record<string, number>;
+  // Hand visibility (reveal_hand op). hand_public = this hand is played face
+  // up: every viewer's snapshot carries its real ids (render it face-up with a
+  // "revealed" badge). hand_revealed_to = player ids allowed to see the hand;
+  // the server only sends the real ids to those viewers, so check for MY id.
+  hand_public?: boolean;
+  hand_revealed_to?: string[];
 };
 
 export type MechanicalStatus =
@@ -183,7 +281,20 @@ export type RulesSnapshot = {
   end_condition: EndConditionSnapshot;
   win_condition: WinConditionSnapshot;
   skip_predicate?: string | null;
+  hand_limit?: number | null;
+  // Per-turn time limit in seconds (null = no clock). The LIVE clock rides
+  // the snapshot's top-level turn_timer entry; this is just the rule.
+  turn_timer?: number | null;
   extra: Record<string, unknown>;
+};
+
+// The live pausable turn clock, when rules.turn_timer is set. The server
+// pauses it while the table waits on brewing/reactions/interactions;
+// deadline_epoch_ms is null while paused (the remainder is server-side only).
+export type TurnTimerSnapshot = {
+  deadline_epoch_ms: number | null;
+  paused: boolean;
+  player_id: string | null;
 };
 
 export type HookSnapshot = {
@@ -192,6 +303,8 @@ export type HookSnapshot = {
   event: string;
   scope: "player" | "center";
   owner_id?: string | null;
+  title?: string;
+  condition_keys?: string[];
 };
 
 // A late joiner who watches but never plays (joined after the game left the
@@ -205,7 +318,18 @@ export type SpectatorSnapshot = {
 
 // Mirrors models.game_state.HistoryKind.
 export type HistoryEventKind =
-  "draw" | "play" | "score_change" | "rule_change" | "interaction" | "game_end";
+  | "draw"
+  | "play"
+  | "score_change"
+  | "rule_change"
+  | "interaction"
+  | "reveal"
+  | "game_end"
+  | "card_fallback"
+  | "dice_roll"
+  | "discard"
+  | "admin_change"
+  | "permanent_transfer";
 
 // One privacy-safe, append-only fact about completed game mechanics. Mirrors
 // models.game_state.HistoryEvent. The "Everything Played" history modal reads
@@ -222,6 +346,10 @@ export type HistoryEventSnapshot = {
   rule_path?: string | null;
   // Turn number the event occurred on (GameState.turn_number at record time).
   turn?: number | null;
+  // Kind-specific structured detail; "dice_roll" carries
+  // {sides, values, total}, "discard" carries {card_ids}. Privacy-safe like
+  // every other field.
+  data?: Record<string, unknown> | null;
 };
 
 // One card's epilogue vote outcome (id+title only — enough to render a list).
@@ -232,10 +360,18 @@ export type EpilogueCardOutcome = { id: string; title: string };
 export type EpilogueResultSummary = {
   kept: EpilogueCardOutcome[];
   destroyed: EpilogueCardOutcome[];
+  // "Table favorite" ids: kept cards tied for the most Keep votes this game.
+  // Always a subset of kept. Optional — old snapshots predate the field.
+  favorite_card_ids?: string[];
 };
 
 export type GameStateSnapshot = {
   room_code: string;
+  mode: Mode;
+  // Optional only for compatibility with snapshots saved before deck presets.
+  starter_deck?: StarterDeck;
+  // Explicit room host. Optional only for compatibility with legacy snapshots.
+  host_id?: string | null;
   phase: "lobby" | "setup" | "playing" | "results" | "epilogue" | "ended";
   players: PlayerSnapshot[];
   spectators: SpectatorSnapshot[];
@@ -248,8 +384,18 @@ export type GameStateSnapshot = {
   turn_order: string[];
   rules: RulesSnapshot;
   draw_count: number;
+  // Draw-pile card ids. Redacted server-side once the game starts (contents
+  // and order back scry/stacked-deck effects), so this is [] during play —
+  // read deck_count instead. During lobby/setup it still carries the public
+  // pre-made pool the authoring screen renders.
   deck: string[];
+  // Number of cards left in the draw pile (present in every phase). Optional
+  // only for back-compat with older servers.
+  deck_count?: number;
   discard: string[];
+  // Cards removed from the game entirely (the public exile zone). Optional
+  // only for back-compat with older servers.
+  exiled?: string[];
   cards: Record<string, CardSnapshot>;
   house_rules: string[];
   hooks: HookSnapshot[];
@@ -264,6 +410,10 @@ export type GameStateSnapshot = {
   can_pass: boolean;
   // During setup: {player_id: number of cards authored so far}.
   setup_progress: Record<string, number>;
+  setup_draft_progress?: Record<
+    string,
+    { ready: number; drafting: number; failed: number; total: number }
+  >;
   // How many cards each player must author during setup (currently 5).
   cards_to_author: number;
   // Winning player ids (empty = no winner, multiple = tie). Set when the deck is
@@ -285,6 +435,29 @@ export type GameStateSnapshot = {
   // is just the immediacy signal. Clients compute their own eligibility from
   // their hand's canonical.trigger === "on_reaction".
   pending_play?: PendingPlaySnapshot | null;
+  // The live turn clock (null when no clock is armed). Reconnect-safe source
+  // of truth; the turn_timer push is the immediacy signal.
+  turn_timer?: TurnTimerSnapshot | null;
+  pending_admin_proposal?: PendingAdminProposalSnapshot | null;
+};
+
+export type AdminProposalPreviewItem = {
+  kind: string;
+  title: string;
+  detail: string;
+};
+
+export type PendingAdminProposalSnapshot = {
+  proposal_id: string;
+  proposer_id: string;
+  phase: "playing" | "results";
+  deadline_at: string;
+  preview: AdminProposalPreviewItem[];
+  warnings: string[];
+  voters: {
+    player_id: string;
+    status: "waiting" | "approved";
+  }[];
 };
 
 export type PendingPlaySnapshot = {
@@ -309,6 +482,10 @@ export type PendingInteractionSummary = {
 };
 
 export type StateMsg = { type: "state"; state: GameStateSnapshot };
+export type AdminStateMsg = {
+  type: "admin_state";
+  state: GameStateSnapshot;
+};
 export type EffectAppliedMsg = { type: "effect_applied"; log_entry: string };
 export type CardInterpretedMsg = {
   type: "card_interpreted";
@@ -350,6 +527,17 @@ export type PromptChoiceMsg = {
   card_id: string;
   prompt: string;
   choices: PromptChoiceOption[];
+  // Full snapshots for exactly the offered card candidates — hidden-hand cards
+  // never ride the chooser's redacted state snapshot, so they ride here.
+  cards?: Record<string, CardSnapshot>;
+  // Context accumulated across a two-step (player then card) prompt chain. The
+  // follow-up play must merge these with the new pick so the final message
+  // carries the complete selection.
+  chosen_player_id?: string;
+  chosen_card_id?: string;
+  // True when this prompt belongs to a reaction play: the follow-up must
+  // re-send as_reaction so it routes back into the open window.
+  as_reaction?: boolean;
 };
 export type EpilogueMsg = { type: "epilogue"; cards: CardSnapshot[] };
 export type ErrorMsg = { type: "error"; message: string };
@@ -380,6 +568,14 @@ export type InteractionDescriptor = {
   // card_pick multi-select bounds (default 1/1 = single pick).
   min_picks?: number;
   max_picks?: number;
+  // card_order (scry) fields; the room fills card_ids with the offered
+  // deck-top ids.
+  source?: string;
+  count?: number;
+  // Recipient-specific faces for the offered card_ids. The room attaches these
+  // to every card_pick and card_order request (hidden cards — deck top, own
+  // hand — never ride the shared snapshot, so they ride here, targeted only).
+  cards?: Record<string, CardSnapshot>;
   confirm_label?: string;
   decline_label?: string;
   max_strokes?: number;
@@ -403,6 +599,18 @@ export type InteractionProgressMsg = {
   progress: InteractionProgress;
 };
 
+// Targeted push: a one-shot reveal_hand showed player_id's hand to ME (sent
+// only to the reveal's resolved audience). Modal like the reaction window —
+// not state, lost on reconnect. cards carries the revealed bodies because
+// redacted snapshots never include hidden hand content.
+export type HandRevealedMsg = {
+  type: "hand_revealed";
+  player_id: string;
+  player_name?: string;
+  card_ids: string[];
+  cards: Record<string, CardSnapshot>;
+};
+
 // A play opened a reaction window: the pending card is in the state snapshot
 // (pending_play); this push carries the deadline for the countdown.
 export type ReactionWindowMsg = {
@@ -411,6 +619,26 @@ export type ReactionWindowMsg = {
   card_id: string;
   actor_id: string;
   deadline_epoch_ms: number;
+};
+// One resolved roll_die: the immediacy push that drives the dice animation.
+// The matching "dice_roll" history event in the state snapshot is the
+// reconnect-safe record. Mirrors models.ws_messages.DiceRollMsg.
+export type DiceRollMsg = {
+  type: "dice_roll";
+  actor_id: string;
+  sides: number;
+  values: number[];
+  total: number;
+  card_id?: string | null;
+};
+// The pausable turn clock started, paused, resumed, or cleared. Clients
+// render the countdown from deadline_epoch_ms and re-sync on every push;
+// the snapshot's turn_timer entry is the reconnect-safe source of truth.
+export type TurnTimerMsg = {
+  type: "turn_timer";
+  deadline_epoch_ms: number | null;
+  paused: boolean;
+  player_id: string | null;
 };
 // The window closed. "resolved" = timeout or all passed (the original play
 // resolved normally); the other outcomes name the reactor and their card.
@@ -422,8 +650,16 @@ export type ReactionResultMsg = {
   reaction_card_id?: string | null;
 };
 
+export type AdminProposalResultMsg = {
+  type: "admin_proposal_result";
+  proposal_id: string;
+  outcome: "applied" | "rejected" | "expired" | "cancelled";
+  message: string;
+};
+
 export type ServerMsg =
   | StateMsg
+  | AdminStateMsg
   | EffectAppliedMsg
   | CardInterpretedMsg
   | PreviewResultMsg
@@ -431,7 +667,11 @@ export type ServerMsg =
   | EpilogueMsg
   | ErrorMsg
   | BrewingMsg
+  | DiceRollMsg
   | InteractionRequestMsg
   | InteractionProgressMsg
+  | HandRevealedMsg
   | ReactionWindowMsg
-  | ReactionResultMsg;
+  | ReactionResultMsg
+  | TurnTimerMsg
+  | AdminProposalResultMsg;

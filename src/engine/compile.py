@@ -28,28 +28,35 @@ from __future__ import annotations
 import logging
 
 from models.effects import (
+    CARD_OWNER,
     AddPointsOp,
     ChangeDrawCountOp,
     CounterPlayOp,
     CreateCardOp,
     CustomNoteOp,
     DestroyCardOp,
+    DiscardRandomOp,
     DrawCardsOp,
     EffectProgram,
+    EliminatePlayerOp,
     EndGameOp,
     ExtraTurnOp,
     InteractionStep,
+    MoveCardsOp,
     RegisterHookOp,
     ResolutionPlan,
     OpsStep,
     Op,
+    RevealHandOp,
     ReverseOrderOp,
+    RollDieOp,
     ScrambleOrderOp,
     SetCardAttributeOp,
     SetConditionOp,
     SetPointsOp,
     SetRuleOp,
     SetWinConditionOp,
+    ShuffleDeckOp,
     SkipTurnOp,
     StealPointsOp,
     SubtractPointsOp,
@@ -163,6 +170,22 @@ def _compile_op(name: str, args: dict) -> Op | None:
             target=_map_target(args.get("target", "self"), default="self", op_name=name),
             amount=int(args.get("amount", 1)),
         )
+    if name == "roll_die":
+        # `result` is deliberately dropped: pre-resolved rolls belong only to
+        # the transient sandbox-diff replay path (engine.sandbox.revalidate).
+        # Authoring ops are persisted and re-compiled on EVERY play, so a
+        # result smuggled into canonical ops would freeze the die forever.
+        return RollDieOp(
+            sides=int(args.get("sides", 6)),
+            count=int(args.get("count", 1)),
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
+            outcome=args.get("outcome", "none"),
+        )
+    if name == "discard_random":
+        return DiscardRandomOp(
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
+            count=int(args.get("count", 1)),
+        )
     if name == "set_win_condition":
         if "kind" not in args or args["kind"] is None:
             raise ValueError("set_win_condition missing 'kind'")
@@ -176,11 +199,51 @@ def _compile_op(name: str, args: dict) -> Op | None:
             card_target=args.get("card_target"),
             card_id=args.get("card_id"),
         )
+    if name == "move_cards":
+        to_zone = args.get("to_zone")
+        if not to_zone:
+            raise ValueError("move_cards missing 'to_zone'")
+        from_player = args.get("from_player")
+        to_player = args.get("to_player")
+        return MoveCardsOp(
+            card_target=args.get("card_target"),
+            from_zone=args.get("from_zone"),
+            selector=args.get("selector", "top"),
+            count=int(args.get("count", 1)),
+            from_player=_map_target(from_player, default="chooser", op_name=name, field="from_player")
+            if from_player is not None
+            else None,
+            to_zone=to_zone,
+            to_position=args.get("to_position", "top"),
+            # "card_owner" is a card-flow destination, not a player Target —
+            # it must bypass the alias mapping or drift-warn into "self".
+            to_player=to_player
+            if to_player == CARD_OWNER
+            else _map_target(to_player, default="self", op_name=name, field="to_player")
+            if to_player is not None
+            else None,
+            match_attributes=args.get("match_attributes") or {},
+        )
+    if name == "shuffle_deck":
+        return ShuffleDeckOp(include_discard=bool(args.get("include_discard", False)))
     if name == "transfer_card":
+        raw_to = args.get("to_target", args.get("to", "self"))
         return TransferCardOp(
             card_target=args.get("card_target", "this"),
-            to_target=_map_target(args.get("to_target", args.get("to", "self")), default="self", op_name=name),
+            to_target=raw_to
+            if raw_to == CARD_OWNER
+            else _map_target(raw_to, default="self", op_name=name, field="to_target"),
         )
+    if name == "reveal_hand":
+        return RevealHandOp(
+            target=_map_target(args.get("target", "self"), default="self", op_name=name),
+            to=_map_target(args.get("to", args.get("to_target", "all")), default="all", op_name=name, field="to"),
+            persistent=bool(args.get("persistent", False)),
+            mode=args.get("mode", "reveal"),
+        )
+    if name == "eliminate_player":
+        # No safe self-default: an unstated target means "a player you pick".
+        return EliminatePlayerOp(target=_map_target(args.get("target", "chooser"), default="chooser", op_name=name))
     if name in _END_GAME_OP_NAMES:
         winner = args.get("winner")
         winners = args.get("winners") or []
@@ -204,7 +267,13 @@ def _compile_op(name: str, args: dict) -> Op | None:
             # Validation rules may have tightened since this card was kept —
             # degrade to a visible note instead of crashing deck build/play.
             return CustomNoteOp(note=f"hook from this card no longer validates: {result.error}")
-        return RegisterHookOp(event=str(event), scope=args.get("scope", "center"), code=str(code))
+        return RegisterHookOp(
+            event=str(event),
+            scope=args.get("scope", "center"),
+            code=str(code),
+            title=str(args.get("title") or ""),
+            condition_keys=args.get("condition_keys") or [],
+        )
     if name == "unregister_hook":
         source = args.get("source_card_id") or args.get("card_id")
         if not source:
@@ -214,10 +283,12 @@ def _compile_op(name: str, args: dict) -> Op | None:
         key = args.get("key")
         if not key:
             raise ValueError("set_condition missing 'key'")
+        duration = args.get("duration_turns")
         return SetConditionOp(
             target=_map_target(args.get("target", "self"), default="self", op_name=name),
             key=str(key),
             value=args.get("value"),
+            duration_turns=int(duration) if duration is not None else None,
         )
     if name == "set_card_attribute":
         key = args.get("key")

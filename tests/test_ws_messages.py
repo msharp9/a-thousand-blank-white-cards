@@ -118,6 +118,22 @@ def test_state_msg_envelope() -> None:
     assert m.state == {"players": []}
 
 
+def test_lobby_and_admin_view_messages_discriminate() -> None:
+    ta = TypeAdapter(ClientMsg)
+    host = ta.validate_python({"type": "lobby_set_host", "participant_id": "p2"})
+    role = ta.validate_python(
+        {
+            "type": "lobby_set_role",
+            "participant_id": "p2",
+            "role": "spectator",
+        }
+    )
+    admin_view = ta.validate_python({"type": "admin_view", "open": True})
+    assert host.participant_id == "p2"
+    assert role.role == "spectator"
+    assert admin_view.open is True
+
+
 # ─── card text length limits (enforced on all authoring messages) ────────────
 
 
@@ -139,6 +155,35 @@ def test_create_card_over_description_limit_rejected() -> None:
     ta = TypeAdapter(ClientMsg)
     with pytest.raises(ValidationError):
         ta.validate_python({"type": "create_card", "title": "ok", "description": "y" * (MAX_CARD_DESCRIPTION + 1)})
+
+
+def test_client_msg_discriminates_redraft_card() -> None:
+    from models.ws_messages import RedraftCardMsg
+
+    ta = TypeAdapter(ClientMsg)
+    msg = ta.validate_python(
+        {
+            "type": "redraft_card",
+            "card_id": "draft-1",
+            "title": "Revised",
+            "description": "Gain 2 points.",
+        }
+    )
+    assert isinstance(msg, RedraftCardMsg)
+    assert msg.card_id == "draft-1"
+
+
+def test_redraft_card_enforces_text_limits() -> None:
+    ta = TypeAdapter(ClientMsg)
+    with pytest.raises(ValidationError):
+        ta.validate_python(
+            {
+                "type": "redraft_card",
+                "card_id": "draft-1",
+                "title": "x" * (MAX_CARD_TITLE + 1),
+                "description": "ok",
+            }
+        )
 
 
 def test_preview_card_over_limit_rejected() -> None:
@@ -184,3 +229,48 @@ def test_reaction_server_messages_round_trip() -> None:
     assert json.loads(window.model_dump_json())["type"] == "reaction_window"
     result = ReactionResultMsg(window_id="w1", outcome="countered", reactor_id="p2", reaction_card_id="c9")
     assert json.loads(result.model_dump_json())["outcome"] == "countered"
+
+
+def test_dice_roll_server_message_round_trip() -> None:
+    from models.ws_messages import DiceRollMsg
+
+    msg = DiceRollMsg(actor_id="p1", sides=6, values=[3, 5], total=8, card_id="c1")
+    payload = json.loads(msg.model_dump_json())
+    assert payload == {
+        "type": "dice_roll",
+        "actor_id": "p1",
+        "sides": 6,
+        "values": [3, 5],
+        "total": 8,
+        "card_id": "c1",
+    }
+    # card_id is optional: hook-originated rolls may have no card in context.
+    assert DiceRollMsg(actor_id="p1", sides=2, values=[1], total=1).card_id is None
+
+
+def test_prompt_choice_msg_two_step_fields_default_empty() -> None:
+    from models.ws_messages import PromptChoiceMsg
+
+    msg = PromptChoiceMsg(card_id="c1", prompt="Choose", choices=[{"player_id": "p1", "name": "Alice"}])
+    assert msg.cards == {}
+    assert msg.chosen_player_id is None
+    assert msg.chosen_card_id is None
+    assert msg.as_reaction is False
+
+
+def test_prompt_choice_msg_carries_accumulated_context_and_snapshots() -> None:
+    from models.ws_messages import PromptChoiceMsg
+
+    msg = PromptChoiceMsg(
+        card_id="theft",
+        prompt="Choose a target card",
+        choices=[{"card_id": "b1", "name": "Loot"}],
+        cards={"b1": {"id": "b1", "title": "Loot"}},
+        chosen_player_id="p2",
+        as_reaction=True,
+    )
+    payload = json.loads(msg.model_dump_json())
+    assert payload["cards"] == {"b1": {"id": "b1", "title": "Loot"}}
+    assert payload["chosen_player_id"] == "p2"
+    assert payload["chosen_card_id"] is None
+    assert payload["as_reaction"] is True

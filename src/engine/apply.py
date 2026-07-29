@@ -28,10 +28,12 @@ def apply_effect(
 
     After each op that touches player scores, emits ON_SCORE_CHANGE so
     persistent hooks can react. Original `state` is never mutated. ``rng`` is
-    forwarded to ``apply_op`` (only consumed by ``scramble_order``).
+    forwarded to ``apply_op`` (consumed by the random ops — see its docstring).
     """
     active_bus = bus or _bus
-    score_ops = {"add_points", "subtract_points", "set_points", "steal_points"}
+    # roll_die belongs here for its points outcomes; the score diff below is
+    # empty (and nothing is emitted) when a roll changes no score.
+    score_ops = {"add_points", "subtract_points", "set_points", "steal_points", "roll_die"}
 
     for op in program.ops:
         is_score_op = op.op in score_ops

@@ -11,10 +11,10 @@ agent turns free-text cards into game effects.
   and transcribed by a vision model. Each record has a real `image_url`, a
   verbatim `title` + `description`, an `alt_text` (the art description, split
   out of the old bracketed description prefix), and a filled `human_canonical`.
-- **`eval_cards.json`** — the hand-annotated **gold** set (~35 cards) the eval
+- **`eval_cards.json`** — the hand-annotated **gold** set (~73 cards) the eval
   harness scores against. No `image_url`: entries were authored for
   coverage/diversity rather than transcribed from a specific photo.
-- **`eval_cards_hard.json`** — the **hard** set (~25 cards): deliberately
+- **`eval_cards_hard.json`** — the **hard** set (~35 cards): deliberately
   compositional effects (`ops: null`, sandbox-only) that stretch the agent —
   hand/deck inspection, alt_text queries, hooks, reactions, multi-step
   conditionals.
@@ -75,10 +75,11 @@ Rules of thumb:
 - Sandbox style: runtime target strings (`"self"`, `"chooser"`, `"all"`,
   `"id:<player_id>"`); `state.subtract_points` for losses; `state.note(...)`
   for the table-adjudicated part of dares; defensive `ctx.get(...)` reads.
-- One-shot cards: `placement: "discard"`, `trigger: null`. Persistent
-  modifiers: `center` (game-wide) or `player` (attached to one player), with
-  `trigger` naming the event that re-fires them. Reactions: `discard` +
-  `"on_reaction"`.
+- Placement describes the physical card's semantic identity, not merely
+  whether an event hook repeats. One-shots use `discard`; shared rules,
+  reminders, and global state use `center`; owned pets/items and personal
+  boons/curses/statuses use `player`. A center/player card may have
+  `trigger: null`. Reactions remain `discard` + `"on_reaction"`.
 
 ## Note-only cards vs interaction-steps upgrades
 

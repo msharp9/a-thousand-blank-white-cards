@@ -28,6 +28,7 @@ SEED_FILES = [
     "seed_cards_gold.json",
     "seed_cards.json",
     "seed_cards_simple.json",
+    "seed_cards_pets.json",
     "seed_cards_fillers.json",
 ]
 
@@ -106,9 +107,29 @@ def test_every_gold_canonical_compiles_and_dry_runs_end_to_end(card: dict) -> No
     assert report["emitted_ops"], card["title"]
 
 
-def test_combined_seed_is_generated_from_gold_and_fillers() -> None:
+def test_time_warp_filler_compiles_and_dry_runs_end_to_end() -> None:
+    """Bead bf3: "return the last card played to its owner's hand" is the
+    first-class transfer_card(last_played, card_owner) composition — it must
+    compile drift-free and execute against a state with a completed prior play."""
+    fillers = json.loads((DATA_DIR / "seed_cards_fillers.json").read_text())
+    card = next(entry for entry in fillers if entry["title"] == "Time Warp")
+    plan = compile_card_plan({**card, "id": "time-warp", "origin": "seed"})
+    assert plan is not None and plan.steps
+
+    state = _representative_state({**card, "id": "time-warp"})
+    state = state.move_card("target-card", "hand", "discard", from_player_id="p2")
+    state = append_history_event(state, "play", actor_id="p2", card_id="target-card")
+
+    report = dry_run_resolution_plan(state, plan, "p1", "gold")
+    assert report["ok"] is True, report
+    assert any(op.get("op") == "transfer_card" for op in report["emitted_ops"])
+
+
+def test_combined_seed_is_generated_from_all_authoritative_sources() -> None:
     gold = json.loads((DATA_DIR / "seed_cards_gold.json").read_text())
     fillers = json.loads((DATA_DIR / "seed_cards_fillers.json").read_text())
+    simple = json.loads((DATA_DIR / "seed_cards_simple.json").read_text())
+    pets = json.loads((DATA_DIR / "seed_cards_pets.json").read_text())
     combined = json.loads((DATA_DIR / "seed_cards.json").read_text())
 
-    assert combined == gold + fillers
+    assert combined == gold + fillers + simple + pets

@@ -16,7 +16,7 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 from agent.contract import InterpretResult
-from models.effects import AddPointsOp, EffectProgram
+from models.effects import AddPointsOp, CustomNoteOp, EffectProgram
 from models.ws_messages import PlayMsg
 from board.rooms.room import Room
 
@@ -112,6 +112,109 @@ def test_center_placement_card_goes_to_center() -> None:
     assert "c4" not in room.state.discard
     assert "c4" not in room.state.cards_in_play()
     assert "c4" in room.state.cards
+
+
+# ── live-interpreted placement: the agent's InterpretResult.placement/venue
+# flow through _canonicalize_interpretation into the zone move ──
+
+
+def _play_with_result(room: Room, card_id: str, result: InterpretResult) -> None:
+    with patch("agent.runtime.run_agent", return_value=result):
+        asyncio.run(room.handle_action("p1", PlayMsg(card_id=card_id)))
+
+
+def test_live_interpreted_center_placement_goes_to_center() -> None:
+    card = {"id": "c6", "title": "House Rule", "description": "Everyone draws two from now on."}
+    room = _room_with_card(card)
+    result = InterpretResult(
+        program=EffectProgram(ops=[AddPointsOp(target="self", amount=1)]),
+        verdict="ok",
+        placement="center",
+        venue="all",
+    )
+    _play_with_result(room, "c6", result)
+
+    assert "c6" not in room.state.get_player("p1").hand
+    assert "c6" in room.state.center_cards()
+    assert "c6" not in room.state.discard
+    canonical = room.state.cards["c6"]["canonical"]
+    assert canonical["placement"] == "center"
+    assert canonical["venue"] == "all"
+    assert "timing" not in canonical
+
+
+def test_live_interpreted_player_placement_goes_to_in_play() -> None:
+    card = {"id": "c7", "title": "Curse", "description": "You lose a point each turn."}
+    room = _room_with_card(card)
+    result = InterpretResult(
+        program=EffectProgram(ops=[AddPointsOp(target="self", amount=1)]),
+        verdict="ok",
+        placement="player",
+        venue="in_person",
+    )
+    _play_with_result(room, "c7", result)
+
+    assert "c7" not in room.state.get_player("p1").hand
+    assert "c7" in room.state.cards_in_play_for("p1")
+    assert "c7" not in room.state.discard
+    canonical = room.state.cards["c7"]["canonical"]
+    assert canonical["placement"] == "player"
+    assert canonical["venue"] == "in_person"
+
+
+def test_live_interpreted_missing_placement_is_inferred_and_persisted() -> None:
+    card = {"id": "c8", "title": "Gain 5", "description": "Gain 5 points."}
+    room = _room_with_card(card)
+    _play_with_result(room, "c8", _OK_PROGRAM)
+
+    assert "c8" in room.state.discard
+    assert "c8" not in room.state.center_cards()
+    assert "c8" not in room.state.cards_in_play()
+    canonical = room.state.cards["c8"]["canonical"]
+    assert canonical["placement"] == "discard"
+    assert "venue" not in canonical
+
+
+def test_missing_placement_infers_owned_cat_to_player() -> None:
+    card = {
+        "id": "cat",
+        "title": "Cat",
+        "description": "Put this card in the center for people to look at. It doesn't do anything, but it's cute.",
+    }
+    room = _room_with_card(card)
+    result = InterpretResult(
+        program=EffectProgram(ops=[CustomNoteOp(note="The player owns a cat.")]),
+        verdict="ok",
+        comment="A cat has selected its staff.",
+    )
+    _play_with_result(room, "cat", result)
+    assert "cat" in room.state.cards_in_play_for("p1")
+    assert room.state.cards["cat"]["canonical"]["placement"] == "player"
+
+
+def test_missing_placement_infers_new_rule_to_center() -> None:
+    card = {
+        "id": "testing",
+        "title": "Testing",
+        "description": "New Rule: Double the points players get. Put this card in the center.",
+    }
+    room = _room_with_card(card)
+    _play_with_result(room, "testing", _OK_PROGRAM)
+    assert "testing" in room.state.center_cards()
+    assert room.state.cards["testing"]["canonical"]["placement"] == "center"
+
+
+def test_failed_interpretation_never_persists_on_the_board() -> None:
+    # A verdict-invalid result has no ongoing rule to be reminded of: even when
+    # the intent chose "center", the card demotes to discard.
+    card = {"id": "c9", "title": "Broken Rule", "description": "??", "creator_id": "p1"}
+    room = _room_with_card(card)
+    result = InterpretResult(verdict="invalid", placement="center", venue="all")
+    _play_with_result(room, "c9", result)
+
+    assert "c9" in room.state.discard
+    assert "c9" not in room.state.center_cards()
+    assert room.state.cards["c9"]["canonical"]["placement"] == "discard"
 
 
 def test_rejected_play_keeps_card_in_hand() -> None:

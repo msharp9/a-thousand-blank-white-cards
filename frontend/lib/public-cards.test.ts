@@ -19,6 +19,7 @@ function player(
 function state(overrides: Partial<GameStateSnapshot> = {}): GameStateSnapshot {
   return {
     room_code: "ABCD",
+    mode: "online",
     phase: "playing",
     players: [],
     spectators: [],

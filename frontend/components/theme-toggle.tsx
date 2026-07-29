@@ -20,11 +20,12 @@ export function ThemeToggle() {
 
   return (
     <button
+      data-theme-toggle
       type="button"
       aria-label="Toggle light/dark theme"
       title="Toggle light/dark theme"
       onClick={toggle}
-      className="fixed right-3 bottom-3 z-50 flex size-11 -rotate-3 cursor-pointer items-center justify-center rounded-full border-2 border-ink bg-card text-xl sticker-shadow-sm transition-transform hover:rotate-0 active:translate-x-px active:translate-y-px active:shadow-[2px_2px_0_var(--sticker-ink)]"
+      className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 flex size-11 -rotate-3 cursor-pointer items-center justify-center rounded-full border-2 border-ink bg-card text-xl sticker-shadow-sm transition-transform hover:rotate-0 active:translate-x-px active:translate-y-px active:shadow-[2px_2px_0_var(--sticker-ink)]"
     >
       <span aria-hidden className="dark:hidden">
         ☀️

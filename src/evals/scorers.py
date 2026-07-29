@@ -6,11 +6,14 @@ Each scorer conforms to ScorerFunction: scorer(context: ScorerContext) -> Score.
                      (keys: resolution_plan, verdict, comment, persona_action)
   context.expected = human_canonical dict
 
-Two per-run caches keyed on the output dict's identity collapse repeated work
-within one row: the four judge scorers share a single LLM Verdict, and the two
-execution scorers share a single dry-run. id() keys are only safe while the
-output objects stay alive, so runners call :func:`reset_run_caches` before each
-run — otherwise a recycled id from a previous run could serve stale results.
+Two per-run caches collapse repeated work within one row: the judge scorers
+share a single LLM Verdict (keyed on a content hash of the (output, card,
+expected) triple, since the verdict depends on all three), and the two
+execution scorers share a single dry-run (keyed on a content hash of the
+output dict). Neither key is derived from object identity, so a recycled
+object address (CPython reuses freed addresses) can never serve a stale
+entry for an unrelated row.
+Runners call :func:`reset_run_caches` before each run to bound cache growth.
 """
 
 from __future__ import annotations
@@ -23,14 +26,29 @@ from evals.eval_core import Score, ScorerContext, create_scorer
 from evals.judge import JudgeLLM, Verdict
 
 _CACHE_MAX = 512
-_VERDICT_CACHE: dict[int, Verdict] = {}
-_DRY_RUN_CACHE: dict[int, dict[str, Any]] = {}
+_VERDICT_CACHE: dict[str, Verdict] = {}
+_DRY_RUN_CACHE: dict[str, dict[str, Any]] = {}
+_CEILING_CACHE: dict[str, dict[str, bool]] = {}
+
+
+def _output_key(output: dict[str, Any]) -> str:
+    """Stable content key for an output dict, immune to id() reuse after GC."""
+    return json.dumps(output, sort_keys=True, default=str)
+
+
+def _judge_key(output: dict[str, Any], card: Any, expected: Any) -> str:
+    """Stable content key for a judge call: the verdict depends on the
+    output AND the card AND the expected canonical, so all three must be
+    part of the key — a content-only key on ``output`` would let two
+    different cards with byte-identical outputs share a cached verdict."""
+    return json.dumps([output, card, expected], sort_keys=True, default=str)
 
 
 def reset_run_caches() -> None:
     """Clear the per-run scorer caches. Call at the start of every eval run."""
     _VERDICT_CACHE.clear()
     _DRY_RUN_CACHE.clear()
+    _CEILING_CACHE.clear()
 
 
 @lru_cache(maxsize=1)
@@ -43,22 +61,30 @@ def _effect_summary(output: dict[str, Any]) -> str:
     so an effect-less interpretation (e.g. verdict="invalid") still gets scored."""
     plan = output.get("resolution_plan")
     if plan:
-        return json.dumps(plan, default=str)
-    return json.dumps({"verdict": output.get("verdict"), "comment": output.get("comment")}, default=str)
+        return json.dumps({"placement": output.get("placement"), "resolution_plan": plan}, default=str)
+    return json.dumps(
+        {
+            "placement": output.get("placement"),
+            "verdict": output.get("verdict"),
+            "comment": output.get("comment"),
+        },
+        default=str,
+    )
 
 
 def _run_judge(context: ScorerContext) -> Verdict:
-    """One judge LLM call per (card, output); the four judge scorers share it."""
+    """One judge LLM call per (card, output, expected); the judge scorers share it."""
     output = context.output or {}
-    key = id(output)
+    card = context.input or {}
+    expected = context.expected or {}
+    key = _judge_key(output, card, expected)
     cached = _VERDICT_CACHE.get(key)
     if cached is not None:
         return cached
-    card = context.input
     verdict = _judge().evaluate(
         card_description=f"{card.get('title', '')}\n{card.get('description', '')}",
         generated_summary=_effect_summary(output),
-        human_canonical=context.expected or {},
+        human_canonical=expected,
     )
     if len(_VERDICT_CACHE) >= _CACHE_MAX:
         _VERDICT_CACHE.clear()
@@ -114,6 +140,51 @@ magnitude_sign = create_scorer(
 )
 
 
+def _magnitude_value_scorer(context: ScorerContext) -> Score:
+    verdict = _run_judge(context)
+    return Score(score=verdict.magnitude_value_correct, metadata={"reason": verdict.reason})
+
+
+magnitude_value = create_scorer(
+    name="magnitude_value",
+    description="LLM judge: is the numeric amount of the effect correct? (N/A scores 1.0)",
+    scorer=_magnitude_value_scorer,
+)
+
+
+_PLACEMENTS = frozenset({"discard", "center", "player"})
+
+
+def _placement_accuracy_scorer(context: ScorerContext) -> Score:
+    expected = (context.expected or {}).get("placement")
+    predicted = (context.output or {}).get("placement")
+    if expected not in _PLACEMENTS:
+        return Score(
+            score=None,
+            metadata={"expected": expected, "predicted": predicted, "skipped": "expected placement is absent/invalid"},
+        )
+    if predicted not in _PLACEMENTS:
+        return Score(
+            score=0.0,
+            metadata={"expected": expected, "predicted": predicted, "reason": "predicted placement is absent/invalid"},
+        )
+    return Score(
+        score=float(predicted == expected),
+        metadata={
+            "expected": expected,
+            "predicted": predicted,
+            "reason": "exact match" if predicted == expected else "placement mismatch",
+        },
+    )
+
+
+placement_accuracy = create_scorer(
+    name="placement_accuracy",
+    description="Deterministic: exact center/player/discard match with no aliases or defaults.",
+    scorer=_placement_accuracy_scorer,
+)
+
+
 def _dsl_validity_scorer(context: ScorerContext) -> Score:
     """Structural check: the plan is well-formed, non-empty, and every snippet
     and hook body passes the engine's static sandbox validation."""
@@ -164,20 +235,33 @@ def _dry_run_output(output: dict[str, Any]) -> dict[str, Any]:
     ``{"ok": False, "error": ...}``. Never raises — a broken plan is a score of
     0, not a harness crash.
     """
-    key = id(output)
+    key = _output_key(output)
     cached = _DRY_RUN_CACHE.get(key)
     if cached is not None:
         return cached
 
     from agent.tools.dry_run_effect import dry_run_resolution_plan
-    from evals.game_fixtures import EVAL_ACTOR_ID, EVAL_CARD_ID, build_eval_state
+    from evals.game_fixtures import (
+        EVAL_ACTOR_ID,
+        EVAL_CARD_ID,
+        EVAL_CHOSEN_CARD_ID,
+        EVAL_CHOSEN_PLAYER_ID,
+        build_eval_state,
+    )
 
     plan = _resolution_plan_from_output(output)
     if plan is None or not plan.steps:
         report: dict[str, Any] = {"ok": False, "error": "no executable plan", "emitted_ops": []}
     else:
         try:
-            report = dry_run_resolution_plan(build_eval_state(), plan, EVAL_ACTOR_ID, EVAL_CARD_ID)
+            report = dry_run_resolution_plan(
+                build_eval_state(),
+                plan,
+                EVAL_ACTOR_ID,
+                EVAL_CARD_ID,
+                chosen_player_id=EVAL_CHOSEN_PLAYER_ID,
+                chosen_card_id=EVAL_CHOSEN_CARD_ID,
+            )
         except Exception as exc:  # noqa: BLE001 — dry_run is defensive, but stay belt-and-suspenders
             report = {"ok": False, "error": str(exc), "emitted_ops": []}
 
@@ -209,11 +293,34 @@ executability = create_scorer(
 _NON_MECHANICAL_EMITTED = frozenset({"custom_note", "note"})
 
 
+def _canonical_ceiling(expected: dict[str, Any]) -> dict[str, bool]:
+    """The card's own ceiling (evals.ceilings), cached per canonical."""
+    key = json.dumps(expected, sort_keys=True, default=str)
+    cached = _CEILING_CACHE.get(key)
+    if cached is None:
+        from evals.ceilings import card_ceiling
+
+        cached = card_ceiling({"id": "ceiling", "human_canonical": expected})
+        if len(_CEILING_CACHE) >= _CACHE_MAX:
+            _CEILING_CACHE.clear()
+        _CEILING_CACHE[key] = cached
+    return cached
+
+
 def _did_something_scorer(context: ScorerContext) -> Score:
     """The fun metric: a no-op kills the fun even when the reading is "right",
     so 1.0 requires verdict != invalid AND a clean dry-run AND >=1 mechanical op
-    (a bare custom_note changes no game state and doesn't count)."""
+    (a bare custom_note changes no game state and doesn't count).
+
+    Abstains (score=None) when the card's OWN canonical is a deliberate no-op
+    (executable but non-mechanical, e.g. a pure flavour card): the metric is
+    unreachable there by design, so a 0 would punish a perfect answer."""
     output = context.output or {}
+    expected = context.expected or {}
+    if expected:
+        ceiling = _canonical_ceiling(expected)
+        if ceiling["executable"] and not ceiling["mechanical"]:
+            return Score(score=None, metadata={"skipped": "canonical is a deliberate no-op (non-mechanical ceiling)"})
     if output.get("verdict") == "invalid":
         return Score(score=0.0, metadata={"reason": "verdict=invalid"})
     report = _dry_run_output(output)
@@ -248,6 +355,14 @@ def _generated_effect_forms(output: dict[str, Any]) -> tuple[list[str], list[dic
     return codes, ops
 
 
+def _plan_has_interaction(output: dict[str, Any]) -> bool:
+    """True when the generated plan contains a play-time interaction step."""
+    plan = output.get("resolution_plan")
+    if not isinstance(plan, dict):
+        return False
+    return any(isinstance(step, dict) and step.get("kind") == "interaction" for step in plan.get("steps") or [])
+
+
 def _sandbox_behavior_scorer(context: ScorerContext) -> Score:
     """Behavioral similarity: execute the EXPECTED sandbox and the GENERATED
     effect against canned fixtures and compare the op diffs (multiset Jaccard).
@@ -259,6 +374,17 @@ def _sandbox_behavior_scorer(context: ScorerContext) -> Score:
     expected_code = (context.expected or {}).get("sandbox")
     if not expected_code:
         return Score(score=1.0, metadata={"skipped": "no expected sandbox (steps-based or unannotated)"})
+
+    # A plan with an interaction step resolves its player/card choice at play
+    # time, independently of how the fixed canonical resolves it (via
+    # ctx.chosen_player_id). The two cannot be behaviorally aligned, so a
+    # comparison here would be a false 0. Abstain — executability and the judge
+    # scorers still grade these cards.
+    if _plan_has_interaction(context.output or {}):
+        return Score(
+            score=1.0, metadata={"skipped": "interaction/choice plan — free choice not comparable to a fixed canonical"}
+        )
+
     from config import get_settings
 
     if not get_settings().snippet_execution_enabled:
@@ -269,16 +395,25 @@ def _sandbox_behavior_scorer(context: ScorerContext) -> Score:
 
     codes, plain_ops = _generated_effect_forms(context.output or {})
     if not codes and not plain_ops:
-        return Score(score=0.0, metadata={"reason": "no generated effect to execute"})
+        # No plan is behaviorally identical to a canonical whose normalised
+        # diff is empty (note-only card): empty == empty, matching
+        # multiset_jaccard's own convention. Otherwise it's a real miss.
+        try:
+            for state_dict, ctx_dict in fixture_states():
+                if normalise_ops(execute_snippet(expected_code, state_dict, ctx_dict), ctx_dict, state_dict):
+                    return Score(score=0.0, metadata={"reason": "no generated effect to execute"})
+        except Exception as exc:  # noqa: BLE001
+            return Score(score=0.0, metadata={"reason": f"no generated effect to execute ({exc})"})
+        return Score(score=1.0, metadata={"note": "no plan vs empty expected diff — behaviorally identical"})
 
     similarities: list[float] = []
     for state_dict, ctx_dict in fixture_states():
         try:
-            expected_diff = normalise_ops(execute_snippet(expected_code, state_dict, ctx_dict), ctx_dict)
+            expected_diff = normalise_ops(execute_snippet(expected_code, state_dict, ctx_dict), ctx_dict, state_dict)
             generated_raw: list[dict[str, Any]] = list(plain_ops)
             for code in codes:
                 generated_raw.extend(execute_snippet(code, state_dict, ctx_dict))
-            generated_diff = normalise_ops(generated_raw, ctx_dict)
+            generated_diff = normalise_ops(generated_raw, ctx_dict, state_dict)
         except SnippetExecutionError as exc:
             return Score(score=0.0, metadata={"reason": f"execution failed: {exc}"})
         except Exception as exc:  # noqa: BLE001
@@ -296,6 +431,6 @@ sandbox_behavior = create_scorer(
 
 # Split by cost: JUDGE_SCORERS make LLM calls (one shared call per card);
 # DETERMINISTIC_SCORERS are free and offline.
-JUDGE_SCORERS = [intent_match_judge, target_accuracy, persistence_accuracy, magnitude_sign]
-DETERMINISTIC_SCORERS = [dsl_validity, sandbox_behavior, executability, did_something]
+JUDGE_SCORERS = [intent_match_judge, target_accuracy, persistence_accuracy, magnitude_sign, magnitude_value]
+DETERMINISTIC_SCORERS = [placement_accuracy, dsl_validity, sandbox_behavior, executability, did_something]
 ALL_SCORERS = [*JUDGE_SCORERS, *DETERMINISTIC_SCORERS]

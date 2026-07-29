@@ -110,8 +110,8 @@ These are prose/diagram deliverables. All should live in
       description and how they interact.
 - [x] **Task 7** — reflection: what you keep vs. change for Demo Day.
 - Diagram assets exist and can be embedded:
-  [`docs/game.excalidraw.svg`](game.excalidraw.svg),
-  [`docs/agent.excalidraw.svg`](agent.excalidraw.svg).
+  [`docs/diagrams/game.excalidraw.svg`](diagrams/game.excalidraw.svg),
+  [`docs/diagrams/agent.excalidraw.svg`](diagrams/agent.excalidraw.svg).
 - [x] [`docs/WRITEUP.md`](WRITEUP.md) contains all Task 1/2/3/7 written
       deliverables (problem statement + user + workflow diagram + eval pairs,
       solution + infrastructure/agent diagrams, chunking + data sources,

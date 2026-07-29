@@ -24,7 +24,8 @@ import random
 from collections.abc import Callable
 from pathlib import Path
 
-from models.card import normalise_canonical
+from models.card import hoist_static_attributes, normalise_canonical
+from models.game_state import StarterDeck
 
 logger = logging.getLogger(__name__)
 
@@ -40,19 +41,38 @@ BLANK_CARD_RATIO = 1 / 3
 
 # Type alias for a card source: a zero-arg callable returning raw card dicts.
 CardSource = Callable[[], list[dict]]
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 
 
-def _make_blank_card(n: int) -> dict:
-    """Return a blank card dict (id ``blank-<n>``).
+def _starter_deck_source(starter_deck: StarterDeck) -> CardSource | None:
+    """Return a deterministic curated source, or None for the live corpus."""
+    if starter_deck == "random":
+        return None
+    filename = "seed_cards_simple.json" if starter_deck == "simple" else "seed_cards_pets.json"
+    path = DATA_DIR / filename
+
+    def load() -> list[dict]:
+        cards = json.loads(path.read_text())
+        # SIMPLE intentionally means the historical first 30 cards even if its
+        # authoring dataset later grows. PETS is itself an exact 30-card deck.
+        return cards[:PREMADE_POOL_SIZE] if starter_deck == "simple" else cards
+
+    return load
+
+
+def _make_blank_card(n: int, *, namespace: str | None = None) -> dict:
+    """Return a blank card dict with an optional game-unique namespace.
 
     A blank enters the hand as blank (empty title/description, ``blank`` flag
     set) and is authored on play: Room._handle_play fills in the title and
     description, sets ``creator_id`` to the player, and clears the ``blank`` flag
     before interpreting. ``creator_id`` starts as ``"blank"`` so an un-played
-    blank is attributable to no player.
+    blank is attributable to no player. Production rooms namespace blanks by
+    room code so epilogue-kept cards from different games never share an id.
     """
+    card_id = f"blank-{namespace}-{n}" if namespace else f"blank-{n}"
     return {
-        "id": f"blank-{n}",
+        "id": card_id,
         "title": "",
         "description": "",
         "blank": True,
@@ -110,6 +130,14 @@ def _normalise_card(raw: dict, index: int) -> dict:
     ``Room.card_art`` registry (and strips) before the dict lands in
     ``GameState.cards`` — art must never ride state snapshots. See
     Room._absorb_card_art.
+
+    A card whose ops stage ``set_card_attribute(card_target="this", key in
+    {play_on_draw, uncounterable})`` gets that attribute hoisted onto a
+    top-level ``attributes`` dict (see :func:`hoist_static_attributes`) so it
+    holds from the moment the card enters ``state.cards`` — a fresh deck's
+    Landmine must auto-play the instant it is drawn, not only after some prior
+    play ran its ops. Mirrors Room._canonical_payload's hoist for
+    LLM-interpreted cards.
     """
     card_id = raw.get("id") or raw.get("card_id") or f"deck-{index:03d}"
     canonical = _coerce_canonical(raw.get("canonical"))
@@ -138,10 +166,13 @@ def _normalise_card(raw: dict, index: int) -> dict:
         if canonical.get("sandbox"):
             card["sandbox"] = canonical["sandbox"]
         card["venue"] = canonical.get("venue", "all")
+        static_attributes = hoist_static_attributes(canonical.get("ops"))
+        if static_attributes:
+            card["attributes"] = static_attributes
     return card
 
 
-def venue_allowed(card_venue: str, mode: str) -> bool:
+def venue_allowed(card_venue: str | None, mode: str) -> bool:
     """Return whether a card of ``card_venue`` may appear in a ``mode`` game.
 
     Room ``mode`` is one of {"online", "in_person", "both"}; card ``venue`` is
@@ -151,13 +182,13 @@ def venue_allowed(card_venue: str, mode: str) -> bool:
       * mode "online"    — allows venue in {"all", "online"}; drops "in_person".
       * mode "in_person" — allows venue in {"all", "in_person"}; drops "online".
 
-    An unknown/missing venue defaults to "all" (always allowed), so blanks and
-    filler cards (which carry no venue) are never filtered out.
+    Filtered modes fail closed for unknown/missing venues: an online game admits
+    only explicit "all"/"online" cards, and an in-person game admits only
+    explicit "all"/"in_person" cards. This prevents stale or malformed RAG
+    payloads from bypassing the venue filter. Mode "both" remains permissive.
     """
     if mode == "both":
         return True
-    if card_venue not in ("all", "in_person", "online"):
-        card_venue = "all"
     if mode == "online":
         return card_venue in ("all", "online")
     if mode == "in_person":
@@ -184,7 +215,7 @@ def collect_cards(card_source: CardSource | None = None, venue_mode: str = "both
     seen: set[str] = set()
     for index, raw in enumerate(raw_cards):
         card = _normalise_card(raw, index)
-        if not venue_allowed(card.get("venue", "all"), venue_mode):
+        if not venue_allowed(card.get("venue"), venue_mode):
             continue
         if card["id"] in seen:
             continue
@@ -216,16 +247,6 @@ PREMADE_POOL_SIZE = 30
 # How many blank cards are shuffled into the deck per player during setup
 # finalisation, and how many cards each player authors / is dealt.
 BLANKS_PER_PLAYER = 5
-
-# Deterministic simple deck of point-only cards — used for a no-AI basic game.
-SIMPLE_SEED_PATH = Path("data/seed_cards_simple.json")
-
-
-def _simple_card_source() -> list[dict]:
-    """Card source for the deterministic simple game: the point-only seed deck."""
-    from agent.rag.seed import read_seed_cards
-
-    return read_seed_cards(SIMPLE_SEED_PATH)
 
 
 def build_deck(
@@ -298,7 +319,7 @@ def build_premade_pool(
     card_source: CardSource | None = None,
     rng: random.Random | None = None,
     venue_mode: str = "both",
-    simple: bool = False,
+    starter_deck: StarterDeck = "random",
 ) -> tuple[dict[str, dict], list[str]]:
     """Build the shared PRE-MADE card pool shown during setup (NO blanks).
 
@@ -308,9 +329,10 @@ def build_premade_pool(
     build synergies), before their created cards and blanks join the deck at
     :func:`finalize_deck`.
 
-    - ``simple=True`` draws from the deterministic point-only simple deck
-      (``data/seed_cards_simple.json``) for a no-AI game; otherwise the default
-      source (RAG corpus, falling back to the full offline seed file) is used.
+    - The default source is the full RAG corpus (seed + epilogue-kept cards),
+      falling back to the combined offline seed file.
+    - When at least ``count`` cards are eligible, membership is sampled uniformly
+      without replacement from the entire venue-filtered corpus.
     - ``venue_mode`` filters out venue-incompatible cards (see
       :func:`venue_allowed`).
     - If the (venue-filtered) source yields fewer than ``count`` distinct cards,
@@ -320,17 +342,16 @@ def build_premade_pool(
     Raises ValueError if the source yields no cards at all.
     """
     rng = rng or random.Random()
-    source = card_source or (_simple_card_source if simple else None)
-    collected = collect_cards(source, venue_mode)
+    if card_source is None:
+        card_source = _starter_deck_source(starter_deck)
+    collected = collect_cards(card_source, venue_mode)
     if not collected:
         raise ValueError("no cards available to build the pre-made pool (empty card source)")
 
     cards: dict[str, dict] = {}
     pool: list[str] = []
-    # Take up to `count` distinct real cards first.
-    for card in collected:
-        if len(pool) >= count:
-            break
+    selected = rng.sample(collected, count) if len(collected) >= count else collected
+    for card in selected:
         cards[card["id"]] = card
         pool.append(card["id"])
 
@@ -346,13 +367,13 @@ def build_premade_pool(
         copy_index += 1
 
     rng.shuffle(pool)
-    logger.info("built pre-made pool of %d cards (simple=%s, venue_mode=%s)", len(pool), simple, venue_mode)
+    logger.info("built pre-made pool of %d cards (eligible=%d, venue_mode=%s)", len(pool), len(collected), venue_mode)
     return cards, pool
 
 
-def build_blanks(count: int, *, start: int = 0) -> dict[str, dict]:
-    """Return ``count`` blank card dicts keyed by id (``blank-<start>`` …)."""
-    return {(b := _make_blank_card(n))["id"]: b for n in range(start, start + count)}
+def build_blanks(count: int, *, start: int = 0, namespace: str | None = None) -> dict[str, dict]:
+    """Return ``count`` blank card dicts, optionally namespaced for one game."""
+    return {(b := _make_blank_card(n, namespace=namespace))["id"]: b for n in range(start, start + count)}
 
 
 def finalize_deck(
@@ -361,13 +382,17 @@ def finalize_deck(
     num_players: int,
     *,
     blanks_per_player: int = BLANKS_PER_PLAYER,
+    additional_blanks: int = 0,
+    blank_namespace: str | None = None,
     rng: random.Random | None = None,
 ) -> tuple[dict[str, dict], list[str]]:
     """Assemble the final draw deck at the end of setup and shuffle it.
 
     Composition (per the rules): the pre-made pool + every player-authored card
-    + ``blanks_per_player`` blank cards PER player, all shuffled together. With
-    30 pre-made cards this yields 30 + 5·players authored + 5·players blanks
+    + ``blanks_per_player`` blank cards PER player + any explicit
+    ``additional_blanks``, all shuffled together. The extra count is used only
+    by the development skip-setup shortcut to replace missing authored slots.
+    With 30 pre-made cards this yields 30 + 5·players authored + 5·players blanks
     (e.g. 2 players → 30+10+10 = 50; 6 players → 30+30+30 = 90).
 
     Returns ``(blank_cards, deck_ids)`` — the newly-created blank card dicts (to
@@ -375,8 +400,8 @@ def finalize_deck(
     the shuffled deck of all ids. Deterministic given ``rng``.
     """
     rng = rng or random.Random()
-    num_blanks = blanks_per_player * num_players
-    blank_cards = build_blanks(num_blanks)
+    num_blanks = blanks_per_player * num_players + additional_blanks
+    blank_cards = build_blanks(num_blanks, namespace=blank_namespace)
     deck = [*premade_ids, *authored_ids, *blank_cards.keys()]
     rng.shuffle(deck)
     logger.info(

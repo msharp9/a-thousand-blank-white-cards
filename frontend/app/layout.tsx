@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Permanent_Marker, Patrick_Hand, Nunito } from "next/font/google";
 import "./globals.css";
 
@@ -30,6 +30,13 @@ const fontNunito = Nunito({
 export const metadata: Metadata = {
   title: "1000 Blank White Cards",
   description: "The card game where you make the rules",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

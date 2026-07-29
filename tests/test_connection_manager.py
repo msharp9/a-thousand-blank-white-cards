@@ -23,8 +23,28 @@ def test_broadcast_state_wraps_envelope() -> None:
     cm = ConnectionManager()
     ws = AsyncMock()
     cm.connect("p1", ws)
-    asyncio.run(cm.broadcast_state({"players": []}))
+    asyncio.run(cm.broadcast_state(lambda viewer_id: {"players": []}))
     ws.send_text.assert_called_once_with(json.dumps({"type": "state", "state": {"players": []}}))
+
+
+def test_broadcast_state_builds_per_viewer_payloads() -> None:
+    cm = ConnectionManager()
+    ws1, ws2 = AsyncMock(), AsyncMock()
+    cm.connect("p1", ws1)
+    cm.connect("p2", ws2)
+    asyncio.run(cm.broadcast_state(lambda viewer_id: {"viewer": viewer_id}))
+    ws1.send_text.assert_called_once_with(json.dumps({"type": "state", "state": {"viewer": "p1"}}))
+    ws2.send_text.assert_called_once_with(json.dumps({"type": "state", "state": {"viewer": "p2"}}))
+
+
+def test_broadcast_state_failed_send_disconnects() -> None:
+    cm = ConnectionManager()
+    ws_ok, ws_bad = AsyncMock(), AsyncMock()
+    ws_bad.send_text.side_effect = RuntimeError("socket closed")
+    cm.connect("ok", ws_ok)
+    cm.connect("bad", ws_bad)
+    asyncio.run(cm.broadcast_state(lambda viewer_id: {}))
+    assert cm.connected_players == ["ok"]
 
 
 def test_send_to_single_player() -> None:

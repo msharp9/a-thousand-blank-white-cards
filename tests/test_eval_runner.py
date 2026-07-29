@@ -153,6 +153,7 @@ def _stub_run_agent(monkeypatch, verdict="ok"):
         return InterpretResult(
             program=EffectProgram(ops=[AddPointsOp(op="add_points", target="self", amount=5)]),
             verdict=verdict,
+            placement="discard",
             comment="stub",
         )
 
@@ -190,6 +191,9 @@ class TestRunBenchmark:
         agg = run.aggregate()
         assert agg["cases"] == 6
         assert agg["unique_cards"] == 2
+        assert agg["placement_missing_rate"] == 0.0
+        assert agg["placement_recall"]["discard"] == 1.0
+        assert agg["placement_balanced_accuracy"] == 1.0
         assert "consistency" in agg
 
     def test_concurrency_preserves_row_order_and_results(self, monkeypatch) -> None:
@@ -310,6 +314,66 @@ class TestRunBenchmark:
 
 
 # --------------------------------------------------------------------------- #
+# Runner: pipeline toggle (A/B the three-stage pipeline vs the legacy agent)
+# --------------------------------------------------------------------------- #
+class TestPipelineToggle:
+    def test_pipeline_true_routes_to_run_pipeline(self, monkeypatch) -> None:
+        import agent.pipeline as pipeline
+        import agent.runtime as runtime
+        from agent.contract import InterpretResult
+        from models.effects import AddPointsOp, EffectProgram
+
+        captured: dict = {}
+
+        def fake_run_pipeline(title, description, state=None, actor_id=None, **kwargs):
+            captured["title"] = title
+            captured.update(kwargs)
+            cb = kwargs["config"]["callbacks"][0]
+            cb.on_tool_start({"name": "card_rag"}, "q")
+            return InterpretResult(
+                program=EffectProgram(ops=[AddPointsOp(op="add_points", target="self", amount=5)]),
+                verdict="ok",
+                comment="pipeline stub",
+            )
+
+        def legacy_boom(*args, **kwargs):
+            raise AssertionError("legacy run_agent must not be called when pipeline=True")
+
+        monkeypatch.setattr(pipeline, "run_pipeline", fake_run_pipeline)
+        monkeypatch.setattr(runtime, "run_agent", legacy_boom)
+
+        from evals.runner import EvalConfig, run_benchmark
+
+        cfg = EvalConfig(benchmark="eval", sample_size=2, use_judge=False, pipeline=True, max_tool_calls=7)
+        run = run_benchmark(cfg, timestamp="t", progress=False)
+
+        assert len(run.rows) == 2
+        assert captured["max_tool_calls"] == 7
+        assert all(r.metrics.tool_calls == 1 for r in run.rows)
+        assert all(r.scores["executability"] == 1.0 for r in run.rows)
+
+    def test_default_config_keeps_legacy_path(self, monkeypatch) -> None:
+        captured = _stub_run_agent(monkeypatch)
+        import agent.pipeline as pipeline
+
+        def pipeline_boom(*args, **kwargs):
+            raise AssertionError("run_pipeline must not be called by default")
+
+        monkeypatch.setattr(pipeline, "run_pipeline", pipeline_boom)
+        from evals.runner import EvalConfig, run_benchmark
+
+        run = run_benchmark(EvalConfig(benchmark="eval", sample_size=1, use_judge=False), timestamp="t", progress=False)
+        assert captured["title"]
+        assert len(run.rows) == 1
+
+    def test_config_dict_records_pipeline(self) -> None:
+        from evals.runner import EvalConfig
+
+        assert EvalConfig().to_dict()["pipeline"] is False
+        assert EvalConfig(pipeline=True).to_dict()["pipeline"] is True
+
+
+# --------------------------------------------------------------------------- #
 # Store round-trip
 # --------------------------------------------------------------------------- #
 class TestStore:
@@ -362,6 +426,7 @@ def _fake_summary(label: str, **overrides) -> dict:
         "target_accuracy": 0.7,
         "persistence_accuracy": 0.6,
         "magnitude_sign": 0.9,
+        "magnitude_value": 0.85,
         "sandbox_behavior": 0.5,
         "executability": 0.85,
         "did_something": 0.9,

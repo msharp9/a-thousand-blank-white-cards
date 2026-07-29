@@ -100,6 +100,25 @@ class Settings(BaseSettings):
     triage_agent_timeout_seconds: float = 30.0
     triage_agent_dedupe: bool = True
 
+    # --- Interpret pipeline ---
+    # Three-stage interpret pipeline (intent -> planner -> coder); False = the
+    # legacy single agent. Flip after an eval A/B shows parity or better.
+    interpret_pipeline_enabled: bool = False
+    # Per-stage chat models for the pipeline. Blank inherits the shared
+    # llm_chat_model (same convention as triage_agent_model) — override only to
+    # run a stage on a different/cheaper model.
+    intent_agent_model: str = ""
+    planner_agent_model: str = ""
+    coder_agent_model: str = ""
+
+    # --- Struggling-author consolation ---
+    # Award the card's author a consolation boon when their card can't work.
+    consolation_point_enabled: bool = True
+    consolation_points: int = Field(default=1, ge=0)
+    # After this many failed authored cards, escalate boons and tell the agent
+    # the author is struggling; 0 disables escalation.
+    struggling_author_threshold: int = Field(default=2, ge=0)
+
     # --- Sandbox ---
     snippet_execution_enabled: bool = True
 
@@ -198,7 +217,7 @@ EVAL_MODEL_PRICES: dict[str, dict[str, float]] = {
 
 
 # --- Eval benchmarks ------------------------------------------------------- #
-# The four scored datasets, each a distinct benchmark. ``canonical_key`` names
+# The benchmark datasets, each with a distinct purpose. ``canonical_key`` names
 # the per-card label field (seed cards use "canonical"; eval/real use
 # "human_canonical"). ``path`` is repo-root-relative. ``scored`` marks whether
 # every card carries a usable label — "real" cards are mostly unlabeled, so
@@ -207,6 +226,16 @@ EVAL_BENCHMARKS: dict[str, dict[str, object]] = {
     "seed": {"path": "data/seed_cards.json", "canonical_key": "canonical", "scored": True},
     "eval": {"path": "data/eval/eval_cards.json", "canonical_key": "human_canonical", "scored": True},
     "eval_hard": {"path": "data/eval/eval_cards_hard.json", "canonical_key": "human_canonical", "scored": True},
+    "placement": {
+        "path": "data/eval/eval_cards_placement.json",
+        "canonical_key": "human_canonical",
+        "scored": True,
+    },
+    "pets": {
+        "path": "data/eval/eval_cards_pets.json",
+        "canonical_key": "human_canonical",
+        "scored": True,
+    },
     "real": {"path": "data/eval/real_cards.json", "canonical_key": "human_canonical", "scored": False},
 }
 

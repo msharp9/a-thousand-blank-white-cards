@@ -15,9 +15,9 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
 
 from agent.contract import InterpretResult
-from agent.persona import PERSONA_ACTIONS, build_system_prompt
+from agent.persona import PERSONA_ACTIONS, STRUGGLING_AUTHOR_NOTE, build_system_prompt
 from agent.runtime import _forced_final_result, build_agent, run_agent
-from models.game_state import GameState, Player
+from models.game_state import GameState, HistoryEvent, Player
 
 
 class ToolAwareFake(GenericFakeChatModel):
@@ -127,6 +127,9 @@ def test_build_system_prompt_contains_key_sections():
     assert "do_nothing" in prompt
     assert "punish_author" in prompt
     assert "comment" in prompt
+    assert '"placement"' in prompt
+    assert "semantic role" in prompt
+    assert "owned pet" in prompt
     # actor IS author -> the authorship note reflects that
     assert "IS the author" in prompt
 
@@ -143,6 +146,31 @@ def test_build_system_prompt_renders_state():
     assert "Alice" in prompt
     assert "Bob" in prompt
     assert "the current player" in prompt
+
+
+def test_describe_state_surfaces_game_mode():
+    from agent.persona import describe_state
+
+    gs = GameState(room_code="ABCD", mode="online", players=[Player(id="p1", name="Alice")], phase="playing")
+    assert "Game mode: online." in describe_state(gs, "p1")
+    assert "Game mode: in_person." in describe_state({"mode": "in_person", "phase": "playing"}, None)
+    # A snapshot without a mode omits the line rather than raising.
+    assert "Game mode" not in describe_state({"phase": "playing"}, None)
+
+
+def test_build_system_prompt_struggling_author_adds_help_mode():
+    prompt = build_system_prompt("T", "D", struggling_author=True, author_fallbacks=2)
+    assert "HELP MODE" in prompt
+    assert "2 card(s)" in prompt
+
+
+def test_build_system_prompt_default_omits_help_mode():
+    prompt = build_system_prompt("T", "D")
+    assert "HELP MODE" not in prompt
+
+
+def test_struggling_author_note_has_no_phrasing_tips():
+    assert "try wording" not in STRUGGLING_AUTHOR_NOTE.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +231,52 @@ def test_failed_repair_returns_invalid_effectless_result() -> None:
     assert result.plan is None
     assert result.program is None
     assert result.snippet is None
+
+
+def test_run_agent_struggling_author_reaches_system_prompt():
+    """A creator with 2 prior card_fallback events crosses the default threshold
+    (2), so the system prompt handed to the model must contain HELP MODE."""
+    recorded_prompts: list[str] = []
+
+    class PromptCapturingFake(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ANN003
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):  # noqa: ANN001, ANN003
+            system = next((m for m in messages if getattr(m, "type", None) == "system"), None)
+            recorded_prompts.append(getattr(system, "content", ""))
+            payload = '{"verdict": "ok", "comment": "Fine.", "persona_action": "none"}'
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content=payload))])
+
+    state = GameState(
+        room_code="TEST",
+        players=[Player(id="p1", name="Alice"), Player(id="p2", name="Bob")],
+        phase="playing",
+        history_events=[
+            HistoryEvent(sequence=1, kind="card_fallback", target_player_ids=["p2"]),
+            HistoryEvent(sequence=2, kind="card_fallback", target_player_ids=["p2"]),
+        ],
+    )
+    fake = PromptCapturingFake(messages=iter([]))
+
+    result = run_agent("Card", "desc", state=state, actor_id="p1", creator_id="p2", model=fake)
+
+    assert result.verdict == "ok"
+    assert recorded_prompts
+    assert "HELP MODE" in recorded_prompts[0]
+    assert "2 card(s)" in recorded_prompts[0]
+
+
+def test_run_agent_dict_snapshot_with_creator_id_does_not_raise():
+    """The struggling-author fallback count is best-effort: a dict game-state
+    snapshot (which lacks ``.players``) must not break the never-raise contract."""
+    state = {"phase": "playing", "players": [{"id": "p1", "name": "Alice", "score": 0}]}
+    payload = '{"verdict": "ok", "comment": "Fine.", "persona_action": "none"}'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+
+    result = run_agent("Card", "desc", state=state, actor_id="p1", creator_id="p1", model=fake, tools=[])
+
+    assert result.verdict == "ok"
 
 
 # ---------------------------------------------------------------------------
@@ -478,6 +552,56 @@ def test_run_agent_ignores_embedded_non_contract_objects():
     assert result.verdict == "invalid"
     assert result.agent_error is True
     assert "add_points" in result.comment
+
+
+_STEPS_JSON = '{"steps": [{"kind": "ops", "ops": [{"op": "add_points", "target": "self", "amount": 5}]}]}'
+
+
+def test_run_agent_recovers_plan_without_verdict_key():
+    fake = ToolAwareFake(messages=iter([AIMessage(content=f'{{"plan": {_STEPS_JSON}}}')]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "ok"
+    assert result.agent_error is False
+    assert result.to_plan().model_dump()["steps"][0]["ops"][0]["op"] == "add_points"
+
+
+def test_run_agent_maps_resolution_plan_key():
+    payload = f'{{"resolution_plan": {_STEPS_JSON}, "comment": "via scorer key"}}'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "ok"
+    assert result.to_plan().model_dump()["steps"][0]["ops"][0]["op"] == "add_points"
+
+
+def test_run_agent_recovers_bare_plan_steps():
+    fake = ToolAwareFake(messages=iter([AIMessage(content=_STEPS_JSON)]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "ok"
+    assert result.to_plan().model_dump()["steps"][0]["ops"][0]["op"] == "add_points"
+
+
+def test_run_agent_normalizes_legacy_needs_choice_with_a_plan_to_ok():
+    payload = f'{{"verdict": "needs_choice", "plan": {_STEPS_JSON}}}'
+    fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "ok"
+
+
+def test_effectless_ok_result_gets_custom_note_plan():
+    # A valid no-op interpretation must still produce an executable plan.
+    fake = ToolAwareFake(messages=iter([AIMessage(content='{"verdict": "ok", "comment": "Nothing happens here."}')]))
+    result = run_agent("The Meta Card", "This card is about itself.", model=fake)
+    assert result.verdict == "ok"
+    steps = result.to_plan().steps
+    assert steps and steps[0].ops[0].op == "custom_note"
+
+
+def test_non_json_fallback_still_has_executable_plan():
+    fake = ToolAwareFake(messages=iter([AIMessage(content="this is not json at all")]))
+    result = run_agent("Card", "desc", model=fake)
+    assert result.verdict == "invalid"
+    steps = result.to_plan().steps
+    assert steps and steps[0].ops[0].op == "custom_note"
 
 
 def test_langsmith_tracing_off_by_default(monkeypatch):

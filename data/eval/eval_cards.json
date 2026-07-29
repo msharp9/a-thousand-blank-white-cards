@@ -75,7 +75,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -86,7 +86,7 @@
         }
       ],
       "magnitude_sign": "negative",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.subtract_points('all', 10)"
     }
@@ -98,7 +98,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -109,7 +109,7 @@
         }
       ],
       "magnitude_sign": "positive",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.add_points('all', 7)"
     }
@@ -121,7 +121,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "player",
+      "placement": "discard",
       "ops": [
         {
           "op": "skip_turn",
@@ -131,7 +131,7 @@
         }
       ],
       "magnitude_sign": "neutral",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.skip_turn(chosen)"
     }
@@ -173,7 +173,7 @@
         }
       ],
       "magnitude_sign": "neutral",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.reverse_order()"
     }
@@ -208,18 +208,19 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "player",
+      "placement": "discard",
       "ops": [
         {
           "op": "steal_points",
           "args": {
-            "target": "player",
+            "from_target": "player",
+            "to_target": "self",
             "amount": 8
           }
         }
       ],
       "magnitude_sign": "positive",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 8)"
     }
@@ -231,7 +232,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "player",
+      "placement": "discard",
       "ops": [
         {
           "op": "add_points",
@@ -249,7 +250,7 @@
         }
       ],
       "magnitude_sign": "neutral",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.subtract_points('self', 10)\n    state.add_points(chosen, 10)"
     }
@@ -284,7 +285,7 @@
     "alt_text": null,
     "human_canonical": {
       "target": "card",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "destroy_card",
@@ -294,7 +295,7 @@
         }
       ],
       "magnitude_sign": "neutral",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.destroy_card(card_id=ctx.get(\"chosen_card_id\"))"
     }
@@ -714,9 +715,9 @@
     "alt_text": null,
     "human_canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "magnitude_sign": "negative",
-      "trigger": "on_play",
+      "trigger": null,
       "ops": [
         {
           "op": "custom_note",
@@ -736,18 +737,19 @@
     "alt_text": null,
     "human_canonical": {
       "target": "player",
-      "placement": "player",
+      "placement": "discard",
       "ops": [
         {
           "op": "steal_points",
           "args": {
-            "target": "player",
+            "from_target": "player",
+            "to_target": "self",
             "amount": 15
           }
         }
       ],
       "magnitude_sign": "positive",
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 15)"
     }
@@ -764,14 +766,14 @@
         {
           "op": "change_draw_count",
           "args": {
-            "amount": -1
+            "amount": 0
           }
         }
       ],
       "magnitude_sign": "neutral",
-      "trigger": "on_turn_start",
+      "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(-1)"
+      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(0)"
     }
   },
   {
@@ -875,25 +877,24 @@
   {
     "id": "eval-036",
     "title": "Total Chaos",
-    "description": "Gain 5, everyone else loses 3 and skips, take an extra turn, and destroy all cards in play.",
+    "description": "Absolute pandemonium: you gain 5 points, everyone else loses 3, everyone else skips their next turn, you take an extra turn, and every card currently in play is destroyed.",
     "alt_text": null,
     "human_canonical": {
       "target": "all",
       "placement": "discard",
-      "magnitude_sign": "positive",
       "ops": [
         {
           "op": "add_points",
           "args": {
-            "target": "self",
-            "amount": 5
+            "amount": 5,
+            "target": "self"
           }
         },
         {
           "op": "subtract_points",
           "args": {
-            "target": "all_others",
-            "amount": 3
+            "amount": 3,
+            "target": "all_others"
           }
         },
         {
@@ -917,7 +918,8 @@
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)\n    state.subtract_points('all_others', 3)\n    state.skip_turn('all_others')\n    state.extra_turn('self')\n    state.destroy_card(card_target='all_in_play')"
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)\n    state.subtract_points('all_others', 3)\n    state.skip_turn('all_others')\n    state.extra_turn('self')\n    state.destroy_card(card_target='all_in_play')",
+      "magnitude_sign": "positive"
     }
   },
   {
@@ -978,12 +980,11 @@
   {
     "id": "eval-039",
     "title": "Spicy Uno",
-    "description": "Use basic Uno rules and add colored Draw 2, Draw 4, and Reverse cards to the deck.",
+    "description": "Use basic Uno ending and draw rules, color your remaining hand red, and shuffle Draw 2, Draw 4, and Reverse cards into the deck.",
     "alt_text": null,
     "human_canonical": {
       "target": "all",
       "placement": "center",
-      "magnitude_sign": "neutral",
       "steps": [
         {
           "kind": "ops",
@@ -1002,40 +1003,67 @@
               "amount": 0
             },
             {
+              "op": "set_card_attribute",
+              "card_target": "all_in_hand",
+              "key": "color",
+              "value": "red"
+            },
+            {
               "op": "create_card",
               "title": "Draw 2",
+              "description": "The next player draws 2 and skips their turn.",
               "ops": [
                 {
                   "op": "draw_cards",
                   "args": {
-                    "target": "right_neighbor",
+                    "target": "left_neighbor",
                     "amount": 2
+                  }
+                },
+                {
+                  "op": "skip_turn",
+                  "args": {
+                    "target": "left_neighbor"
                   }
                 }
               ],
               "attributes": {
-                "color": "red"
-              }
+                "color": "red",
+                "symbol": "draw_2"
+              },
+              "destination": "deck_shuffle",
+              "count": 1
             },
             {
               "op": "create_card",
               "title": "Draw 4",
+              "description": "The next player draws 4 and skips their turn.",
               "ops": [
                 {
                   "op": "draw_cards",
                   "args": {
-                    "target": "right_neighbor",
+                    "target": "left_neighbor",
                     "amount": 4
+                  }
+                },
+                {
+                  "op": "skip_turn",
+                  "args": {
+                    "target": "left_neighbor"
                   }
                 }
               ],
               "attributes": {
-                "color": "wild"
-              }
+                "color": "wild",
+                "symbol": "draw_4"
+              },
+              "destination": "deck_shuffle",
+              "count": 1
             },
             {
               "op": "create_card",
               "title": "Reverse",
+              "description": "Reverse turn order.",
               "ops": [
                 {
                   "op": "reverse_order",
@@ -1043,26 +1071,29 @@
                 }
               ],
               "attributes": {
-                "color": "red"
-              }
+                "color": "red",
+                "symbol": "reverse"
+              },
+              "destination": "deck_shuffle",
+              "count": 1
             }
           ]
         }
       ],
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
-      "sandbox": null
+      "sandbox": null,
+      "magnitude_sign": "neutral"
     }
   },
   {
     "id": "eval-040",
     "title": "Wild Uno",
-    "description": "Use Uno ending rules and enforce color alignment on every play.",
+    "description": "Use Uno's empty-hand ending and zero-draw rule. Track the color of each played card and reject plays that do not match the current color.",
     "alt_text": null,
     "human_canonical": {
       "target": "all",
       "placement": "center",
-      "magnitude_sign": "neutral",
       "steps": [
         {
           "kind": "ops",
@@ -1100,9 +1131,10 @@
           ]
         }
       ],
-      "trigger": "on_play",
+      "trigger": null,
       "venue": "all",
-      "sandbox": null
+      "sandbox": null,
+      "magnitude_sign": "neutral"
     }
   },
   {
@@ -1125,6 +1157,852 @@
       ],
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    if ctx.get(\"pending_card_id\"):\n        state.counter_play(\"steal_hand\")"
+    }
+  },
+  {
+    "id": "eval-042",
+    "title": "Unstoppable",
+    "description": "This card has split second and trample",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "from_target": "player",
+            "to_target": "self",
+            "amount": 5
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "uncounterable",
+            "value": true
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 5)\n    state.set_card_attribute('this', 'uncounterable', True)"
+    }
+  },
+  {
+    "id": "eval-043",
+    "title": "Happy Points!",
+    "description": "Everyone gets happy points!",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "all",
+            "amount": 3
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.add_points('all', 3)"
+    }
+  },
+  {
+    "id": "eval-044",
+    "title": "Grab And Go",
+    "description": "steal 2 points and also draw",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "from_target": "player",
+            "to_target": "self",
+            "amount": 2
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 2)\n    state.draw_cards('self', 1)"
+    }
+  },
+  {
+    "id": "eval-045",
+    "title": "Open Book",
+    "description": "Turn your hand around and let the whole table read it. One good look for everyone.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "self",
+            "to": "all",
+            "persistent": false
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all')"
+    }
+  },
+  {
+    "id": "eval-046",
+    "title": "Fishbowl",
+    "description": "Pick a player. For the rest of the game they hold their cards facing out where everyone can see them.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "player",
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "chooser",
+            "to": "all",
+            "persistent": true
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.reveal_hand('id:' + pid, to='all', persistent=True)"
+    }
+  },
+  {
+    "id": "eval-047",
+    "title": "Over the Shoulder",
+    "description": "Quietly glance at the hand of a player you choose. Nobody else sees a thing.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "chooser",
+            "to": "self",
+            "persistent": false
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.reveal_hand('id:' + pid, to='self')"
+    }
+  },
+  {
+    "id": "eval-048",
+    "title": "Close the Blinds",
+    "description": "Your cards go back to being private. Any effect that was showing your hand to the table ends now.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "self",
+            "to": "all",
+            "mode": "conceal"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all', mode='conceal')"
+    }
+  },
+  {
+    "id": "eval-049",
+    "title": "Dice Tax",
+    "description": "Roll a d8. A player of your choice loses that many points. The house always wins.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 8,
+            "count": 1,
+            "target": "chosen_player",
+            "outcome": "subtract_points"
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    state.roll_die(sides=8, outcome='subtract_points', target=chosen)"
+    }
+  },
+  {
+    "id": "eval-050",
+    "title": "The Oracle Cube",
+    "description": "Roll a d12 where the whole table can see it. Whatever it shows is an omen — the table decides what it foretells.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "none",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 12,
+            "count": 1,
+            "outcome": "none"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    total = state.roll_die(sides=12)\n    state.note('The Oracle Cube shows ' + str(total) + '. The table reads the omen.')"
+    }
+  },
+  {
+    "id": "eval-051",
+    "title": "Hand Grenade",
+    "description": "KABOOM. Every player discards 2 cards from their hand at random.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "discard_random",
+          "args": {
+            "target": "all",
+            "count": 2
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.discard_random('all', 2)"
+    }
+  },
+  {
+    "id": "eval-052",
+    "title": "Vending Machine",
+    "description": "Insert card, roll a d6, and draw that many cards from the deck. No refunds.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 6,
+            "count": 1,
+            "target": "self",
+            "outcome": "draw_cards"
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.roll_die(sides=6, outcome='draw_cards', target='self')"
+    }
+  },
+  {
+    "id": "eval-070",
+    "title": "Hot Streak",
+    "description": "You are On Fire for your next 2 turns. After that you cool back down on your own.",
+    "alt_text": "a stick figure with flames for hair, grinning",
+    "human_canonical": {
+      "target": "self",
+      "placement": "player",
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "on_fire",
+            "value": true,
+            "duration_turns": 2
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'on_fire', True, duration_turns=2)"
+    }
+  },
+  {
+    "id": "eval-071",
+    "title": "Frog Spell",
+    "description": "Choose a player. They are a Frog for their next 3 turns, then the spell wears off by itself.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "player",
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "chosen_player",
+            "key": "frog",
+            "value": true,
+            "duration_turns": 3
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'frog', True, duration_turns=3)"
+    }
+  },
+  {
+    "id": "eval-060",
+    "title": "Voted Off the Island",
+    "description": "Choose a player. They are eliminated from the game: their hand goes to the discard pile and they take no more turns.",
+    "alt_text": "a torch being snuffed out at a tribal council",
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "eliminate_player",
+          "args": {
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.eliminate_player('id:' + pid)"
+    }
+  },
+  {
+    "id": "eval-061",
+    "title": "Tripwire",
+    "description": "This card goes off the moment it is drawn: the drawer plays it immediately, and it does not count as their play for the turn. They lose 2 points.",
+    "alt_text": "a taut wire stretched across a doorway",
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "play_on_draw",
+            "value": true
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": -2
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'play_on_draw', True)\n    state.subtract_points('self', 2)"
+    }
+  },
+  {
+    "id": "eval-062",
+    "title": "Declutter Ordinance",
+    "description": "New rule: nobody may hold more than 4 cards. At the end of each turn, anyone over the limit discards down to 4.",
+    "alt_text": "a tidy shelf with exactly four boxes on it",
+    "human_canonical": {
+      "target": "none",
+      "placement": "center",
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "hand_limit",
+            "value": 4
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('hand_limit', 4)"
+    }
+  },
+  {
+    "id": "eval-063",
+    "title": "Speed Round",
+    "description": "New rule: turns are timed. Each player gets 20 seconds; when the clock hits zero their turn ends on the spot.",
+    "alt_text": "a stopwatch with a cracked face",
+    "human_canonical": {
+      "target": "none",
+      "placement": "center",
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "turn_timer",
+            "value": 20
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('turn_timer', 20)"
+    }
+  },
+  {
+    "id": "eval-080",
+    "title": "Witness Protection",
+    "description": "Choose any card in play or in a hand and remove it from the game forever. It gets a new identity and is never seen at this table again.",
+    "alt_text": "a playing card wearing sunglasses and a fake mustache",
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "to_zone": "exile"
+          }
+        }
+      ],
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, to_zone='exile')"
+    }
+  },
+  {
+    "id": "eval-081",
+    "title": "Lawnmower",
+    "description": "Mow down the top 4 cards of the deck: they go straight to the discard pile, sight unseen.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "none",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "deck",
+            "selector": "top",
+            "count": 4,
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='deck', selector='top', count=4, to_zone='discard')"
+    }
+  },
+  {
+    "id": "eval-082",
+    "title": "Fresh Start",
+    "description": "Shuffle the whole discard pile back into the deck. Everything old is new again.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "none",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "shuffle_deck",
+          "args": {
+            "include_discard": true
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.shuffle_deck(include_discard=True)"
+    }
+  },
+  {
+    "id": "eval-083",
+    "title": "Trash Panda",
+    "description": "Rummage through the trash: take the top card of the discard pile (the most recently discarded card) into your hand.",
+    "alt_text": "a raccoon triumphantly holding a card above an open trash can",
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "discard",
+            "selector": "top",
+            "count": 1,
+            "to_zone": "hand",
+            "to_player": "self"
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='discard', selector='top', count=1, to_zone='hand', to_player='self')"
+    }
+  },
+  {
+    "id": "eval-084",
+    "title": "Periscope Up",
+    "description": "Raise the periscope: peek at the top 2 cards of the deck, then put them back in any order or send either to the bottom. Tell no one what you saw.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "none",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "peek",
+          "request": {
+            "kind": "card_order",
+            "prompt": "Peek at the top 2 cards of the deck. Reorder them or send either to the bottom.",
+            "count": 2
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    seq = ctx['interactions']['peek'][ctx['actor_id']]\n    for cid in seq['to_bottom']:\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='bottom')\n    for cid in reversed(seq['order']):\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='top')"
+        }
+      ]
+    }
+  },
+  {
+    "id": "eval-090",
+    "title": "Do-Over",
+    "description": "The most recently played card was a mistake — hand it straight back to whoever played it.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "last_played",
+            "to_target": "card_owner"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card('last_played', 'card_owner')"
+    }
+  },
+  {
+    "id": "eval-091",
+    "title": "Butterfingers",
+    "description": "Whoops — the last card played slips out of play and back into the hand of the player who played it.",
+    "alt_text": "a fumbled card slipping out of a clumsy player's grip",
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "last_played",
+            "to_zone": "hand",
+            "to_player": "card_owner"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(card_target='last_played', to_zone='hand', to_player='card_owner')"
+    }
+  },
+  {
+    "id": "eval-100",
+    "title": "Win the Game",
+    "description": "Congratulations! You win immediately. The game is over. Really.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "end_game",
+          "args": {
+            "winner": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.end_game('self')",
+      "magnitude_sign": "positive"
+    }
+  },
+  {
+    "id": "eval-101",
+    "title": "Person with Fewest Points Wins",
+    "description": "New game rule: the player with the FEWEST points at game end wins instead.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "lowest_points"
+          }
+        }
+      ],
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('lowest_points')",
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "id": "eval-102",
+    "title": "Red Card Rule",
+    "description": "At the physical table, only red cards may be played while this rule remains in the center.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "in_person",
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.current_color",
+            "value": "red"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_validate_play",
+            "scope": "center",
+            "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.current_color', 'red')\n    state.register_hook('on_validate_play', scope='center', code=\"def apply(state, ctx):\\n    color = ctx.get('card_attributes', {}).get('color')\\n    current = state.rules().get('extra', {}).get('current_color')\\n    if current and color != current:\\n        state.reject_play('Card color must match ' + current)\\n\")",
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "id": "eval-103",
+    "title": "Sudden Death",
+    "description": "New rule, effective immediately: whoever has the most points right now wins. The game is over.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "highest_points"
+          }
+        },
+        {
+          "op": "end_game",
+          "args": {}
+        }
+      ],
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('highest_points')\n    state.end_game()",
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "id": "eval-104",
+    "title": "The Big Finish",
+    "description": "End the game now. The player with the most points wins.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "end_game",
+          "args": {
+            "winner": "player_with_most_points"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.end_game(winners=['player_with_most_points'])\n",
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "id": "eval-105",
+    "title": "The Ejector Seat",
+    "description": "Choose a player. They are out of the game: their hand is discarded and they take no more turns. Any cards they have in play stay in effect.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "eliminate_player",
+          "args": {
+            "target": "chosen_player"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.eliminate_player('id:' + pid)\n",
+      "magnitude_sign": "negative"
+    }
+  },
+  {
+    "id": "eval-106",
+    "title": "Boomerang",
+    "description": "Like a boomerang, this card comes right back: after it resolves, return it to its owner's hand instead of the discard pile.",
+    "alt_text": "a wooden boomerang curving back toward the hand that threw it",
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "this",
+            "to_target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card('this', 'self')",
+      "magnitude_sign": "neutral"
+    }
+  },
+  {
+    "id": "eval-107",
+    "title": "Spring Cleaning",
+    "description": "Every card on the table in front of every player gets swept into the discard pile. Spotless.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all_cards",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "in_play",
+            "from_player": "all",
+            "selector": "all",
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='in_play', from_player='all', selector='all', to_zone='discard')"
+    }
+  },
+  {
+    "id": "eval-108",
+    "title": "Museum Heist",
+    "description": "Choose a player and steal one card on the table in front of them straight into your hand.",
+    "alt_text": "a gloved hand lifting a painting off a gallery wall",
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "chooser",
+            "to_zone": "hand",
+            "to_player": "self"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    mark = ctx.get('chosen_player_id')\n    loot = ctx.get('chosen_card_id')\n    if mark and loot:\n        state.move_cards(card_target='id:' + loot, from_zone='in_play', from_player='id:' + mark, to_zone='hand', to_player='self')"
+    }
+  },
+  {
+    "id": "eval-109",
+    "title": "House Plant",
+    "description": "Keep this card on the table in front of you. It livens the place up: at the end of each of your turns, draw an extra card.",
+    "alt_text": "a cheerful potted fern on a card table",
+    "human_canonical": {
+      "target": "self",
+      "placement": "player",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_end",
+            "scope": "player",
+            "title": "The owner draws a card at the end of each of their turns.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.draw_cards('self', 1)\n"
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": "on_turn_end",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_end', scope='player', code=\"def apply(state, ctx):\\n    state.draw_cards('self', 1)\\n\", title='The owner draws a card at the end of each of their turns.', condition_keys=[])"
     }
   }
 ]

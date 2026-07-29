@@ -426,5 +426,190 @@
       "venue": "all",
       "sandbox": null
     }
+  },
+  {
+    "id": "hard-025",
+    "title": "Public Audit",
+    "description": "Choose a player. Their hand gets shown to the whole table, and they lose 1 point for every card in it.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    if not pid:\n        return\n    state.reveal_hand('id:' + pid, to='all')\n    size = state.hand_size(pid)\n    if size > 0:\n        state.subtract_points('id:' + pid, size)"
+    }
+  },
+  {
+    "id": "hard-026",
+    "title": "Transparency Report",
+    "description": "Every hand is shown to the table. Whoever is hoarding the most cards loses 3 points; on a tie, everyone tied pays.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('all', to='all')\n    sizes = {p.id: state.hand_size(p.id) for p in state.players()}\n    if not sizes:\n        return\n    biggest = max(sizes.values())\n    if biggest == 0:\n        return\n    for pid, size in sizes.items():\n        if size == biggest:\n            state.subtract_points('id:' + pid, 3)"
+    }
+  },
+  {
+    "id": "hard-027",
+    "title": "Press Your Luck",
+    "description": "Roll a d6. On a 4 or higher, draw 2 cards. Otherwise, discard a random card from your hand.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    total = state.roll_die(sides=6)\n    if total >= 4:\n        state.draw_cards('self', 2)\n    else:\n        state.discard_random('self', 1)"
+    }
+  },
+  {
+    "id": "hard-028",
+    "title": "Dice Duel",
+    "description": "Challenge a player of your choice: you each roll a d20. Whoever rolls lower loses 6 points and discards a random card. Ties fizzle.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    mine = state.roll_die(sides=20)\n    theirs = state.roll_die(sides=20)\n    if mine > theirs:\n        state.subtract_points(chosen, 6)\n        state.discard_random(chosen, 1)\n    elif theirs > mine:\n        state.subtract_points('self', 6)\n        state.discard_random('self', 1)\n    else:\n        state.note('Dice Duel: a tie -- both duelists walk away unscathed.')"
+    }
+  },
+  {
+    "id": "hard-050",
+    "title": "Snail Mail",
+    "description": "Choose a player. They are Slowed for their next 2 turns and immediately lose 1 point for every card in their hand.",
+    "alt_text": "a snail carrying an envelope on its shell",
+    "human_canonical": {
+      "target": "player",
+      "placement": "player",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id') or ctx.get('actor_id') or ''\n    chosen = 'id:' + pid\n    state.set_condition(chosen, 'slowed', True, duration_turns=2)\n    penalty = state.hand_size(pid)\n    if penalty > 0:\n        state.subtract_points(chosen, penalty)"
+    }
+  },
+  {
+    "id": "hard-040",
+    "title": "The Tribe Has Spoken",
+    "description": "The player with the fewest points is eliminated from the game. If several players are tied for last place, they all go.",
+    "alt_text": "a row of torches with the shortest one extinguished",
+    "human_canonical": {
+      "target": "player",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    alive = [p for p in state.players() if not p.eliminated]\n    if len(alive) <= 1:\n        return\n    lowest = min(p.score for p in alive)\n    for p in alive:\n        if p.score == lowest:\n            state.eliminate_player('id:' + p.id)"
+    }
+  },
+  {
+    "id": "hard-041",
+    "title": "Downsizing",
+    "description": "New rule: the hand limit is 3. Then everyone draws a card, and anyone the draw pushes over the limit loses 2 points.",
+    "alt_text": "a moving box overflowing with playing cards",
+    "human_canonical": {
+      "target": "all",
+      "placement": "center",
+      "ops": null,
+      "magnitude_sign": "negative",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('hand_limit', 3)\n    state.draw_cards('all', 1)\n    for p in state.players():\n        if state.hand_size(p.id) + 1 > 3:\n            state.subtract_points('id:' + p.id, 2)"
+    }
+  },
+  {
+    "id": "hard-060",
+    "title": "Scout Ahead",
+    "description": "Send a scout up the trail: look at the top 2 cards of the deck and arrange them however you like, then draw a card.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "scout",
+          "request": {
+            "kind": "card_order",
+            "prompt": "Look at the top 2 cards of the deck. Reorder them or send either to the bottom.",
+            "count": 2
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    seq = ctx['interactions']['scout'][ctx['actor_id']]\n    for cid in seq['to_bottom']:\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='bottom')\n    for cid in reversed(seq['order']):\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='top')\n    state.draw_cards('self', 1)"
+        }
+      ]
+    }
+  },
+  {
+    "id": "hard-061",
+    "title": "Mulch Money",
+    "description": "Turn the deck into fertilizer: mill the top 3 cards of the deck into the discard pile and gain 1 point for each card actually milled.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "self",
+      "placement": "discard",
+      "ops": null,
+      "magnitude_sign": "positive",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    milled = min(3, state.deck_size)\n    if milled > 0:\n        state.move_cards(from_zone='deck', selector='top', count=milled, to_zone='discard')\n        state.add_points('self', milled)"
+    }
+  },
+  {
+    "id": "hard-070",
+    "title": "Going Once, Going Twice",
+    "description": "Everyone secretly bids points for this card. The highest bidder pays their bid and takes this card into their hand. Ties go to the earliest player in turn order.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all",
+      "placement": "discard",
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "bids",
+          "request": {
+            "kind": "number",
+            "prompt": "How many points do you bid?",
+            "audience": "all",
+            "sealed": true,
+            "minimum": 0,
+            "maximum": 100,
+            "integer": true
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    bids = ctx['interactions']['bids']\n    best = max(bids.values())\n    winner = [pid for pid in state.turn_order if bids[pid] == best][0]\n    state.subtract_points('id:' + winner, int(best))\n    state.transfer_card('this', 'id:' + winner)\n",
+          "explanation": "Resolve a sealed bid deterministically, charge the winner, and move the played card with the canonical transfer_card API."
+        }
+      ],
+      "trigger": null,
+      "venue": "all",
+      "sandbox": null,
+      "magnitude_sign": "neutral",
+      "ops": null
+    }
   }
 ]

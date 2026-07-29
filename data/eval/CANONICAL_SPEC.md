@@ -55,14 +55,13 @@ for player input; those cards teach through their `steps` instead.
 
 ### PLACEMENT — where the card physically goes after being played
 
-- `discard` — the effect resolves once and the card goes to the discard pile.
-  All one-shot/immediate cards, including physical dares and reactions.
-- `center` — the card stays in the shared table center as a game-wide modifier
-  (changes the draw amount, the win condition, a global ongoing rule).
-- `player` — the card stays **in front of one player** as a modifier attached to
-  that player (their points count double, they can't be targeted, they are
-  poisoned). The affected player may be the actor or a chosen player — `target`
-  says who.
+- `discard` — the card has no continuing physical identity after its one-shot
+  action or reaction resolves.
+- `center` — the card is a shared rule, enduring global state reminder,
+  table-wide condition, or shared table object.
+- `player` — the card is an owned pet/item or a boon, curse, or status attached
+  to one player. The affected player may be the actor or a chosen player —
+  `target` says who.
 
 To be fair, every card *could* just go to the discard; center/player placement
 exists so persistent effects stay visible as reminders and are targetable
@@ -72,8 +71,10 @@ There is no `self` placement (v1 legacy — see mapping appendix) and no
 `destroy` placement (a card that removes itself from the game encodes that with
 a `destroy_card {card_target: "this"}` op and placement `discard`).
 
-Invariant: placement `discard` ⇔ one-shot; `center`/`player` ⇔ persistent
-modifier. (The old `timing` field is gone — it was fully redundant with this.)
+Classify semantic identity, not casual author wording about "the center" or
+"in front": players are not expected to know engine zone names. A cute inert
+pet belongs to its owner; a "New Rule" belongs in the center even when its
+state mutation happens immediately. Placement is independent of `trigger`.
 
 ### TARGET — who/what the effect primarily affects
 
@@ -113,8 +114,8 @@ impression, answer trivia) are `all`, not `in_person` — a camera is enough.
 Values are the engine's `GameEvent` strings (`src/engine/events.py`) plus
 `on_reaction`:
 
-- `null` — one-shot: the effect fires when played, done. **All placement
-  `discard` cards except reactions.**
+- `null` — no event hook. This includes one-shots and visible cards whose
+  ongoing state/reminder needs no repeated hook.
 - `on_play`, `on_validate_play`, `on_score_change`, `on_turn_start`,
   `on_turn_end`, `on_draw_step`, `on_win_check`, `on_game_end` — for persistent
   modifiers (`center`/`player` placement): the event that re-fires the card's
@@ -147,16 +148,23 @@ input mid-resolution**. Each item is one of:
   sandbox code (never prose; never truncate or replace code with a summary).
 - `{"kind": "interaction", "result_key": "bids", "request": {...},
    "input_refs": {...}}` — a **barrier**: resolution pauses, the `request`
-  descriptor (`kind`: `choice` | `number` | `text` | `card_pick` | `confirm` |
-  `drawing`; `audience`: `active` | `all` | `all_others` | `player:<id>`;
+  descriptor (`kind`: `choice` | `number` | `text` | `card_pick` |
+  `card_order` | `confirm` | `drawing`; `audience`: `active` | `all` |
+  `all_others` | `player:<id>`;
   `sealed` for hidden bids; `timeout_seconds` 10–300) is sent to the audience,
   and collected responses land in `ctx["interactions"][result_key]`
   (player_id → validated value) for later steps. `input_refs` lets a step's
   options come from a prior result (e.g. vote on submitted drawings).
+  `card_pick` can source its options at send time: `from_hand: true` offers
+  each responder their own hand; `from_deck_top: <int 1-10>` offers the deck's
+  top N ("draw 3, keep 1" — see gold "Window Shopping"). `card_order` is scry:
+  the audience sees the top `count` cards and answers with a permutation split
+  into `order` (back on top, first entry topmost) and `to_bottom`; a snippet
+  step writes the arrangement back with `move_cards` (see gold "Crystal Ball").
 
 Bounds: ≤ 8 steps per plan, ≤ 4 interaction barriers, byte caps enforced by
-`models.effects.ResolutionPlan`. Exemplars: gold "Going Once, Going Twice"
-(sealed auction), "Cat Show" (drawing contest + vote).
+`models.effects.ResolutionPlan`. Exemplars: hard eval "Going Once, Going Twice"
+(sealed auction) and seed gold "Cat Show" (drawing contest + vote).
 
 ### OPS — structured operations
 
@@ -168,16 +176,48 @@ A list of `{"op": <name>, "args": {...}}` in the authoring vocabulary
 - `set_points` — `{"target": <TARGET>, "amount": <int>}`
 - `skip_turn` / `extra_turn` — `{"target": <TARGET>}`
 - `draw_cards` — `{"target": <TARGET>, "amount": <int>}`
+- `roll_die` — `{"sides": <int 2-1000>, "count": <int 1-10>, "target": <TARGET>, "outcome": "add_points"|"subtract_points"|"draw_cards"|"none"}` — the engine rolls; the total feeds `outcome` for `target` (`none` = bare roll, shown and recorded in history)
+- `discard_random` — `{"target": <TARGET>, "count": <int 1-10>}` — the engine picks the cards at apply time
+- `move_cards` — move cards between zones (`"deck" | "discard" | "hand" | "in_play" | "center" | "exile"`)
+  without playing them (mill, exile/"remove from the game", tuck, fetch). Source is
+  `{"card_target": ...}`, `{"from_zone": <zone>, "selector": "top"|"bottom"|"all"|"random", "count": <int 1-50>}`,
+  or BOTH — with both, the addressed card moves only if it actually sits in the declared
+  zone (`selector`/`count` are not applied there and must stay at their defaults; a
+  mismatched card is a logged no-op). `card_target: "chosen_card"` with a `from_zone`
+  also SCOPES the play-time card prompt to that zone ("exile a card in the center"
+  offers only center cards — see gold "Into the Void"); the prompt candidates are
+  the zone's public contents (`center`/`exile`/`discard` in state order, or
+  `hand`/`in_play` from the resolved `from_player` owners) — `deck` is hidden and
+  never offered, so a `chosen_card` scoped to `from_zone: "deck"` has no eligible
+  candidates. An unscoped `chosen_card` offers the public in-play cards plus the
+  actor's own hand. Destination is
+  `{"to_zone": <zone>, "to_position": "top"|"bottom"|"shuffle"}` (`to_position`
+  applies only to a deck destination). `from_player`/`to_player` (`<TARGET>`) are required
+  exactly when the corresponding zone is `hand`/`in_play`; `to_player` also accepts
+  `"card_owner"` (each moved card routes to its own owner). Random picks use the engine's rng
+  at apply time — hidden cards stay hidden.
+- `shuffle_deck` — `{"include_discard": <bool>}` — shuffle the draw pile;
+  `true` is the classic reshuffle (discard pile folded in first, left empty)
 - `reverse_order` / `scramble_order` — `{}`
 - `change_draw_count` — `{"amount": <int>}` (new absolute draw count)
-- `destroy_card` — `{"card_target": "this" | "chosen_card" | "all_in_play" | ...}`
-- `transfer_card` — `{"card_target": ..., "to_target": <TARGET>}` (moves cards into one player's hand)
+- `destroy_card` — `{"card_target": "this" | "chosen_card" | "last_played" | "all_in_play" | "all_in_hand" | "all_in_center" | "id:<card_id>" | "attr:<k>=<v>"}`
+  (`last_played` = the most recent completed play other than this card, skipping
+  plays whose card has since left the game)
+- `transfer_card` — `{"card_target": ..., "to_target": <TARGET> | "card_owner"}` (moves cards
+  into a player's hand; `card_owner` routes each card to its own owner — the player whose
+  hand/in-play zone holds it, else whoever played it, else its creator — so "return the
+  last card played to its owner's hand" is `card_target: "last_played", to_target: "card_owner"`)
 - `set_win_condition` — `{"kind": "highest_points"|"lowest_points"|"first_to"|"empty_hand"|"last_standing"|"none", "threshold": <int|null>}`
 - `set_rule` — `{"path": <str>, "value": ...}`
-- `set_condition` — `{"target": <TARGET>, "key": <str>, "value": ...}`
+- `set_condition` — `{"target": <TARGET>, "key": <str>, "value": ..., "duration_turns": <int|null>}`
+  — `duration_turns` makes the status self-expire after N of the targeted
+  player's turns (active through the turn the counter hits 0); omit it for a
+  status that lasts until something removes it. A personal timed status uses
+  `player`; a shared multi-player status uses `center`. Its source card is
+  discarded when the last linked status expires.
 - `set_card_attribute` — `{"card_target": ..., "key": <str>, "value": ...}`
 - `create_card` — `{"title": ..., "description": ..., "ops": [...], "destination": ...}`
-- `register_hook` — `{"event": <GameEvent>, "scope": "center"|"player", "code": <sandbox code>}`
+- `register_hook` — `{"event": <GameEvent>, "scope": "center"|"player", "code": <sandbox code>, "title": <player-facing sentence>, "condition_keys": [<normalized key>, ...]}`
 - `custom_note` — `{"note": <str>}` — flavour / table-adjudicated actions with no engine effect.
 - `counter_play` — `{"mode": "negate"|"steal_hand"|"redirect"}` — reaction cards
   only (see REACTIONS below).
@@ -207,8 +247,10 @@ reads — `current_player_id`, `actor_id`, `draw_count`, `deck_size`,
 (returns `title`, `description`, `alt_text`, `attributes`, `origin`);
 mutators — `add_points`, `subtract_points`, `set_points`, `skip_turn`,
 `extra_turn`, `set_draw_count`, `note`, `reverse_order`, `scramble_order`,
-`steal_points`, `draw_cards`, `destroy_card`, `transfer_card`,
-`set_win_condition`, `end_game`, `set_rule`, `set_condition`,
+`steal_points`, `draw_cards`, `roll_die` (rolls immediately and RETURNS the
+total, so code can branch on it), `discard_random` (engine picks at apply
+time; no return value), `move_cards`, `shuffle_deck`, `destroy_card`,
+`transfer_card`, `set_win_condition`, `end_game`, `set_rule`, `set_condition`,
 `set_card_attribute`, `create_card`, `shuffle_into_deck`, `register_hook`,
 `unregister_hook`, plus context-gated `reject_play` (on_validate_play hooks)
 and `counter_play` (reactions). After an interaction barrier, a snippet step
@@ -216,8 +258,9 @@ reads `ctx["interactions"][result_key]`.
 
 Style guide:
 - Player targets are runtime Target strings: `"self"`, `"chooser"` (the chosen
-  player), `"all"`, `"all_others"`, `"left_neighbor"`, `"right_neighbor"`,
-  `"id:<player_id>"`, `"has:<condition_key>"`.
+  player), `"all"`, `"all_others"`, `"left_neighbor"` (the NEXT player in turn
+  order — the successor), `"right_neighbor"` (the PREVIOUS player — the
+  predecessor), `"id:<player_id>"`, `"has:<condition_key>"`.
 - Read `ctx` defensively: `ctx.get("actor_id", "")`.
 - Use `state.note(...)` for the table-adjudicated part of a dare.
 - Point losses use `subtract_points` (`add_points` rejects negative amounts).

@@ -2,7 +2,7 @@
 """Run the eval harness and write a conclusions report to data/eval/conclusions.md.
 
 Usage:
-    LLM_API_KEY=... uv run python -m evals.conclusions [--suite gold|hard|all] [--data PATH] [--limit N]
+    LLM_API_KEY=... uv run python -m evals.conclusions [--suite gold|hard|placement|all] [--data PATH] [--limit N]
 """
 
 from __future__ import annotations

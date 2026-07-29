@@ -135,7 +135,7 @@
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.skip_turn('right_neighbor')"
+      "sandbox": "def apply(state, ctx):\n    state.skip_turn('left_neighbor')"
     }
   },
   {
@@ -186,7 +186,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "draw_cards",
@@ -230,48 +230,6 @@
     }
   },
   {
-    "id": "seed-gold-010",
-    "title": "Win the Game",
-    "description": "Congratulations! You win immediately. The game is over. Really.",
-    "alt_text": null,
-    "canonical": {
-      "target": "self",
-      "placement": "discard",
-      "ops": [
-        {
-          "op": "end_game",
-          "args": {
-            "winner": "self"
-          }
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.end_game('self')"
-    }
-  },
-  {
-    "id": "seed-gold-011",
-    "title": "Person with Fewest Points Wins",
-    "description": "New game rule: the player with the FEWEST points at game end wins instead.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "trigger": "on_game_end",
-      "ops": [
-        {
-          "op": "set_win_condition",
-          "args": {
-            "kind": "lowest_points"
-          }
-        }
-      ],
-      "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('lowest_points')"
-    }
-  },
-  {
     "id": "seed-gold-012",
     "title": "Draw Bonus Rule",
     "description": "For the rest of the game, whenever a player takes their draw step, they gain 1 point.",
@@ -285,13 +243,15 @@
           "args": {
             "event": "on_draw_step",
             "scope": "center",
+            "title": "Every player gains 1 point when they take their draw step.",
+            "condition_keys": [],
             "code": "def apply(state, ctx):\n    state.add_points('self', 1)\n"
           }
         }
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_draw_step', scope='center', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\")"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_draw_step', scope='center', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\", title='Every player gains 1 point when they take their draw step.', condition_keys=[])"
     }
   },
   {
@@ -384,36 +344,6 @@
     }
   },
   {
-    "id": "seed-gold-016",
-    "title": "Red Card Rule",
-    "description": "At the physical table, only red cards may be played while this rule remains in the center.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "venue": "in_person",
-      "ops": [
-        {
-          "op": "set_rule",
-          "args": {
-            "path": "extra.current_color",
-            "value": "red"
-          }
-        },
-        {
-          "op": "register_hook",
-          "args": {
-            "event": "on_validate_play",
-            "scope": "center",
-            "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"
-          }
-        }
-      ],
-      "trigger": null,
-      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.current_color', 'red')\n    state.register_hook('on_validate_play', scope='center', code=\"def apply(state, ctx):\\n    color = ctx.get('card_attributes', {}).get('color')\\n    current = state.rules().get('extra', {}).get('current_color')\\n    if current and color != current:\\n        state.reject_play('Card color must match ' + current)\\n\")"
-    }
-  },
-  {
     "id": "seed-gold-017",
     "title": "This Card is Worth 10 Points If You Keep It",
     "description": "Hold onto this card. At game end, it's worth 10 points — but only if you still have it.",
@@ -424,16 +354,18 @@
       "trigger": "on_game_end",
       "ops": [
         {
-          "op": "add_points",
+          "op": "register_hook",
           "args": {
-            "amount": 10,
-            "target": "self",
-            "condition": "still_in_hand"
+            "event": "on_game_end",
+            "scope": "player",
+            "title": "The owner gains 10 points at the end of the game.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.add_points('self', 10)\n"
           }
         }
       ],
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 10)"
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 10)\\n\", title='The owner gains 10 points at the end of the game.', condition_keys=[])"
     }
   },
   {
@@ -455,114 +387,6 @@
       "trigger": null,
       "venue": "all",
       "sandbox": "def apply(state, ctx):\n    state.note('Nothing happens. Thank you for your participation.')"
-    }
-  },
-  {
-    "id": "seed-gold-019",
-    "title": "Spicy Uno",
-    "description": "Use basic Uno ending and draw rules, color your remaining hand red, and shuffle Draw 2, Draw 4, and Reverse cards into the deck.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "steps": [
-        {
-          "kind": "ops",
-          "ops": [
-            {
-              "op": "set_win_condition",
-              "kind": "empty_hand"
-            },
-            {
-              "op": "set_rule",
-              "path": "end_condition.type",
-              "value": "empty_hand"
-            },
-            {
-              "op": "change_draw_count",
-              "amount": 0
-            },
-            {
-              "op": "set_card_attribute",
-              "card_target": "all_in_hand",
-              "key": "color",
-              "value": "red"
-            },
-            {
-              "op": "create_card",
-              "title": "Draw 2",
-              "description": "The next player draws 2 and skips their turn.",
-              "ops": [
-                {
-                  "op": "draw_cards",
-                  "args": {
-                    "target": "right_neighbor",
-                    "amount": 2
-                  }
-                },
-                {
-                  "op": "skip_turn",
-                  "args": {
-                    "target": "right_neighbor"
-                  }
-                }
-              ],
-              "attributes": {
-                "color": "red",
-                "symbol": "draw_2"
-              },
-              "destination": "deck_shuffle",
-              "count": 1
-            },
-            {
-              "op": "create_card",
-              "title": "Draw 4",
-              "description": "The next player draws 4 and skips their turn.",
-              "ops": [
-                {
-                  "op": "draw_cards",
-                  "args": {
-                    "target": "right_neighbor",
-                    "amount": 4
-                  }
-                },
-                {
-                  "op": "skip_turn",
-                  "args": {
-                    "target": "right_neighbor"
-                  }
-                }
-              ],
-              "attributes": {
-                "color": "wild",
-                "symbol": "draw_4"
-              },
-              "destination": "deck_shuffle",
-              "count": 1
-            },
-            {
-              "op": "create_card",
-              "title": "Reverse",
-              "description": "Reverse turn order.",
-              "ops": [
-                {
-                  "op": "reverse_order",
-                  "args": {}
-                }
-              ],
-              "attributes": {
-                "color": "red",
-                "symbol": "reverse"
-              },
-              "destination": "deck_shuffle",
-              "count": 1
-            }
-          ]
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": null
     }
   },
   {
@@ -596,135 +420,13 @@
     }
   },
   {
-    "id": "seed-gold-021",
-    "title": "Sudden Death",
-    "description": "New rule, effective immediately: whoever has the most points right now wins. The game is over.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "ops": [
-        {
-          "op": "set_win_condition",
-          "args": {
-            "kind": "highest_points"
-          }
-        },
-        {
-          "op": "end_game",
-          "args": {}
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('highest_points')\n    state.end_game()"
-    }
-  },
-  {
-    "id": "seed-gold-022",
-    "title": "Total Chaos",
-    "description": "Absolute pandemonium: you gain 5 points, everyone else loses 3, everyone else skips their next turn, you take an extra turn, and every card currently in play is destroyed.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "ops": [
-        {
-          "op": "add_points",
-          "args": {
-            "amount": 5,
-            "target": "self"
-          }
-        },
-        {
-          "op": "subtract_points",
-          "args": {
-            "amount": 3,
-            "target": "all_others"
-          }
-        },
-        {
-          "op": "skip_turn",
-          "args": {
-            "target": "all_others"
-          }
-        },
-        {
-          "op": "extra_turn",
-          "args": {
-            "target": "self"
-          }
-        },
-        {
-          "op": "destroy_card",
-          "args": {
-            "card_target": "all_in_play"
-          }
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)\n    state.subtract_points('all_others', 3)\n    state.skip_turn('all_others')\n    state.extra_turn('self')\n    state.destroy_card(card_target='all_in_play')"
-    }
-  },
-  {
-    "id": "seed-gold-023",
-    "title": "Wild Uno",
-    "description": "Use Uno's empty-hand ending and zero-draw rule. Track the color of each played card and reject plays that do not match the current color.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "steps": [
-        {
-          "kind": "ops",
-          "ops": [
-            {
-              "op": "set_win_condition",
-              "kind": "empty_hand"
-            },
-            {
-              "op": "set_rule",
-              "path": "end_condition.type",
-              "value": "empty_hand"
-            },
-            {
-              "op": "change_draw_count",
-              "amount": 0
-            },
-            {
-              "op": "set_rule",
-              "path": "extra.current_color",
-              "value": "red"
-            },
-            {
-              "op": "register_hook",
-              "event": "on_validate_play",
-              "scope": "center",
-              "code": "def apply(state, ctx):\n    color = ctx.get('card_attributes', {}).get('color')\n    current = state.rules().get('extra', {}).get('current_color')\n    if current and color != current:\n        state.reject_play('Card color must match ' + current)\n"
-            },
-            {
-              "op": "register_hook",
-              "event": "on_play",
-              "scope": "center",
-              "code": "def apply(state, ctx):\n    card = state.card(ctx['card_id'])\n    if card:\n        color = card.get('attributes', {}).get('color')\n        if color:\n            state.set_rule('extra.current_color', color)\n"
-            }
-          ]
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": null
-    }
-  },
-  {
     "id": "seed-gold-024",
     "title": "Shuffle and Snatch",
     "description": "Scramble the turn order into chaos, then steal 4 points from whoever has the most.",
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "ops": [
         {
           "op": "scramble_order",
@@ -741,40 +443,7 @@
       ],
       "trigger": null,
       "venue": "all",
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.scramble_order()\n    state.steal_points(chosen, 'self', 4)"
-    }
-  },
-  {
-    "id": "seed-gold-025",
-    "title": "Going Once, Going Twice",
-    "description": "Everyone secretly bids points for this card. The highest bidder pays their bid and takes this card into their hand. Ties go to the earliest player in turn order.",
-    "alt_text": null,
-    "canonical": {
-      "target": "all",
-      "placement": "center",
-      "steps": [
-        {
-          "kind": "interaction",
-          "result_key": "bids",
-          "request": {
-            "kind": "number",
-            "prompt": "How many points do you bid?",
-            "audience": "all",
-            "sealed": true,
-            "minimum": 0,
-            "maximum": 100,
-            "integer": true
-          }
-        },
-        {
-          "kind": "snippet",
-          "code": "def apply(state, ctx):\n    bids = ctx['interactions']['bids']\n    best = max(bids.values())\n    winner = [pid for pid in state.turn_order if bids[pid] == best][0]\n    state.subtract_points('id:' + winner, int(best))\n    state.transfer_card('this', 'id:' + winner)\n",
-          "explanation": "Resolve a sealed bid deterministically, charge the winner, and move the played card with the canonical transfer_card API."
-        }
-      ],
-      "trigger": null,
-      "venue": "all",
-      "sandbox": null
+      "sandbox": "def apply(state, ctx):\n    state.scramble_order()\n    state.steal_points('player_with_most_points', 'self', 4)"
     }
   },
   {
@@ -784,7 +453,7 @@
     "alt_text": null,
     "canonical": {
       "target": "all",
-      "placement": "center",
+      "placement": "discard",
       "steps": [
         {
           "kind": "interaction",
@@ -864,6 +533,1448 @@
     }
   },
   {
+    "id": "seed-gold-029",
+    "title": "The Great Equalizer",
+    "description": "Everyone's score is now 10. Fair is fair.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_points",
+          "args": {
+            "target": "all",
+            "amount": 10
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_points('all', 10)\n"
+    }
+  },
+  {
+    "id": "seed-gold-030",
+    "title": "Wealth Tax",
+    "description": "Steal 8 points from whoever's winning.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "from_target": "player_with_most_points",
+            "to_target": "self",
+            "amount": 8
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 8)\n"
+    }
+  },
+  {
+    "id": "seed-gold-031",
+    "title": "Pity Party",
+    "description": "The player in last place gains 5 points. Aww.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "player_with_least_points",
+            "amount": 5
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.add_points('player_with_least_points', 5)\n"
+    }
+  },
+  {
+    "id": "seed-gold-032",
+    "title": "Participation Trophy",
+    "description": "Every player with an empty hand gains 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "player_with_empty_hand",
+            "amount": 3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.add_points('player_with_empty_hand', 3)\n"
+    }
+  },
+  {
+    "id": "seed-gold-033",
+    "title": "The Auditor",
+    "description": "From now on, every score change is announced to the table.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": "on_score_change",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_score_change",
+            "scope": "center",
+            "title": "Every score change is announced to the table.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.note('A score just changed at the table.')\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_score_change', scope='center', code=\"def apply(state, ctx):\\n    state.note('A score just changed at the table.')\\n\", title='Every score change is announced to the table.', condition_keys=[])\n"
+    }
+  },
+  {
+    "id": "seed-gold-034",
+    "title": "Turn's End Tax",
+    "description": "At the end of each turn, the active player loses 1 point.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": "on_turn_end",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_end",
+            "scope": "center",
+            "title": "The active player loses 1 point at the end of every turn.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.subtract_points('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_end', scope='center', code=\"def apply(state, ctx):\\n    state.subtract_points('self', 1)\\n\", title='The active player loses 1 point at the end of every turn.', condition_keys=[])\n"
+    }
+  },
+  {
+    "id": "seed-gold-035",
+    "title": "The Bouncer",
+    "description": "From now on, anyone with more than 20 points is too rich to play.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": "on_validate_play",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_validate_play",
+            "scope": "center",
+            "title": "Players with more than 20 points cannot play cards.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    actor = ctx.get('actor_id')\n    if actor and state.player(actor).score > 20:\n        state.reject_play('Too rich to play - over 20 points.')\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_validate_play', scope='center', code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor and state.player(actor).score > 20:\\n        state.reject_play('Too rich to play - over 20 points.')\\n\", title='Players with more than 20 points cannot play cards.', condition_keys=[])\n"
+    }
+  },
+  {
+    "id": "seed-gold-036",
+    "title": "Fresh Deck Energy",
+    "description": "Add a brand new 'Wild Point' card to the top of the deck. Wild Point: Gain 2 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": null,
+      "sandbox": "def apply(state, ctx):\n    state.create_card('Wild Point', description='Gain 2 points.', ops=[{'op': 'add_points', 'args': {'target': 'self', 'amount': 2}}], destination='deck_top', count=1)\n",
+      "steps": [
+        {
+          "kind": "ops",
+          "ops": [
+            {
+              "op": "create_card",
+              "title": "Wild Point",
+              "description": "Gain 2 points.",
+              "ops": [
+                {
+                  "op": "add_points",
+                  "args": {
+                    "target": "self",
+                    "amount": 2
+                  }
+                }
+              ],
+              "attributes": {},
+              "destination": "deck_top",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "seed-gold-037",
+    "title": "Race to the Top",
+    "description": "First player to reach 50 points wins immediately.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "first_to",
+            "threshold": 50
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('first_to', 50)\n"
+    }
+  },
+  {
+    "id": "seed-gold-038",
+    "title": "Encore",
+    "description": "Take another turn, then draw a card.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "extra_turn",
+          "args": {
+            "target": "self"
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.extra_turn('self')\n    state.draw_cards('self', 1)\n"
+    }
+  },
+  {
+    "id": "seed-gold-039",
+    "title": "Total Reset",
+    "description": "Reverse the order, scramble the seats, and everyone draws 3 from now on.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reverse_order",
+          "args": {}
+        },
+        {
+          "op": "scramble_order",
+          "args": {}
+        },
+        {
+          "op": "change_draw_count",
+          "args": {
+            "amount": 3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.reverse_order()\n    state.scramble_order()\n    state.change_draw_count(3)\n"
+    }
+  },
+  {
+    "id": "seed-gold-040",
+    "title": "Mind Your Manners",
+    "description": "You become Polite and gain 2 points for it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "polite",
+            "value": true
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 2
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'polite', True)\n    state.add_points('self', 2)\n"
+    }
+  },
+  {
+    "id": "seed-gold-041",
+    "title": "Generous Gift",
+    "description": "Choose a player. They gain 5 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "chooser",
+            "amount": 5
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.add_points('id:' + pid, 5)\n"
+    }
+  },
+  {
+    "id": "seed-gold-042",
+    "title": "Highway Robbery",
+    "description": "Choose a player and steal 4 points from them.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "from_target": "chooser",
+            "to_target": "self",
+            "amount": 4
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.steal_points('id:' + pid, 'self', 4)\n"
+    }
+  },
+  {
+    "id": "seed-gold-043",
+    "title": "Karma",
+    "description": "Choose a player. They lose 4 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "target": "chooser",
+            "amount": 4
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.subtract_points('id:' + pid, 4)\n"
+    }
+  },
+  {
+    "id": "seed-gold-044",
+    "title": "Kingmaker",
+    "description": "Choose a player and hand them 10 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "chooser",
+            "amount": 10
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.add_points('id:' + pid, 10)\n"
+    }
+  },
+  {
+    "id": "seed-gold-045",
+    "title": "Sabotage",
+    "description": "Choose a card in another player's hand and destroy it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "hand",
+            "from_player": "chooser",
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    victim = ctx.get('chosen_player_id')\n    loot = ctx.get('chosen_card_id')\n    if victim and loot:\n        state.move_cards(card_target='id:' + loot, from_zone='hand', from_player='id:' + victim, to_zone='discard')"
+    }
+  },
+  {
+    "id": "seed-gold-046",
+    "title": "Finders Keepers",
+    "description": "Choose a card from another player's hand and take it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "transfer_card",
+          "args": {
+            "card_target": "chosen_card",
+            "to_target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card(\"id:\" + (ctx.get(\"chosen_card_id\") or \"\"), 'self')"
+    }
+  },
+  {
+    "id": "seed-gold-047",
+    "title": "Branded",
+    "description": "Choose a card and mark it Cursed.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "chosen_card",
+            "key": "cursed",
+            "value": true
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.set_card_attribute('id:' + cid, 'cursed', True)\n"
+    }
+  },
+  {
+    "id": "seed-gold-048",
+    "title": "Grand Theft",
+    "description": "Choose a player, take one of their cards, and cost them 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "hand",
+            "from_player": "chooser",
+            "to_zone": "hand",
+            "to_player": "self"
+          }
+        },
+        {
+          "op": "subtract_points",
+          "args": {
+            "target": "chooser",
+            "amount": 3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    victim = ctx.get('chosen_player_id')\n    loot = ctx.get('chosen_card_id')\n    if victim and loot:\n        state.move_cards(card_target='id:' + loot, from_zone='hand', from_player='id:' + victim, to_zone='hand', to_player='self')\n        state.subtract_points('id:' + victim, 3)"
+    }
+  },
+  {
+    "id": "seed-gold-049",
+    "title": "Rule Repeal",
+    "description": "Enact a shiny new rule, then immediately repeal it. Never mind.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": null,
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_start', scope='center', code=\"def apply(state, ctx):\\n    state.note('A temporary rule flickers into being.')\\n\")\n    cid = ctx.get('card_id')\n    if cid:\n        state.unregister_hook(cid)\n"
+    }
+  },
+  {
+    "id": "seed-gold-050",
+    "title": "Pass the Buck",
+    "description": "Skip the player to your right.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "skip_turn",
+          "args": {
+            "target": "right_neighbor"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.skip_turn('right_neighbor')\n"
+    }
+  },
+  {
+    "id": "seed-gold-051",
+    "title": "Double Trouble",
+    "description": "Take an extra turn and draw two cards.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "extra_turn",
+          "args": {
+            "target": "self"
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 2
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.extra_turn('self')\n    state.draw_cards('self', 2)\n"
+    }
+  },
+  {
+    "id": "seed-gold-052",
+    "title": "Backfire",
+    "description": "You lose 5 points, but everyone else gains 2.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "target": "self",
+            "amount": 5
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "all_others",
+            "amount": 2
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 5)\n    state.add_points('all_others', 2)\n"
+    }
+  },
+  {
+    "id": "seed-gold-053",
+    "title": "The Curse",
+    "description": "You are Cursed. Nothing good comes of this.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "cursed",
+            "value": true
+          }
+        },
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "You are now Cursed."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'cursed', True)\n    state.note('You are now Cursed.')\n"
+    }
+  },
+  {
+    "id": "seed-gold-054",
+    "title": "Reckoning",
+    "description": "Every Cursed player loses 10 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "target": "has:cursed",
+            "amount": 10
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('has:cursed', 10)\n"
+    }
+  },
+  {
+    "id": "seed-gold-055",
+    "title": "Neighborly Love",
+    "description": "Both your neighbors gain 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all_others",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "target": "left_neighbor",
+            "amount": 3
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "right_neighbor",
+            "amount": 3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.add_points('left_neighbor', 3)\n    state.add_points('right_neighbor', 3)\n"
+    }
+  },
+  {
+    "id": "seed-gold-056",
+    "title": "Draw Storm",
+    "description": "From now on, everyone draws 3 cards each turn.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "change_draw_count",
+          "args": {
+            "amount": 3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(3)\n"
+    }
+  },
+  {
+    "id": "seed-gold-057",
+    "title": "Last One Standing",
+    "description": "The game now ends when only one player has cards. Last one standing wins.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "last_standing"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('last_standing')\n"
+    }
+  },
+  {
+    "id": "seed-gold-059",
+    "title": "Show and Tell",
+    "description": "Hold your cards up for the class. Reveal your entire hand to every player.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "self",
+            "to": "all",
+            "persistent": false
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all')\n"
+    }
+  },
+  {
+    "id": "seed-gold-060",
+    "title": "Cards on the Table",
+    "description": "Choose a player. They play with their hand face up for the rest of the game.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "chooser",
+            "to": "all",
+            "persistent": true
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.reveal_hand('id:' + pid, to='all', persistent=True)\n"
+    }
+  },
+  {
+    "id": "seed-gold-061",
+    "title": "Sneak a Peek",
+    "description": "Choose a player and look at their hand. Only you get to see it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "chooser",
+            "to": "self",
+            "persistent": false
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pid = ctx.get('chosen_player_id')\n    if pid:\n        state.reveal_hand('id:' + pid, to='self')\n"
+    }
+  },
+  {
+    "id": "seed-gold-062",
+    "title": "Poker Face",
+    "description": "Your hand is your business again. Conceal your hand, ending any effect that was revealing it.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "self",
+            "to": "all",
+            "mode": "conceal"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('self', to='all', mode='conceal')\n"
+    }
+  },
+  {
+    "id": "seed-gold-063",
+    "title": "Group Therapy",
+    "description": "Everyone shows their hand to the table at once. Take a good look.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "reveal_hand",
+          "args": {
+            "target": "all",
+            "to": "all",
+            "persistent": false
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.reveal_hand('all', to='all')\n"
+    }
+  },
+  {
+    "id": "seed-gold-064",
+    "title": "Roll for It",
+    "description": "Roll a d20 where everyone can see it. The table decides what your number means.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "in_person",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 20,
+            "count": 1,
+            "outcome": "none"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    total = state.roll_die(sides=20)\n    state.note('The d20 shows ' + str(total) + '. The table decides what it means.')\n"
+    }
+  },
+  {
+    "id": "seed-gold-065",
+    "title": "High Roller",
+    "description": "Roll a d6 and gain that many points. Let it ride.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 6,
+            "count": 1,
+            "target": "self",
+            "outcome": "add_points"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.roll_die(sides=6, outcome='add_points', target='self')\n"
+    }
+  },
+  {
+    "id": "seed-gold-066",
+    "title": "Lucky Dip",
+    "description": "Roll two d4 and draw that many cards from the deck.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "roll_die",
+          "args": {
+            "sides": 4,
+            "count": 2,
+            "target": "self",
+            "outcome": "draw_cards"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.roll_die(sides=4, count=2, outcome='draw_cards', target='self')\n"
+    }
+  },
+  {
+    "id": "seed-gold-067",
+    "title": "Odds or Evens",
+    "description": "Roll a d6. Even: gain 4 points. Odd: lose 4 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": null,
+      "sandbox": "def apply(state, ctx):\n    total = state.roll_die(sides=6)\n    if total % 2 == 0:\n        state.add_points('self', 4)\n    else:\n        state.subtract_points('self', 4)\n"
+    }
+  },
+  {
+    "id": "seed-gold-068",
+    "title": "Butterfingers",
+    "description": "Whoops. Discard 2 random cards from your hand.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "discard_random",
+          "args": {
+            "target": "self",
+            "count": 2
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.discard_random('self', 2)\n"
+    }
+  },
+  {
+    "id": "seed-gold-069",
+    "title": "Pickpocket",
+    "description": "Choose a player. They discard a random card from their hand — nobody gets to pick which.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "discard_random",
+          "args": {
+            "target": "chosen_player",
+            "count": 1
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = 'id:' + (ctx.get('chosen_player_id') or '')\n    state.discard_random(chosen, 1)\n"
+    }
+  },
+  {
+    "id": "seed-gold-090",
+    "title": "Three-Turn Curse",
+    "description": "Choose a player. They are Cursed for their next 3 turns, then the curse lifts on its own.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "chosen_player",
+            "key": "cursed",
+            "value": true,
+            "duration_turns": 3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'cursed', True, duration_turns=3)\n"
+    }
+  },
+  {
+    "id": "seed-gold-091",
+    "title": "Beginner's Luck",
+    "description": "You are Lucky until the end of your next turn.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "self",
+            "key": "lucky",
+            "value": true,
+            "duration_turns": 1
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'lucky', True, duration_turns=1)\n"
+    }
+  },
+  {
+    "id": "seed-gold-092",
+    "title": "Sleeping Gas",
+    "description": "Everyone else is Drowsy for their next 2 turns. You gain 1 point for staying awake.",
+    "alt_text": "a green cloud drifting over a table of yawning stick figures",
+    "canonical": {
+      "target": "all_others",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_condition",
+          "args": {
+            "target": "all_others",
+            "key": "drowsy",
+            "value": true,
+            "duration_turns": 2
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('all_others', 'drowsy', True, duration_turns=2)\n    state.add_points('self', 1)\n"
+    }
+  },
+  {
+    "id": "seed-gold-071",
+    "title": "Battle Royale",
+    "description": "New rule: the last player standing wins. The moment only one player remains in the game, they win immediately.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_win_condition",
+          "args": {
+            "kind": "last_standing"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_win_condition('last_standing')\n"
+    }
+  },
+  {
+    "id": "seed-gold-072",
+    "title": "Landmine",
+    "description": "This card plays itself the moment it is drawn — it costs no action. Whoever drew it loses 3 points. Watch your step.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "play_on_draw",
+            "value": true
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": -3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'play_on_draw', True)\n    state.subtract_points('self', 3)\n"
+    }
+  },
+  {
+    "id": "seed-gold-073",
+    "title": "Marie Kondo Visits",
+    "description": "New house rule: maximum hand size is 5. At the end of each turn, anyone over the limit discards down to it. Keep only what sparks joy.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "hand_limit",
+            "value": 5
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('hand_limit', 5)\n"
+    }
+  },
+  {
+    "id": "seed-gold-074",
+    "title": "Shot Clock",
+    "description": "New house rule: each player has 30 seconds per turn. When the clock runs out, their turn ends automatically.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "center",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "turn_timer",
+            "value": 30
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('turn_timer', 30)\n"
+    }
+  },
+  {
+    "id": "seed-gold-100",
+    "title": "Into the Void",
+    "description": "Choose a card in the center and exile it. It leaves the game instead of going to the discard pile.",
+    "alt_text": "a small card being pulled into a swirling black hole",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "center",
+            "to_zone": "exile"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, from_zone='center', to_zone='exile')\n"
+    }
+  },
+  {
+    "id": "seed-gold-101",
+    "title": "Card Shredder",
+    "description": "Feed the deck to the shredder: move the top 3 cards of the deck straight to the discard pile without anyone looking at them.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "deck",
+            "selector": "top",
+            "count": 3,
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='deck', selector='top', count=3, to_zone='discard')\n"
+    }
+  },
+  {
+    "id": "seed-gold-102",
+    "title": "Recycling Program",
+    "description": "Shuffle the entire discard pile back into the deck. Waste not, want not.",
+    "alt_text": "a green recycling arrow made of playing cards",
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "shuffle_deck",
+          "args": {
+            "include_discard": true
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.shuffle_deck(include_discard=True)\n"
+    }
+  },
+  {
+    "id": "seed-gold-103",
+    "title": "Dumpster Diving",
+    "description": "Dig all the way down: take the card at the very bottom of the discard pile (the oldest one there) into your hand.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "discard",
+            "selector": "bottom",
+            "count": 1,
+            "to_zone": "hand",
+            "to_player": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='discard', selector='bottom', count=1, to_zone='hand', to_player='self')\n"
+    }
+  },
+  {
+    "id": "seed-gold-104",
+    "title": "Crystal Ball",
+    "description": "Scry 3: look at the top 3 cards of the deck. Put any of them on the bottom and the rest back on top in any order. What you saw is your secret.",
+    "alt_text": "a fortune teller's hands hovering over a glowing crystal ball",
+    "canonical": {
+      "target": "none",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": null,
+      "sandbox": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "scry",
+          "request": {
+            "kind": "card_order",
+            "prompt": "Look at the top 3 cards of the deck. Reorder them or send some to the bottom.",
+            "count": 3
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    seq = ctx['interactions']['scry'][ctx['actor_id']]\n    for cid in seq['to_bottom']:\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='bottom')\n    for cid in reversed(seq['order']):\n        state.move_cards(card_target='id:' + cid, to_zone='deck', to_position='top')\n",
+          "explanation": "Write the scryer's secret arrangement back: bottomed cards first, then the kept cards re-stacked so the first entry ends up on top."
+        }
+      ]
+    }
+  },
+  {
+    "id": "seed-gold-105",
+    "title": "Window Shopping",
+    "description": "Look at the top 3 cards of the deck and take one into your hand. The two you passed on go to the bottom of the deck.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": null,
+      "sandbox": null,
+      "steps": [
+        {
+          "kind": "interaction",
+          "result_key": "pick",
+          "request": {
+            "kind": "card_pick",
+            "prompt": "Pick one of the top 3 cards of the deck to keep.",
+            "from_deck_top": 3
+          }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picked = ctx['interactions']['pick'][ctx['actor_id']]\n    if picked:\n        state.move_cards(card_target='id:' + picked, to_zone='hand', to_player='id:' + ctx['actor_id'])\n        state.move_cards(from_zone='deck', selector='top', count=2, to_zone='deck', to_position='bottom')\n",
+          "explanation": "Move the kept card to the actor's hand, then tuck the two unpicked offers (now the deck top) to the bottom."
+        }
+      ]
+    }
+  },
+  {
+    "id": "seed-gold-111",
+    "title": "Rewind",
+    "description": "Remove the last card played from the game entirely, then draw a fresh card.",
+    "alt_text": "a cassette tape with its ribbon spooling backwards",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "last_played",
+            "to_zone": "exile"
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(card_target='last_played', to_zone='exile')\n    state.draw_cards('self', 1)\n"
+    }
+  },
+  {
+    "id": "seed-gold-112",
+    "title": "Companion Pebble",
+    "description": "This tiny pebble is your loyal companion now. Keep it in front of you. It does nothing, faithfully.",
+    "alt_text": "a smiling pebble sitting beside its new owner",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "custom_note",
+          "args": {
+            "note": "The player owns a magnificently loyal pebble."
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.note('The player owns a magnificently loyal pebble.')"
+    }
+  },
+  {
+    "id": "seed-gold-113",
+    "title": "Controlled Chaos",
+    "description": "Scramble the turn order, shuffle the discard pile into the deck, then every player draws 2 cards.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "scramble_order",
+          "args": {}
+        },
+        {
+          "op": "shuffle_deck",
+          "args": {
+            "include_discard": true
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "all",
+            "amount": 2
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.scramble_order()\n    state.shuffle_deck(include_discard=True)\n    state.draw_cards('all', 2)"
+    }
+  },
+  {
+    "id": "seed-gold-114",
+    "title": "Tip Jar",
+    "description": "Place this card on the table in front of you. While it sits in front of you, gain 1 point at the start of each of your turns.",
+    "alt_text": "a glass jar with a single shiny coin at the bottom",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_turn_start",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_start",
+            "scope": "player",
+            "title": "The owner gains 1 point at the start of each of their turns.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.add_points('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\", title='The owner gains 1 point at the start of each of their turns.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-gold-115",
+    "title": "Regifting",
+    "description": "Choose one of the cards on the table in front of you and slide it across so it sits in front of a player of your choice instead.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "self",
+            "to_zone": "in_play",
+            "to_player": "chooser"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    gift = ctx.get('chosen_card_id')\n    recipient = ctx.get('chosen_player_id')\n    if gift and recipient:\n        state.move_cards(card_target='id:' + gift, from_zone='in_play', from_player='self', to_zone='in_play', to_player='id:' + recipient)\n"
+    }
+  },
+  {
+    "id": "seed-gold-116",
+    "title": "Controlled Demolition",
+    "description": "Choose a player and demolish one card on the table in front of them. It goes to the discard pile, reduced to rubble.",
+    "alt_text": "a tiny building collapsing in a puff of dust",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "chooser",
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    victim = ctx.get('chosen_player_id')\n    condemned = ctx.get('chosen_card_id')\n    if victim and condemned:\n        state.move_cards(card_target='id:' + condemned, from_zone='in_play', from_player='id:' + victim, to_zone='discard')\n"
+    }
+  },
+  {
     "id": "seed-filler-000",
     "title": "Compliment Someone",
     "description": "Say something genuinely nice about another player right now. They gain 1 point if they believe you.",
@@ -871,7 +1982,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -899,7 +2010,7 @@
     "canonical": {
       "target": "all",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -927,7 +2038,7 @@
     "canonical": {
       "target": "self",
       "placement": "player",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": "on_turn_start",
       "ops": [
         {
@@ -943,6 +2054,10 @@
           "args": {
             "event": "on_turn_start",
             "scope": "player",
+            "title": "The owner may speak only in questions until their next turn.",
+            "condition_keys": [
+              "speak_only_in_questions"
+            ],
             "code": "def apply(state, ctx):\n    state.set_condition('self', 'speak_only_in_questions', False)\n    state.note('The questions-only restriction has ended.')\n"
           }
         },
@@ -953,7 +2068,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'speak_only_in_questions', True)\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.set_condition('self', 'speak_only_in_questions', False)\\n    state.note('The questions-only restriction has ended.')\\n\")\n    state.note('Until the start of your next turn you may only communicate in questions. Each violation costs 2 points.')"
+      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'speak_only_in_questions', True)\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.set_condition('self', 'speak_only_in_questions', False)\\n    state.note('The questions-only restriction has ended.')\\n\", title='The owner may speak only in questions until their next turn.', condition_keys=['speak_only_in_questions'])\n    state.note('Until the start of your next turn you may only communicate in questions. Each violation costs 2 points.')"
     }
   },
   {
@@ -964,7 +2079,7 @@
     "canonical": {
       "target": "self",
       "placement": "player",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1022,7 +2137,7 @@
     "canonical": {
       "target": "all",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1043,7 +2158,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1092,7 +2207,7 @@
     "canonical": {
       "target": "all",
       "placement": "center",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1120,7 +2235,7 @@
     "canonical": {
       "target": "player",
       "placement": "player",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1165,6 +2280,10 @@
           "args": {
             "event": "on_game_end",
             "scope": "player",
+            "title": "The owner gains 5 points if their prophesied player wins.",
+            "condition_keys": [
+              "prophesied_winner"
+            ],
             "code": "def apply(state, ctx):\n    best = None\n    for p in state.players():\n        if best is None or p.score > best.score:\n            best = p\n    if best and state.conditions(best.id).get('prophesied_winner'):\n        state.add_points('self', 5)\n"
           }
         },
@@ -1175,13 +2294,13 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'prophesied_winner', True)\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    best = None\\n    for p in state.players():\\n        if best is None or p.score > best.score:\\n            best = p\\n    if best and state.conditions(best.id).get('prophesied_winner'):\\n        state.add_points('self', 5)\\n\")\n    state.note('Announce who you think will win the game right now. If you are correct, you gain 5 points at game end.')"
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.set_condition(chosen, 'prophesied_winner', True)\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    best = None\\n    for p in state.players():\\n        if best is None or p.score > best.score:\\n            best = p\\n    if best and state.conditions(best.id).get('prophesied_winner'):\\n        state.add_points('self', 5)\\n\", title='The owner gains 5 points if their prophesied player wins.', condition_keys=['prophesied_winner'])\n    state.note('Announce who you think will win the game right now. If you are correct, you gain 5 points at game end.')"
     }
   },
   {
     "id": "seed-filler-011",
     "title": "Time Warp",
-    "description": "Undo the last card played as if it never happened. The card goes back into the hand it came from.",
+    "description": "Return the last card played to its owner's hand.",
     "alt_text": null,
     "canonical": {
       "target": "card",
@@ -1190,20 +2309,14 @@
       "trigger": null,
       "ops": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "The last card played never happened; the table unwinds its effects. Choose that card and the player whose hand it came from."
-          }
-        },
-        {
           "op": "transfer_card",
           "args": {
-            "card_target": "chosen_card",
-            "to_target": "chosen_player"
+            "card_target": "last_played",
+            "to_target": "card_owner"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('The last card played never happened; the table unwinds its effects.')\n    state.transfer_card('chosen_card', chosen)"
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card('last_played', 'card_owner')"
     }
   },
   {
@@ -1235,7 +2348,7 @@
     "canonical": {
       "target": "self",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1265,22 +2378,35 @@
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Accuse the chosen player of cheating. They must defend themselves and the group votes. If acquitted, the table restores these 3 points."
+          "kind": "interaction",
+          "result_key": "verdict",
+          "request": {
+            "kind": "choice",
+            "prompt": "Is the accused guilty of cheating?",
+            "audience": "all",
+            "sealed": true,
+            "options": [
+              {
+                "id": "guilty",
+                "label": "Guilty"
+              },
+              {
+                "id": "innocent",
+                "label": "Innocent"
+              }
+            ]
           }
         },
         {
-          "op": "subtract_points",
-          "args": {
-            "amount": 3,
-            "target": "chosen_player"
-          }
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    counts = {}\n    for picks in ctx['interactions']['verdict'].values():\n        for pid in picks:\n            counts[pid] = counts.get(pid, 0) + 1\n    accused = 'id:' + (ctx.get('chosen_player_id') or '')\n    if counts.get('guilty', 0) > counts.get('innocent', 0):\n        state.subtract_points(accused, 3)\n    else:\n        state.note('Acquitted. The conspiracy remains unproven.')\n",
+          "explanation": "Tally the sealed guilty/innocent vote; a strict Guilty majority costs the accused 3 points, otherwise the accusation is dismissed."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('Accuse the chosen player of cheating. They defend themselves and the group votes; if acquitted, the table restores the 3 points.')\n    state.subtract_points(chosen, 3)"
+      "sandbox": null
     }
   },
   {
@@ -1319,7 +2445,7 @@
     "canonical": {
       "target": "none",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1340,7 +2466,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1368,17 +2494,24 @@
     "canonical": {
       "target": "all",
       "placement": "center",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.referendum_passed",
+            "value": true
+          }
+        },
+        {
           "op": "custom_note",
           "args": {
-            "note": "Propose any rule change. All players vote; on a majority it becomes a house rule for the rest of the game. This card stays in the center as the reminder."
+            "note": "A proposed rule passed by majority vote — it is now a house rule for the rest of the game."
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Propose any rule change. All players vote; on a majority it becomes a house rule for the rest of the game.')"
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.referendum_passed', True)\n    state.note('A proposed rule passed by majority vote and is now a house rule.')"
     }
   },
   {
@@ -1389,7 +2522,7 @@
     "canonical": {
       "target": "self",
       "placement": "player",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1422,20 +2555,17 @@
       "trigger": null,
       "ops": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Claim any card currently on the table in front of another player. It is yours now. No take-backs."
-          }
-        },
-        {
-          "op": "transfer_card",
+          "op": "move_cards",
           "args": {
             "card_target": "chosen_card",
-            "to_target": "self"
+            "from_zone": "in_play",
+            "from_player": "all_others",
+            "to_zone": "in_play",
+            "to_player": "self"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Claim any card currently on the table in front of another player. It is yours now. No take-backs.')\n    state.transfer_card('chosen_card', 'self')"
+      "sandbox": "def apply(state, ctx):\n    loot = ctx.get('chosen_card_id')\n    if loot:\n        state.move_cards(card_target='id:' + loot, from_zone='in_play', from_player='all_others', to_zone='in_play', to_player='self')"
     }
   },
   {
@@ -1476,28 +2606,30 @@
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "sandbox": null,
+      "steps": [
         {
-          "op": "draw_cards",
-          "args": {
-            "amount": 3,
-            "target": "self"
+          "kind": "interaction",
+          "result_key": "pick",
+          "request": {
+            "kind": "card_pick",
+            "prompt": "Pick one of the top 3 cards of the deck to keep.",
+            "from_deck_top": 3
           }
         },
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Keep 1 of the 3 drawn cards and discard the other 2. You live with your choices."
-          }
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picked = ctx['interactions']['pick'][ctx['actor_id']]\n    if picked:\n        state.move_cards(card_target='id:' + picked, to_zone='hand', to_player='id:' + ctx['actor_id'])\n        state.move_cards(from_zone='deck', selector='top', count=2, to_zone='discard')\n",
+          "explanation": "Move the kept card to the actor's hand, then discard the two unpicked offers (now the deck top)."
         }
-      ],
-      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 3)\n    state.note('Keep 1 of the 3 drawn cards and discard the other 2. You live with your choices.')"
+      ]
     }
   },
   {
     "id": "seed-filler-023",
     "title": "Groundhog Day",
-    "description": "The last player's turn repeats exactly. Same cards, same effects. Don't think too hard about it.",
+    "description": "Deja vu: the previous player takes another turn.",
     "alt_text": null,
     "canonical": {
       "target": "player",
@@ -1508,17 +2640,11 @@
         {
           "op": "extra_turn",
           "args": {
-            "target": "left_neighbor"
-          }
-        },
-        {
-          "op": "custom_note",
-          "args": {
-            "note": "The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage."
+            "target": "right_neighbor"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.extra_turn('left_neighbor')\n    state.note(\"The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage.\")"
+      "sandbox": "def apply(state, ctx):\n    state.extra_turn('right_neighbor')"
     }
   },
   {
@@ -1557,7 +2683,7 @@
     "canonical": {
       "target": "all",
       "placement": "center",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1585,7 +2711,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1608,22 +2734,15 @@
   {
     "id": "seed-filler-027",
     "title": "Chaos Shuffle",
-    "description": "All players pass their hands to the player on their left simultaneously.",
+    "description": "Every live player passes their entire hand to the player on their left simultaneously.",
     "alt_text": null,
     "canonical": {
       "target": "all",
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
-        {
-          "op": "custom_note",
-          "args": {
-            "note": "All players pass their entire hands to the player on their left simultaneously."
-          }
-        }
-      ],
-      "sandbox": "def apply(state, ctx):\n    state.note('All players pass their entire hands to the player on their left simultaneously.')"
+      "ops": null,
+      "sandbox": "def apply(state, ctx):\n    live = []\n    for pid in state.turn_order:\n        if not state.player(pid).eliminated:\n            live.append(pid)\n    if len(live) < 2:\n        state.note('Chaos Shuffle needs at least two live players.')\n        return\n    actor = ctx.get('actor_id') or state.actor_id\n    start = live.index(actor)\n    order = live[start:] + live[:start]\n    marker_key = 'chaos_shuffle_origin'\n    marker_value = ctx.get('card_id') or 'chaos_shuffle'\n    state.set_card_attribute('all_in_hand', marker_key, marker_value)\n    for index in range(1, len(order)):\n        state.move_cards(from_zone='hand', selector='all', count=50, from_player='id:' + order[index], to_zone='hand', to_player='id:' + order[index - 1])\n    tagged = 'attr:' + marker_key + '=' + marker_value\n    state.move_cards(card_target=tagged, to_zone='hand', to_player='id:' + order[-1])\n    state.set_card_attribute(tagged, marker_key, None)"
     }
   },
   {
@@ -1634,7 +2753,7 @@
     "canonical": {
       "target": "all_others",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1657,43 +2776,55 @@
   {
     "id": "seed-filler-029",
     "title": "The Clone",
-    "description": "Copy the effect of any card that has already been played this game. If you can remember it.",
+    "description": "Take the most recently played card that is still in the game and put it into your hand.",
     "alt_text": null,
     "canonical": {
       "target": "card",
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
-        {
-          "op": "custom_note",
-          "args": {
-            "note": "Copy the effect of any card that has already been played this game — if you can remember it. The table re-applies that effect."
-          }
-        }
-      ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Copy the effect of any card that has already been played this game, if you can remember it. The table re-applies that effect.')"
+      "ops": null,
+      "sandbox": "def apply(state, ctx):\n    for event in reversed(state.history(kind='play')):\n        card_id = event.get('card_id')\n        if card_id and state.card(card_id):\n            state.transfer_card('id:' + card_id, 'self')\n            return\n    state.note('No previously played card remains to clone.')"
     }
   },
   {
     "id": "seed-filler-030",
     "title": "Timeout",
-    "description": "The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence.",
+    "description": "Pause the game until every player presses Ready, or until 2 minutes have passed.",
     "alt_text": null,
     "canonical": {
-      "target": "none",
+      "target": "all",
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence."
+          "kind": "interaction",
+          "result_key": "ready",
+          "request": {
+            "kind": "choice",
+            "schema_version": 1,
+            "prompt": "Timeout! Press Ready when you are ready to resume.",
+            "audience": "all",
+            "sealed": false,
+            "timeout_seconds": 120,
+            "options": [
+              {
+                "id": "ready",
+                "label": "Ready"
+              }
+            ],
+            "min_selections": 1,
+            "max_selections": 1
           }
+        },
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    state.note('Timeout ended. Play resumes.')"
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('The game pauses for 2 minutes. Players may discuss strategy, complain, or simply sit in silence.')"
+      "sandbox": null
     }
   },
   {
@@ -1727,7 +2858,7 @@
   {
     "id": "seed-filler-032",
     "title": "Hot Potato",
-    "description": "Pass this card to another player at any time, even out of turn, to give them a problem you don't want. They must play it on their next turn.",
+    "description": "The player on your right loses 2 points, then this card goes into their hand instead of the discard pile.",
     "alt_text": null,
     "canonical": {
       "target": "player",
@@ -1736,20 +2867,21 @@
       "trigger": null,
       "ops": [
         {
-          "op": "transfer_card",
+          "op": "subtract_points",
           "args": {
-            "card_target": "this",
-            "to_target": "chosen_player"
+            "target": "right_neighbor",
+            "amount": 2
           }
         },
         {
-          "op": "custom_note",
+          "op": "transfer_card",
           "args": {
-            "note": "The chosen player must play this card on their next turn. It may be passed again at any time, even out of turn."
+            "card_target": "this",
+            "to_target": "right_neighbor"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.transfer_card('this', chosen)\n    state.note('The chosen player must play this card on their next turn. It may be passed again at any time, even out of turn.')"
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('right_neighbor', 2)\n    state.transfer_card('this', 'right_neighbor')"
     }
   },
   {
@@ -1760,7 +2892,7 @@
     "canonical": {
       "target": "player",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1788,7 +2920,7 @@
     "canonical": {
       "target": "card",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1806,7 +2938,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'legacy_owner', state.actor_id)\n    state.note('This card is now named after its first player; whenever it is played again, they gain 1 point.')"
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'legacy_card', True)\n    state.note('This card is now named after its first player; whenever it is played again, they gain 1 point.')"
     }
   },
   {
@@ -1816,8 +2948,8 @@
     "alt_text": null,
     "canonical": {
       "target": "self",
-      "placement": "discard",
-      "venue": "all",
+      "placement": "player",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1840,30 +2972,29 @@
   {
     "id": "seed-filler-036",
     "title": "Nap Time",
-    "description": "Close your eyes for 30 seconds. You are resting. Nothing can target you during this time. Probably.",
+    "description": "Draw 3 cards, then skip your next turn. Enjoy the nap.",
     "alt_text": null,
     "canonical": {
       "target": "self",
-      "placement": "player",
+      "placement": "discard",
       "venue": "all",
       "trigger": null,
       "ops": [
         {
-          "op": "set_condition",
+          "op": "draw_cards",
           "args": {
             "target": "self",
-            "key": "napping",
-            "value": true
+            "amount": 3
           }
         },
         {
-          "op": "custom_note",
+          "op": "skip_turn",
           "args": {
-            "note": "Close your eyes for 30 seconds. Nothing can target you while napping. Probably. Afterwards, remove this card and the condition."
+            "target": "self"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.set_condition('self', 'napping', True)\n    state.note('Close your eyes for 30 seconds. Nothing can target you while napping. Probably. Afterwards, remove this card and the condition.')"
+      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 3)\n    state.skip_turn('self')"
     }
   },
   {
@@ -1874,7 +3005,7 @@
     "canonical": {
       "target": "self",
       "placement": "discard",
-      "venue": "all",
+      "venue": "in_person",
       "trigger": null,
       "ops": [
         {
@@ -1897,7 +3028,7 @@
   {
     "id": "seed-filler-038",
     "title": "Mystery Box",
-    "description": "Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first.",
+    "description": "Discard 1 random card from your hand, then draw 2 cards.",
     "alt_text": null,
     "canonical": {
       "target": "self",
@@ -1906,34 +3037,1787 @@
       "trigger": null,
       "ops": [
         {
-          "op": "custom_note",
+          "op": "discard_random",
           "args": {
-            "note": "Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first."
+            "target": "self",
+            "count": 1
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 2
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Shuffle your hand face-down. Draw one card at random and play it immediately without looking at it first.')"
+      "sandbox": "def apply(state, ctx):\n    state.discard_random('self', 1)\n    state.draw_cards('self', 2)"
     }
   },
   {
     "id": "seed-filler-039",
     "title": "The Epilogue",
-    "description": "If this is the last card played in the game, whoever played it wins regardless of points. If it isn't, nothing happens.",
+    "description": "Keep this card. If you are still holding it when the game ends, you gain a decisive 100-point bonus — enough to steal the win.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_game_end",
+            "scope": "player",
+            "title": "The owner gains 100 points at the end of the game.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.add_points('self', 100)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_game_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 100)\\n\", title='The owner gains 100 points at the end of the game.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-simple-000",
+    "title": "Gain 5 Points",
+    "description": "You feel great about yourself. Gain 5 points immediately.",
     "alt_text": null,
     "canonical": {
       "target": "self",
       "placement": "discard",
       "venue": "all",
-      "trigger": null,
       "ops": [
         {
-          "op": "custom_note",
+          "op": "add_points",
           "args": {
-            "note": "If this is the last card played in the game, whoever played it wins regardless of points. If it is not, nothing happens."
+            "amount": 5,
+            "target": "self"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('If this is the last card played in the game, whoever played it wins regardless of points. If it is not, nothing happens.')"
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-001",
+    "title": "Gain 10 Points",
+    "description": "A windfall! Gain 10 points and try not to gloat.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 10,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 10)"
+    }
+  },
+  {
+    "id": "seed-simple-002",
+    "title": "Gain 2 Points",
+    "description": "A modest reward. Gain 2 points. Every little bit helps.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 2,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 2)"
+    }
+  },
+  {
+    "id": "seed-simple-003",
+    "title": "Gain 7 Points",
+    "description": "Lucky number seven. Gain 7 points immediately.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 7,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 7)"
+    }
+  },
+  {
+    "id": "seed-simple-004",
+    "title": "Jackpot",
+    "description": "The stars align. Gain 15 points in one glorious moment.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 15,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 15)"
+    }
+  },
+  {
+    "id": "seed-simple-005",
+    "title": "Lose 3 Points",
+    "description": "Oops. Lose 3 points. It happens to the best of us.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": -3,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 3)"
+    }
+  },
+  {
+    "id": "seed-simple-006",
+    "title": "Lose 5 Points",
+    "description": "A costly mistake. Lose 5 points and learn nothing.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 5,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-007",
+    "title": "Costly Blunder",
+    "description": "That did not go as planned. Lose 8 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 8,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('self', 8)"
+    }
+  },
+  {
+    "id": "seed-simple-008",
+    "title": "Give 5 Points to Any Player",
+    "description": "Pick another player. They gain 5 points. Bask in their gratitude.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "player"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.add_points(chosen, 5)"
+    }
+  },
+  {
+    "id": "seed-simple-009",
+    "title": "Give 3 Points to Any Player",
+    "description": "Choose a player and hand them 3 points. Generosity has its rewards.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 3,
+            "target": "player"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.add_points(chosen, 3)"
+    }
+  },
+  {
+    "id": "seed-simple-010",
+    "title": "Steal 3 Points",
+    "description": "Take 3 points from any player of your choice. They had too many anyway.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 3,
+            "from": "player",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 3)"
+    }
+  },
+  {
+    "id": "seed-simple-011",
+    "title": "Steal 5 Points",
+    "description": "Snatch 5 points from a player of your choosing. Finders keepers.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 5,
+            "from": "player",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-012",
+    "title": "Rob the Leader",
+    "description": "Whoever is winning has it coming. Steal 5 points from the player with the most points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 5,
+            "from": "player_with_most_points",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-013",
+    "title": "Great Heist",
+    "description": "Pull off the big score. Steal 8 points from the player with the most points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 8,
+            "from": "player_with_most_points",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.steal_points('player_with_most_points', 'self', 8)"
+    }
+  },
+  {
+    "id": "seed-simple-014",
+    "title": "Tax the Rich",
+    "description": "The player with the most points loses 4 points. Fair is fair.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 4,
+            "target": "player_with_most_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('player_with_most_points', 4)"
+    }
+  },
+  {
+    "id": "seed-simple-015",
+    "title": "Cut Down the Leader",
+    "description": "Tall poppy syndrome. The player with the most points loses 6 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 6,
+            "target": "player_with_most_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('player_with_most_points', 6)"
+    }
+  },
+  {
+    "id": "seed-simple-016",
+    "title": "Charity for the Underdog",
+    "description": "The player with the fewest points gains 5 points. Everybody deserves a chance.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "player_with_least_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('player_with_least_points', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-017",
+    "title": "Boost the Trailer",
+    "description": "The player with the fewest points gains 3 points. Onward and upward.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 3,
+            "target": "player_with_least_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('player_with_least_points', 3)"
+    }
+  },
+  {
+    "id": "seed-simple-018",
+    "title": "Everyone Else Loses 2",
+    "description": "Misery loves company. Every other player loses 2 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 2,
+            "target": "all_others"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('all_others', 2)"
+    }
+  },
+  {
+    "id": "seed-simple-019",
+    "title": "Everyone Else Loses 4",
+    "description": "A bad day for everyone but you. Every other player loses 4 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 4,
+            "target": "all_others"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('all_others', 4)"
+    }
+  },
+  {
+    "id": "seed-simple-020",
+    "title": "Everyone Else Gains 1",
+    "description": "You are feeling charitable. Every other player gains 1 point.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 1,
+            "target": "all_others"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('all_others', 1)"
+    }
+  },
+  {
+    "id": "seed-simple-021",
+    "title": "Everybody Gains 2",
+    "description": "A rising tide lifts all boats. Every player, including you, gains 2 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 2,
+            "target": "all"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.add_points('all', 2)"
+    }
+  },
+  {
+    "id": "seed-simple-022",
+    "title": "Everybody Loses 3",
+    "description": "Universal setback. Every player, including you, loses 3 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "subtract_points",
+          "args": {
+            "amount": 3,
+            "target": "all"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.subtract_points('all', 3)"
+    }
+  },
+  {
+    "id": "seed-simple-023",
+    "title": "Back to Zero",
+    "description": "A fresh start, whether you like it or not. Set your points to 0.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "set_points",
+          "args": {
+            "amount": 0,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.set_points('self', 0)"
+    }
+  },
+  {
+    "id": "seed-simple-024",
+    "title": "Nice Round Number",
+    "description": "Tidy up your score. Set your points to exactly 10.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "set_points",
+          "args": {
+            "amount": 10,
+            "target": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.set_points('self', 10)"
+    }
+  },
+  {
+    "id": "seed-simple-025",
+    "title": "Humble the Champion",
+    "description": "Knock the leader down a peg. Set the player with the most points to 0.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "set_points",
+          "args": {
+            "amount": 0,
+            "target": "player_with_most_points"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.set_points('player_with_most_points', 0)"
+    }
+  },
+  {
+    "id": "seed-simple-026",
+    "title": "Modest Gift",
+    "description": "Hand a chosen player a single point. It's the thought that counts.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 1,
+            "target": "player"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.add_points(chosen, 1)"
+    }
+  },
+  {
+    "id": "seed-simple-027",
+    "title": "Petty Theft",
+    "description": "Swipe 2 points from any player. Small crimes add up.",
+    "alt_text": null,
+    "canonical": {
+      "target": "player",
+      "placement": "discard",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "steal_points",
+          "args": {
+            "amount": 2,
+            "from": "player",
+            "to": "self"
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.steal_points(chosen, 'self', 2)"
+    }
+  },
+  {
+    "id": "seed-simple-028",
+    "title": "Worth 10 Points If You Keep It",
+    "description": "Keep this card in your hand until the game ends. If you still hold it, gain 10 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 10,
+            "target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 10)"
+    }
+  },
+  {
+    "id": "seed-simple-029",
+    "title": "Worth 5 Points If Still In Hand",
+    "description": "A slow burn. If this card is still in your hand when the game ends, gain 5 points.",
+    "alt_text": null,
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "add_points",
+          "args": {
+            "amount": 5,
+            "target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.add_points('self', 5)"
+    }
+  },
+  {
+    "id": "seed-simple-030",
+    "title": "Generous Dealer",
+    "description": "House rule: everyone now draws 2 cards at the start of their turn. Keep this card in the center as a reminder.",
+    "alt_text": null,
+    "canonical": {
+      "target": "none",
+      "placement": "center",
+      "venue": "all",
+      "ops": [
+        {
+          "op": "change_draw_count",
+          "args": {
+            "amount": 2
+          }
+        }
+      ],
+      "trigger": null,
+      "sandbox": "def apply(state, ctx):\n    state.change_draw_count(2)"
+    }
+  },
+  {
+    "id": "seed-simple-031",
+    "title": "Echo Chamber",
+    "description": "While this card sits in the center, every score change echoes: the player who caused it gains 1 bonus point.",
+    "alt_text": null,
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": "on_score_change",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_score_change",
+            "scope": "center",
+            "title": "The player who causes a score change gains 1 bonus point.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    actor = ctx.get(\"actor_id\")\n    if actor:\n        state.add_points(\"id:\" + actor, 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.register_hook(\"on_score_change\", scope=\"center\", code=\"def apply(state, ctx):\\n    actor = ctx.get('actor_id')\\n    if actor:\\n        state.add_points('id:' + actor, 1)\\n\", title=\"The player who causes a score change gains 1 bonus point.\", condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-000",
+    "title": "Marmalade",
+    "description": "A very orange cat. Marmalade sits in front of you and does absolutely nothing.",
+    "alt_text": "a smug orange cat",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "cat"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')"
+    }
+  },
+  {
+    "id": "seed-pets-001",
+    "title": "Void Cat",
+    "description": "A tiny black cat who stares into the middle distance. Void Cat sits in front of you and does nothing.",
+    "alt_text": "a black cat shaped like a small void",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "cat"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')"
+    }
+  },
+  {
+    "id": "seed-pets-002",
+    "title": "Box Cat",
+    "description": "The box is more important than the cat. Box Cat sits in front of you and does nothing.",
+    "alt_text": "a cat crammed into a cardboard box",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "cat"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')"
+    }
+  },
+  {
+    "id": "seed-pets-003",
+    "title": "Library Cat",
+    "description": "Library Cat sits in front of you. At the start of each of your turns, draw 1 extra card.",
+    "alt_text": "a bespectacled cat asleep on an open book",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": "on_turn_start",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "cat"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_start",
+            "scope": "player",
+            "title": "Its controller draws an extra card at the start of their turn.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.draw_cards('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.draw_cards('self', 1)\\n\", title='Its controller draws an extra card at the start of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-004",
+    "title": "Lucky Whiskers",
+    "description": "Lucky Whiskers sits in front of you. At the start of each of your turns, gain 1 point.",
+    "alt_text": "a cat with one glittering curled whisker",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": "on_turn_start",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "cat"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_start",
+            "scope": "player",
+            "title": "Its controller gains 1 point at the start of their turn.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.add_points('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\", title='Its controller gains 1 point at the start of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-005",
+    "title": "Klepto Cat",
+    "description": "Klepto Cat sits in front of you. When played, steal every pet in front of every opponent. Keep them in play in front of you.",
+    "alt_text": "a cat dragging a heap of pet toys",
+    "canonical": {
+      "target": "all_others",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "cat"
+          }
+        },
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "in_play",
+            "from_player": "all_others",
+            "selector": "all",
+            "to_zone": "in_play",
+            "to_player": "self",
+            "match_attributes": {
+              "kind": "pet"
+            }
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    state.move_cards(from_zone='in_play', from_player='all_others', selector='all', to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-006",
+    "title": "Alley Cat",
+    "description": "Alley Cat sits in front of you. When played, choose a player and steal up to 2 of their pets, keeping them in play in front of you.",
+    "alt_text": "a streetwise cat in a tiny jacket",
+    "canonical": {
+      "target": "player",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "cat"
+          }
+        },
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "in_play",
+            "from_player": "chooser",
+            "selector": "top",
+            "count": 2,
+            "to_zone": "in_play",
+            "to_player": "self",
+            "match_attributes": {
+              "kind": "pet"
+            }
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    chosen = ctx.get('chosen_player_id')\n    if chosen:\n        state.move_cards(from_zone='in_play', from_player='id:' + chosen, count=2, to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-007",
+    "title": "Copycat",
+    "description": "Copycat sits in front of you. Whenever you play a pet, including Copycat, draw 1 card.",
+    "alt_text": "two nearly identical cats mirroring each other",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": "on_play",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "cat"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_play",
+            "scope": "player",
+            "title": "Its controller draws whenever they play a pet.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    card = state.card(ctx.get('card_id') or '')\n    if card and card.get('attributes', {}).get('kind') == 'pet':\n        state.draw_cards('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    state.register_hook('on_play', scope='player', code=\"def apply(state, ctx):\\n    card = state.card(ctx.get('card_id') or '')\\n    if card and card.get('attributes', {}).get('kind') == 'pet':\\n        state.draw_cards('self', 1)\\n\", title='Its controller draws whenever they play a pet.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-008",
+    "title": "Good Dog",
+    "description": "A certified good dog. Good Dog sits in front of you and does nothing.",
+    "alt_text": "a happy dog wearing a medal",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "dog"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')"
+    }
+  },
+  {
+    "id": "seed-pets-009",
+    "title": "Tiny Dog",
+    "description": "Tiny Dog is mostly ears. Tiny Dog sits in front of you and does nothing.",
+    "alt_text": "an extremely small dog with enormous ears",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "dog"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')"
+    }
+  },
+  {
+    "id": "seed-pets-010",
+    "title": "Big Dog",
+    "description": "Big Dog takes up the entire couch. Big Dog sits in front of you and does nothing.",
+    "alt_text": "a huge shaggy dog on a tiny couch",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "dog"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')"
+    }
+  },
+  {
+    "id": "seed-pets-011",
+    "title": "Fetching Retriever",
+    "description": "Fetching Retriever sits in front of you. When played, draw 2 cards.",
+    "alt_text": "a retriever proudly carrying two cards",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "dog"
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 2
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.draw_cards('self', 2)"
+    }
+  },
+  {
+    "id": "seed-pets-012",
+    "title": "Guard Dog",
+    "description": "Guard Dog sits in front of you. When played, gain 3 points.",
+    "alt_text": "a vigilant dog guarding three gold stars",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "dog"
+          }
+        },
+        {
+          "op": "add_points",
+          "args": {
+            "target": "self",
+            "amount": 3
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.add_points('self', 3)"
+    }
+  },
+  {
+    "id": "seed-pets-013",
+    "title": "Treasure Hound",
+    "description": "Treasure Hound sits in front of you. When played, put the top card of the discard pile into your hand.",
+    "alt_text": "a hound digging up a shining card",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "dog"
+          }
+        },
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "discard",
+            "selector": "top",
+            "count": 1,
+            "to_zone": "hand",
+            "to_player": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.move_cards(from_zone='discard', selector='top', count=1, to_zone='hand', to_player='self')"
+    }
+  },
+  {
+    "id": "seed-pets-014",
+    "title": "Cat-Chasing Terrier",
+    "description": "Cat-Chasing Terrier sits in front of you. When played, destroy every cat currently in play.",
+    "alt_text": "a determined terrier chasing a blur of cats",
+    "canonical": {
+      "target": "all_cards",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "dog"
+          }
+        },
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "in_play",
+            "from_player": "all",
+            "selector": "all",
+            "to_zone": "discard",
+            "match_attributes": {
+              "kind": "pet",
+              "species": "cat"
+            }
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.move_cards(from_zone='in_play', from_player='all', selector='all', to_zone='discard', match_attributes={'kind': 'pet', 'species': 'cat'})"
+    }
+  },
+  {
+    "id": "seed-pets-015",
+    "title": "Generous Dog",
+    "description": "Generous Dog sits in front of you. Whenever you gain points, draw 1 card.",
+    "alt_text": "a dog offering a gift-wrapped card",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": "on_score_change",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "dog"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_score_change",
+            "scope": "player",
+            "title": "Its controller draws a card whenever they gain points.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    if ctx.get('amount', 0) > 0:\n        state.draw_cards('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.register_hook('on_score_change', scope='player', code=\"def apply(state, ctx):\\n    if ctx.get('amount', 0) > 0:\\n        state.draw_cards('self', 1)\\n\", title='Its controller draws a card whenever they gain points.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-016",
+    "title": "Pocket Dragon",
+    "description": "Pocket Dragon sits in front of you. At the end of each of your turns, gain 2 points.",
+    "alt_text": "a tiny dragon curled in a coat pocket",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": "on_turn_end",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "dragon"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_end",
+            "scope": "player",
+            "title": "Its controller gains 2 points at the end of their turn.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.add_points('self', 2)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dragon')\n    state.register_hook('on_turn_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 2)\\n\", title='Its controller gains 2 points at the end of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-017",
+    "title": "Pet Slime",
+    "description": "Pet Slime sits in front of you. It jiggles supportively and does nothing.",
+    "alt_text": "a cheerful green slime in a pet bed",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "pet"
+          }
+        },
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "species",
+            "value": "slime"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'slime')"
+    }
+  },
+  {
+    "id": "seed-pets-018",
+    "title": "Golden Food Bowl",
+    "description": "This artifact sits in front of you. Whenever you play a pet, gain 1 point.",
+    "alt_text": "an ornate golden pet bowl",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": "on_play",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "artifact"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_play",
+            "scope": "player",
+            "title": "Its controller gains 1 point whenever they play a pet.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    card = state.card(ctx.get('card_id') or '')\n    if card and card.get('attributes', {}).get('kind') == 'pet':\n        state.add_points('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'artifact')\n    state.register_hook('on_play', scope='player', code=\"def apply(state, ctx):\\n    card = state.card(ctx.get('card_id') or '')\\n    if card and card.get('attributes', {}).get('kind') == 'pet':\\n        state.add_points('self', 1)\\n\", title='Its controller gains 1 point whenever they play a pet.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-019",
+    "title": "Enchanted Collar",
+    "description": "This enchantment sits in front of you. When played, draw 1 card and take an extra turn.",
+    "alt_text": "a glowing collar covered in stars",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "placement_owner": "actor",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "enchantment"
+          }
+        },
+        {
+          "op": "draw_cards",
+          "args": {
+            "target": "self",
+            "amount": 1
+          }
+        },
+        {
+          "op": "extra_turn",
+          "args": {
+            "target": "self"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'enchantment')\n    state.draw_cards('self', 1)\n    state.extra_turn('self')"
+    }
+  },
+  {
+    "id": "seed-pets-020",
+    "title": "Cursed Chew Toy",
+    "description": "Choose a player. This curse sits in front of them. At the end of each of their turns, they lose 1 point.",
+    "alt_text": "a squeaky toy surrounded by ominous smoke",
+    "canonical": {
+      "target": "player",
+      "placement": "player",
+      "placement_owner": "chosen_player",
+      "venue": "all",
+      "trigger": "on_turn_end",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "curse"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_end",
+            "scope": "player",
+            "title": "Its controller loses 1 point at the end of their turn.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.subtract_points('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'curse')\n    state.register_hook('on_turn_end', scope='player', code=\"def apply(state, ctx):\\n    state.subtract_points('self', 1)\\n\", title='Its controller loses 1 point at the end of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-021",
+    "title": "Monster Under the Bed",
+    "description": "Choose a player. This monster sits in front of them. At the start of each of their turns, they discard 1 random card.",
+    "alt_text": "two glowing eyes beneath a bed",
+    "canonical": {
+      "target": "player",
+      "placement": "player",
+      "placement_owner": "chosen_player",
+      "venue": "all",
+      "trigger": "on_turn_start",
+      "ops": [
+        {
+          "op": "set_card_attribute",
+          "args": {
+            "card_target": "this",
+            "key": "kind",
+            "value": "monster"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_start",
+            "scope": "player",
+            "title": "Its controller discards a random card at the start of their turn.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.discard_random('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'monster')\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.discard_random('self', 1)\\n\", title='Its controller discards a random card at the start of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-022",
+    "title": "Cat Kingdom",
+    "description": "This rule sits in the center. When the game ends, the player or players with the most cats in front of them win instead.",
+    "alt_text": "a cardboard castle ruled by cats",
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.pet_win_condition",
+            "value": "cats"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_game_end",
+            "scope": "center",
+            "title": "The player or players controlling the most cats win.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    if state.rules().get('extra', {}).get('pet_win_condition') != 'cats':\n        return\n    best = -1\n    winners = []\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('species') == 'cat':\n                count += 1\n        if count > best:\n            best = count\n            winners = [player.id]\n        elif count == best:\n            winners.append(player.id)\n    state.end_game(winners=winners)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.pet_win_condition', 'cats')\n    state.register_hook('on_game_end', scope='center', code=\"def apply(state, ctx):\\n    if state.rules().get('extra', {}).get('pet_win_condition') != 'cats':\\n        return\\n    best = -1\\n    winners = []\\n    for player in state.players():\\n        count = 0\\n        for cid in player.in_play:\\n            card = state.card(cid)\\n            if card and card.get('attributes', {}).get('species') == 'cat':\\n                count += 1\\n        if count > best:\\n            best = count\\n            winners = [player.id]\\n        elif count == best:\\n            winners.append(player.id)\\n    state.end_game(winners=winners)\\n\", title='The player or players controlling the most cats win.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-023",
+    "title": "Dog Park Dominion",
+    "description": "This rule sits in the center. When the game ends, the player or players with the most dogs in front of them win instead.",
+    "alt_text": "dogs raising a flag over a park",
+    "canonical": {
+      "target": "all",
+      "placement": "center",
+      "venue": "all",
+      "trigger": "on_game_end",
+      "ops": [
+        {
+          "op": "set_rule",
+          "args": {
+            "path": "extra.pet_win_condition",
+            "value": "dogs"
+          }
+        },
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_game_end",
+            "scope": "center",
+            "title": "The player or players controlling the most dogs win.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    if state.rules().get('extra', {}).get('pet_win_condition') != 'dogs':\n        return\n    best = -1\n    winners = []\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('species') == 'dog':\n                count += 1\n        if count > best:\n            best = count\n            winners = [player.id]\n        elif count == best:\n            winners.append(player.id)\n    state.end_game(winners=winners)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.pet_win_condition', 'dogs')\n    state.register_hook('on_game_end', scope='center', code=\"def apply(state, ctx):\\n    if state.rules().get('extra', {}).get('pet_win_condition') != 'dogs':\\n        return\\n    best = -1\\n    winners = []\\n    for player in state.players():\\n        count = 0\\n        for cid in player.in_play:\\n            card = state.card(cid)\\n            if card and card.get('attributes', {}).get('species') == 'dog':\\n                count += 1\\n        if count > best:\\n            best = count\\n            winners = [player.id]\\n        elif count == best:\\n            winners.append(player.id)\\n    state.end_game(winners=winners)\\n\", title='The player or players controlling the most dogs win.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-024",
+    "title": "Catnip Storm",
+    "description": "Each player draws 1 card for each cat sitting in front of them. Then discard Catnip Storm.",
+    "alt_text": "cats tumbling through a green whirlwind",
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "steps": [
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('species') == 'cat':\n                count += 1\n        if count:\n            state.draw_cards('id:' + player.id, count)\n"
+        }
+      ]
+    }
+  },
+  {
+    "id": "seed-pets-025",
+    "title": "Walkies",
+    "description": "Each player gains 1 point for each dog sitting in front of them. Then discard Walkies.",
+    "alt_text": "a chaotic parade of dogs on leashes",
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "steps": [
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('species') == 'dog':\n                count += 1\n        if count:\n            state.add_points('id:' + player.id, count)\n"
+        }
+      ]
+    }
+  },
+  {
+    "id": "seed-pets-026",
+    "title": "Adoption Day",
+    "description": "Choose a pet in front of another player. Steal it: keep it in play and move it directly in front of you.",
+    "alt_text": "a pet adoption certificate with a paw-print seal",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "all_others",
+            "to_zone": "in_play",
+            "to_player": "self",
+            "match_attributes": {
+              "kind": "pet"
+            }
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pet = ctx.get('chosen_card_id')\n    if pet:\n        state.move_cards(card_target='id:' + pet, from_zone='in_play', from_player='all_others', to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-027",
+    "title": "Animal Control",
+    "description": "Choose any pet in play and destroy it. Put that pet in the discard pile.",
+    "alt_text": "a butterfly net labeled animal control",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "all",
+            "to_zone": "discard",
+            "match_attributes": {
+              "kind": "pet"
+            }
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    pet = ctx.get('chosen_card_id')\n    if pet:\n        state.move_cards(card_target='id:' + pet, from_zone='in_play', from_player='all', to_zone='discard', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-028",
+    "title": "Pet Rustler",
+    "description": "Steal every pet in front of every opponent. Keep all of those pets in play in front of you.",
+    "alt_text": "a masked rider escaping with a wagon full of pets",
+    "canonical": {
+      "target": "all_others",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "in_play",
+            "from_player": "all_others",
+            "selector": "all",
+            "to_zone": "in_play",
+            "to_player": "self",
+            "match_attributes": {
+              "kind": "pet"
+            }
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='in_play', from_player='all_others', selector='all', to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-029",
+    "title": "Best in Show",
+    "description": "The player or players with the most pets in front of them each gain 5 points. If nobody has a pet, nobody gains points.",
+    "alt_text": "a blue ribbon with a golden paw print",
+    "canonical": {
+      "target": "all",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "steps": [
+        {
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    best = 0\n    winners = []\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('kind') == 'pet':\n                count += 1\n        if count > best:\n            best = count\n            winners = [player.id]\n        elif count == best and count > 0:\n            winners.append(player.id)\n    for winner in winners:\n        state.add_points('id:' + winner, 5)\n"
+        }
+      ]
     }
   }
 ]

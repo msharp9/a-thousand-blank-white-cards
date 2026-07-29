@@ -7,6 +7,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 from models.ws_messages import EpilogueDoneMsg, EpilogueFinalizeMsg, EpilogueVoteMsg
+from board.rooms.deck import build_premade_pool
 from board.rooms.epilogue import EpilogueManager
 from board.rooms.room import Room
 
@@ -59,6 +60,32 @@ def test_tally_and_persist_upserts_kept_cards() -> None:
     _, kwargs = mock_upsert.call_args
     assert kwargs["card_id"] == "c1"
     assert kwargs["source"] == "player"
+
+
+def test_kept_card_is_eligible_for_next_games_premade_pool() -> None:
+    fake_vector = [0.1] * 1536
+    with patch("agent.rag.store.embed_text_cached", return_value=fake_vector):
+        from agent.rag.store import init_store, upsert_card
+
+        init_store()
+        upsert_card("seed-1", "Seed One", "First seed.", "{}", "seed")
+        upsert_card("seed-2", "Seed Two", "Second seed.", "{}", "seed")
+
+        mgr = EpilogueManager(player_ids=["p1"])
+
+        async def keep_authored_card() -> None:
+            await mgr.start(
+                [{"id": "authored-1", "title": "A Keeper", "description": "Keep this card.", "canonical": {}}],
+                AsyncMock(),
+            )
+            mgr.record_vote("p1", "authored-1", keep=True)
+            await mgr.tally_and_persist()
+
+        asyncio.run(keep_authored_card())
+        cards, pool = build_premade_pool(count=3)
+
+    assert set(pool) == {"seed-1", "seed-2", "authored-1"}
+    assert cards["authored-1"]["origin"] == "authored"
 
 
 def test_room_epilogue_vote_without_start_errors() -> None:
@@ -162,9 +189,9 @@ def test_epilogue_finalize_rejects_non_host() -> None:
     assert any(m["type"] == "error" for m in sent)
 
 
-def test_epilogue_unvoted_card_abstains_and_defaults_to_kept() -> None:
-    # p2 walks away without voting at all; going straight to done abstains them
-    # on every card, and the tie-defaults-to-keep rule keeps it.
+def test_epilogue_unvoted_card_abstains_and_is_destroyed() -> None:
+    # Both players walk away without voting; abstains leave the card at 0-0,
+    # which is not a strict keep majority, so it is destroyed.
     room = Room("ABCDEF")
     room.add_player("p1", "Alice")
     room.add_player("p2", "Bob")
@@ -173,9 +200,83 @@ def test_epilogue_unvoted_card_abstains_and_defaults_to_kept() -> None:
     )
     room.connections.connect("p1", AsyncMock())
     room.connections.connect("p2", AsyncMock())
-    with patch("agent.rag.store.upsert_card"):
+    with patch("agent.rag.store.delete_card"):
         asyncio.run(room.start_epilogue())
         asyncio.run(room.handle_action("p1", EpilogueDoneMsg()))
         asyncio.run(room.handle_action("p2", EpilogueDoneMsg()))
     assert room.state.phase == "ended"
-    assert any("Kept: 1" in line for line in room.state.log)
+    assert any("Kept: 0" in line for line in room.state.log)
+    assert [c.id for c in room.state.epilogue_result.destroyed] == ["c1"]
+    assert room.state.epilogue_result.favorite_card_ids == []
+
+
+def test_record_vote_rejects_outsider_and_unknown_card() -> None:
+    mgr = EpilogueManager(player_ids=["p1"])
+    _start(mgr, [{"id": "c1", "title": "A", "description": "a"}])
+    assert mgr.record_vote("spec-1", "c1", keep=True) is False
+    assert mgr.record_vote("p1", "nope", keep=True) is False
+    assert mgr.record_vote("p1", "c1", keep=True) is True
+    assert mgr.to_dict()["votes"] == {"c1": {"p1": "keep"}}
+
+
+def test_from_dict_sanitizes_votes_and_done_to_eligible_state() -> None:
+    data = {
+        "player_ids": ["p1", "p2"],
+        "votes": {
+            "c1": {"p1": "keep", "spec-1": "destroy"},
+            "ghost-card": {"p1": "keep"},
+        },
+        "done": ["p1", "spec-1"],
+        "cards": [{"id": "c1", "title": "A", "description": "a"}],
+    }
+    mgr = EpilogueManager.from_dict(data, AsyncMock())
+    assert mgr.to_dict()["votes"] == {"c1": {"p1": "keep"}}
+    assert mgr.to_dict()["done"] == ["p1"]
+    assert mgr.all_done() is False
+
+
+def _spectated_epilogue_room(host_is_spectator: bool = False) -> tuple[Room, AsyncMock]:
+    room = Room("ABCDEF")
+    if host_is_spectator:
+        room.add_spectator("spec-1", "Watcher")
+    room.add_player("p1", "Alice")
+    room.add_player("p2", "Bob")
+    if not host_is_spectator:
+        room.add_spectator("spec-1", "Watcher")
+    room.state = room.state.model_copy(
+        update={"cards": {"c1": {"id": "c1", "title": "T", "description": "D", "origin": "authored"}}}
+    )
+    room.connections.connect("p1", AsyncMock())
+    room.connections.connect("p2", AsyncMock())
+    spec_ws = AsyncMock()
+    room.connections.connect("spec-1", spec_ws)
+    asyncio.run(room.start_epilogue())
+    return room, spec_ws
+
+
+def test_spectator_epilogue_vote_and_done_are_rejected() -> None:
+    room, spec_ws = _spectated_epilogue_room()
+    asyncio.run(room.handle_action("spec-1", EpilogueVoteMsg(card_id="c1", keep=False)))
+    asyncio.run(room.handle_action("spec-1", EpilogueDoneMsg()))
+    assert room.state.phase == "epilogue"
+    assert room._epilogue.to_dict()["votes"]["c1"] == {}
+    assert room._epilogue.to_dict()["done"] == []
+    sent = [json.loads(c.args[0]) for c in spec_ws.send_text.call_args_list if c.args]
+    assert sum(1 for m in sent if m["type"] == "error") >= 2
+
+
+def test_spectator_host_cannot_vote_but_can_finalize() -> None:
+    room, spec_ws = _spectated_epilogue_room(host_is_spectator=True)
+    assert room.state.host_id == "spec-1"
+    asyncio.run(room.handle_action("spec-1", EpilogueVoteMsg(card_id="c1", keep=True)))
+    asyncio.run(room.handle_action("spec-1", EpilogueDoneMsg()))
+    assert room.state.phase == "epilogue"
+    sent = [json.loads(c.args[0]) for c in spec_ws.send_text.call_args_list if c.args]
+    assert any(m["type"] == "error" for m in sent)
+
+    with patch("agent.rag.store.upsert_card"), patch("agent.rag.store.delete_card"):
+        asyncio.run(room.handle_action("p1", EpilogueVoteMsg(card_id="c1", keep=True)))
+        asyncio.run(room.handle_action("spec-1", EpilogueFinalizeMsg()))
+    assert room.state.phase == "ended"
+    assert [c.id for c in room.state.epilogue_result.kept] == ["c1"]
+    assert room.state.epilogue_result.favorite_card_ids == ["c1"]

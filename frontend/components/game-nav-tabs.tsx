@@ -1,78 +1,67 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { GalleryOverlay } from "@/components/gallery-overlay";
-import { ScoreboardOverlay } from "@/components/scoreboard-overlay";
-import type { GameStateSnapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Tab = "table" | "gallery" | "scores";
+export type GameView =
+  "table" | "log" | "gallery" | "scores" | "status" | "host";
 
-const TABS: { id: Tab; label: string }[] = [
+export type AuxiliaryGameView = Exclude<GameView, "table">;
+
+const PLAYER_VIEWS: {
+  id: GameView;
+  label: string;
+}[] = [
   { id: "table", label: "Table" },
+  { id: "log", label: "History" },
   { id: "gallery", label: "Gallery" },
   { id: "scores", label: "Scores" },
+  { id: "status", label: "Rules" },
 ];
 
 interface GameNavTabsProps {
-  gameState: GameStateSnapshot;
-  roomCode: string;
+  activeView: GameView;
+  isHost: boolean;
+  onViewChange: (view: GameView) => void;
+  className?: string;
 }
 
-/**
- * Top-bar view switcher for the playing phase (design's Table/Gallery/Scores
- * tabs — Create and Epilogue are separate phases in this app, not tabs).
- * Table is the default felt view underneath; Gallery and Scores render as
- * full-screen overlays on top of it and close back to Table via the tab, the
- * Escape key, or a scrim tap. The felt/hand stay mounted the whole time, so
- * switching tabs never interrupts live game state — the overlays just read
- * straight from the same gameState this component already re-renders on.
- */
-export function GameNavTabs({ gameState, roomCode }: GameNavTabsProps) {
-  const [tab, setTab] = useState<Tab>("table");
-
-  useEffect(() => {
-    if (tab === "table") return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setTab("table");
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [tab]);
+export function GameNavTabs({
+  activeView,
+  isHost,
+  onViewChange,
+  className,
+}: GameNavTabsProps) {
+  const views = isHost
+    ? [...PLAYER_VIEWS, { id: "host" as const, label: "Host" }]
+    : PLAYER_VIEWS;
 
   return (
-    <>
-      <nav className="flex items-center gap-1.5" aria-label="Game views">
-        {TABS.map(({ id, label }) => (
+    <nav
+      className={cn("flex items-center gap-1", className)}
+      aria-label="Game views"
+    >
+      {views.map(({ id, label }) => {
+        const selected = activeView === id;
+        return (
           <button
             key={id}
             type="button"
-            aria-pressed={tab === id}
-            onClick={() => setTab(id)}
+            data-game-view-trigger={id}
+            aria-pressed={selected}
+            aria-expanded={id === "table" ? undefined : selected}
+            aria-controls={id === "table" ? undefined : "game-view-panel"}
+            onClick={() => onViewChange(id)}
             className={cn(
-              "rounded-lg border-[1.5px] border-ink px-2.5 py-1 font-hand text-[15px] transition-colors",
-              tab === id
+              "min-h-11 min-w-0 flex-1 rounded-lg border-[1.5px] border-ink px-1 py-1 font-hand text-[13px] transition-colors min-[360px]:text-[15px] xl:min-h-0 xl:flex-none xl:px-2.5",
+              selected
                 ? "bg-ink text-background"
                 : "bg-card text-foreground hover:bg-muted",
             )}
           >
             {label}
           </button>
-        ))}
-      </nav>
-      {tab === "gallery" && (
-        <GalleryOverlay
-          gameState={gameState}
-          roomCode={roomCode}
-          onClose={() => setTab("table")}
-        />
-      )}
-      {tab === "scores" && (
-        <ScoreboardOverlay
-          players={gameState.players}
-          onClose={() => setTab("table")}
-        />
-      )}
-    </>
+        );
+      })}
+    </nav>
   );
 }
