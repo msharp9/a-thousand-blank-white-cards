@@ -2309,22 +2309,35 @@
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Accuse the chosen player of cheating. They must defend themselves and the group votes. If acquitted, the table restores these 3 points."
+          "kind": "interaction",
+          "result_key": "verdict",
+          "request": {
+            "kind": "choice",
+            "prompt": "Is the accused guilty of cheating?",
+            "audience": "all",
+            "sealed": true,
+            "options": [
+              {
+                "id": "guilty",
+                "label": "Guilty"
+              },
+              {
+                "id": "innocent",
+                "label": "Innocent"
+              }
+            ]
           }
         },
         {
-          "op": "subtract_points",
-          "args": {
-            "amount": 3,
-            "target": "chosen_player"
-          }
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    counts = {}\n    for picks in ctx['interactions']['verdict'].values():\n        for pid in picks:\n            counts[pid] = counts.get(pid, 0) + 1\n    accused = 'id:' + (ctx.get('chosen_player_id') or '')\n    if counts.get('guilty', 0) > counts.get('innocent', 0):\n        state.subtract_points(accused, 3)\n    else:\n        state.note('Acquitted. The conspiracy remains unproven.')\n",
+          "explanation": "Tally the sealed guilty/innocent vote; a strict Guilty majority costs the accused 3 points, otherwise the accusation is dismissed."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('Accuse the chosen player of cheating. They defend themselves and the group votes; if acquitted, the table restores the 3 points.')\n    state.subtract_points(chosen, 3)"
+      "sandbox": null
     }
   },
   {

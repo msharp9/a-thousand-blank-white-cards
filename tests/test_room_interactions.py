@@ -811,6 +811,40 @@ def test_cat_show_vote_stage_survives_cold_restore_and_completes(tmp_path) -> No
     assert [player.score for player in restored.state.players] == [3, 3]
 
 
+def test_conspiracy_theory_guilty_majority_costs_accused_three_points() -> None:
+    plan = _gold_plan("Conspiracy Theory")
+    room = _room_with_plan(plan, player_count=3)
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card", chosen_player_id="p2"))
+        verdict = room._pending_resolution
+        assert verdict is not None and verdict.request.kind == "choice"
+        await room.handle_action("p1", _response(verdict.interaction_id, "choice", option_ids=["guilty"]))
+        await room.handle_action("p2", _response(verdict.interaction_id, "choice", option_ids=["innocent"]))
+        await room.handle_action("p3", _response(verdict.interaction_id, "choice", option_ids=["guilty"]))
+
+    asyncio.run(scenario())
+    assert room._pending_resolution is None
+    assert [player.score for player in room.state.players] == [0, -3, 0]
+
+
+def test_conspiracy_theory_tied_vote_acquits_and_leaves_score_untouched() -> None:
+    plan = _gold_plan("Conspiracy Theory")
+    room = _room_with_plan(plan, player_count=2)
+
+    async def scenario() -> None:
+        await room.handle_action("p1", PlayMsg(card_id="card", chosen_player_id="p2"))
+        verdict = room._pending_resolution
+        assert verdict is not None and verdict.request.kind == "choice"
+        await room.handle_action("p1", _response(verdict.interaction_id, "choice", option_ids=["guilty"]))
+        await room.handle_action("p2", _response(verdict.interaction_id, "choice", option_ids=["innocent"]))
+
+    asyncio.run(scenario())
+    assert room._pending_resolution is None
+    assert [player.score for player in room.state.players] == [0, 0]
+    assert "[note] Acquitted. The conspiracy remains unproven." in room.state.log
+
+
 def test_pending_resolution_persists_and_request_replays_without_values(tmp_path) -> None:
     plan = ResolutionPlan.model_validate(
         {
