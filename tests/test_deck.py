@@ -109,6 +109,55 @@ def test_collect_cards_empty_canonical_string_is_ignored() -> None:
     assert "canonical" not in card
 
 
+def test_collect_cards_hoists_play_on_draw_attribute() -> None:
+    # A card that stages set_card_attribute(this, play_on_draw) on itself must
+    # carry that attribute from the moment it enters state.cards — it fires
+    # ops only run when the card is PLAYED, so a fresh-deck Landmine would
+    # never auto-play on draw without this hoist (bead 100.3).
+    def source() -> list[dict]:
+        return [
+            {
+                "id": "seed-gold-072",
+                "title": "Landmine",
+                "description": "Whoever drew it loses 3 points.",
+                "canonical": {
+                    "target": "self",
+                    "placement": "discard",
+                    "venue": "all",
+                    "ops": [
+                        {
+                            "op": "set_card_attribute",
+                            "args": {"card_target": "this", "key": "play_on_draw", "value": True},
+                        },
+                        {"op": "add_points", "args": {"target": "self", "amount": -3}},
+                    ],
+                },
+            }
+        ]
+
+    (card,) = collect_cards(source)
+    assert card["attributes"] == {"play_on_draw": True}
+
+
+def test_collect_cards_without_static_attribute_op_has_no_attributes_key() -> None:
+    def source() -> list[dict]:
+        return [
+            {
+                "id": "plain",
+                "title": "Plain",
+                "description": "d",
+                "canonical": {
+                    "target": "self",
+                    "placement": "discard",
+                    "ops": [{"op": "add_points", "args": {"target": "self", "amount": 3}}],
+                },
+            }
+        ]
+
+    (card,) = collect_cards(source)
+    assert "attributes" not in card
+
+
 def test_build_deck_meets_minimum_with_small_source() -> None:
     # Only 4 unique cards, but the deck must still reach MIN_DECK via padding.
     rng = random.Random(1)

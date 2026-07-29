@@ -179,7 +179,16 @@ def test_first_player_auto_drawn_at_game_start() -> None:
     import agent.rag.store as store
 
     store._client = None
-    drive_to_playing(room, ["p1", "p2"])
+
+    def plain_cards() -> list[dict]:
+        # A fixed, ops-free premade pool: the real seed corpus includes
+        # play_on_draw cards (e.g. Landmine) that auto-play the instant they
+        # land in a hand, which would make the exact hand-size assertions
+        # below flaky against an unseeded deal from the full corpus.
+        return [{"id": f"plain-{i}", "title": f"T{i}", "description": f"D{i}"} for i in range(40)]
+
+    with patch("board.rooms.deck._default_card_source", plain_cards):
+        drive_to_playing(room, ["p1", "p2"])
 
     first_id = room.state.turn_order[0]
     other_id = "p2" if first_id == "p1" else "p1"

@@ -23,7 +23,7 @@ import logging
 import random
 from collections.abc import Callable
 
-from models.card import normalise_canonical
+from models.card import hoist_static_attributes, normalise_canonical
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +111,14 @@ def _normalise_card(raw: dict, index: int) -> dict:
     ``Room.card_art`` registry (and strips) before the dict lands in
     ``GameState.cards`` — art must never ride state snapshots. See
     Room._absorb_card_art.
+
+    A card whose ops stage ``set_card_attribute(card_target="this", key in
+    {play_on_draw, uncounterable})`` gets that attribute hoisted onto a
+    top-level ``attributes`` dict (see :func:`hoist_static_attributes`) so it
+    holds from the moment the card enters ``state.cards`` — a fresh deck's
+    Landmine must auto-play the instant it is drawn, not only after some prior
+    play ran its ops. Mirrors Room._canonical_payload's hoist for
+    LLM-interpreted cards.
     """
     card_id = raw.get("id") or raw.get("card_id") or f"deck-{index:03d}"
     canonical = _coerce_canonical(raw.get("canonical"))
@@ -139,6 +147,9 @@ def _normalise_card(raw: dict, index: int) -> dict:
         if canonical.get("sandbox"):
             card["sandbox"] = canonical["sandbox"]
         card["venue"] = canonical.get("venue", "all")
+        static_attributes = hoist_static_attributes(canonical.get("ops"))
+        if static_attributes:
+            card["attributes"] = static_attributes
     return card
 
 
