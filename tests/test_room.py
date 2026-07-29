@@ -7,7 +7,7 @@ import json
 import random
 from unittest.mock import AsyncMock, patch
 
-from conftest import drive_to_playing, ready_card_result
+from conftest import drive_to_playing, plain_cards, ready_card_result
 
 from agent.contract import InterpretResult
 from models.effects import AddPointsOp, DestroyCardOp, EffectProgram
@@ -146,7 +146,8 @@ def test_start_builds_deck_of_at_least_30_and_deals_hands() -> None:
     import agent.rag.store as store
 
     store._client = None
-    drive_to_playing(room, ["p1", "p2"])
+    with patch("board.rooms.deck._default_card_source", plain_cards):
+        drive_to_playing(room, ["p1", "p2"])
 
     assert room.state.phase == "playing"
     # Deck was finalised: 30 premade + 10 authored + 10 blanks = 50, minus the
@@ -179,7 +180,9 @@ def test_first_player_auto_drawn_at_game_start() -> None:
     import agent.rag.store as store
 
     store._client = None
-    drive_to_playing(room, ["p1", "p2"])
+
+    with patch("board.rooms.deck._default_card_source", plain_cards):
+        drive_to_playing(room, ["p1", "p2"])
 
     first_id = room.state.turn_order[0]
     other_id = "p2" if first_id == "p1" else "p1"

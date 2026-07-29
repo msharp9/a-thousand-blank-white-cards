@@ -1927,5 +1927,82 @@
       "sandbox": "def apply(state, ctx):\n    state.transfer_card('this', 'self')",
       "magnitude_sign": "neutral"
     }
+  },
+  {
+    "id": "eval-107",
+    "title": "Spring Cleaning",
+    "description": "Every card on the table in front of every player gets swept into the discard pile. Spotless.",
+    "alt_text": null,
+    "human_canonical": {
+      "target": "all_cards",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "from_zone": "in_play",
+            "from_player": "all",
+            "selector": "all",
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='in_play', from_player='all', selector='all', to_zone='discard')"
+    }
+  },
+  {
+    "id": "eval-108",
+    "title": "Museum Heist",
+    "description": "Choose a player and steal one card on the table in front of them straight into your hand.",
+    "alt_text": "a gloved hand lifting a painting off a gallery wall",
+    "human_canonical": {
+      "target": "card",
+      "placement": "discard",
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "chooser",
+            "to_zone": "hand",
+            "to_player": "self"
+          }
+        }
+      ],
+      "magnitude_sign": "neutral",
+      "trigger": null,
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    mark = ctx.get('chosen_player_id')\n    loot = ctx.get('chosen_card_id')\n    if mark and loot:\n        state.move_cards(card_target='id:' + loot, from_zone='in_play', from_player='id:' + mark, to_zone='hand', to_player='self')"
+    }
+  },
+  {
+    "id": "eval-109",
+    "title": "House Plant",
+    "description": "Keep this card on the table in front of you. It livens the place up: at the end of each of your turns, draw an extra card.",
+    "alt_text": "a cheerful potted fern on a card table",
+    "human_canonical": {
+      "target": "self",
+      "placement": "player",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_end",
+            "scope": "player",
+            "title": "The owner draws a card at the end of each of their turns.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.draw_cards('self', 1)\n"
+          }
+        }
+      ],
+      "magnitude_sign": "positive",
+      "trigger": "on_turn_end",
+      "venue": "all",
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_end', scope='player', code=\"def apply(state, ctx):\\n    state.draw_cards('self', 1)\\n\", title='The owner draws a card at the end of each of their turns.', condition_keys=[])"
+    }
   }
 ]

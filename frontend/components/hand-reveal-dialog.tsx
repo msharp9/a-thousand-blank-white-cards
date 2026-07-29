@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { CardInspectTrigger } from "@/components/card-inspector-dialog";
 import { SketchCard, stableRotation } from "@/components/sketch-card";
 import { getCardArtUrl } from "@/lib/art";
 import type { CardSnapshot, HandRevealedMsg } from "@/lib/types";
@@ -15,6 +16,7 @@ interface HandRevealDialogProps {
   reveal: HandRevealedMsg | null;
   roomCode: string;
   onDismiss: () => void;
+  onInspectCard?: (card: CardSnapshot) => void;
 }
 
 /**
@@ -28,6 +30,7 @@ export function HandRevealDialog({
   reveal,
   roomCode,
   onDismiss,
+  onInspectCard,
 }: HandRevealDialogProps) {
   const cards: CardSnapshot[] = reveal
     ? reveal.card_ids
@@ -58,16 +61,32 @@ export function HandRevealDialog({
           </p>
         ) : (
           <div className="flex flex-wrap items-end gap-2">
-            {cards.map((card) => (
-              <SketchCard
-                key={card.id}
-                card={card}
-                w={110}
-                showTape={false}
-                rot={stableRotation(card.id, 4)}
-                artUrl={getCardArtUrl(roomCode, card)}
-              />
-            ))}
+            {cards.map((card) =>
+              onInspectCard ? (
+                <CardInspectTrigger
+                  key={card.id}
+                  card={card}
+                  onInspect={onInspectCard}
+                >
+                  <SketchCard
+                    card={card}
+                    w={110}
+                    showTape={false}
+                    rot={stableRotation(card.id, 4)}
+                    artUrl={getCardArtUrl(roomCode, card)}
+                  />
+                </CardInspectTrigger>
+              ) : (
+                <SketchCard
+                  key={card.id}
+                  card={card}
+                  w={110}
+                  showTape={false}
+                  rot={stableRotation(card.id, 4)}
+                  artUrl={getCardArtUrl(roomCode, card)}
+                />
+              ),
+            )}
           </div>
         )}
       </DialogContent>

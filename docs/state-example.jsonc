@@ -39,6 +39,7 @@
     },
     "spectators": ["Person1", "Person2"],  // People watching the game but not participating
     "ruleBindings": [{ "sourceCardId": "Card9", "path": "draw", "previousValue": 1 }],  // set_rule writes attributed to a source card; destroying the card reverts its most recent binding for that path
+    "revealBindings": [{ "sourceCardId": "Card2", "playerId": "Player1", "viewerId": "Player2", "previousPublic": false }],  // Persistent reveal_hand writes attributed to a board card; when the card leaves play the reveal ends (viewerId null = the write set handPublic, restored to previousPublic; otherwise the named viewer is removed from handRevealedTo). Concealing drops the matching bindings. Server-only: stripped from every redacted snapshot because it names the reveal audience
     "historyEvents": [ // Public mechanics only; never drawn-card ids or private responses
       {
         "sequence": 1,

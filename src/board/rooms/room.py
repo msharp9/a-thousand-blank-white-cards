@@ -64,7 +64,7 @@ from engine.loop import advance_turn, tick_condition_ttls
 from engine.reducers import collect_hand_reveals
 from engine.scoring import evaluate_end_condition, evaluate_win_condition, resolve_end_of_game, win_condition_met
 from models.admin import PendingAdminProposal
-from models.card import MAX_ROOM_ART_BYTES
+from models.card import MAX_ROOM_ART_BYTES, hoist_static_attributes
 from models.effects import (
     AddPointsOp,
     CounterPlayOp,
@@ -76,7 +76,6 @@ from models.effects import (
     Op,
     OpsStep,
     ResolutionPlan,
-    SetCardAttributeOp,
     SetPointsOp,
     SnippetStep,
 )
@@ -2233,13 +2232,7 @@ class Room:
         if len(snippets) == 1 and isinstance(plan.steps[-1], SnippetStep):
             canonical["sandbox"] = snippets[0].code
         merged: dict = {"canonical": canonical}
-        static_attributes = {
-            op.key: op.value
-            for op in plan.operations()
-            if isinstance(op, SetCardAttributeOp)
-            and op.card_target == "this"
-            and op.key in {"play_on_draw", "uncounterable"}
-        }
+        static_attributes = hoist_static_attributes(plan.operations())
         if static_attributes:
             merged["attributes"] = static_attributes
         return merged

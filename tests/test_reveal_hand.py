@@ -14,7 +14,7 @@ from engine.reducers import apply_op, collect_hand_reveals
 from engine.sandbox.revalidate import parse_diff
 from board.rooms.redaction import redact_snapshot
 from board.rooms.room import Room
-from models.effects import OpsStep, ResolutionPlan, RevealHandOp, op_requires_choice
+from models.effects import DestroyCardOp, MoveCardsOp, OpsStep, ResolutionPlan, RevealHandOp, op_requires_choice
 from models.game_state import GameState, Player
 
 
@@ -152,6 +152,126 @@ def test_one_shot_reveal_to_all_excludes_the_owner_from_the_audience() -> None:
 def test_one_shot_reveal_without_a_drain_does_not_crash() -> None:
     state = apply_op(_state(), RevealHandOp(target="self", to="all"), _ctx())
     assert state.history_events[-1].kind == "reveal"
+
+
+# ---------------------------------------------------------------------------
+# Persistent reveal binds to its board source card (bead 100.2)
+# ---------------------------------------------------------------------------
+
+
+def _board_state() -> GameState:
+    state = _state()
+    players = [p.model_copy(update={"in_play": ["rvl", "rvl2"]}) if p.id == "p1" else p for p in state.players]
+    cards = {**state.cards, "rvl": _card("rvl"), "rvl2": _card("rvl2")}
+    return state.model_copy(update={"players": players, "cards": cards})
+
+
+def _card_ctx(card_id: str, actor: str = "p1") -> HookContext:
+    return HookContext(event=GameEvent.ON_PLAY, actor_id=actor, card_id=card_id)
+
+
+def test_stealing_the_reveal_card_ends_a_public_reveal() -> None:
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="all", persistent=True), _card_ctx("rvl"))
+    assert state.get_player("p1").hand_public is True
+    assert [b.source_card_id for b in state.reveal_bindings] == ["rvl"]
+    state = apply_op(
+        state,
+        MoveCardsOp(card_target="id:rvl", to_zone="hand", to_player="id:p2"),
+        _card_ctx("thief", actor="p2"),
+    )
+    assert "rvl" in state.get_player("p2").hand
+    assert state.get_player("p1").hand_public is False
+    assert state.reveal_bindings == []
+
+
+def test_stealing_the_reveal_card_removes_granted_viewers() -> None:
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="all_others", persistent=True), _card_ctx("rvl"))
+    assert state.get_player("p1").hand_revealed_to == ["p2", "p3"]
+    state = apply_op(
+        state,
+        MoveCardsOp(card_target="id:rvl", to_zone="hand", to_player="id:p2"),
+        _card_ctx("thief", actor="p2"),
+    )
+    assert state.get_player("p1").hand_revealed_to == []
+    assert state.reveal_bindings == []
+
+
+def test_destroying_the_reveal_card_ends_the_reveal() -> None:
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="id:p2", persistent=True), _card_ctx("rvl"))
+    state = apply_op(state, DestroyCardOp(card_id="rvl"), _ctx("p2"))
+    assert state.get_player("p1").hand_revealed_to == []
+    assert state.reveal_bindings == []
+
+
+def test_persistent_reveal_without_board_source_records_no_binding() -> None:
+    state = apply_op(_state(), RevealHandOp(target="self", to="all", persistent=True), _ctx())
+    assert state.get_player("p1").hand_public is True
+    assert state.reveal_bindings == []
+
+
+def test_conceal_then_retirement_does_not_resurrect_the_reveal() -> None:
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="all", persistent=True), _card_ctx("rvl"))
+    state = apply_op(state, RevealHandOp(target="self", to="all", mode="conceal"), _ctx())
+    assert state.reveal_bindings == []
+    state = apply_op(state, DestroyCardOp(card_id="rvl"), _ctx("p2"))
+    assert state.get_player("p1").hand_public is False
+    assert state.get_player("p1").hand_revealed_to == []
+
+
+def test_conceal_beats_stacked_public_bindings() -> None:
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="all", persistent=True), _card_ctx("rvl"))
+    state = apply_op(state, RevealHandOp(target="self", to="all", persistent=True), _card_ctx("rvl2"))
+    state = apply_op(state, RevealHandOp(target="self", to="all", mode="conceal"), _ctx())
+    state = apply_op(state, DestroyCardOp(card_id="rvl2"), _ctx("p2"))
+    assert state.get_player("p1").hand_public is False
+
+
+def test_buried_public_binding_splices_without_hiding_the_hand() -> None:
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="all", persistent=True), _card_ctx("rvl"))
+    state = apply_op(state, RevealHandOp(target="self", to="all", persistent=True), _card_ctx("rvl2"))
+    state = apply_op(state, DestroyCardOp(card_id="rvl"), _ctx("p2"))
+    assert state.get_player("p1").hand_public is True
+    state = apply_op(state, DestroyCardOp(card_id="rvl2"), _ctx("p2"))
+    assert state.get_player("p1").hand_public is False
+    assert state.reveal_bindings == []
+
+
+def test_partial_conceal_drops_only_that_viewers_binding() -> None:
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="all_others", persistent=True), _card_ctx("rvl"))
+    state = apply_op(state, RevealHandOp(target="self", to="id:p2", mode="conceal"), _ctx())
+    assert [b.viewer_id for b in state.reveal_bindings] == ["p3"]
+    state = apply_op(state, DestroyCardOp(card_id="rvl"), _ctx("p2"))
+    assert state.get_player("p1").hand_revealed_to == []
+
+
+def test_viewer_still_granted_by_a_live_binding_survives_release() -> None:
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="id:p2", persistent=True), _card_ctx("rvl"))
+    state = apply_op(state, RevealHandOp(target="self", to="id:p2", persistent=True), _card_ctx("rvl2"))
+    assert state.get_player("p1").hand_revealed_to == ["p2"]
+    assert [b.source_card_id for b in state.reveal_bindings] == ["rvl", "rvl2"]
+    state = apply_op(state, DestroyCardOp(card_id="rvl"), _ctx("p2"))
+    assert state.get_player("p1").hand_revealed_to == ["p2"]
+    assert [b.source_card_id for b in state.reveal_bindings] == ["rvl2"]
+
+
+def test_reveal_bindings_survive_snapshot_round_trip() -> None:
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="all", persistent=True), _card_ctx("rvl"))
+    state = apply_op(state, RevealHandOp(target="self", to="id:p2", persistent=True), _card_ctx("rvl2"))
+    restored = GameState.model_validate(state.model_dump())
+    assert restored.reveal_bindings == state.reveal_bindings
+    after = apply_op(restored, DestroyCardOp(card_target="all_in_play"), _ctx("p2"))
+    assert after.get_player("p1").hand_public is False
+    assert after.get_player("p1").hand_revealed_to == []
+    assert after.reveal_bindings == []
+
+
+def test_redactor_strips_reveal_bindings_for_every_viewer() -> None:
+    snap = _state().model_dump()
+    snap["reveal_bindings"] = [
+        {"source_card_id": "rvl", "player_id": "p1", "viewer_id": "p2", "previous_public": False}
+    ]
+    for viewer in ("p1", "p2", "p3", "spec-1", None):
+        assert "reveal_bindings" not in redact_snapshot(snap, viewer)
 
 
 # ---------------------------------------------------------------------------

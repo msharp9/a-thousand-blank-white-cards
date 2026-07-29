@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from models.card import FillerCard, GoldCard, parse_seed_card
+from models.card import FillerCard, GoldCard, hoist_static_attributes, parse_seed_card
+from models.effects import AddPointsOp, SetCardAttributeOp
 
 
 GOLD_DICT = {
@@ -62,3 +63,30 @@ def test_gold_card_legacy_code_snippet_becomes_sandbox() -> None:
 def test_filler_has_no_canonical() -> None:
     card = parse_seed_card(FILLER_DICT)
     assert not hasattr(card, "canonical")
+
+
+def test_hoist_static_attributes_reads_authoring_op_dicts() -> None:
+    ops = [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "play_on_draw", "value": True}},
+        {"op": "add_points", "args": {"target": "self", "amount": -3}},
+    ]
+    assert hoist_static_attributes(ops) == {"play_on_draw": True}
+
+
+def test_hoist_static_attributes_reads_runtime_op_instances() -> None:
+    ops = [SetCardAttributeOp(card_target="this", key="play_on_draw", value=True), AddPointsOp(target="self", amount=1)]
+    assert hoist_static_attributes(ops) == {"play_on_draw": True}
+
+
+def test_hoist_static_attributes_ignores_other_targets_and_keys() -> None:
+    ops = [
+        {"op": "set_card_attribute", "args": {"card_target": "all", "key": "play_on_draw", "value": True}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "color", "value": "red"}},
+    ]
+    assert hoist_static_attributes(ops) == {}
+
+
+def test_hoist_static_attributes_empty_or_missing_ops() -> None:
+    assert hoist_static_attributes(None) == {}
+    assert hoist_static_attributes([]) == {}
+    assert hoist_static_attributes([{"op": "add_points", "args": {"target": "self", "amount": 1}}]) == {}

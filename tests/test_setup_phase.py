@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-from conftest import drive_to_playing, ready_card_result
+from conftest import drive_to_playing, plain_cards, ready_card_result
 
 from agent.contract import InterpretResult
 from models.effects import AddPointsOp, CounterPlayOp, EffectProgram, SetCardAttributeOp
@@ -189,7 +189,8 @@ def test_start_during_setup_with_players_behind_errors_and_stays_in_setup() -> N
 
 def test_full_flow_two_players_reaches_playing_with_dealt_hands() -> None:
     room = _room_two_players()
-    drive_to_playing(room, ["p1", "p2"])
+    with patch("board.rooms.deck._default_card_source", plain_cards):
+        drive_to_playing(room, ["p1", "p2"])
 
     assert room.state.phase == "playing"
     # The shuffled turn_order's first player's turn began with the automatic
@@ -220,7 +221,8 @@ def test_auto_start_when_last_player_finishes_authoring() -> None:
         await room.handle_action("p2", CreateCardMsg(title="b-last", description="gain 1 point"))
         await room.wait_for_card_drafts()
 
-    _run_ready(scenario())
+    with patch("board.rooms.deck._default_card_source", plain_cards):
+        _run_ready(scenario())
     assert room.state.phase == "playing"
     # First turn begun: the shuffled turn_order's first player was auto-drawn
     # to — turn order is randomized, not host-first.
@@ -259,7 +261,8 @@ def test_single_player_game_auto_starts() -> None:
         await room.handle_action("p1", CreateCardMsg(title="s-last", description="gain 1 point"))
         await room.wait_for_card_drafts()
 
-    _run_ready(scenario())
+    with patch("board.rooms.deck._default_card_source", plain_cards):
+        _run_ready(scenario())
     assert room.state.phase == "playing"
     assert len(room.state.get_player("p1").hand) == STARTING_HAND_SIZE + room.state.draw_count
 
@@ -268,7 +271,8 @@ def test_finalized_deck_size_for_two_players() -> None:
     # 30 premade + 10 authored (5 each) + 10 blanks (5/player) = 50 total, minus
     # 10 dealt (5 each) and the first player's auto-draw = 39 in the deck.
     room = _room_two_players()
-    drive_to_playing(room, ["p1", "p2"])
+    with patch("board.rooms.deck._default_card_source", plain_cards):
+        drive_to_playing(room, ["p1", "p2"])
 
     total_hands = sum(len(p.hand) for p in room.state.players)
     assert total_hands == 2 * STARTING_HAND_SIZE + room.state.draw_count

@@ -944,13 +944,16 @@
       "trigger": null,
       "ops": [
         {
-          "op": "destroy_card",
+          "op": "move_cards",
           "args": {
-            "card_target": "chosen_card"
+            "card_target": "chosen_card",
+            "from_zone": "hand",
+            "from_player": "chooser",
+            "to_zone": "discard"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.destroy_card(card_id=cid)\n"
+      "sandbox": "def apply(state, ctx):\n    victim = ctx.get('chosen_player_id')\n    loot = ctx.get('chosen_card_id')\n    if victim and loot:\n        state.move_cards(card_target='id:' + loot, from_zone='hand', from_player='id:' + victim, to_zone='discard')"
     }
   },
   {
@@ -1818,7 +1821,7 @@
   {
     "id": "seed-gold-111",
     "title": "Rewind",
-    "description": "Undo the last thing that happened: the last card played is removed from the game, and you draw a fresh card.",
+    "description": "Remove the last card played from the game entirely, then draw a fresh card.",
     "alt_text": "a cassette tape with its ribbon spooling backwards",
     "canonical": {
       "target": "card",
@@ -1827,9 +1830,10 @@
       "trigger": null,
       "ops": [
         {
-          "op": "destroy_card",
+          "op": "move_cards",
           "args": {
-            "card_target": "last_played"
+            "card_target": "last_played",
+            "to_zone": "exile"
           }
         },
         {
@@ -1840,7 +1844,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.destroy_card(card_target='last_played')\n    state.draw_cards('self', 1)"
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(card_target='last_played', to_zone='exile')\n    state.draw_cards('self', 1)\n"
     }
   },
   {
@@ -1894,6 +1898,80 @@
         }
       ],
       "sandbox": "def apply(state, ctx):\n    state.scramble_order()\n    state.shuffle_deck(include_discard=True)\n    state.draw_cards('all', 2)"
+    }
+  },
+  {
+    "id": "seed-gold-114",
+    "title": "Tip Jar",
+    "description": "Place this card on the table in front of you. While it sits in front of you, gain 1 point at the start of each of your turns.",
+    "alt_text": "a glass jar with a single shiny coin at the bottom",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_turn_start",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_start",
+            "scope": "player",
+            "title": "The owner gains 1 point at the start of each of their turns.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.add_points('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\", title='The owner gains 1 point at the start of each of their turns.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-gold-115",
+    "title": "Regifting",
+    "description": "Choose one of the cards on the table in front of you and slide it across so it sits in front of a player of your choice instead.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "self",
+            "to_zone": "in_play",
+            "to_player": "chooser"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    gift = ctx.get('chosen_card_id')\n    recipient = ctx.get('chosen_player_id')\n    if gift and recipient:\n        state.move_cards(card_target='id:' + gift, from_zone='in_play', from_player='self', to_zone='in_play', to_player='id:' + recipient)\n"
+    }
+  },
+  {
+    "id": "seed-gold-116",
+    "title": "Controlled Demolition",
+    "description": "Choose a player and demolish one card on the table in front of them. It goes to the discard pile, reduced to rubble.",
+    "alt_text": "a tiny building collapsing in a puff of dust",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "chooser",
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    victim = ctx.get('chosen_player_id')\n    condemned = ctx.get('chosen_card_id')\n    if victim and condemned:\n        state.move_cards(card_target='id:' + condemned, from_zone='in_play', from_player='id:' + victim, to_zone='discard')\n"
     }
   },
   {
@@ -2222,7 +2300,7 @@
   {
     "id": "seed-filler-011",
     "title": "Time Warp",
-    "description": "Return the last card played to its owner's hand. The table agrees its effect never happened.",
+    "description": "Return the last card played to its owner's hand.",
     "alt_text": null,
     "canonical": {
       "target": "card",
@@ -2231,12 +2309,6 @@
       "trigger": null,
       "ops": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "The table agrees the last card played never happened."
-          }
-        },
-        {
           "op": "transfer_card",
           "args": {
             "card_target": "last_played",
@@ -2244,7 +2316,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('The table agrees the last card played never happened.')\n    state.transfer_card('last_played', 'card_owner')"
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card('last_played', 'card_owner')"
     }
   },
   {
@@ -2306,22 +2378,35 @@
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "steps": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Accuse the chosen player of cheating. They must defend themselves and the group votes. If acquitted, the table restores these 3 points."
+          "kind": "interaction",
+          "result_key": "verdict",
+          "request": {
+            "kind": "choice",
+            "prompt": "Is the accused guilty of cheating?",
+            "audience": "all",
+            "sealed": true,
+            "options": [
+              {
+                "id": "guilty",
+                "label": "Guilty"
+              },
+              {
+                "id": "innocent",
+                "label": "Innocent"
+              }
+            ]
           }
         },
         {
-          "op": "subtract_points",
-          "args": {
-            "amount": 3,
-            "target": "chosen_player"
-          }
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    counts = {}\n    for picks in ctx['interactions']['verdict'].values():\n        for pid in picks:\n            counts[pid] = counts.get(pid, 0) + 1\n    accused = 'id:' + (ctx.get('chosen_player_id') or '')\n    if counts.get('guilty', 0) > counts.get('innocent', 0):\n        state.subtract_points(accused, 3)\n    else:\n        state.note('Acquitted. The conspiracy remains unproven.')\n",
+          "explanation": "Tally the sealed guilty/innocent vote; a strict Guilty majority costs the accused 3 points, otherwise the accusation is dismissed."
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    chosen = \"id:\" + (ctx.get(\"chosen_player_id\") or \"\")\n    state.note('Accuse the chosen player of cheating. They defend themselves and the group votes; if acquitted, the table restores the 3 points.')\n    state.subtract_points(chosen, 3)"
+      "sandbox": null
     }
   },
   {
@@ -2470,20 +2555,17 @@
       "trigger": null,
       "ops": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Claim any card currently on the table in front of another player. It is yours now. No take-backs."
-          }
-        },
-        {
-          "op": "transfer_card",
+          "op": "move_cards",
           "args": {
             "card_target": "chosen_card",
-            "to_target": "self"
+            "from_zone": "in_play",
+            "from_player": "all_others",
+            "to_zone": "in_play",
+            "to_player": "self"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Claim any card currently on the table in front of another player. It is yours now. No take-backs.')\n    state.transfer_card('chosen_card', 'self')"
+      "sandbox": "def apply(state, ctx):\n    loot = ctx.get('chosen_card_id')\n    if loot:\n        state.move_cards(card_target='id:' + loot, from_zone='in_play', from_player='all_others', to_zone='in_play', to_player='self')"
     }
   },
   {
@@ -2524,28 +2606,30 @@
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "sandbox": null,
+      "steps": [
         {
-          "op": "draw_cards",
-          "args": {
-            "amount": 3,
-            "target": "self"
+          "kind": "interaction",
+          "result_key": "pick",
+          "request": {
+            "kind": "card_pick",
+            "prompt": "Pick one of the top 3 cards of the deck to keep.",
+            "from_deck_top": 3
           }
         },
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Keep 1 of the 3 drawn cards and discard the other 2. You live with your choices."
-          }
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picked = ctx['interactions']['pick'][ctx['actor_id']]\n    if picked:\n        state.move_cards(card_target='id:' + picked, to_zone='hand', to_player='id:' + ctx['actor_id'])\n        state.move_cards(from_zone='deck', selector='top', count=2, to_zone='discard')\n",
+          "explanation": "Move the kept card to the actor's hand, then discard the two unpicked offers (now the deck top)."
         }
-      ],
-      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 3)\n    state.note('Keep 1 of the 3 drawn cards and discard the other 2. You live with your choices.')"
+      ]
     }
   },
   {
     "id": "seed-filler-023",
     "title": "Groundhog Day",
-    "description": "The last player's turn repeats exactly. Same cards, same effects. Don't think too hard about it.",
+    "description": "Deja vu: the previous player takes another turn.",
     "alt_text": null,
     "canonical": {
       "target": "player",
@@ -2558,15 +2642,9 @@
           "args": {
             "target": "right_neighbor"
           }
-        },
-        {
-          "op": "custom_note",
-          "args": {
-            "note": "The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage."
-          }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.extra_turn('right_neighbor')\n    state.note(\"The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage.\")"
+      "sandbox": "def apply(state, ctx):\n    state.extra_turn('right_neighbor')"
     }
   },
   {

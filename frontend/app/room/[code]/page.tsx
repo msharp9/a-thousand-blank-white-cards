@@ -11,6 +11,10 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AdminProposalDialog } from "@/components/admin-proposal-dialog";
+import {
+  CardInspectorDialog,
+  CardInspectTrigger,
+} from "@/components/card-inspector-dialog";
 import { Input } from "@/components/ui/input";
 import {
   CurrentTurnBadge,
@@ -93,6 +97,10 @@ export default function RoomPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resultsAdminOpen, setResultsAdminOpen] = useState(false);
   const [gameView, setGameView] = useState<GameView>("table");
+  const [inspectCard, setInspectCard] = useState<CardSnapshot | null>(null);
+  const openInspector = useCallback((card: CardSnapshot) => {
+    setInspectCard(card);
+  }, []);
   const compactViewport = useCompactViewport();
   const wideGameView = useWideGameView();
 
@@ -548,6 +556,7 @@ export default function RoomPage() {
                 <GameTable
                   gameState={gameState}
                   myPlayerId={myPlayerId ?? ""}
+                  onInspectCard={openInspector}
                 />
 
                 {/* felt table: center zone + deck/action dock */}
@@ -670,14 +679,19 @@ export default function RoomPage() {
                           In front of you:
                         </span>
                         {myInPlayCards.map((card) => (
-                          <SketchCard
+                          <CardInspectTrigger
                             key={card.id}
                             card={card}
-                            w={56}
-                            showTape={false}
-                            rot={stableRotation(card.id, 4)}
-                            artUrl={getCardArtUrl(code, card)}
-                          />
+                            onInspect={openInspector}
+                          >
+                            <SketchCard
+                              card={card}
+                              w={56}
+                              showTape={false}
+                              rot={stableRotation(card.id, 4)}
+                              artUrl={getCardArtUrl(code, card)}
+                            />
+                          </CardInspectTrigger>
                         ))}
                       </div>
                     )}
@@ -812,6 +826,13 @@ export default function RoomPage() {
         reveal={handReveal}
         roomCode={code}
         onDismiss={clearHandReveal}
+        onInspectCard={openInspector}
+      />
+
+      <CardInspectorDialog
+        card={inspectCard}
+        roomCode={code}
+        onDismiss={() => setInspectCard(null)}
       />
 
       {gameState && (

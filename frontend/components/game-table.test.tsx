@@ -1,9 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { conditionLabel, GameTable } from "./game-table";
 import { playerColor } from "@/lib/players";
 import { makePlayer as player } from "@/lib/test-fixtures";
-import type { GameStateSnapshot } from "@/lib/types";
+import type { CardSnapshot, GameStateSnapshot } from "@/lib/types";
 
 function baseState(
   overrides: Partial<GameStateSnapshot> = {},
@@ -243,6 +244,50 @@ describe("GameTable seat projection", () => {
     expect(railOrder(container)).toEqual(["a", "b", "c"]);
     expect(screen.getByText("· eliminated")).toBeTruthy();
     expect(screen.getByText("· offline")).toBeTruthy();
+  });
+});
+
+describe("GameTable card inspection", () => {
+  const cards: Record<string, CardSnapshot> = {
+    inFront: { id: "inFront", title: "Pocket Volcano", description: "Boom." },
+    revealed: { id: "revealed", title: "Zap", description: "Zap zap." },
+  };
+
+  it("opens the inspector for an opponent's in-front card on click", async () => {
+    const user = userEvent.setup();
+    const onInspectCard = vi.fn();
+    const state = baseState();
+    state.players[0].in_play = ["inFront"];
+    state.cards = cards;
+    render(
+      <GameTable
+        gameState={state}
+        myPlayerId="me"
+        onInspectCard={onInspectCard}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Inspect Pocket Volcano" }),
+    );
+    expect(onInspectCard).toHaveBeenCalledWith(cards.inFront);
+  });
+
+  it("opens the inspector for an opponent's revealed hand card on click", async () => {
+    const user = userEvent.setup();
+    const onInspectCard = vi.fn();
+    const state = baseState();
+    state.players[0].hand = ["revealed"];
+    state.players[0].hand_public = true;
+    state.cards = cards;
+    render(
+      <GameTable
+        gameState={state}
+        myPlayerId="me"
+        onInspectCard={onInspectCard}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Inspect Zap" }));
+    expect(onInspectCard).toHaveBeenCalledWith(cards.revealed);
   });
 });
 

@@ -46,6 +46,21 @@ describe("HandRevealDialog", () => {
     expect(onDismiss).toHaveBeenCalled();
   });
 
+  it("opens the card inspector when a revealed card is clicked", async () => {
+    const user = userEvent.setup();
+    const onInspectCard = vi.fn();
+    render(
+      <HandRevealDialog
+        reveal={reveal}
+        roomCode="ROOM"
+        onDismiss={vi.fn()}
+        onInspectCard={onInspectCard}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Inspect Zap" }));
+    expect(onInspectCard).toHaveBeenCalledWith(reveal.cards.a1);
+  });
+
   it("handles an empty revealed hand", () => {
     render(
       <HandRevealDialog

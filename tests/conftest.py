@@ -33,6 +33,16 @@ def ready_card_result() -> InterpretResult:
     )
 
 
+def plain_cards() -> list[dict]:
+    """A fixed, ops-free premade-pool source for hand-size assertions.
+
+    The real seed corpus includes play_on_draw cards (e.g. Landmine) that
+    auto-play the instant they land in a hand, which would make exact
+    hand-size assertions flaky against an unseeded deal from the full corpus.
+    """
+    return [{"id": f"plain-{i}", "title": f"T{i}", "description": f"D{i}"} for i in range(40)]
+
+
 def drive_to_playing(room, player_ids, cards_each: int = 5) -> None:
     """Drive a room through the two-step start flow to ``phase="playing"``.
 

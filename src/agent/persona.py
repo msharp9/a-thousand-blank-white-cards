@@ -111,7 +111,9 @@ OP_CATALOG_GUIDE = """\
     MORE than one per player ("everyone discards 2 cards") set the card_pick's
     max_picks=N: each player's collected value is then a LIST of card ids to iterate.
   * move_cards moves cards between zones (deck, discard, hand, in_play, center, exile)
-    WITHOUT playing them. Source is EITHER an explicit card_target OR a from_zone with
+    WITHOUT playing them. Zone vocabulary: a hand is private and hidden; a card "in
+    front of" a player / "on the table before them" is that player's in_play zone,
+    NOT their hand; the shared middle of the table is center. Source is EITHER an explicit card_target OR a from_zone with
     selector "top"/"bottom"/"all"/"random" and count (1-50); from_player / to_player name
     whose hand or in-play zone and are required exactly for those zones. Mill = from_zone
     "deck", selector "top", to_zone "discard". Take the top discard into your hand =
