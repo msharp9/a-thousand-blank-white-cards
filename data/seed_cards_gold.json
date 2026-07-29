@@ -944,13 +944,16 @@
       "trigger": null,
       "ops": [
         {
-          "op": "destroy_card",
+          "op": "move_cards",
           "args": {
-            "card_target": "chosen_card"
+            "card_target": "chosen_card",
+            "from_zone": "hand",
+            "from_player": "chooser",
+            "to_zone": "discard"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.destroy_card(card_id=cid)\n"
+      "sandbox": "def apply(state, ctx):\n    victim = ctx.get('chosen_player_id')\n    loot = ctx.get('chosen_card_id')\n    if victim and loot:\n        state.move_cards(card_target='id:' + loot, from_zone='hand', from_player='id:' + victim, to_zone='discard')"
     }
   },
   {
