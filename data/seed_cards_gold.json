@@ -1821,7 +1821,7 @@
   {
     "id": "seed-gold-111",
     "title": "Rewind",
-    "description": "Undo the last thing that happened: the last card played is removed from the game, and you draw a fresh card.",
+    "description": "Remove the last card played from the game entirely, then draw a fresh card.",
     "alt_text": "a cassette tape with its ribbon spooling backwards",
     "canonical": {
       "target": "card",
@@ -1830,9 +1830,10 @@
       "trigger": null,
       "ops": [
         {
-          "op": "destroy_card",
+          "op": "move_cards",
           "args": {
-            "card_target": "last_played"
+            "card_target": "last_played",
+            "to_zone": "exile"
           }
         },
         {
@@ -1843,7 +1844,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.destroy_card(card_target='last_played')\n    state.draw_cards('self', 1)"
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(card_target='last_played', to_zone='exile')\n    state.draw_cards('self', 1)\n"
     }
   },
   {
