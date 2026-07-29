@@ -1899,5 +1899,79 @@
       ],
       "sandbox": "def apply(state, ctx):\n    state.scramble_order()\n    state.shuffle_deck(include_discard=True)\n    state.draw_cards('all', 2)"
     }
+  },
+  {
+    "id": "seed-gold-114",
+    "title": "Tip Jar",
+    "description": "Place this card on the table in front of you. While it sits in front of you, gain 1 point at the start of each of your turns.",
+    "alt_text": "a glass jar with a single shiny coin at the bottom",
+    "canonical": {
+      "target": "self",
+      "placement": "player",
+      "venue": "all",
+      "trigger": "on_turn_start",
+      "ops": [
+        {
+          "op": "register_hook",
+          "args": {
+            "event": "on_turn_start",
+            "scope": "player",
+            "title": "The owner gains 1 point at the start of each of their turns.",
+            "condition_keys": [],
+            "code": "def apply(state, ctx):\n    state.add_points('self', 1)\n"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\", title='The owner gains 1 point at the start of each of their turns.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-gold-115",
+    "title": "Regifting",
+    "description": "Choose one of the cards on the table in front of you and slide it across so it sits in front of a player of your choice instead.",
+    "alt_text": null,
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "self",
+            "to_zone": "in_play",
+            "to_player": "chooser"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    gift = ctx.get('chosen_card_id')\n    recipient = ctx.get('chosen_player_id')\n    if gift and recipient:\n        state.move_cards(card_target='id:' + gift, from_zone='in_play', from_player='self', to_zone='in_play', to_player='id:' + recipient)\n"
+    }
+  },
+  {
+    "id": "seed-gold-116",
+    "title": "Controlled Demolition",
+    "description": "Choose a player and demolish one card on the table in front of them. It goes to the discard pile, reduced to rubble.",
+    "alt_text": "a tiny building collapsing in a puff of dust",
+    "canonical": {
+      "target": "card",
+      "placement": "discard",
+      "venue": "all",
+      "trigger": null,
+      "ops": [
+        {
+          "op": "move_cards",
+          "args": {
+            "card_target": "chosen_card",
+            "from_zone": "in_play",
+            "from_player": "chooser",
+            "to_zone": "discard"
+          }
+        }
+      ],
+      "sandbox": "def apply(state, ctx):\n    victim = ctx.get('chosen_player_id')\n    condemned = ctx.get('chosen_card_id')\n    if victim and condemned:\n        state.move_cards(card_target='id:' + condemned, from_zone='in_play', from_player='id:' + victim, to_zone='discard')\n"
+    }
   }
 ]
