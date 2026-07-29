@@ -289,6 +289,13 @@ class ChangeDrawCountOp(BaseModel):
 
 
 class StealPointsOp(BaseModel):
+    """Move ``amount`` points from each ``from_target`` player to each ``to_target`` player.
+
+    Conserved, not clamped: victims lose ``amount`` per recipient and may go
+    negative; recipients always gain the full ``amount`` regardless of the
+    victim's score.
+    """
+
     op: Literal["steal_points"] = "steal_points"
     from_target: Target
     to_target: Target = "self"
