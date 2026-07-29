@@ -2537,22 +2537,24 @@
       "placement": "discard",
       "venue": "all",
       "trigger": null,
-      "ops": [
+      "ops": null,
+      "sandbox": null,
+      "steps": [
         {
-          "op": "draw_cards",
-          "args": {
-            "amount": 3,
-            "target": "self"
+          "kind": "interaction",
+          "result_key": "pick",
+          "request": {
+            "kind": "card_pick",
+            "prompt": "Pick one of the top 3 cards of the deck to keep.",
+            "from_deck_top": 3
           }
         },
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Keep 1 of the 3 drawn cards and discard the other 2. You live with your choices."
-          }
+          "kind": "snippet",
+          "code": "def apply(state, ctx):\n    picked = ctx['interactions']['pick'][ctx['actor_id']]\n    if picked:\n        state.move_cards(card_target='id:' + picked, to_zone='hand', to_player='id:' + ctx['actor_id'])\n        state.move_cards(from_zone='deck', selector='top', count=2, to_zone='discard')\n",
+          "explanation": "Move the kept card to the actor's hand, then discard the two unpicked offers (now the deck top)."
         }
-      ],
-      "sandbox": "def apply(state, ctx):\n    state.draw_cards('self', 3)\n    state.note('Keep 1 of the 3 drawn cards and discard the other 2. You live with your choices.')"
+      ]
     }
   },
   {
