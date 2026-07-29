@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from conftest import ready_card_result
+from conftest import plain_cards, ready_card_result
 from config import get_settings
 from models.ws_messages import CreateCardMsg, StartMsg
 from board.app import create_app
@@ -25,16 +25,6 @@ def dev_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("DEV_MODE", "true")
     get_settings.cache_clear()
     return TestClient(create_app())
-
-
-def _plain_cards() -> list[dict]:
-    """A fixed, ops-free premade-pool source for hand-size assertions.
-
-    The real seed corpus includes play_on_draw cards (e.g. Landmine) that
-    auto-play the instant they land in a hand, which would make exact
-    hand-size assertions flaky against an unseeded deal from the full corpus.
-    """
-    return [{"id": f"plain-{i}", "title": f"T{i}", "description": f"D{i}"} for i in range(40)]
 
 
 def test_create_room(client: TestClient) -> None:
@@ -156,7 +146,7 @@ def test_dev_skip_setup_fast_forwards_to_playing(dev_client: TestClient) -> None
     dev_client.post(f"/rooms/{code}/join", json={"name": "Alice"})
     dev_client.post(f"/rooms/{code}/join", json={"name": "Bob"})
 
-    with patch("board.rooms.deck._default_card_source", _plain_cards):
+    with patch("board.rooms.deck._default_card_source", plain_cards):
         resp = dev_client.post(f"/rooms/{code}/dev/skip-setup")
     assert resp.status_code == 200
     data = resp.json()
@@ -196,7 +186,7 @@ def test_dev_end_game_opens_results(dev_client: TestClient) -> None:
     code = dev_client.post("/rooms").json()["code"]
     dev_client.post(f"/rooms/{code}/join", json={"name": "Alice"})
     dev_client.post(f"/rooms/{code}/join", json={"name": "Bob"})
-    with patch("board.rooms.deck._default_card_source", _plain_cards):
+    with patch("board.rooms.deck._default_card_source", plain_cards):
         assert dev_client.post(f"/rooms/{code}/dev/skip-setup").status_code == 200
 
     resp = dev_client.post(f"/rooms/{code}/dev/end-game")
@@ -225,7 +215,7 @@ def test_dev_skip_setup_fills_missing_authoring_slots_with_blanks() -> None:
     room.add_player("p1", "Alice")
     room.add_player("p2", "Bob")
 
-    with patch("board.rooms.deck._default_card_source", _plain_cards):
+    with patch("board.rooms.deck._default_card_source", plain_cards):
         asyncio.run(room.dev_autofill_authoring())
 
     assert room.state.phase == "playing"
@@ -257,7 +247,7 @@ def test_dev_skip_setup_waits_for_and_preserves_submitted_draft() -> None:
 
     with (
         patch("agent.runtime.run_agent", return_value=ready_card_result()) as spy,
-        patch("board.rooms.deck._default_card_source", _plain_cards),
+        patch("board.rooms.deck._default_card_source", plain_cards),
     ):
         asyncio.run(scenario())
 

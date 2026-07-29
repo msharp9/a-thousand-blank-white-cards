@@ -7,7 +7,7 @@ import json
 import random
 from unittest.mock import AsyncMock, patch
 
-from conftest import drive_to_playing, ready_card_result
+from conftest import drive_to_playing, plain_cards, ready_card_result
 
 from agent.contract import InterpretResult
 from models.effects import AddPointsOp, DestroyCardOp, EffectProgram
@@ -20,16 +20,6 @@ def _room_with_two_players() -> Room:
     room.add_player("p1", "Alice")
     room.add_player("p2", "Bob")
     return room
-
-
-def _plain_cards() -> list[dict]:
-    """A fixed, ops-free premade-pool source for hand-size assertions.
-
-    The real seed corpus includes play_on_draw cards (e.g. Landmine) that
-    auto-play the instant they land in a hand, which would make exact
-    hand-size assertions flaky against an unseeded deal from the full corpus.
-    """
-    return [{"id": f"plain-{i}", "title": f"T{i}", "description": f"D{i}"} for i in range(40)]
 
 
 def test_room_constructs() -> None:
@@ -156,7 +146,7 @@ def test_start_builds_deck_of_at_least_30_and_deals_hands() -> None:
     import agent.rag.store as store
 
     store._client = None
-    with patch("board.rooms.deck._default_card_source", _plain_cards):
+    with patch("board.rooms.deck._default_card_source", plain_cards):
         drive_to_playing(room, ["p1", "p2"])
 
     assert room.state.phase == "playing"
@@ -191,7 +181,7 @@ def test_first_player_auto_drawn_at_game_start() -> None:
 
     store._client = None
 
-    with patch("board.rooms.deck._default_card_source", _plain_cards):
+    with patch("board.rooms.deck._default_card_source", plain_cards):
         drive_to_playing(room, ["p1", "p2"])
 
     first_id = room.state.turn_order[0]
