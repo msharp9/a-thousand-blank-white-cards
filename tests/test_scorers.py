@@ -124,6 +124,74 @@ class TestJudgeScorers:
         assert score.metadata["reason"] == "stubbed"
 
 
+class TestVerdictCacheKeying:
+    """Regression: _VERDICT_CACHE must be keyed on (output, card, expected)
+    content, not id(output), so a recycled object address can never serve
+    another row's cached verdict (CPython reuses freed dict addresses)."""
+
+    def _install_counting_judge(self, monkeypatch) -> list[int]:
+        calls: list[int] = []
+
+        class FakeJudge:
+            def evaluate(self, **kwargs) -> Verdict:
+                calls.append(1)
+                return Verdict(
+                    intent_match=0.9,
+                    persistence_correct=0.8,
+                    target_placement_correct=0.7,
+                    trigger_event_correct=1.0,
+                    magnitude_sign_correct=0.6,
+                    magnitude_value_correct=0.5,
+                    overall=0.75,
+                    reason="stubbed",
+                )
+
+        monkeypatch.setattr(scorers, "_judge", lambda: FakeJudge())
+        reset_run_caches()
+        return calls
+
+    def test_recycled_id_never_serves_a_stale_verdict(self, monkeypatch) -> None:
+        self._install_counting_judge(monkeypatch)
+        output_a = _ops_plan({"op": "add_points", "target": "self", "amount": 5})
+        verdict_a = scorers._run_judge(_ctx(output_a, {"placement": "player"}))
+        assert verdict_a.reason == "stubbed"
+
+        output_b = _ops_plan({"op": "custom_note", "note": "different content"})
+        ctx_b = _ctx(output_b, {"placement": "center"})
+        stale_marker = Verdict(
+            intent_match=0.0,
+            persistence_correct=0.0,
+            target_placement_correct=0.0,
+            trigger_event_correct=0.0,
+            magnitude_sign_correct=0.0,
+            magnitude_value_correct=0.0,
+            overall=0.0,
+            reason="STALE: belongs to a different row",
+        )
+        # Simulate the pre-fix bug: if output_b's address recycled output_a's
+        # freed id, an id()-keyed cache would have this entry under
+        # id(output_b) and serve it back unchanged.
+        scorers._VERDICT_CACHE[id(output_b)] = stale_marker
+
+        verdict_b = scorers._run_judge(ctx_b)
+
+        assert verdict_b != stale_marker
+        assert verdict_b.reason == "stubbed"
+        reset_run_caches()
+
+    def test_identical_output_different_card_or_expected_gets_fresh_judgement(self, monkeypatch) -> None:
+        calls = self._install_counting_judge(monkeypatch)
+        output = _ops_plan({"op": "add_points", "target": "self", "amount": 5})
+        item_a = EvalItem(id="a", input={"title": "Card A", "description": "x"}, expected={"placement": "player"})
+        item_b = EvalItem(id="b", input={"title": "Card B", "description": "y"}, expected={"placement": "center"})
+
+        scorers._run_judge(ScorerContext(item=item_a, output=output))
+        scorers._run_judge(ScorerContext(item=item_b, output=output))
+
+        assert len(calls) == 2  # byte-identical output, different card/expected -> no cache collision
+        reset_run_caches()
+
+
 class TestDslValidity:
     def test_valid_ops_plan(self) -> None:
         assert dsl_validity.evaluate(_ctx(_ops_plan({"op": "add_points", "target": "self", "amount": 5}))).score == 1.0
