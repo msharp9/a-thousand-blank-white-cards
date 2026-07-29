@@ -8,7 +8,7 @@ and the RAG pipeline that grounds the interpretation agent.
 
 > Scope note: this file is the technical reference. Narrative / submission
 > context lives in `docs/WRITEUP.md`; setup lives in the README. The two
-> hand-authored diagrams `docs/agent.excalidraw.svg` and `docs/game.excalidraw.svg`
+> hand-authored diagrams `docs/diagrams/agent.excalidraw.svg` and `docs/diagrams/game.excalidraw.svg`
 > are the owner's authoritative design sketches — the Mermaid diagrams below
 > complement them, and any place the code has since diverged is called out
 > under [Diagram reconciliation](#7-diagrams).
@@ -832,13 +832,13 @@ with `source="player"`, so the corpus grows across games. Each new room samples
 
 The authoritative, hand-authored design sketches:
 
-- **`docs/game.excalidraw.svg`** — the game-system shape: **Board** (player UI,
+- **`docs/diagrams/game.excalidraw.svg`** — the game-system shape: **Board** (player UI,
   renders visuals, manages game state, handles multiplayer connection) ↔ **Game
   Engine** (applies game "physics": `add_points()`, `subtract_points()`,
   `check_end_game()`, `determine_winner()`, `update_history()`, `draw()`,
   `resolve_card()`) with the **Agent** interpreting cards during the
   `resolve_card()` step.
-- **`docs/agent.excalidraw.svg`** — the agent shape: the **Game Engine** asks the
+- **`docs/diagrams/agent.excalidraw.svg`** — the agent shape: the **Game Engine** asks the
   **Agent** to interpret a new card; the agent has tools (**Web Search**, **Read
   Game Engine Methods**, **Memory**, **Game Rules**, **Read Game State**, **Card
   Database**), an LLM, LangGraph as framework, LangSmith for observability, and a

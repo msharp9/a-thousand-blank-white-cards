@@ -6,8 +6,8 @@ order. It deliberately does **not** repeat the deep technical reference: for mod
 boundaries, the import-layering contract, the WebSocket flow, the engine + sandbox
 model, and the full RAG pipeline, see [`docs/architecture.md`](architecture.md). The
 two authoritative hand-authored design sketches are
-[`docs/game.excalidraw.svg`](game.excalidraw.svg) (the game-system shape) and
-[`docs/agent.excalidraw.svg`](agent.excalidraw.svg) (the agent shape); the Mermaid
+[`docs/diagrams/game.excalidraw.svg`](diagrams/game.excalidraw.svg) (the game-system shape) and
+[`docs/diagrams/agent.excalidraw.svg`](diagrams/agent.excalidraw.svg) (the agent shape); the Mermaid
 diagrams here complement them.
 
 ---
@@ -77,11 +77,11 @@ Simplified diagrams of core mechanics.
 
 This shows the overall interaction and design of the game.
 
-![High level game design](game.excalidraw.svg)
+![High level game design](diagrams/game.excalidraw.svg)
 
 This shows the agent design. It's a simple single agent with custom crafted tools.
 
-![High level agent design](agent.excalidraw.svg)
+![High level agent design](diagrams/agent.excalidraw.svg)
 
 A more detailed mapping of the larger architecture.
 
@@ -370,7 +370,7 @@ pick the serving model and bound the agent's tool budget. The model sweep
 cost, gemma-4-31b collapses (≈0.50 intent_match, ~0.48 invalid rate), and haiku-4-5
 is the price/quality sweet spot.
 
-![Cost vs Quality](cost_vs_quality_eval_results.png)
+![Cost vs Quality](diagrams/cost_vs_quality_eval_results.png)
 
 I had been using Sonnet up to this point, but switched to Haiku as it had comparitive performance but much better cost savings. Fixing haiku and sweeping `max_tool_calls` on
 `eval_hard` (`MAX_TOOL_CALLS` in [`src/agent/runtime.py`](../src/agent/runtime.py),
