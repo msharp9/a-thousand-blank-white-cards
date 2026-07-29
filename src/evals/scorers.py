@@ -7,12 +7,13 @@ Each scorer conforms to ScorerFunction: scorer(context: ScorerContext) -> Score.
   context.expected = human_canonical dict
 
 Two per-run caches collapse repeated work within one row: the judge scorers
-share a single LLM Verdict (keyed on the output object's identity, valid only
-while that object stays alive for the row), and the two execution scorers
-share a single dry-run (keyed on a content hash of the output dict, so it
-cannot collide with an unrelated output from a recycled object address).
-Runners call :func:`reset_run_caches` before each run to bound cache growth
-and drop the identity-keyed entries before their backing objects can be GC'd.
+share a single LLM Verdict (keyed on a content hash of the (output, card,
+expected) triple, since the verdict depends on all three), and the two
+execution scorers share a single dry-run (keyed on a content hash of the
+output dict). Neither key is derived from object identity, so a recycled
+object address (CPython reuses freed addresses) can never serve a stale
+entry for an unrelated row.
+Runners call :func:`reset_run_caches` before each run to bound cache growth.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from evals.eval_core import Score, ScorerContext, create_scorer
 from evals.judge import JudgeLLM, Verdict
 
 _CACHE_MAX = 512
-_VERDICT_CACHE: dict[int, Verdict] = {}
+_VERDICT_CACHE: dict[str, Verdict] = {}
 _DRY_RUN_CACHE: dict[str, dict[str, Any]] = {}
 _CEILING_CACHE: dict[str, dict[str, bool]] = {}
 
@@ -33,6 +34,14 @@ _CEILING_CACHE: dict[str, dict[str, bool]] = {}
 def _output_key(output: dict[str, Any]) -> str:
     """Stable content key for an output dict, immune to id() reuse after GC."""
     return json.dumps(output, sort_keys=True, default=str)
+
+
+def _judge_key(output: dict[str, Any], card: Any, expected: Any) -> str:
+    """Stable content key for a judge call: the verdict depends on the
+    output AND the card AND the expected canonical, so all three must be
+    part of the key — a content-only key on ``output`` would let two
+    different cards with byte-identical outputs share a cached verdict."""
+    return json.dumps([output, card, expected], sort_keys=True, default=str)
 
 
 def reset_run_caches() -> None:
@@ -64,17 +73,18 @@ def _effect_summary(output: dict[str, Any]) -> str:
 
 
 def _run_judge(context: ScorerContext) -> Verdict:
-    """One judge LLM call per (card, output); the judge scorers share it."""
+    """One judge LLM call per (card, output, expected); the judge scorers share it."""
     output = context.output or {}
-    key = id(output)
+    card = context.input or {}
+    expected = context.expected or {}
+    key = _judge_key(output, card, expected)
     cached = _VERDICT_CACHE.get(key)
     if cached is not None:
         return cached
-    card = context.input
     verdict = _judge().evaluate(
         card_description=f"{card.get('title', '')}\n{card.get('description', '')}",
         generated_summary=_effect_summary(output),
-        human_canonical=context.expected or {},
+        human_canonical=expected,
     )
     if len(_VERDICT_CACHE) >= _CACHE_MAX:
         _VERDICT_CACHE.clear()
