@@ -55,6 +55,7 @@ from models.game_state import (
     EndCondition,
     GameState,
     HookSpec,
+    RevealBinding,
     RuleBinding,
     Rules,
     TurnOrderBinding,
@@ -768,18 +769,26 @@ def _reduce_reveal_hand(state: GameState, op: RevealHandOp, ctx: HookContext) ->
         for pid in owners:
             if op.to == "all":
                 state = _update_player_visibility(state, pid, {"hand_public": False, "hand_revealed_to": []})
+                state = _drop_reveal_bindings(state, pid)
             else:
                 removed = set(_resolve_targets(op.to, ctx, state))
                 remaining = [v for v in state.get_player(pid).hand_revealed_to if v not in removed]
                 state = _update_player_visibility(state, pid, {"hand_revealed_to": remaining})
+                state = _drop_reveal_bindings(state, pid, viewer_ids=removed)
     elif op.persistent:
         viewers = _resolve_targets(op.to, ctx, state)
+        source = _board_source_card_id(state, ctx)
         for pid in owners:
             if op.to == "all":
+                if source is not None:
+                    state = _bind_public_reveal(state, source, pid)
                 state = _update_player_visibility(state, pid, {"hand_public": True})
             else:
                 current = state.get_player(pid).hand_revealed_to
                 added = [v for v in viewers if v != pid and v not in current]
+                if source is not None and added:
+                    bindings = [RevealBinding(source_card_id=source, player_id=pid, viewer_id=v) for v in added]
+                    state = state.model_copy(update={"reveal_bindings": [*state.reveal_bindings, *bindings]})
                 state = _update_player_visibility(state, pid, {"hand_revealed_to": [*current, *added]})
     else:
         viewers = _resolve_targets(op.to, ctx, state)
@@ -1097,6 +1106,75 @@ def _release_turn_order_bindings(state: GameState, departed: set[str]) -> GameSt
     return state.model_copy(update=update)
 
 
+def _bind_public_reveal(state: GameState, source: str, player_id: str) -> GameState:
+    top = next(
+        (
+            binding
+            for binding in reversed(state.reveal_bindings)
+            if binding.player_id == player_id and binding.viewer_id is None
+        ),
+        None,
+    )
+    if top is not None and top.source_card_id == source:
+        return state
+    binding = RevealBinding(
+        source_card_id=source,
+        player_id=player_id,
+        previous_public=state.get_player(player_id).hand_public,
+    )
+    return state.model_copy(update={"reveal_bindings": [*state.reveal_bindings, binding]})
+
+
+def _drop_reveal_bindings(state: GameState, player_id: str, *, viewer_ids: set[str] | None = None) -> GameState:
+    """Forget a concealed player's reveal bindings (all, or specific viewer grants)."""
+
+    def dropped(binding: RevealBinding) -> bool:
+        if binding.player_id != player_id:
+            return False
+        return viewer_ids is None or (binding.viewer_id is not None and binding.viewer_id in viewer_ids)
+
+    remaining = [binding for binding in state.reveal_bindings if not dropped(binding)]
+    if len(remaining) == len(state.reveal_bindings):
+        return state
+    return state.model_copy(update={"reveal_bindings": remaining})
+
+
+def _release_reveal_bindings(state: GameState, departed: set[str]) -> GameState:
+    """Undo departed cards' persistent hand reveals.
+
+    ``hand_public`` writes form a per-player stack released like rule bindings
+    (a buried binding splices out; the binding above inherits its
+    ``previous_public``). A released viewer grant removes that viewer from
+    ``hand_revealed_to`` unless another live binding still grants them.
+    """
+    if not any(binding.source_card_id in departed for binding in state.reveal_bindings):
+        return state
+    remaining: list[RevealBinding] = []
+    carried_public: dict[str, bool] = {}
+    dropped_viewers: set[tuple[str, str]] = set()
+    for binding in state.reveal_bindings:
+        if binding.source_card_id in departed:
+            if binding.viewer_id is None:
+                carried_public.setdefault(binding.player_id, binding.previous_public)
+            else:
+                dropped_viewers.add((binding.player_id, binding.viewer_id))
+        elif binding.viewer_id is None and binding.player_id in carried_public:
+            remaining.append(binding.model_copy(update={"previous_public": carried_public.pop(binding.player_id)}))
+        else:
+            remaining.append(binding)
+    still_granted = {(binding.player_id, binding.viewer_id) for binding in remaining if binding.viewer_id is not None}
+    state = state.model_copy(update={"reveal_bindings": remaining})
+    for player_id, public in carried_public.items():
+        state = _update_player_visibility(state, player_id, {"hand_public": public})
+    removed_by_player: dict[str, set[str]] = {}
+    for player_id, viewer_id in dropped_viewers - still_granted:
+        removed_by_player.setdefault(player_id, set()).add(viewer_id)
+    for player_id, viewers in removed_by_player.items():
+        revealed_to = [v for v in state.get_player(player_id).hand_revealed_to if v not in viewers]
+        state = _update_player_visibility(state, player_id, {"hand_revealed_to": revealed_to})
+    return state
+
+
 def _bind_condition(state: GameState, source: str, player_id: str, key: str) -> GameState:
     key = normalize_condition_key(key)
     top = next(
@@ -1237,6 +1315,7 @@ def _retire_board_sources(state: GameState, departed: set[str], *, reason: str) 
             state = state.with_log(f"[hook] unregistered {source} ({reason})")
     state = _release_rule_bindings(state, departed)
     state = _release_turn_order_bindings(state, departed)
+    state = _release_reveal_bindings(state, departed)
     return _release_condition_bindings(state, departed)
 
 

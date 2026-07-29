@@ -247,6 +247,24 @@ class TurnOrderBinding(BaseModel):
     previous_order: list[str]
 
 
+class RevealBinding(BaseModel):
+    """One board card's persistent ``reveal_hand`` write to a player's hand
+    visibility, released when the card leaves the board.
+
+    ``viewer_id`` None means the write set ``hand_public`` (``previous_public``
+    records the value it replaced; per-player stack, released like
+    ``RuleBinding``). Otherwise the write added ``viewer_id`` to
+    ``hand_revealed_to`` and release removes that viewer again. Concealing
+    drops the matching bindings, so a later card retirement can never
+    resurrect a reveal the players already concealed.
+    """
+
+    source_card_id: str
+    player_id: str
+    viewer_id: str | None = None
+    previous_public: bool = False
+
+
 class HistoryEvent(BaseModel):
     """One privacy-safe, append-only fact about completed game mechanics."""
 
@@ -369,6 +387,7 @@ class GameState(BaseModel):
     # cards. They mirror rule_bindings so removing a reminder removes its effect.
     condition_bindings: list[ConditionBinding] = Field(default_factory=list)
     turn_order_bindings: list[TurnOrderBinding] = Field(default_factory=list)
+    reveal_bindings: list[RevealBinding] = Field(default_factory=list)
 
     # Machine-readable history for game logic and reconnects. Unlike ``log``,
     # events never contain private hand contents or generated prose.
