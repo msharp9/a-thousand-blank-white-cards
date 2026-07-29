@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from models.card import CardPlacement
+from models.card import CardPlacement, PlacementOwner
 from models.effects import EffectProgram, OpsStep, RegisterHookOp, ResolutionPlan, SnippetStep
 
 
@@ -88,7 +88,7 @@ class InterpretResult(BaseModel):
     )
     verdict: str = Field(
         default="invalid",
-        description="Overall interpretation verdict: 'ok', 'invalid', or 'needs_choice'.",
+        description="Overall interpretation verdict: 'ok' or 'invalid'. Choice-bearing plans are 'ok'.",
     )
     comment: str = Field(
         default="",
@@ -117,6 +117,13 @@ class InterpretResult(BaseModel):
             "Where the played card lives afterwards ('discard', 'center', or 'player'), "
             "predicted from the card's semantic role. Successful production interpretations "
             "supply this; bounded runtime failures may leave it unset."
+        ),
+    )
+    placement_owner: PlacementOwner | None = Field(
+        default=None,
+        description=(
+            "For player placement, 'actor' keeps the card with its player even when "
+            "the effect chooses a victim; 'chosen_player' attaches it to the chosen player."
         ),
     )
     venue: str | None = Field(
@@ -196,6 +203,13 @@ class CardIntent(BaseModel):
             "Where the physical card lives afterwards: discard when it has no continuing "
             "identity; center for a shared rule/reminder/object; player for an owned "
             "pet/item or personal boon/curse/status. Semantic role wins over casual zone wording."
+        ),
+    )
+    placement_owner: PlacementOwner | None = Field(
+        default=None,
+        description=(
+            "Required when placement is player: actor for an owned permanent, "
+            "chosen_player for a gift, boon, curse, or monster attached to the chosen player."
         ),
     )
     resolved_references: list[str] = Field(

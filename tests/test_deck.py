@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import random
+from pathlib import Path
 
 import pytest
 
@@ -411,6 +413,22 @@ def test_build_premade_pool_venue_mode_online_excludes_in_person() -> None:
 def test_build_premade_pool_empty_source_raises() -> None:
     with pytest.raises(ValueError, match="no cards available"):
         build_premade_pool(card_source=lambda: [])
+
+
+def test_simple_starter_deck_uses_historical_first_30() -> None:
+    source = json.loads(Path("data/seed_cards_simple.json").read_text())
+    cards, pool = build_premade_pool(starter_deck="simple", rng=random.Random(7))
+    assert len(pool) == 30
+    assert set(pool) == {card["id"] for card in source[:30]}
+    assert set(cards) == set(pool)
+
+
+def test_pet_starter_deck_uses_all_30_pet_cards() -> None:
+    source = json.loads(Path("data/seed_cards_pets.json").read_text())
+    cards, pool = build_premade_pool(starter_deck="pets", rng=random.Random(7))
+    assert len(pool) == 30
+    assert set(pool) == {card["id"] for card in source}
+    assert set(cards) == set(pool)
 
 
 def test_finalize_deck_composition_for_two_players() -> None:

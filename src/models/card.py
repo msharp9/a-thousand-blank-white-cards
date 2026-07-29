@@ -86,6 +86,7 @@ CardTrigger = Literal[
     "on_reaction",
 ]
 CardPlacement = Literal["discard", "center", "player"]
+PlacementOwner = Literal["actor", "chosen_player"]
 
 # v1 → v2 trigger value remaps (spec appendix, data/eval/CANONICAL_SPEC.md).
 _TRIGGER_REMAP = {
@@ -217,6 +218,13 @@ class CardCanonical(BaseModel):
             "identity; 'center' for a shared rule, reminder, or table-wide object; "
             "'player' for an owned pet/item or personal boon, curse, or status."
         )
+    )
+    placement_owner: PlacementOwner | None = Field(
+        default=None,
+        description=(
+            "For placement='player', whether the card sits in front of its actor or "
+            "the chosen player. None preserves legacy placement behavior."
+        ),
     )
     venue: Literal["all", "in_person", "online"] = Field(
         default="all",

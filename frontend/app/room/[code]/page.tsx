@@ -49,7 +49,12 @@ import {
   useCompactViewport,
   useWideGameView,
 } from "@/lib/use-compact-viewport";
-import type { CardSnapshot, ClientMsg, GameStateSnapshot } from "@/lib/types";
+import type {
+  CardSnapshot,
+  ClientMsg,
+  GameStateSnapshot,
+  StarterDeck,
+} from "@/lib/types";
 import { getPlayerId, storePlayerId, useGameSocket } from "@/lib/ws";
 import { cn } from "@/lib/utils";
 
@@ -519,6 +524,58 @@ export default function RoomPage() {
                     send={send}
                   />
                 </div>
+                <fieldset className="w-full rounded-xl border-2 border-ink/25 bg-paper/60 p-3">
+                  <legend className="px-2 font-marker text-lg">
+                    Starting deck
+                  </legend>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        ["random", "Random", "30 cards from everything"],
+                        ["simple", "Simple", "Points and basics"],
+                        ["pets", "Pets", "Pets and permanents"],
+                      ] as const satisfies readonly [
+                        StarterDeck,
+                        string,
+                        string,
+                      ][]
+                    ).map(([deck, label, description]) => {
+                      const selected =
+                        (gameState.starter_deck ?? "random") === deck;
+                      return (
+                        <button
+                          key={deck}
+                          type="button"
+                          disabled={!isHost}
+                          aria-pressed={selected}
+                          title={description}
+                          onClick={() => send({ type: "lobby_set_deck", deck })}
+                          className={cn(
+                            "rounded-lg border-2 px-2 py-2 text-center transition",
+                            selected
+                              ? "border-ink bg-marker-yellow/50"
+                              : "border-ink/20 bg-card",
+                            isHost
+                              ? "cursor-pointer hover:-translate-y-0.5"
+                              : "cursor-default opacity-80",
+                          )}
+                        >
+                          <span className="block font-marker text-base">
+                            {label}
+                          </span>
+                          <span className="mt-1 block font-hand text-xs leading-tight text-muted-foreground">
+                            {description}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!isHost && (
+                    <p className="mt-2 text-center font-hand text-xs italic text-muted-foreground">
+                      The host chooses the starting deck.
+                    </p>
+                  )}
+                </fieldset>
                 {isHost ? (
                   <Button
                     size="lg"

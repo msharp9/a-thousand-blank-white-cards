@@ -22,8 +22,10 @@ import json
 import logging
 import random
 from collections.abc import Callable
+from pathlib import Path
 
 from models.card import hoist_static_attributes, normalise_canonical
+from models.game_state import StarterDeck
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,23 @@ BLANK_CARD_RATIO = 1 / 3
 
 # Type alias for a card source: a zero-arg callable returning raw card dicts.
 CardSource = Callable[[], list[dict]]
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+
+
+def _starter_deck_source(starter_deck: StarterDeck) -> CardSource | None:
+    """Return a deterministic curated source, or None for the live corpus."""
+    if starter_deck == "random":
+        return None
+    filename = "seed_cards_simple.json" if starter_deck == "simple" else "seed_cards_pets.json"
+    path = DATA_DIR / filename
+
+    def load() -> list[dict]:
+        cards = json.loads(path.read_text())
+        # SIMPLE intentionally means the historical first 30 cards even if its
+        # authoring dataset later grows. PETS is itself an exact 30-card deck.
+        return cards[:PREMADE_POOL_SIZE] if starter_deck == "simple" else cards
+
+    return load
 
 
 def _make_blank_card(n: int, *, namespace: str | None = None) -> dict:
@@ -300,6 +319,7 @@ def build_premade_pool(
     card_source: CardSource | None = None,
     rng: random.Random | None = None,
     venue_mode: str = "both",
+    starter_deck: StarterDeck = "random",
 ) -> tuple[dict[str, dict], list[str]]:
     """Build the shared PRE-MADE card pool shown during setup (NO blanks).
 
@@ -322,6 +342,8 @@ def build_premade_pool(
     Raises ValueError if the source yields no cards at all.
     """
     rng = rng or random.Random()
+    if card_source is None:
+        card_source = _starter_deck_source(starter_deck)
     collected = collect_cards(card_source, venue_mode)
     if not collected:
         raise ValueError("no cards available to build the pre-made pool (empty card source)")

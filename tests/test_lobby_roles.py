@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 from board.rooms.manager import RoomManager
 from board.rooms.room import Room
-from models.ws_messages import LobbySetHostMsg, LobbySetRoleMsg, StartMsg
+from models.ws_messages import LobbySetDeckMsg, LobbySetHostMsg, LobbySetRoleMsg, StartMsg
 
 
 def test_first_lobby_join_becomes_explicit_host() -> None:
@@ -130,3 +130,31 @@ def test_player_start_is_server_host_only() -> None:
 
     assert room.state.phase == "lobby"
     assert "Only the host" in socket.send_text.call_args.args[0]
+
+
+def test_host_can_choose_pet_deck_in_lobby() -> None:
+    room = Room("LOBBY6")
+    room.add_player("p1", "Alice")
+
+    asyncio.run(room.handle_action("p1", LobbySetDeckMsg(deck="pets")))
+
+    assert room.state.starter_deck == "pets"
+
+
+def test_non_host_and_post_lobby_deck_changes_are_rejected() -> None:
+    room = Room("LOBBY7")
+    room.add_player("p1", "Alice")
+    room.add_player("p2", "Bob")
+    p2_socket = AsyncMock()
+    room.connections.connect("p2", p2_socket)
+
+    asyncio.run(room.handle_action("p2", LobbySetDeckMsg(deck="simple")))
+    assert room.state.starter_deck == "random"
+    assert "Only the host" in p2_socket.send_text.call_args.args[0]
+
+    room.state = room.state.model_copy(update={"phase": "setup"})
+    p1_socket = AsyncMock()
+    room.connections.connect("p1", p1_socket)
+    asyncio.run(room.handle_action("p1", LobbySetDeckMsg(deck="pets")))
+    assert room.state.starter_deck == "random"
+    assert "lobby-only" in p1_socket.send_text.call_args.args[0]

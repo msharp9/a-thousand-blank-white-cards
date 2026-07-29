@@ -37,6 +37,7 @@ DATASETS: tuple[tuple[Path, str, str], ...] = (
     (ROOT / "data" / "seed_cards_gold.json", "canonical", "seed-gold"),
     (ROOT / "data" / "seed_cards_fillers.json", "canonical", "seed-filler"),
     (ROOT / "data" / "seed_cards_simple.json", "canonical", "seed-simple"),
+    (ROOT / "data" / "seed_cards_pets.json", "canonical", "seed-pets"),
     (ROOT / "data" / "eval" / "eval_cards.json", "human_canonical", "eval"),
     (ROOT / "data" / "eval" / "eval_cards_hard.json", "human_canonical", "hard"),
     (ROOT / "data" / "eval" / "eval_cards_placement.json", "human_canonical", "placement"),

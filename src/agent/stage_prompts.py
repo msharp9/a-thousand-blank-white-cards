@@ -72,6 +72,9 @@ intent — do NOT design mechanics, pick engine ops, or write code; later stages
   * placement: apply the semantic physical-card rules below. Placement is not
     redundant with persistence: an inert owned pet belongs before a player, and
     an immediate global state change can remain in the center as its reminder.
+  * placement_owner: null unless placement is "player"; use "actor" for an owned
+    permanent even when its effect chooses a victim, and "chosen_player" only when
+    the permanent itself attaches to the chosen player.
 """
 
 INTENT_JOB += "\n" + PLACEMENT_GUIDANCE
@@ -87,6 +90,7 @@ INTENT_OUTPUT_CONTRACT = f"""{OUTPUT_CONTRACT_PREAMBLE}
     "complexity":          "trivial" | "standard" | "complex",
     "venue":               "all" | "in_person" | "online",
     "placement":           "discard" | "center" | "player",
+    "placement_owner":     null | "actor" | "chosen_player",
 {PERSONA_OUTPUT_KEYS}
   }}
 """

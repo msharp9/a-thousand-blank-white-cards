@@ -3,6 +3,7 @@
 // Room play mode chosen by the host on create. Mirrors the backend's
 // POST /rooms body ({"mode": ...}); the backend defaults to "both" when omitted.
 export type Mode = "online" | "in_person" | "both";
+export type StarterDeck = "random" | "simple" | "pets";
 
 // ─── client → server ──────────────────────────────────────────────────────
 
@@ -21,6 +22,10 @@ export type LobbySetRoleMsg = {
   type: "lobby_set_role";
   participant_id: string;
   role: "player" | "spectator";
+};
+export type LobbySetDeckMsg = {
+  type: "lobby_set_deck";
+  deck: StarterDeck;
 };
 // A turn begins with an automatic server-side draw (there is no client `draw`
 // message); the active player then plays a card OR ends their turn.
@@ -162,6 +167,7 @@ export type ClientMsg =
   | StartMsg
   | LobbySetHostMsg
   | LobbySetRoleMsg
+  | LobbySetDeckMsg
   | PassMsg
   | EndTurnMsg
   | PlayMsg
@@ -322,7 +328,8 @@ export type HistoryEventKind =
   | "card_fallback"
   | "dice_roll"
   | "discard"
-  | "admin_change";
+  | "admin_change"
+  | "permanent_transfer";
 
 // One privacy-safe, append-only fact about completed game mechanics. Mirrors
 // models.game_state.HistoryEvent. The "Everything Played" history modal reads
@@ -361,6 +368,8 @@ export type EpilogueResultSummary = {
 export type GameStateSnapshot = {
   room_code: string;
   mode: Mode;
+  // Optional only for compatibility with snapshots saved before deck presets.
+  starter_deck?: StarterDeck;
   // Explicit room host. Optional only for compatibility with legacy snapshots.
   host_id?: string | null;
   phase: "lobby" | "setup" | "playing" | "results" | "epilogue" | "ended";

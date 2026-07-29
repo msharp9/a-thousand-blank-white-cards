@@ -1,0 +1,74 @@
+[
+  {
+    "id": "pet-eval-000", "title": "Chairman Meow", "description": "Chairman Meow is your pet cat. Keep this card in front of you. It has no effect.", "alt_text": null,
+    "human_canonical": {"target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null, "ops": [{"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}}, {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "cat"}}], "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')"}
+  },
+  {
+    "id": "pet-eval-001", "title": "Alarm Cat", "description": "Keep Alarm Cat in front of you. At the start of each of your turns, draw an extra card.", "alt_text": null,
+    "human_canonical": {"target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_turn_start", "ops": [{"op": "register_hook", "args": {"event": "on_turn_start", "scope": "player", "title": "Its controller draws an extra card at turn start.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.draw_cards('self', 1)\n"}}], "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.draw_cards('self', 1)\\n\", title='Its controller draws an extra card at turn start.', condition_keys=[])"}
+  },
+  {
+    "id": "pet-eval-002", "title": "Flea Curse", "description": "Choose a player and put this curse in front of them. They lose 1 point at the start of each of their turns.", "alt_text": null,
+    "human_canonical": {"target": "player", "placement": "player", "placement_owner": "chosen_player", "venue": "all", "trigger": "on_turn_start", "ops": [{"op": "register_hook", "args": {"event": "on_turn_start", "scope": "player", "title": "Its controller loses 1 point at turn start.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.subtract_points('self', 1)\n"}}], "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.subtract_points('self', 1)\\n\", title='Its controller loses 1 point at turn start.', condition_keys=[])"}
+  },
+  {
+    "id": "pet-eval-003", "title": "Bottomless Water Bowl", "description": "This artifact stays in front of you. Whenever you play a pet, draw 1 card.", "alt_text": null,
+    "human_canonical": {"target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_play", "ops": [{"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "artifact"}}, {"op": "register_hook", "args": {"event": "on_play", "scope": "player", "title": "Its controller draws when they play a pet.", "condition_keys": [], "code": "def apply(state, ctx):\n    card = state.card(ctx.get('card_id') or '')\n    if card and card.get('attributes', {}).get('kind') == 'pet':\n        state.draw_cards('self', 1)\n"}}], "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'artifact')\n    state.register_hook('on_play', scope='player', code=\"def apply(state, ctx):\\n    card = state.card(ctx.get('card_id') or '')\\n    if card and card.get('attributes', {}).get('kind') == 'pet':\\n        state.draw_cards('self', 1)\\n\", title='Its controller draws when they play a pet.', condition_keys=[])"}
+  },
+  {
+    "id": "pet-eval-004", "title": "Closet Monster", "description": "Choose a player. Closet Monster stays in front of that player. At the end of their turn, they discard a random card.", "alt_text": null,
+    "human_canonical": {"target": "player", "placement": "player", "placement_owner": "chosen_player", "venue": "all", "trigger": "on_turn_end", "ops": [{"op": "register_hook", "args": {"event": "on_turn_end", "scope": "player", "title": "Its controller discards randomly at turn end.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.discard_random('self', 1)\n"}}], "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_end', scope='player', code=\"def apply(state, ctx):\\n    state.discard_random('self', 1)\\n\", title='Its controller discards randomly at turn end.', condition_keys=[])"}
+  },
+  {
+    "id": "pet-eval-005", "title": "Mail Dog", "description": "Mail Dog becomes your pet and sits in front of you. When played, draw 2 cards.", "alt_text": null,
+    "human_canonical": {"target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null, "ops": [{"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}}, {"op": "draw_cards", "args": {"target": "self", "amount": 2}}], "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.draw_cards('self', 2)"}
+  },
+  {
+    "id": "pet-eval-006", "title": "Rescue Mission", "description": "Choose a pet in front of an opponent. Steal it and keep it in play in front of you.", "alt_text": null,
+    "human_canonical": {"target": "card", "placement": "discard", "venue": "all", "trigger": null, "ops": [{"op": "move_cards", "args": {"card_target": "chosen_card", "from_zone": "in_play", "from_player": "all_others", "to_zone": "in_play", "to_player": "self", "match_attributes": {"kind": "pet"}}}], "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, from_zone='in_play', from_player='all_others', to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"}
+  },
+  {
+    "id": "pet-eval-007", "title": "The Great Pet Heist", "description": "Steal every opponent's pets. They remain in play, now in front of you.", "alt_text": null,
+    "human_canonical": {"target": "all_others", "placement": "discard", "venue": "all", "trigger": null, "ops": [{"op": "move_cards", "args": {"from_zone": "in_play", "from_player": "all_others", "selector": "all", "to_zone": "in_play", "to_player": "self", "match_attributes": {"kind": "pet"}}}], "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='in_play', from_player='all_others', selector='all', to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"}
+  },
+  {
+    "id": "pet-eval-008", "title": "Cat Council", "description": "Keep this rule in the center. At game end, whoever controls the most cats wins.", "alt_text": null,
+    "human_canonical": {"target": "all", "placement": "center", "venue": "all", "trigger": "on_game_end", "ops": [{"op": "set_rule", "args": {"path": "extra.pet_win_condition", "value": "cats"}}], "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.pet_win_condition', 'cats')"}
+  },
+  {
+    "id": "pet-eval-009", "title": "Top Dog Law", "description": "This law remains in the center. The player with the most dogs wins the game.", "alt_text": null,
+    "human_canonical": {"target": "all", "placement": "center", "venue": "all", "trigger": "on_game_end", "ops": [{"op": "set_rule", "args": {"path": "extra.pet_win_condition", "value": "dogs"}}], "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.pet_win_condition', 'dogs')"}
+  },
+  {
+    "id": "pet-eval-010", "title": "Cat Census", "description": "Gain 2 points for every cat in front of you, then discard this card.", "alt_text": null,
+    "human_canonical": {"target": "self", "placement": "discard", "venue": "all", "trigger": null, "steps": [{"kind": "snippet", "code": "def apply(state, ctx):\n    count = 0\n    for cid in state.player(ctx['actor_id']).in_play:\n        card = state.card(cid)\n        if card and card.get('attributes', {}).get('species') == 'cat':\n            count += 1\n    state.add_points('self', count * 2)\n"}]}
+  },
+  {
+    "id": "pet-eval-011", "title": "No Pets Allowed", "description": "Choose any pet in front of any player and destroy it.", "alt_text": null,
+    "human_canonical": {"target": "card", "placement": "discard", "venue": "all", "trigger": null, "ops": [{"op": "move_cards", "args": {"card_target": "chosen_card", "from_zone": "in_play", "from_player": "all", "to_zone": "discard", "match_attributes": {"kind": "pet"}}}], "sandbox": "def apply(state, ctx):\n    cid = ctx.get('chosen_card_id')\n    if cid:\n        state.move_cards(card_target='id:' + cid, from_zone='in_play', from_player='all', to_zone='discard', match_attributes={'kind': 'pet'})"}
+  },
+  {
+    "id": "pet-eval-012", "title": "Moonlit Collar", "description": "This enchantment remains in front of you. At the end of your turn, gain 1 point.", "alt_text": null,
+    "human_canonical": {"target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_turn_end", "ops": [{"op": "register_hook", "args": {"event": "on_turn_end", "scope": "player", "title": "Its controller gains 1 point at turn end.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.add_points('self', 1)\n"}}], "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\", title='Its controller gains 1 point at turn end.', condition_keys=[])"}
+  },
+  {
+    "id": "pet-eval-013", "title": "Friendship Bracelet", "description": "This boon stays in front of you. At the start of your turn, draw 1 card.", "alt_text": null,
+    "human_canonical": {"target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_turn_start", "ops": [{"op": "register_hook", "args": {"event": "on_turn_start", "scope": "player", "title": "Its controller draws 1 card at turn start.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.draw_cards('self', 1)\n"}}], "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.draw_cards('self', 1)\\n\", title='Its controller draws 1 card at turn start.', condition_keys=[])"}
+  },
+  {
+    "id": "pet-eval-014", "title": "Cone of Shame", "description": "Choose a player and attach this curse in front of them. They lose 2 points at the end of each turn they take.", "alt_text": null,
+    "human_canonical": {"target": "player", "placement": "player", "placement_owner": "chosen_player", "venue": "all", "trigger": "on_turn_end", "ops": [{"op": "register_hook", "args": {"event": "on_turn_end", "scope": "player", "title": "Its controller loses 2 points at turn end.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.subtract_points('self', 2)\n"}}], "sandbox": "def apply(state, ctx):\n    state.register_hook('on_turn_end', scope='player', code=\"def apply(state, ctx):\\n    state.subtract_points('self', 2)\\n\", title='Its controller loses 2 points at turn end.', condition_keys=[])"}
+  },
+  {
+    "id": "pet-eval-015", "title": "Zoomies", "description": "Keep this power-up in front of you. When you play it, take an extra turn.", "alt_text": null,
+    "human_canonical": {"target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null, "ops": [{"op": "extra_turn", "args": {"target": "self"}}], "sandbox": "def apply(state, ctx):\n    state.extra_turn('self')"}
+  },
+  {
+    "id": "pet-eval-016", "title": "Bandit Cat", "description": "Bandit Cat becomes your pet and stays in front of you. When played, steal one pet from a chosen opponent and keep it in play.", "alt_text": null,
+    "human_canonical": {"target": "player", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null, "ops": [{"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}}, {"op": "move_cards", "args": {"from_zone": "in_play", "from_player": "chooser", "selector": "top", "count": 1, "to_zone": "in_play", "to_player": "self", "match_attributes": {"kind": "pet"}}}], "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    chosen = ctx.get('chosen_player_id')\n    if chosen:\n        state.move_cards(from_zone='in_play', from_player='id:' + chosen, count=1, to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"}
+  },
+  {
+    "id": "pet-eval-017", "title": "Emotional Support Rock", "description": "This rock is your pet. Place it in front of you. It does nothing, but it believes in you.", "alt_text": null,
+    "human_canonical": {"target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null, "ops": [{"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}}, {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "rock"}}], "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'rock')"}
+  }
+]

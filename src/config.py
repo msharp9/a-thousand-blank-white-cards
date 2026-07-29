@@ -231,6 +231,11 @@ EVAL_BENCHMARKS: dict[str, dict[str, object]] = {
         "canonical_key": "human_canonical",
         "scored": True,
     },
+    "pets": {
+        "path": "data/eval/eval_cards_pets.json",
+        "canonical_key": "human_canonical",
+        "scored": True,
+    },
     "real": {"path": "data/eval/real_cards.json", "canonical_key": "human_canonical", "scored": False},
 }
 

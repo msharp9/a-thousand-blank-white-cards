@@ -19,6 +19,7 @@ from models.interactions import (
     InteractionProgress,
     InteractionResponsePayload,
 )
+from models.game_state import StarterDeck
 
 # Length-bounded card text, enforced on every inbound authoring message via the
 # ClientMsg TypeAdapter in board.ws. Limits live in models.card (single source).
@@ -68,6 +69,11 @@ class LobbySetRoleMsg(BaseModel):
     type: Literal["lobby_set_role"] = "lobby_set_role"
     participant_id: str = Field(min_length=1, max_length=80)
     role: Literal["player", "spectator"]
+
+
+class LobbySetDeckMsg(BaseModel):
+    type: Literal["lobby_set_deck"] = "lobby_set_deck"
+    deck: StarterDeck
 
 
 class PassMsg(BaseModel):
@@ -216,6 +222,7 @@ ClientMsg = Annotated[
         StartMsg,
         LobbySetHostMsg,
         LobbySetRoleMsg,
+        LobbySetDeckMsg,
         PassMsg,
         EndTurnMsg,
         PlayMsg,

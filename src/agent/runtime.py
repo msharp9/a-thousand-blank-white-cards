@@ -215,6 +215,8 @@ def _normalise_contract_payload(payload: Any) -> Any:
             payload["plan"] = {"steps": payload.pop("steps")}
     if "verdict" not in payload and any(payload.get(key) for key in ("plan", "program", "snippet")):
         payload["verdict"] = "ok"
+    if payload.get("verdict") == "needs_choice" and any(payload.get(key) for key in ("plan", "program", "snippet")):
+        payload["verdict"] = "ok"
     return payload
 
 

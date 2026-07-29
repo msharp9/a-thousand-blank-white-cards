@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
+StarterDeck = Literal["random", "simple", "pets"]
+
 HistoryKind = Literal[
     "draw",
     "play",
@@ -22,6 +24,7 @@ HistoryKind = Literal[
     "dice_roll",
     "discard",
     "admin_change",
+    "permanent_transfer",
 ]
 
 
@@ -187,6 +190,7 @@ class HookSpec(BaseModel):
     source_card_id: str
     event: str  # a GameEvent value, e.g. "on_turn_start"
     scope: Literal["player", "center"] = "center"
+    owner_mode: Literal["global", "fixed", "source_controller", "legacy"] = "legacy"
     owner_id: str | None = None  # player id for player-scoped hooks
     code: str  # sandbox-validated snippet: def apply(state, ctx)
     title: str = Field(default="", max_length=300)
@@ -230,6 +234,11 @@ class ConditionBinding(BaseModel):
     had_previous: bool = False
     previous_value: Any = None
     previous_ttl: int | None = None
+    # The condition follows the card's current in-play controller when control
+    # changes. Fixed/chosen/global condition writes leave this false.
+    controller_relative: bool = False
+    applied_value: Any = None
+    applied_ttl: int | None = None
 
     @field_validator("key")
     @classmethod
@@ -263,6 +272,9 @@ class RevealBinding(BaseModel):
     player_id: str
     viewer_id: str | None = None
     previous_public: bool = False
+    # True when the revealed hand was addressed as the source card's current
+    # controller; such visibility follows an in-play control transfer.
+    controller_relative: bool = False
 
 
 class HistoryEvent(BaseModel):
@@ -332,6 +344,9 @@ class GameState(BaseModel):
     # bead uses it to filter the deck by card venue; here it just rides in every
     # snapshot via model_dump().
     mode: Literal["online", "in_person", "both"] = "both"
+    # Host-selected source for the 30-card pre-made setup pool. "random"
+    # preserves the historical behavior of sampling the full seed/RAG corpus.
+    starter_deck: StarterDeck = "random"
     players: list[Player] = Field(default_factory=list)
     # Watchers who joined after the game left the lobby (see Spectator). Kept
     # separate from ``players`` rather than merged in as a flagged Player.
@@ -543,6 +558,13 @@ class GameState(BaseModel):
     def cards_in_play_for(self, player_id: str) -> list[str]:
         """Return the in-play (in-front-of) cards for a single player."""
         return list(self.get_player(player_id).in_play)
+
+    def controller_of(self, card_id: str) -> str | None:
+        """Return the player currently controlling an in-play card."""
+        for player in self.players:
+            if card_id in player.in_play:
+                return player.id
+        return None
 
     def center_cards(self) -> list[str]:
         """Return the cards in the shared center zone (stored in house_rules)."""

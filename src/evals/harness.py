@@ -29,15 +29,18 @@ from evals.scorers import ALL_SCORERS
 DEFAULT_DATA = find_repo_root(Path(__file__)) / "data" / "eval" / "eval_cards.json"
 DEFAULT_HARD_DATA = find_repo_root(Path(__file__)) / "data" / "eval" / "eval_cards_hard.json"
 DEFAULT_PLACEMENT_DATA = find_repo_root(Path(__file__)) / "data" / "eval" / "eval_cards_placement.json"
+DEFAULT_PETS_DATA = find_repo_root(Path(__file__)) / "data" / "eval" / "eval_cards_pets.json"
 
 SUITES: dict[str, list[tuple[Path, str]]] = {
     "gold": [(DEFAULT_DATA, "real_card")],
     "hard": [(DEFAULT_HARD_DATA, "hard_card")],
     "placement": [(DEFAULT_PLACEMENT_DATA, "placement_card")],
+    "pets": [(DEFAULT_PETS_DATA, "pet_card")],
     "all": [
         (DEFAULT_DATA, "real_card"),
         (DEFAULT_HARD_DATA, "hard_card"),
         (DEFAULT_PLACEMENT_DATA, "placement_card"),
+        (DEFAULT_PETS_DATA, "pet_card"),
     ],
 }
 

@@ -70,7 +70,9 @@ def test_ok_verdict_program_is_applied() -> None:
         asyncio.run(room.handle_action("p1", PlayMsg(card_id="c2")))
 
     assert room.state.get_player("p1").score == 4
-    assert "c2" in room.state.discard
+    # A card whose identity is a boon is a player-zone permanent even when its
+    # immediate effect has already resolved.
+    assert "c2" in room.state.get_player("p1").in_play
 
 
 def test_invalid_verdict_falls_back_to_custom_note_no_silent_noop() -> None:

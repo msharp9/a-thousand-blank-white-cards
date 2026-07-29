@@ -39,6 +39,7 @@ class _PlayerView:
     name: str
     score: int
     hand_size: int
+    in_play: tuple[str, ...]
     connected: bool
     eliminated: bool
 
@@ -96,6 +97,7 @@ class SandboxGame:
             name=p["name"],
             score=p["score"],
             hand_size=len(p.get("hand", [])),
+            in_play=tuple(p.get("in_play", [])),
             connected=p.get("connected", True),
             eliminated=p.get("eliminated", False),
         )
@@ -303,6 +305,7 @@ class SandboxGame:
         to_zone: str = "discard",
         to_position: str = "top",
         to_player: str | None = None,
+        match_attributes: dict[str, str | int | float | bool | None] | None = None,
     ) -> None:
         """Move cards between zones (deck/discard/hand/in_play/center/exile) without playing them.
 
@@ -333,19 +336,20 @@ class SandboxGame:
             raise ValueError("from_player is required exactly when from_zone is 'hand' or 'in_play'")
         if (to_zone in ("hand", "in_play")) != (to_player is not None):
             raise ValueError("to_player is required exactly when to_zone is 'hand' or 'in_play'")
-        self._ops.append(
-            {
-                "op": "move_cards",
-                "card_target": card_target,
-                "from_zone": from_zone,
-                "selector": selector,
-                "count": count,
-                "from_player": from_player,
-                "to_zone": to_zone,
-                "to_position": to_position,
-                "to_player": to_player,
-            }
-        )
+        op = {
+            "op": "move_cards",
+            "card_target": card_target,
+            "from_zone": from_zone,
+            "selector": selector,
+            "count": count,
+            "from_player": from_player,
+            "to_zone": to_zone,
+            "to_position": to_position,
+            "to_player": to_player,
+        }
+        if match_attributes:
+            op["match_attributes"] = dict(match_attributes)
+        self._ops.append(op)
 
     def shuffle_deck(self, include_discard: bool = False) -> None:
         """Shuffle the draw pile; include_discard=True reshuffles the discard pile into it."""

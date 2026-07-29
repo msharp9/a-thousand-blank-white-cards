@@ -518,6 +518,18 @@ class Room:
         self.state = self.state.model_copy(update={"players": players, "spectators": spectators})
         await self._broadcast_state()
 
+    async def _handle_lobby_set_deck(self, player_id: str, msg) -> None:
+        if self.state.phase != "lobby":
+            await self.connections.send(player_id, {"type": "error", "message": "Deck changes are lobby-only"})
+            return
+        if not self._is_host(player_id):
+            await self.connections.send(player_id, {"type": "error", "message": "Only the host can choose the deck"})
+            return
+        if self.state.starter_deck == msg.deck:
+            return
+        self.state = self.state.model_copy(update={"starter_deck": msg.deck})
+        await self._broadcast_state()
+
     # ── turn helpers ──
     def _is_active_player(self, player_id: str) -> bool:
         if not self.state.players:
@@ -584,6 +596,7 @@ class Room:
             "start",
             "lobby_set_host",
             "lobby_set_role",
+            "lobby_set_deck",
             "pass",
             "end_turn",
             "play",
@@ -605,6 +618,7 @@ class Room:
             "start",
             "lobby_set_host",
             "lobby_set_role",
+            "lobby_set_deck",
             "admin_propose",
             "admin_cancel",
             "admin_view",
@@ -629,6 +643,9 @@ class Room:
             return
         if mtype == "lobby_set_role":
             await self._handle_lobby_set_role(player_id, msg)
+            return
+        if mtype == "lobby_set_deck":
+            await self._handle_lobby_set_deck(player_id, msg)
             return
         if mtype == "admin_view":
             await self._handle_admin_view(player_id, msg)
@@ -882,6 +899,7 @@ class Room:
             build_premade_pool,
             count=PREMADE_POOL_SIZE,
             venue_mode=self.state.mode,
+            starter_deck=self.state.starter_deck,
         )
         # Pre-made cards live in the registry AND (as ids) in the deck so the
         # setup UI can render "the deck so far". They're re-shuffled with the
@@ -1551,7 +1569,7 @@ class Room:
         await self._advance_turn()
 
     def _hook_bus(self) -> EventBus:
-        fingerprint = tuple(h.id for h in self.state.hooks)
+        fingerprint = tuple((h.id, h.event, h.scope, h.owner_mode, h.owner_id, h.code) for h in self.state.hooks)
         if self._hook_registry is None or fingerprint != self._hook_fingerprint:
             self._hook_registry = build_registry(self.state)
             self._hook_fingerprint = fingerprint
@@ -1595,7 +1613,13 @@ class Room:
         never brick the game. The vetoed card stays in hand and the turn is
         not consumed.
         """
-        specs = [h for h in self.state.hooks if h.event == str(GameEvent.ON_VALIDATE_PLAY)]
+        from engine.hooks import hook_applies_to_player
+
+        specs = [
+            hook
+            for hook in self.state.hooks
+            if hook.event == str(GameEvent.ON_VALIDATE_PLAY) and hook_applies_to_player(self.state, hook, player_id)
+        ]
         if not specs:
             return None
         from config import get_settings
@@ -1616,8 +1640,18 @@ class Room:
         }
         state_dict = json.loads(self.state.model_dump_json())
         for spec in specs[:MAX_HOOKS_PER_EVENT]:
+            scoped_ctx = dict(ctx_dict)
+            controller_id = self.state.controller_of(spec.source_card_id)
+            if spec.scope == "player" and controller_id is not None:
+                scoped_ctx.update(
+                    {
+                        "actor_id": controller_id,
+                        "event_actor_id": player_id,
+                        "source_controller_id": controller_id,
+                    }
+                )
             try:
-                raw_ops = await asyncio.to_thread(execute_snippet, spec.code, state_dict, ctx_dict)
+                raw_ops = await asyncio.to_thread(execute_snippet, spec.code, state_dict, scoped_ctx)
             except SnippetExecutionError as exc:
                 logger.warning(
                     "validation hook failed card_id=%s source=%s reason=%s", card_id, spec.source_card_id, exc
@@ -2025,12 +2059,19 @@ class Room:
         return "discard"
 
     def _placement_owner(self, card, ctx: HookContext) -> str:
-        """Which player an in_play (placement "player") card sits in front of:
-        the chosen target when the play had one, else the actor. Legacy
-        placement "self" always attaches to the actor."""
+        """Resolve the controller for a newly played player-zone card."""
         canonical = card.get("canonical") if isinstance(card, dict) else getattr(card, "canonical", None)
         placement = canonical.get("placement") if isinstance(canonical, dict) else getattr(canonical, "placement", None)
         if placement == "player":
+            placement_owner = (
+                canonical.get("placement_owner")
+                if isinstance(canonical, dict)
+                else getattr(canonical, "placement_owner", None)
+            )
+            if placement_owner == "actor":
+                return ctx.actor_id
+            if placement_owner == "chosen_player" and ctx.chosen_player_id is not None:
+                return ctx.chosen_player_id
             return ctx.chosen_player_id or ctx.actor_id
         return ctx.actor_id
 
@@ -2174,8 +2215,14 @@ class Room:
         if re.search(r"\bnew rule\b|\bhouse rule\b|\beveryone\b.*\b(?:now|must|cannot|can't)\b", text):
             return "center"
         if re.search(
-            r"\b(cat|dog|pet|puppy|kitten|companion|familiar|owned|owner|yours|your item|your hat)\b",
+            r"\b(this is your|belongs to you|keep this|your (?:pet|companion|item|artifact|curse|boon))\b",
             text,
+        ):
+            return "player"
+        if re.fullmatch(
+            r"\s*(?:(?:the|a|an)\s+)?(?:cat|dog|pet|monster|artifact|enchantment|curse|boon|companion)\s*",
+            title,
+            flags=re.IGNORECASE,
         ):
             return "player"
         return "discard"
@@ -2213,12 +2260,15 @@ class Room:
         if trigger is not None:
             canonical["trigger"] = trigger
         placement = getattr(result, "placement", None)
-        if result.verdict != "ok":
+        if getattr(result, "verdict", "ok") == "invalid":
             placement = "discard"
         elif placement is None:
             placement = self._infer_interpretation_placement(result, title=title, description=description)
-            logger.warning("successful interpretation omitted placement; inferred %s for %r", placement, title)
+            logger.warning("interpretation omitted placement; inferred %s for %r", placement, title)
         canonical["placement"] = placement
+        placement_owner = getattr(result, "placement_owner", None)
+        if placement == "player" and placement_owner is not None:
+            canonical["placement_owner"] = placement_owner
         venue = getattr(result, "venue", None)
         if venue is not None:
             canonical["venue"] = venue

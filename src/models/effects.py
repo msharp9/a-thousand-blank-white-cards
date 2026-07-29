@@ -37,6 +37,7 @@ _VALID_TARGETS: frozenset[str] = frozenset(
         "all_others",
         "chooser",  # actor chooses at play-time (requires_choice=True)
         "target_player",  # pre-resolved by engine from ctx.chosen_player_id
+        "source_controller",  # current holder of ctx.source_card_id/ctx.card_id in in_play
         "player_with_most_points",
         "player_with_least_points",
         "player_with_empty_hand",
@@ -406,6 +407,7 @@ class MoveCardsOp(BaseModel):
     to_zone: Zone
     to_position: Literal["top", "bottom", "shuffle"] = "top"
     to_player: CardFlowTarget | None = None
+    match_attributes: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _source_shape_and_player_zones(self) -> MoveCardsOp:

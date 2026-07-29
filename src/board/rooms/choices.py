@@ -75,19 +75,30 @@ def chosen_card_candidates(
 def _op_candidates(state: GameState, op: Op, actor_id: str, chosen_player_id: str | None) -> list[str]:
     from_zone = op.from_zone if isinstance(op, MoveCardsOp) else None
     if from_zone is None:
-        return [*state.cards_in_play(), *state.get_player(actor_id).hand]
+        return _filter_attributes(state, [*state.cards_in_play(), *state.get_player(actor_id).hand], op)
     if from_zone in ("hand", "in_play"):
         cards: list[str] = []
         for pid in _owner_ids(state, op.from_player, actor_id, chosen_player_id):
             cards.extend(getattr(state.get_player(pid), from_zone))
-        return cards
+        return _filter_attributes(state, cards, op)
     if from_zone == "center":
-        return state.center_cards()
+        return _filter_attributes(state, state.center_cards(), op)
     if from_zone == "exile":
-        return list(state.exiled)
+        return _filter_attributes(state, list(state.exiled), op)
     if from_zone == "discard":
-        return list(state.discard)
+        return _filter_attributes(state, list(state.discard), op)
     return []
+
+
+def _filter_attributes(state: GameState, cards: list[str], op: Op) -> list[str]:
+    if not isinstance(op, MoveCardsOp) or not op.match_attributes:
+        return cards
+    return [
+        card_id
+        for card_id in cards
+        if isinstance((card := state.cards.get(card_id)), dict)
+        and all((card.get("attributes") or {}).get(key) == value for key, value in op.match_attributes.items())
+    ]
 
 
 def _owner_ids(state: GameState, from_player: str, actor_id: str, chosen_player_id: str | None) -> list[str]:

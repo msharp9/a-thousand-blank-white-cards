@@ -22,12 +22,17 @@ def test_load_eval_items(tmp_path: Path) -> None:
     assert items[0].expected == {"placement": "discard"}
 
 
-def test_load_suite_items_all_combines_gold_and_hard() -> None:
+def test_load_suite_items_all_combines_every_scored_suite() -> None:
     from evals.harness import load_suite_items
 
     items = load_suite_items("all", limit=2)
-    assert len(items) == 6
-    assert {t for item in items for t in item.tags} == {"real_card", "hard_card", "placement_card"}
+    assert len(items) == 8
+    assert {t for item in items for t in item.tags} == {
+        "real_card",
+        "hard_card",
+        "placement_card",
+        "pet_card",
+    }
 
 
 def test_placement_suite_is_balanced_and_contains_regressions() -> None:

@@ -109,7 +109,11 @@ def _resolve_targets(target: Target, ctx: HookContext, state: GameState) -> list
 
     match target:
         case "self":
-            return [ctx.actor_id]
+            return [ctx.source_controller_id or ctx.actor_id]
+        case "source_controller":
+            source = ctx.source_card_id or ctx.card_id
+            controller = state.controller_of(source) if source is not None else None
+            return [controller] if controller is not None else []
         case "left_neighbor":
             order = state.effective_turn_order()
             pos = order.index(ctx.actor_id)
@@ -197,6 +201,16 @@ def _resolve_card_targets(card_target: CardTarget, ctx: HookContext, state: Game
             return []
         case _:
             raise ValueError(f"Unknown card target: {card_target!r}")
+
+
+def _matches_attributes(state: GameState, card_id: str, expected: dict[str, object]) -> bool:
+    if not expected:
+        return True
+    card = state.cards.get(card_id)
+    if not isinstance(card, dict):
+        return False
+    attributes = card.get("attributes") or {}
+    return all(attributes.get(key) == value for key, value in expected.items())
 
 
 # ---------------------------------------------------------------------------
@@ -587,6 +601,10 @@ def _resolve_card_owner(state: GameState, card_id: str) -> str | None:
         return holder
     player_ids = {player.id for player in state.players}
     for event in reversed(state.history_events):
+        if event.kind == "permanent_transfer" and event.card_id == card_id:
+            recipient = (event.data or {}).get("to_controller_id")
+            if recipient in player_ids:
+                return recipient
         if event.kind == "play" and event.card_id == card_id and event.actor_id in player_ids:
             return event.actor_id
     card = state.cards.get(card_id)
@@ -642,6 +660,8 @@ def _reduce_move_cards(
     if op.card_target is not None:
         allowed_owners = set(_resolve_targets(op.from_player, ctx, state)) if op.from_player is not None else None
         for cid in _resolve_card_targets(op.card_target, ctx, state):
+            if not _matches_attributes(state, cid, op.match_attributes):
+                continue
             zone, owner = _locate_card_zone(state, cid)
             if zone is None:
                 continue
@@ -663,6 +683,8 @@ def _reduce_move_cards(
             sources = [(op.from_zone, None)]
         for zone, owner in sources:
             for cid in _select_from_zone(_zone_card_ids(state, zone, owner), zone, op.selector, op.count, rng):
+                if not _matches_attributes(state, cid, op.match_attributes):
+                    continue
                 moves.append((cid, zone, owner))
 
     source_label = op.card_target if op.card_target is not None else op.from_zone
@@ -701,14 +723,24 @@ def _reduce_move_cards(
                 deck_index = position
             elif op.to_position == "shuffle":
                 deck_index = rng.randint(0, max(len(state.deck) - (1 if zone == "deck" else 0), 0))
+        destination_owner = owners[cid] if owner_routing else to_player_id
         state = state.move_card(
             cid,
             _MOVE_CARD_ZONE[zone],
             _MOVE_CARD_ZONE[op.to_zone],
             from_player_id=owner,
-            to_player_id=owners[cid] if owner_routing else to_player_id,
+            to_player_id=destination_owner,
             deck_index=deck_index,
         )
+        if zone == "in_play" and op.to_zone == "in_play" and owner != destination_owner:
+            state = _change_permanent_controller(
+                state,
+                cid,
+                old_controller=owner,
+                new_controller=destination_owner,
+                actor_id=ctx.actor_id,
+                effect_card_id=ctx.card_id,
+            )
 
     if op.to_zone not in ("center", "in_play"):
         departed = {cid for cid, zone, _ in moves if zone in ("center", "in_play")}
@@ -784,7 +816,14 @@ def _reduce_reveal_hand(state: GameState, op: RevealHandOp, ctx: HookContext) ->
         for pid in owners:
             if op.to == "all":
                 if source is not None:
-                    state = _bind_public_reveal(state, source, pid)
+                    state = _bind_public_reveal(
+                        state,
+                        source,
+                        pid,
+                        controller_relative=(
+                            op.target in {"self", "source_controller"} and state.controller_of(source) == pid
+                        ),
+                    )
                 state = _update_player_visibility(state, pid, {"hand_public": True})
             else:
                 current = state.get_player(pid).hand_revealed_to
@@ -792,7 +831,15 @@ def _reduce_reveal_hand(state: GameState, op: RevealHandOp, ctx: HookContext) ->
                 if source is not None:
                     for v in viewers:
                         if v != pid:
-                            state = _bind_viewer_reveal(state, source, pid, v)
+                            state = _bind_viewer_reveal(
+                                state,
+                                source,
+                                pid,
+                                v,
+                                controller_relative=(
+                                    op.target in {"self", "source_controller"} and state.controller_of(source) == pid
+                                ),
+                            )
                 state = _update_player_visibility(state, pid, {"hand_revealed_to": [*current, *added]})
     else:
         viewers = _resolve_targets(op.to, ctx, state)
@@ -866,7 +913,17 @@ def _reduce_set_condition(state: GameState, op: SetConditionOp, ctx: HookContext
             if source is None:
                 state = _supersede_condition_bindings(state, pid, op.key)
             else:
-                state = _bind_condition(state, source, pid, op.key)
+                state = _bind_condition(
+                    state,
+                    source,
+                    pid,
+                    op.key,
+                    applied_value=op.value,
+                    applied_ttl=op.duration_turns,
+                    controller_relative=(
+                        op.target in {"self", "source_controller"} and state.controller_of(source) == pid
+                    ),
+                )
             state = state.with_condition(pid, op.key, op.value, ttl=op.duration_turns)
     return state
 
@@ -974,7 +1031,12 @@ def _reduce_register_hook(state: GameState, op: RegisterHookOp, ctx: HookContext
         source_card_id=source,
         event=op.event,
         scope=op.scope,
-        owner_id=ctx.actor_id if op.scope == "player" else None,
+        owner_mode=(
+            "source_controller"
+            if op.scope == "player" and state.controller_of(source) is not None
+            else ("fixed" if op.scope == "player" else "global")
+        ),
+        owner_id=(state.controller_of(source) or ctx.actor_id) if op.scope == "player" else None,
         code=op.code,
         title=op.title,
         condition_keys=op.condition_keys,
@@ -1110,7 +1172,13 @@ def _release_turn_order_bindings(state: GameState, departed: set[str]) -> GameSt
     return state.model_copy(update=update)
 
 
-def _bind_public_reveal(state: GameState, source: str, player_id: str) -> GameState:
+def _bind_public_reveal(
+    state: GameState,
+    source: str,
+    player_id: str,
+    *,
+    controller_relative: bool = False,
+) -> GameState:
     top = next(
         (
             binding
@@ -1125,11 +1193,19 @@ def _bind_public_reveal(state: GameState, source: str, player_id: str) -> GameSt
         source_card_id=source,
         player_id=player_id,
         previous_public=state.get_player(player_id).hand_public,
+        controller_relative=controller_relative,
     )
     return state.model_copy(update={"reveal_bindings": [*state.reveal_bindings, binding]})
 
 
-def _bind_viewer_reveal(state: GameState, source: str, player_id: str, viewer_id: str) -> GameState:
+def _bind_viewer_reveal(
+    state: GameState,
+    source: str,
+    player_id: str,
+    viewer_id: str,
+    *,
+    controller_relative: bool = False,
+) -> GameState:
     top = next(
         (
             binding
@@ -1140,7 +1216,12 @@ def _bind_viewer_reveal(state: GameState, source: str, player_id: str, viewer_id
     )
     if top is not None and top.source_card_id == source:
         return state
-    binding = RevealBinding(source_card_id=source, player_id=player_id, viewer_id=viewer_id)
+    binding = RevealBinding(
+        source_card_id=source,
+        player_id=player_id,
+        viewer_id=viewer_id,
+        controller_relative=controller_relative,
+    )
     return state.model_copy(update={"reveal_bindings": [*state.reveal_bindings, binding]})
 
 
@@ -1158,7 +1239,12 @@ def _drop_reveal_bindings(state: GameState, player_id: str, *, viewer_ids: set[s
     return state.model_copy(update={"reveal_bindings": remaining})
 
 
-def _release_reveal_bindings(state: GameState, departed: set[str]) -> GameState:
+def _release_reveal_bindings(
+    state: GameState,
+    departed: set[str],
+    *,
+    controller_relative_only: bool = False,
+) -> GameState:
     """Undo departed cards' persistent hand reveals.
 
     ``hand_public`` writes form a per-player stack released like rule bindings
@@ -1166,13 +1252,17 @@ def _release_reveal_bindings(state: GameState, departed: set[str]) -> GameState:
     ``previous_public``). A released viewer grant removes that viewer from
     ``hand_revealed_to`` unless another live binding still grants them.
     """
-    if not any(binding.source_card_id in departed for binding in state.reveal_bindings):
+
+    def selected(binding: RevealBinding) -> bool:
+        return binding.source_card_id in departed and (not controller_relative_only or binding.controller_relative)
+
+    if not any(selected(binding) for binding in state.reveal_bindings):
         return state
     remaining: list[RevealBinding] = []
     carried_public: dict[str, bool] = {}
     dropped_viewers: set[tuple[str, str]] = set()
     for binding in state.reveal_bindings:
-        if binding.source_card_id in departed:
+        if selected(binding):
             if binding.viewer_id is None:
                 carried_public.setdefault(binding.player_id, binding.previous_public)
             else:
@@ -1194,7 +1284,16 @@ def _release_reveal_bindings(state: GameState, departed: set[str]) -> GameState:
     return state
 
 
-def _bind_condition(state: GameState, source: str, player_id: str, key: str) -> GameState:
+def _bind_condition(
+    state: GameState,
+    source: str,
+    player_id: str,
+    key: str,
+    *,
+    applied_value: Any = None,
+    applied_ttl: int | None = None,
+    controller_relative: bool = False,
+) -> GameState:
     key = normalize_condition_key(key)
     top = next(
         (
@@ -1214,6 +1313,9 @@ def _bind_condition(state: GameState, source: str, player_id: str, key: str) -> 
         had_previous=key in player.conditions,
         previous_value=player.conditions.get(key),
         previous_ttl=player.condition_ttls.get(key),
+        controller_relative=controller_relative,
+        applied_value=applied_value,
+        applied_ttl=applied_ttl,
     )
     return state.model_copy(update={"condition_bindings": [*state.condition_bindings, binding]})
 
@@ -1223,10 +1325,15 @@ def _release_condition_bindings(
     departed: set[str],
     *,
     paths: set[tuple[str, str]] | None = None,
+    controller_relative_only: bool = False,
 ) -> GameState:
     def selected(binding: ConditionBinding) -> bool:
         path = (binding.player_id, binding.key)
-        return binding.source_card_id in departed and (paths is None or path in paths)
+        return (
+            binding.source_card_id in departed
+            and (paths is None or path in paths)
+            and (not controller_relative_only or binding.controller_relative)
+        )
 
     if not any(selected(binding) for binding in state.condition_bindings):
         return state
@@ -1320,6 +1427,107 @@ def expire_condition(state: GameState, player_id: str, key: str) -> GameState:
     source = top.source_card_id
     state = _release_condition_bindings(state, {source}, paths={(player_id, key)})
     return _discard_condition_sources(state, {source}, reason="condition expired")
+
+
+def _change_permanent_controller(
+    state: GameState,
+    card_id: str,
+    *,
+    old_controller: str | None,
+    new_controller: str | None,
+    actor_id: str,
+    effect_card_id: str | None,
+) -> GameState:
+    """Record an in-place control transfer for a player-zone permanent.
+
+    Player-scoped hooks resolve their owner dynamically from ``Player.in_play``,
+    so the physical move performed immediately before this call is the
+    authoritative rebind. One-time effects are deliberately not replayed.
+    """
+    if old_controller is None or new_controller is None or old_controller == new_controller:
+        return state
+
+    # Controller-relative condition layers follow the permanent. Releasing the
+    # old layer first restores whatever condition it covered; binding at the
+    # destination then composes normally with any layer already there.
+    moved_conditions = [
+        binding
+        for binding in state.condition_bindings
+        if binding.source_card_id == card_id and binding.player_id == old_controller and binding.controller_relative
+    ]
+    condition_paths = {(binding.player_id, binding.key) for binding in moved_conditions}
+    if condition_paths:
+        state = _release_condition_bindings(
+            state,
+            {card_id},
+            paths=condition_paths,
+            controller_relative_only=True,
+        )
+        for binding in moved_conditions:
+            state = _bind_condition(
+                state,
+                card_id,
+                new_controller,
+                binding.key,
+                applied_value=binding.applied_value,
+                applied_ttl=binding.applied_ttl,
+                controller_relative=True,
+            )
+            state = state.with_condition(
+                new_controller,
+                binding.key,
+                binding.applied_value,
+                ttl=binding.applied_ttl,
+            )
+
+    # Persistent reveals addressed to the controller's hand follow the same
+    # rule. Fixed reveals of other players, and table-wide effects, remain put.
+    moved_reveals = [
+        binding
+        for binding in state.reveal_bindings
+        if binding.source_card_id == card_id and binding.player_id == old_controller and binding.controller_relative
+    ]
+    if moved_reveals:
+        state = _release_reveal_bindings(state, {card_id}, controller_relative_only=True)
+        for binding in moved_reveals:
+            if binding.viewer_id is None:
+                state = _bind_public_reveal(
+                    state,
+                    card_id,
+                    new_controller,
+                    controller_relative=True,
+                )
+                state = _update_player_visibility(state, new_controller, {"hand_public": True})
+            else:
+                state = _bind_viewer_reveal(
+                    state,
+                    card_id,
+                    new_controller,
+                    binding.viewer_id,
+                    controller_relative=True,
+                )
+                current = state.get_player(new_controller).hand_revealed_to
+                if binding.viewer_id not in current and binding.viewer_id != new_controller:
+                    state = _update_player_visibility(
+                        state,
+                        new_controller,
+                        {"hand_revealed_to": [*current, binding.viewer_id]},
+                    )
+
+    state = append_history_event(
+        state,
+        "permanent_transfer",
+        actor_id=actor_id,
+        target_player_ids=[old_controller, new_controller],
+        card_id=card_id,
+        source="move_cards",
+        data={
+            "from_controller_id": old_controller,
+            "to_controller_id": new_controller,
+            "effect_card_id": effect_card_id,
+        },
+    )
+    return state.with_log(f"[control] {card_id} moved from {old_controller} to {new_controller}")
 
 
 def _retire_board_sources(state: GameState, departed: set[str], *, reason: str) -> GameState:

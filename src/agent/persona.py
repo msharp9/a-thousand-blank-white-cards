@@ -123,7 +123,16 @@ OP_CATALOG_GUIDE = """\
     The ENGINE picks random cards — never pick them yourself — and moving a hidden card
     reveals nothing about it. Moving a card OFF the board (out of the center or an
     in-play zone) retires its ongoing effect just like destroy_card: its hooks
-    unregister and any rule it set reverts. LOOKING at the top of the deck (scry, peek, draw-N-keep-1)
+    unregister and any rule it set reverts. By contrast, "steal", "take control of",
+    or "move in front of another player" means a DIRECT in_play -> in_play move:
+    from_zone="in_play", to_zone="in_play", to_player=<new controller>. Never route
+    a stolen permanent through a hand unless the card explicitly says to return it
+    to a hand. A direct control change keeps the card active, does not replay its
+    on-entry effect, and transfers every player-scoped ongoing boon, curse, hook,
+    enchantment, artifact, monster, pet, or other attachment to the new controller.
+    Use match_attributes (for example {"kind": "pet"} or {"species": "cat"}) when
+    a bulk or chosen-card move is restricted to a card category.
+    LOOKING at the top of the deck (scry, peek, draw-N-keep-1)
     is NOT a bare move_cards: it needs a card_order or from_deck_top card_pick
     interaction step (see the interaction rules) so the faces reach only the peeking
     player.
@@ -214,19 +223,21 @@ OP_CATALOG_GUIDE = """\
 """
 
 PLACEMENT_GUIDANCE = """\
-PLACEMENT is the physical identity of the played card after it resolves, independent
-of whether its mechanics use a hook:
-- "discard": a one-shot action, reaction, completed score/card movement, or anything
-  with no continuing physical identity.
-- "center": a shared rule, enduring global game-state change, table-wide condition,
-  shared reminder, or shared table object. "New Rule" cards belong here even when
-  their state mutation happens immediately.
-- "player": an owned pet, companion, item, boon, curse, or personal status. Put it
-  before the chosen player when there is one, otherwise before the actor. An inert
-  named pet or personal object still belongs to its owner.
-Classify by semantic role, not by casual player wording about "the center", "in front",
-or "discard"; players are not expected to know the engine's zone vocabulary. A card
-with a failed/invalid interpretation is discarded.
+PLACEMENT answers where THIS PLAYED CARD lives after its on-play effects. It does not
+describe an effect target or the destination of other cards it moves. Decide from the
+card's semantic role, using this priority order:
+1. "player" when this card itself becomes owned by or attached to exactly one player:
+   an owned pet, companion, monster, item, artifact, power-up, enchantment, boon, curse, or
+   personal status. It remains player even when inert or when its only effect is immediate.
+2. "center" when this card itself is a shared rule, shared win condition, global
+   reminder/condition, communal object, or table-wide monster.
+3. "discard" otherwise: an action, spell, reaction, or completed effect. Mentioning,
+   counting, stealing, or destroying pets/items does not make an action a pet/item.
+Contrasts: "This is your cat" -> player; "Give this cursed collar to a player" ->
+player with placement_owner chosen_player; "Steal a cat" -> discard; "the player with
+the most cats wins" -> center. For player placement, placement_owner is actor for an
+owned permanent even if its effect chooses a victim, and chosen_player only when this
+card itself attaches to that player.
 """
 
 SANDBOX_RULES = """\
@@ -283,6 +294,8 @@ TOOL_GUIDANCE = """\
   targets you can express (and the snippet escape hatch); `read_game_state` shows the
   live board and who authored this card; `read_game_history` queries exact public
   mechanics and draw totals. Never infer mechanics by parsing the prose game log.
+  When card identity or zone language remains unclear, call `card_rag_hybrid` with
+  the full card text and compare its placement and zone precedent.
   Call tools sparingly and stop as soon as you have enough to decide.
 """
 
@@ -361,7 +374,7 @@ EFFECT_OUTPUT_KEYS = """\
     "plan":           an ordered ResolutionPlan {"steps": [{"kind":"ops","ops":[...]}, {"kind":"interaction","result_key":"bids","request":{"kind":"number","prompt":"Bid","audience":"all","sealed":true}}, {"kind":"snippet","code":"...","explanation":"..."}]} or null,
     "program":        an EffectProgram object {"ops": [...], "requires_choice": bool} or null,
     "snippet":        a snippet object {"code": "...", "explanation": "...", "trigger": null | "on_play" | "on_turn_start" | "on_turn_end" | "on_draw_step" | "on_score_change" | "on_game_end" | "on_validate_play" | "on_reaction", "scope": "center" | "player"} or null (trigger null = run once now; a GameEvent trigger = persistent hook; "on_reaction" = a reaction card that runs when played into a reaction window),
-    "verdict":        "ok" | "invalid" | "needs_choice"\
+    "verdict":        "ok" | "invalid" (plans with player/card choices are still "ok")\
 """
 
 PERSONA_OUTPUT_KEYS = """\
@@ -370,7 +383,8 @@ PERSONA_OUTPUT_KEYS = """\
 """
 
 PLACEMENT_OUTPUT_KEY = """\
-    "placement":      "discard" | "center" | "player" (ALWAYS present; use the semantic placement rules)\
+    "placement":      "discard" | "center" | "player" (ALWAYS present; use the semantic placement rules),
+    "placement_owner": null | "actor" | "chosen_player" (ALWAYS present; null unless placement is player)\
 """
 
 OUTPUT_CONTRACT = (

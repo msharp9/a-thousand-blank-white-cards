@@ -16,6 +16,8 @@ from models.effects import (
     DrawCardsOp,
     EndGameOp,
     ExtraTurnOp,
+    MoveCardsOp,
+    RevealHandOp,
     ReverseOrderOp,
     RollDieOp,
     ScrambleOrderOp,
@@ -107,6 +109,102 @@ class TestResolveTargets:
 
     def test_all(self):
         assert set(_resolve_targets("all", make_ctx("p1"), make_state())) == {"p1", "p2", "p3"}
+
+
+def test_stealing_in_play_permanent_transfers_its_player_hook() -> None:
+    players = [
+        Player(id="p1", name="Alice", in_play=["pet"]),
+        Player(id="p2", name="Bob"),
+    ]
+    hook = HookSpec(
+        id="pet-hook",
+        source_card_id="pet",
+        event=str(GameEvent.ON_TURN_START),
+        scope="player",
+        owner_mode="source_controller",
+        owner_id="p1",
+        code="def apply(state, ctx):\n    state.add_points('self', 1)\n",
+    )
+    state = GameState(
+        room_code="TEST",
+        players=players,
+        cards={"pet": {"id": "pet", "title": "Library Cat", "attributes": {"kind": "pet"}}},
+        hooks=[hook],
+    )
+    stolen = apply_op(
+        state,
+        MoveCardsOp(
+            card_target="id:pet",
+            from_zone="in_play",
+            from_player="id:p1",
+            to_zone="in_play",
+            to_player="id:p2",
+        ),
+        make_ctx("p2"),
+    )
+
+    assert stolen.get_player("p1").in_play == []
+    assert stolen.get_player("p2").in_play == ["pet"]
+    assert stolen.controller_of("pet") == "p2"
+    assert stolen.history_events[-1].kind == "permanent_transfer"
+
+    registry = build_registry(stolen)
+    after_old_owner = fire_hooks(
+        stolen,
+        GameEvent.ON_TURN_START,
+        HookContext(event=GameEvent.ON_TURN_START, actor_id="p1"),
+        registry=registry,
+    )
+    assert after_old_owner.get_player("p1").score == 0
+    assert after_old_owner.get_player("p2").score == 0
+
+    after_new_owner = fire_hooks(
+        after_old_owner,
+        GameEvent.ON_TURN_START,
+        HookContext(event=GameEvent.ON_TURN_START, actor_id="p2"),
+        registry=registry,
+    )
+    assert after_new_owner.get_player("p1").score == 0
+    assert after_new_owner.get_player("p2").score == 1
+
+
+def test_stealing_permanent_transfers_controller_relative_condition_and_reveal() -> None:
+    state = GameState(
+        room_code="TEST",
+        players=[
+            Player(id="p1", name="Alice", in_play=["curse"]),
+            Player(id="p2", name="Bob"),
+        ],
+        cards={"curse": {"id": "curse", "title": "Visible Curse"}},
+    )
+    source_ctx = HookContext(event=GameEvent.ON_PLAY, actor_id="p1", card_id="curse")
+    state = apply_op(state, SetConditionOp(target="self", key="cursed", value=True), source_ctx)
+    state = apply_op(
+        state,
+        RevealHandOp(target="self", to="all", persistent=True),
+        source_ctx,
+    )
+    assert state.get_player("p1").conditions["cursed"] is True
+    assert state.get_player("p1").hand_public is True
+
+    stolen = apply_op(
+        state,
+        MoveCardsOp(
+            card_target="id:curse",
+            from_zone="in_play",
+            from_player="id:p1",
+            to_zone="in_play",
+            to_player="id:p2",
+        ),
+        make_ctx("p2"),
+    )
+
+    assert "cursed" not in stolen.get_player("p1").conditions
+    assert stolen.get_player("p1").hand_public is False
+    assert stolen.get_player("p2").conditions["cursed"] is True
+    assert stolen.get_player("p2").hand_public is True
+    assert all(binding.player_id == "p2" for binding in stolen.condition_bindings)
+    assert all(binding.player_id == "p2" for binding in stolen.reveal_bindings)
 
     def test_all_others(self):
         assert set(_resolve_targets("all_others", make_ctx("p1"), make_state())) == {"p2", "p3"}

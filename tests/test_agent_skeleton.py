@@ -580,11 +580,11 @@ def test_run_agent_recovers_bare_plan_steps():
     assert result.to_plan().model_dump()["steps"][0]["ops"][0]["op"] == "add_points"
 
 
-def test_run_agent_preserves_explicit_verdict_alongside_plan():
+def test_run_agent_normalizes_legacy_needs_choice_with_a_plan_to_ok():
     payload = f'{{"verdict": "needs_choice", "plan": {_STEPS_JSON}}}'
     fake = ToolAwareFake(messages=iter([AIMessage(content=payload)]))
     result = run_agent("Card", "desc", model=fake)
-    assert result.verdict == "needs_choice"
+    assert result.verdict == "ok"
 
 
 def test_effectless_ok_result_gets_custom_note_plan():

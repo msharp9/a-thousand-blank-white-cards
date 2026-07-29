@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the combined RAG seed corpus from its gold, filler, and simple sources.
+"""Build the combined RAG seed corpus from its gold, filler, simple, and pet sources.
 
 The simple deck (point-only, no-AI mode) also feeds retrieval: its cards cover
 the most common basic scenarios worth surfacing on the ``seed`` benchmark. A few
@@ -18,9 +18,10 @@ DATA = ROOT / "data"
 GOLD = DATA / "seed_cards_gold.json"
 FILLERS = DATA / "seed_cards_fillers.json"
 SIMPLE = DATA / "seed_cards_simple.json"
+PETS = DATA / "seed_cards_pets.json"
 COMBINED = DATA / "seed_cards.json"
 
-SOURCES = (GOLD, FILLERS, SIMPLE)
+SOURCES = (GOLD, FILLERS, SIMPLE, PETS)
 
 
 def render_corpus() -> str:

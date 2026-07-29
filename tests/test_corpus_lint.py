@@ -28,6 +28,7 @@ SEED_FILES = [
     "seed_cards_gold.json",
     "seed_cards.json",
     "seed_cards_simple.json",
+    "seed_cards_pets.json",
     "seed_cards_fillers.json",
 ]
 
@@ -124,10 +125,11 @@ def test_time_warp_filler_compiles_and_dry_runs_end_to_end() -> None:
     assert any(op.get("op") == "transfer_card" for op in report["emitted_ops"])
 
 
-def test_combined_seed_is_generated_from_gold_fillers_and_simple() -> None:
+def test_combined_seed_is_generated_from_all_authoritative_sources() -> None:
     gold = json.loads((DATA_DIR / "seed_cards_gold.json").read_text())
     fillers = json.loads((DATA_DIR / "seed_cards_fillers.json").read_text())
     simple = json.loads((DATA_DIR / "seed_cards_simple.json").read_text())
+    pets = json.loads((DATA_DIR / "seed_cards_pets.json").read_text())
     combined = json.loads((DATA_DIR / "seed_cards.json").read_text())
 
-    assert combined == gold + fillers + simple
+    assert combined == gold + fillers + simple + pets

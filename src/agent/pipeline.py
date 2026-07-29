@@ -526,6 +526,7 @@ def _finalize_node(state: PipelineState) -> dict[str, Any]:
         "comment": intent.comment,
         "persona_action": intent.persona_action,
         "placement": intent.placement,
+        "placement_owner": intent.placement_owner,
         "venue": intent.venue,
         "trigger": state.get("plan").trigger if state.get("plan") is not None else None,
     }
