@@ -573,20 +573,17 @@
       "trigger": null,
       "ops": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "Claim any card currently on the table in front of another player. It is yours now. No take-backs."
-          }
-        },
-        {
-          "op": "transfer_card",
+          "op": "move_cards",
           "args": {
             "card_target": "chosen_card",
-            "to_target": "self"
+            "from_zone": "in_play",
+            "from_player": "all_others",
+            "to_zone": "in_play",
+            "to_player": "self"
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('Claim any card currently on the table in front of another player. It is yours now. No take-backs.')\n    state.transfer_card('chosen_card', 'self')"
+      "sandbox": "def apply(state, ctx):\n    loot = ctx.get('chosen_card_id')\n    if loot:\n        state.move_cards(card_target='id:' + loot, from_zone='in_play', from_player='all_others', to_zone='in_play', to_player='self')"
     }
   },
   {
