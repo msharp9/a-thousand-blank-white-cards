@@ -222,6 +222,7 @@ def _compile_op(name: str, args: dict) -> Op | None:
             else _map_target(to_player, default="self", op_name=name, field="to_player")
             if to_player is not None
             else None,
+            match_attributes=args.get("match_attributes") or {},
         )
     if name == "shuffle_deck":
         return ShuffleDeckOp(include_discard=bool(args.get("include_discard", False)))

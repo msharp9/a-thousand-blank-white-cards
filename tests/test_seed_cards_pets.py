@@ -7,6 +7,7 @@ from pathlib import Path
 
 from engine.compile import compile_card_plan
 from models.card import GoldCard, parse_seed_card
+from models.effects import MoveCardsOp
 
 DATA = Path(__file__).parent.parent / "data"
 
@@ -52,3 +53,14 @@ def test_pet_deck_contains_cat_and_dog_win_conditions() -> None:
     descriptions = " ".join(card["description"].lower() for card in _cards())
     assert "most cats" in descriptions
     assert "most dogs" in descriptions
+
+
+def test_cat_chasing_terrier_compiles_its_exact_pet_cat_filter() -> None:
+    terrier = next(card for card in _cards() if card["title"] == "Cat-Chasing Terrier")
+    plan = compile_card_plan({**terrier, "origin": "seed"})
+    assert plan is not None
+    moves = [op for op in plan.operations() if isinstance(op, MoveCardsOp)]
+    assert len(moves) == 1
+    assert moves[0].from_zone == "in_play"
+    assert moves[0].selector == "all"
+    assert moves[0].match_attributes == {"kind": "pet", "species": "cat"}

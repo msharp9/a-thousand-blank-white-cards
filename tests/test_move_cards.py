@@ -107,6 +107,32 @@ class TestMoveCardsReducer:
         assert new.deck == []
         assert new.discard == ["d1", "d2", "d3"]
 
+    def test_attribute_filter_moves_only_cards_matching_every_attribute(self):
+        players = [
+            Player(id="p1", name="Alice", in_play=["cat-pet", "cat-artifact"]),
+            Player(id="p2", name="Bob", in_play=["dog-pet", "untagged"]),
+        ]
+        cards = {
+            "cat-pet": {"id": "cat-pet", "attributes": {"kind": "pet", "species": "cat"}},
+            "cat-artifact": {"id": "cat-artifact", "attributes": {"kind": "artifact", "species": "cat"}},
+            "dog-pet": {"id": "dog-pet", "attributes": {"kind": "pet", "species": "dog"}},
+            "untagged": {"id": "untagged"},
+        }
+        new = apply_op(
+            make_state(players=players, cards=cards),
+            MoveCardsOp(
+                from_zone="in_play",
+                from_player="all",
+                selector="all",
+                to_zone="discard",
+                match_attributes={"kind": "pet", "species": "cat"},
+            ),
+            make_ctx(),
+        )
+        assert new.discard == ["cat-pet"]
+        assert new.get_player("p1").in_play == ["cat-artifact"]
+        assert new.get_player("p2").in_play == ["dog-pet", "untagged"]
+
     def test_count_exceeding_zone_moves_what_is_there(self):
         new = apply_op(
             make_state(), MoveCardsOp(from_zone="deck", selector="top", count=50, to_zone="discard"), make_ctx()
@@ -496,6 +522,27 @@ class TestCompileAuthoring:
         )
         (op,) = program.ops
         assert op == MoveCardsOp(from_zone="deck", selector="top", count=3, to_zone="discard")
+
+    def test_move_cards_preserves_attribute_filter(self):
+        program = compile_card(
+            {
+                "ops": [
+                    {
+                        "op": "move_cards",
+                        "args": {
+                            "from_zone": "in_play",
+                            "from_player": "all",
+                            "selector": "all",
+                            "to_zone": "discard",
+                            "match_attributes": {"kind": "pet", "species": "cat"},
+                        },
+                    }
+                ]
+            }
+        )
+        (op,) = program.ops
+        assert isinstance(op, MoveCardsOp)
+        assert op.match_attributes == {"kind": "pet", "species": "cat"}
 
     def test_move_cards_maps_authoring_player_aliases(self):
         program = compile_card(

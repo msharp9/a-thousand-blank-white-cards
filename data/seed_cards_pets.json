@@ -1,0 +1,413 @@
+[
+  {
+    "id": "seed-pets-000",
+    "title": "Marmalade",
+    "description": "A very orange cat. Marmalade sits in front of you and does absolutely nothing.",
+    "alt_text": "a smug orange cat",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "cat"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')"
+    }
+  },
+  {
+    "id": "seed-pets-001",
+    "title": "Void Cat",
+    "description": "A tiny black cat who stares into the middle distance. Void Cat sits in front of you and does nothing.",
+    "alt_text": "a black cat shaped like a small void",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "cat"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')"
+    }
+  },
+  {
+    "id": "seed-pets-002",
+    "title": "Box Cat",
+    "description": "The box is more important than the cat. Box Cat sits in front of you and does nothing.",
+    "alt_text": "a cat crammed into a cardboard box",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "cat"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')"
+    }
+  },
+  {
+    "id": "seed-pets-003",
+    "title": "Library Cat",
+    "description": "Library Cat sits in front of you. At the start of each of your turns, draw 1 extra card.",
+    "alt_text": "a bespectacled cat asleep on an open book",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_turn_start",
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "cat"}},
+        {"op": "register_hook", "args": {"event": "on_turn_start", "scope": "player", "title": "Its controller draws an extra card at the start of their turn.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.draw_cards('self', 1)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.draw_cards('self', 1)\\n\", title='Its controller draws an extra card at the start of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-004",
+    "title": "Lucky Whiskers",
+    "description": "Lucky Whiskers sits in front of you. At the start of each of your turns, gain 1 point.",
+    "alt_text": "a cat with one glittering curled whisker",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_turn_start",
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "cat"}},
+        {"op": "register_hook", "args": {"event": "on_turn_start", "scope": "player", "title": "Its controller gains 1 point at the start of their turn.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.add_points('self', 1)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 1)\\n\", title='Its controller gains 1 point at the start of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-005",
+    "title": "Klepto Cat",
+    "description": "Klepto Cat sits in front of you. When played, steal every pet in front of every opponent. Keep them in play in front of you.",
+    "alt_text": "a cat dragging a heap of pet toys",
+    "canonical": {
+      "target": "all_others", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "cat"}},
+        {"op": "move_cards", "args": {"from_zone": "in_play", "from_player": "all_others", "selector": "all", "to_zone": "in_play", "to_player": "self", "match_attributes": {"kind": "pet"}}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    state.move_cards(from_zone='in_play', from_player='all_others', selector='all', to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-006",
+    "title": "Alley Cat",
+    "description": "Alley Cat sits in front of you. When played, choose a player and steal up to 2 of their pets, keeping them in play in front of you.",
+    "alt_text": "a streetwise cat in a tiny jacket",
+    "canonical": {
+      "target": "player", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "cat"}},
+        {"op": "move_cards", "args": {"from_zone": "in_play", "from_player": "chooser", "selector": "top", "count": 2, "to_zone": "in_play", "to_player": "self", "match_attributes": {"kind": "pet"}}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    chosen = ctx.get('chosen_player_id')\n    if chosen:\n        state.move_cards(from_zone='in_play', from_player='id:' + chosen, count=2, to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-007",
+    "title": "Copycat",
+    "description": "Copycat sits in front of you. Whenever you play a pet, including Copycat, draw 1 card.",
+    "alt_text": "two nearly identical cats mirroring each other",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_play",
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "cat"}},
+        {"op": "register_hook", "args": {"event": "on_play", "scope": "player", "title": "Its controller draws whenever they play a pet.", "condition_keys": [], "code": "def apply(state, ctx):\n    card = state.card(ctx.get('card_id') or '')\n    if card and card.get('attributes', {}).get('kind') == 'pet':\n        state.draw_cards('self', 1)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'cat')\n    state.register_hook('on_play', scope='player', code=\"def apply(state, ctx):\\n    card = state.card(ctx.get('card_id') or '')\\n    if card and card.get('attributes', {}).get('kind') == 'pet':\\n        state.draw_cards('self', 1)\\n\", title='Its controller draws whenever they play a pet.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-008",
+    "title": "Good Dog",
+    "description": "A certified good dog. Good Dog sits in front of you and does nothing.",
+    "alt_text": "a happy dog wearing a medal",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "dog"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')"
+    }
+  },
+  {
+    "id": "seed-pets-009",
+    "title": "Tiny Dog",
+    "description": "Tiny Dog is mostly ears. Tiny Dog sits in front of you and does nothing.",
+    "alt_text": "an extremely small dog with enormous ears",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "dog"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')"
+    }
+  },
+  {
+    "id": "seed-pets-010",
+    "title": "Big Dog",
+    "description": "Big Dog takes up the entire couch. Big Dog sits in front of you and does nothing.",
+    "alt_text": "a huge shaggy dog on a tiny couch",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "dog"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')"
+    }
+  },
+  {
+    "id": "seed-pets-011",
+    "title": "Fetching Retriever",
+    "description": "Fetching Retriever sits in front of you. When played, draw 2 cards.",
+    "alt_text": "a retriever proudly carrying two cards",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "dog"}},
+        {"op": "draw_cards", "args": {"target": "self", "amount": 2}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.draw_cards('self', 2)"
+    }
+  },
+  {
+    "id": "seed-pets-012",
+    "title": "Guard Dog",
+    "description": "Guard Dog sits in front of you. When played, gain 3 points.",
+    "alt_text": "a vigilant dog guarding three gold stars",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "dog"}},
+        {"op": "add_points", "args": {"target": "self", "amount": 3}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.add_points('self', 3)"
+    }
+  },
+  {
+    "id": "seed-pets-013",
+    "title": "Treasure Hound",
+    "description": "Treasure Hound sits in front of you. When played, put the top card of the discard pile into your hand.",
+    "alt_text": "a hound digging up a shining card",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "dog"}},
+        {"op": "move_cards", "args": {"from_zone": "discard", "selector": "top", "count": 1, "to_zone": "hand", "to_player": "self"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.move_cards(from_zone='discard', selector='top', count=1, to_zone='hand', to_player='self')"
+    }
+  },
+  {
+    "id": "seed-pets-014",
+    "title": "Cat-Chasing Terrier",
+    "description": "Cat-Chasing Terrier sits in front of you. When played, destroy every cat currently in play.",
+    "alt_text": "a determined terrier chasing a blur of cats",
+    "canonical": {
+      "target": "all_cards", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "dog"}},
+        {"op": "move_cards", "args": {"from_zone": "in_play", "from_player": "all", "selector": "all", "to_zone": "discard", "match_attributes": {"kind": "pet", "species": "cat"}}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.move_cards(from_zone='in_play', from_player='all', selector='all', to_zone='discard', match_attributes={'kind': 'pet', 'species': 'cat'})"
+    }
+  },
+  {
+    "id": "seed-pets-015",
+    "title": "Generous Dog",
+    "description": "Generous Dog sits in front of you. Whenever you gain points, draw 1 card.",
+    "alt_text": "a dog offering a gift-wrapped card",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_score_change",
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "dog"}},
+        {"op": "register_hook", "args": {"event": "on_score_change", "scope": "player", "title": "Its controller draws a card whenever they gain points.", "condition_keys": [], "code": "def apply(state, ctx):\n    if ctx.get('amount', 0) > 0:\n        state.draw_cards('self', 1)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.register_hook('on_score_change', scope='player', code=\"def apply(state, ctx):\\n    if ctx.get('amount', 0) > 0:\\n        state.draw_cards('self', 1)\\n\", title='Its controller draws a card whenever they gain points.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-016",
+    "title": "Pocket Dragon",
+    "description": "Pocket Dragon sits in front of you. At the end of each of your turns, gain 2 points.",
+    "alt_text": "a tiny dragon curled in a coat pocket",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_turn_end",
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "dragon"}},
+        {"op": "register_hook", "args": {"event": "on_turn_end", "scope": "player", "title": "Its controller gains 2 points at the end of their turn.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.add_points('self', 2)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dragon')\n    state.register_hook('on_turn_end', scope='player', code=\"def apply(state, ctx):\\n    state.add_points('self', 2)\\n\", title='Its controller gains 2 points at the end of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-017",
+    "title": "Pet Slime",
+    "description": "Pet Slime sits in front of you. It jiggles supportively and does nothing.",
+    "alt_text": "a cheerful green slime in a pet bed",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "pet"}},
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "species", "value": "slime"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'slime')"
+    }
+  },
+  {
+    "id": "seed-pets-018",
+    "title": "Golden Food Bowl",
+    "description": "This artifact sits in front of you. Whenever you play a pet, gain 1 point.",
+    "alt_text": "an ornate golden pet bowl",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": "on_play",
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "artifact"}},
+        {"op": "register_hook", "args": {"event": "on_play", "scope": "player", "title": "Its controller gains 1 point whenever they play a pet.", "condition_keys": [], "code": "def apply(state, ctx):\n    card = state.card(ctx.get('card_id') or '')\n    if card and card.get('attributes', {}).get('kind') == 'pet':\n        state.add_points('self', 1)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'artifact')\n    state.register_hook('on_play', scope='player', code=\"def apply(state, ctx):\\n    card = state.card(ctx.get('card_id') or '')\\n    if card and card.get('attributes', {}).get('kind') == 'pet':\\n        state.add_points('self', 1)\\n\", title='Its controller gains 1 point whenever they play a pet.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-019",
+    "title": "Enchanted Collar",
+    "description": "This enchantment sits in front of you. When played, draw 1 card and take an extra turn.",
+    "alt_text": "a glowing collar covered in stars",
+    "canonical": {
+      "target": "self", "placement": "player", "placement_owner": "actor", "venue": "all", "trigger": null,
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "enchantment"}},
+        {"op": "draw_cards", "args": {"target": "self", "amount": 1}},
+        {"op": "extra_turn", "args": {"target": "self"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'enchantment')\n    state.draw_cards('self', 1)\n    state.extra_turn('self')"
+    }
+  },
+  {
+    "id": "seed-pets-020",
+    "title": "Cursed Chew Toy",
+    "description": "Choose a player. This curse sits in front of them. At the end of each of their turns, they lose 1 point.",
+    "alt_text": "a squeaky toy surrounded by ominous smoke",
+    "canonical": {
+      "target": "player", "placement": "player", "placement_owner": "chosen_player", "venue": "all", "trigger": "on_turn_end",
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "curse"}},
+        {"op": "register_hook", "args": {"event": "on_turn_end", "scope": "player", "title": "Its controller loses 1 point at the end of their turn.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.subtract_points('self', 1)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'curse')\n    state.register_hook('on_turn_end', scope='player', code=\"def apply(state, ctx):\\n    state.subtract_points('self', 1)\\n\", title='Its controller loses 1 point at the end of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-021",
+    "title": "Monster Under the Bed",
+    "description": "Choose a player. This monster sits in front of them. At the start of each of their turns, they discard 1 random card.",
+    "alt_text": "two glowing eyes beneath a bed",
+    "canonical": {
+      "target": "player", "placement": "player", "placement_owner": "chosen_player", "venue": "all", "trigger": "on_turn_start",
+      "ops": [
+        {"op": "set_card_attribute", "args": {"card_target": "this", "key": "kind", "value": "monster"}},
+        {"op": "register_hook", "args": {"event": "on_turn_start", "scope": "player", "title": "Its controller discards a random card at the start of their turn.", "condition_keys": [], "code": "def apply(state, ctx):\n    state.discard_random('self', 1)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'monster')\n    state.register_hook('on_turn_start', scope='player', code=\"def apply(state, ctx):\\n    state.discard_random('self', 1)\\n\", title='Its controller discards a random card at the start of their turn.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-022",
+    "title": "Cat Kingdom",
+    "description": "This rule sits in the center. When the game ends, the player or players with the most cats in front of them win instead.",
+    "alt_text": "a cardboard castle ruled by cats",
+    "canonical": {
+      "target": "all", "placement": "center", "venue": "all", "trigger": "on_game_end",
+      "ops": [
+        {"op": "set_rule", "args": {"path": "extra.pet_win_condition", "value": "cats"}},
+        {"op": "register_hook", "args": {"event": "on_game_end", "scope": "center", "title": "The player or players controlling the most cats win.", "condition_keys": [], "code": "def apply(state, ctx):\n    if state.rules().get('extra', {}).get('pet_win_condition') != 'cats':\n        return\n    best = -1\n    winners = []\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('species') == 'cat':\n                count += 1\n        if count > best:\n            best = count\n            winners = [player.id]\n        elif count == best:\n            winners.append(player.id)\n    state.end_game(winners=winners)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.pet_win_condition', 'cats')\n    state.register_hook('on_game_end', scope='center', code=\"def apply(state, ctx):\\n    if state.rules().get('extra', {}).get('pet_win_condition') != 'cats':\\n        return\\n    best = -1\\n    winners = []\\n    for player in state.players():\\n        count = 0\\n        for cid in player.in_play:\\n            card = state.card(cid)\\n            if card and card.get('attributes', {}).get('species') == 'cat':\\n                count += 1\\n        if count > best:\\n            best = count\\n            winners = [player.id]\\n        elif count == best:\\n            winners.append(player.id)\\n    state.end_game(winners=winners)\\n\", title='The player or players controlling the most cats win.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-023",
+    "title": "Dog Park Dominion",
+    "description": "This rule sits in the center. When the game ends, the player or players with the most dogs in front of them win instead.",
+    "alt_text": "dogs raising a flag over a park",
+    "canonical": {
+      "target": "all", "placement": "center", "venue": "all", "trigger": "on_game_end",
+      "ops": [
+        {"op": "set_rule", "args": {"path": "extra.pet_win_condition", "value": "dogs"}},
+        {"op": "register_hook", "args": {"event": "on_game_end", "scope": "center", "title": "The player or players controlling the most dogs win.", "condition_keys": [], "code": "def apply(state, ctx):\n    if state.rules().get('extra', {}).get('pet_win_condition') != 'dogs':\n        return\n    best = -1\n    winners = []\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('species') == 'dog':\n                count += 1\n        if count > best:\n            best = count\n            winners = [player.id]\n        elif count == best:\n            winners.append(player.id)\n    state.end_game(winners=winners)\n"}}
+      ],
+      "sandbox": "def apply(state, ctx):\n    state.set_rule('extra.pet_win_condition', 'dogs')\n    state.register_hook('on_game_end', scope='center', code=\"def apply(state, ctx):\\n    if state.rules().get('extra', {}).get('pet_win_condition') != 'dogs':\\n        return\\n    best = -1\\n    winners = []\\n    for player in state.players():\\n        count = 0\\n        for cid in player.in_play:\\n            card = state.card(cid)\\n            if card and card.get('attributes', {}).get('species') == 'dog':\\n                count += 1\\n        if count > best:\\n            best = count\\n            winners = [player.id]\\n        elif count == best:\\n            winners.append(player.id)\\n    state.end_game(winners=winners)\\n\", title='The player or players controlling the most dogs win.', condition_keys=[])"
+    }
+  },
+  {
+    "id": "seed-pets-024",
+    "title": "Catnip Storm",
+    "description": "Each player draws 1 card for each cat sitting in front of them. Then discard Catnip Storm.",
+    "alt_text": "cats tumbling through a green whirlwind",
+    "canonical": {
+      "target": "all", "placement": "discard", "venue": "all", "trigger": null,
+      "steps": [{"kind": "snippet", "code": "def apply(state, ctx):\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('species') == 'cat':\n                count += 1\n        if count:\n            state.draw_cards('id:' + player.id, count)\n"}]
+    }
+  },
+  {
+    "id": "seed-pets-025",
+    "title": "Walkies",
+    "description": "Each player gains 1 point for each dog sitting in front of them. Then discard Walkies.",
+    "alt_text": "a chaotic parade of dogs on leashes",
+    "canonical": {
+      "target": "all", "placement": "discard", "venue": "all", "trigger": null,
+      "steps": [{"kind": "snippet", "code": "def apply(state, ctx):\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('species') == 'dog':\n                count += 1\n        if count:\n            state.add_points('id:' + player.id, count)\n"}]
+    }
+  },
+  {
+    "id": "seed-pets-026",
+    "title": "Adoption Day",
+    "description": "Choose a pet in front of another player. Steal it: keep it in play and move it directly in front of you.",
+    "alt_text": "a pet adoption certificate with a paw-print seal",
+    "canonical": {
+      "target": "card", "placement": "discard", "venue": "all", "trigger": null,
+      "ops": [{"op": "move_cards", "args": {"card_target": "chosen_card", "from_zone": "in_play", "from_player": "all_others", "to_zone": "in_play", "to_player": "self", "match_attributes": {"kind": "pet"}}}],
+      "sandbox": "def apply(state, ctx):\n    pet = ctx.get('chosen_card_id')\n    if pet:\n        state.move_cards(card_target='id:' + pet, from_zone='in_play', from_player='all_others', to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-027",
+    "title": "Animal Control",
+    "description": "Choose any pet in play and destroy it. Put that pet in the discard pile.",
+    "alt_text": "a butterfly net labeled animal control",
+    "canonical": {
+      "target": "card", "placement": "discard", "venue": "all", "trigger": null,
+      "ops": [{"op": "move_cards", "args": {"card_target": "chosen_card", "from_zone": "in_play", "from_player": "all", "to_zone": "discard", "match_attributes": {"kind": "pet"}}}],
+      "sandbox": "def apply(state, ctx):\n    pet = ctx.get('chosen_card_id')\n    if pet:\n        state.move_cards(card_target='id:' + pet, from_zone='in_play', from_player='all', to_zone='discard', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-028",
+    "title": "Pet Rustler",
+    "description": "Steal every pet in front of every opponent. Keep all of those pets in play in front of you.",
+    "alt_text": "a masked rider escaping with a wagon full of pets",
+    "canonical": {
+      "target": "all_others", "placement": "discard", "venue": "all", "trigger": null,
+      "ops": [{"op": "move_cards", "args": {"from_zone": "in_play", "from_player": "all_others", "selector": "all", "to_zone": "in_play", "to_player": "self", "match_attributes": {"kind": "pet"}}}],
+      "sandbox": "def apply(state, ctx):\n    state.move_cards(from_zone='in_play', from_player='all_others', selector='all', to_zone='in_play', to_player='self', match_attributes={'kind': 'pet'})"
+    }
+  },
+  {
+    "id": "seed-pets-029",
+    "title": "Best in Show",
+    "description": "The player or players with the most pets in front of them each gain 5 points. If nobody has a pet, nobody gains points.",
+    "alt_text": "a blue ribbon with a golden paw print",
+    "canonical": {
+      "target": "all", "placement": "discard", "venue": "all", "trigger": null,
+      "steps": [{"kind": "snippet", "code": "def apply(state, ctx):\n    best = 0\n    winners = []\n    for player in state.players():\n        count = 0\n        for cid in player.in_play:\n            card = state.card(cid)\n            if card and card.get('attributes', {}).get('kind') == 'pet':\n                count += 1\n        if count > best:\n            best = count\n            winners = [player.id]\n        elif count == best and count > 0:\n            winners.append(player.id)\n    for winner in winners:\n        state.add_points('id:' + winner, 5)\n"}]
+    }
+  }
+]

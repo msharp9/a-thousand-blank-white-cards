@@ -180,6 +180,7 @@ plan/
 !data/seed_cards_fillers.json
 !data/seed_cards.json
 !data/seed_cards_simple.json
+!data/seed_cards_pets.json
 # ...and keep the bundled game-rules snapshot served by the game_rules tool
 !data/game_rules.txt
 # ...and keep the bundled MTG rules-term glossary served by mtg_lookup

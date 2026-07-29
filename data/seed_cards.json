@@ -4355,12 +4355,13 @@
             "selector": "all",
             "to_zone": "discard",
             "match_attributes": {
+              "kind": "pet",
               "species": "cat"
             }
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.move_cards(from_zone='in_play', from_player='all', selector='all', to_zone='discard', match_attributes={'species': 'cat'})"
+      "sandbox": "def apply(state, ctx):\n    state.set_card_attribute('this', 'kind', 'pet')\n    state.set_card_attribute('this', 'species', 'dog')\n    state.move_cards(from_zone='in_play', from_player='all', selector='all', to_zone='discard', match_attributes={'kind': 'pet', 'species': 'cat'})"
     }
   },
   {
