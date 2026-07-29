@@ -2222,7 +2222,7 @@
   {
     "id": "seed-filler-011",
     "title": "Time Warp",
-    "description": "Return the last card played to its owner's hand. The table agrees its effect never happened.",
+    "description": "Return the last card played to its owner's hand.",
     "alt_text": null,
     "canonical": {
       "target": "card",
@@ -2231,12 +2231,6 @@
       "trigger": null,
       "ops": [
         {
-          "op": "custom_note",
-          "args": {
-            "note": "The table agrees the last card played never happened."
-          }
-        },
-        {
           "op": "transfer_card",
           "args": {
             "card_target": "last_played",
@@ -2244,7 +2238,7 @@
           }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.note('The table agrees the last card played never happened.')\n    state.transfer_card('last_played', 'card_owner')"
+      "sandbox": "def apply(state, ctx):\n    state.transfer_card('last_played', 'card_owner')"
     }
   },
   {
@@ -2545,7 +2539,7 @@
   {
     "id": "seed-filler-023",
     "title": "Groundhog Day",
-    "description": "The last player's turn repeats exactly. Same cards, same effects. Don't think too hard about it.",
+    "description": "Deja vu: the previous player takes another turn.",
     "alt_text": null,
     "canonical": {
       "target": "player",
@@ -2558,15 +2552,9 @@
           "args": {
             "target": "right_neighbor"
           }
-        },
-        {
-          "op": "custom_note",
-          "args": {
-            "note": "The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage."
-          }
         }
       ],
-      "sandbox": "def apply(state, ctx):\n    state.extra_turn('right_neighbor')\n    state.note(\"The previous player's turn repeats: they replay the same cards and effects as closely as the table can manage.\")"
+      "sandbox": "def apply(state, ctx):\n    state.extra_turn('right_neighbor')"
     }
   },
   {
