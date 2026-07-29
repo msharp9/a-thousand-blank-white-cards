@@ -1,6 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
+import { CardInspectTrigger } from "@/components/card-inspector-dialog";
 import { CurrentTurnBadge } from "@/components/current-turn-indicator";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { getCardArtUrl } from "@/lib/art";
@@ -28,6 +29,7 @@ import { SketchCard, stableRotation } from "./sketch-card";
 interface GameTableProps {
   gameState: GameStateSnapshot;
   myPlayerId: string;
+  onInspectCard?: (card: CardSnapshot) => void;
 }
 
 /**
@@ -78,7 +80,11 @@ function ConditionBadges({ player }: { player: PlayerSnapshot }) {
  * predecessor; spectators see the canonical order. Identity colors stay keyed
  * to the roster index so they never shift when the turn order does.
  */
-export function GameTable({ gameState, myPlayerId }: GameTableProps) {
+export function GameTable({
+  gameState,
+  myPlayerId,
+  onInspectCard,
+}: GameTableProps) {
   const { players, spectators, turn_index, turn_order, cards } = gameState;
   const activePlayerId = players.length
     ? players[turn_index % players.length]?.id
@@ -110,6 +116,7 @@ export function GameTable({ gameState, myPlayerId }: GameTableProps) {
               roomCode={gameState.room_code}
               isActive={player.id === activePlayerId}
               myPlayerId={myPlayerId}
+              onInspectCard={onInspectCard}
             />
           ))}
         </div>
@@ -140,6 +147,7 @@ function OpponentPanel({
   roomCode,
   isActive,
   myPlayerId,
+  onInspectCard,
 }: {
   player: PlayerSnapshot;
   color: string;
@@ -148,6 +156,7 @@ function OpponentPanel({
   roomCode: string;
   isActive: boolean;
   myPlayerId: string;
+  onInspectCard?: (card: CardSnapshot) => void;
 }) {
   // Cards this player has played in front of them, resolved to snapshots so
   // everyone at the table can see what others played.
@@ -256,17 +265,36 @@ function OpponentPanel({
             className="flex items-end"
             title={`${handCount} cards in hand (revealed)`}
           >
-            {revealedHandCards.map((card, i) => (
-              <SketchCard
-                key={card.id}
-                card={card}
-                w={52}
-                showTape={false}
-                rot={(i - (revealedHandCards.length - 1) / 2) * 4}
-                artUrl={getCardArtUrl(roomCode, card)}
-                className={cn(i > 0 && "-ml-[16px]", "hover:z-10")}
-              />
-            ))}
+            {revealedHandCards.map((card, i) => {
+              const rot = (i - (revealedHandCards.length - 1) / 2) * 4;
+              const marginClass = cn(i > 0 && "-ml-[16px]", "hover:z-10");
+              return onInspectCard ? (
+                <CardInspectTrigger
+                  key={card.id}
+                  card={card}
+                  onInspect={onInspectCard}
+                  className={marginClass}
+                >
+                  <SketchCard
+                    card={card}
+                    w={52}
+                    showTape={false}
+                    rot={rot}
+                    artUrl={getCardArtUrl(roomCode, card)}
+                  />
+                </CardInspectTrigger>
+              ) : (
+                <SketchCard
+                  key={card.id}
+                  card={card}
+                  w={52}
+                  showTape={false}
+                  rot={rot}
+                  artUrl={getCardArtUrl(roomCode, card)}
+                  className={marginClass}
+                />
+              );
+            })}
           </div>
         ) : (
           <div className="flex items-end" title={`${handCount} cards in hand`}>
@@ -287,16 +315,32 @@ function OpponentPanel({
           <span className="whitespace-nowrap font-hand text-xs text-muted-foreground">
             in front:
           </span>
-          {inPlayCards.map((card) => (
-            <SketchCard
-              key={card.id}
-              card={card}
-              w={52}
-              showTape={false}
-              rot={stableRotation(card.id, 4)}
-              artUrl={getCardArtUrl(roomCode, card)}
-            />
-          ))}
+          {inPlayCards.map((card) =>
+            onInspectCard ? (
+              <CardInspectTrigger
+                key={card.id}
+                card={card}
+                onInspect={onInspectCard}
+              >
+                <SketchCard
+                  card={card}
+                  w={52}
+                  showTape={false}
+                  rot={stableRotation(card.id, 4)}
+                  artUrl={getCardArtUrl(roomCode, card)}
+                />
+              </CardInspectTrigger>
+            ) : (
+              <SketchCard
+                key={card.id}
+                card={card}
+                w={52}
+                showTape={false}
+                rot={stableRotation(card.id, 4)}
+                artUrl={getCardArtUrl(roomCode, card)}
+              />
+            ),
+          )}
         </div>
       )}
     </div>
