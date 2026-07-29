@@ -280,13 +280,18 @@ def _reduce_change_draw_count(state: GameState, op: ChangeDrawCountOp, ctx: Hook
 # Steal / cards / win-condition / note
 # ---------------------------------------------------------------------------
 def _reduce_steal_points(state: GameState, op: StealPointsOp, ctx: HookContext) -> GameState:
+    """Move ``op.amount`` points from each ``from_target`` player to each ``to_target`` player.
+
+    Conserved, not clamped: a victim loses ``op.amount`` per recipient (so with
+    N recipients they lose ``N * op.amount``) and may go negative; a thief
+    always gains the full ``op.amount`` regardless of the victim's score.
+    """
     from_ids = _resolve_targets(op.from_target, ctx, state)
     to_ids = _resolve_targets(op.to_target, ctx, state)
     for from_id in from_ids:
-        stolen = min(op.amount, state.get_player(from_id).score)
-        state = _update_player_score(state, from_id, state.get_player(from_id).score - stolen)
         for to_id in to_ids:
-            state = _update_player_score(state, to_id, state.get_player(to_id).score + stolen)
+            state = _update_player_score(state, from_id, state.get_player(from_id).score - op.amount)
+            state = _update_player_score(state, to_id, state.get_player(to_id).score + op.amount)
     return state
 
 

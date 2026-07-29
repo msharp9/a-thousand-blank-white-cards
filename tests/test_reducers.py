@@ -245,11 +245,54 @@ class TestStealPoints:
         assert new.get_player("p2").score == 2
         assert new.get_player("p1").score == 13
 
-    def test_cannot_steal_below_zero(self):
+    def test_victim_can_go_negative_when_amount_exceeds_score(self):
         ctx = make_ctx("p1", chosen="p2")
         new = apply_op(make_state(), StealPointsOp(from_target="target_player", to_target="self", amount=100), ctx)
+        assert new.get_player("p2").score == -95
+        assert new.get_player("p1").score == 110
+
+    def test_negative_victim_score_still_conserves_playtest_example_one(self):
+        players = [
+            Player(id="p1", name="Alice", score=1, hand=["c1", "c2"]),
+            Player(id="p2", name="Bob", score=-5, hand=["c3"]),
+        ]
+        ctx = make_ctx("p2", chosen="p1")
+        new = apply_op(
+            make_state(players=players),
+            StealPointsOp(from_target="target_player", to_target="self", amount=5),
+            ctx,
+        )
+        assert new.get_player("p1").score == -4
         assert new.get_player("p2").score == 0
-        assert new.get_player("p1").score == 15  # only stole 5
+
+    def test_negative_victim_score_still_conserves_playtest_example_two(self):
+        players = [
+            Player(id="p1", name="Alice", score=-3, hand=["c1", "c2"]),
+            Player(id="p2", name="Bob", score=6, hand=["c3"]),
+        ]
+        ctx = make_ctx("p2", chosen="p1")
+        new = apply_op(
+            make_state(players=players),
+            StealPointsOp(from_target="target_player", to_target="self", amount=5),
+            ctx,
+        )
+        assert new.get_player("p1").score == -8
+        assert new.get_player("p2").score == 11
+
+    def test_multi_recipient_conserves_points_via_per_recipient_transfer(self):
+        ctx = make_ctx("p1")
+        new = apply_op(make_state(), StealPointsOp(from_target="self", to_target="all_others", amount=3), ctx)
+        assert new.get_player("p1").score == 10 - 3 * 2
+        assert new.get_player("p2").score == 5 + 3
+        assert new.get_player("p3").score == 20 + 3
+
+    def test_records_score_change_history_for_thief_and_victim(self):
+        ctx = make_ctx("p1", chosen="p2")
+        new = apply_op(make_state(), StealPointsOp(from_target="target_player", to_target="self", amount=3), ctx)
+        events = [e for e in new.history_events if e.kind == "score_change"]
+        by_player = {e.target_player_ids[0]: e.amount for e in events}
+        assert by_player["p2"] == -3
+        assert by_player["p1"] == 3
 
 
 class TestDrawCards:
