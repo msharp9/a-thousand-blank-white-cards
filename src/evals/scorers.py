@@ -6,11 +6,13 @@ Each scorer conforms to ScorerFunction: scorer(context: ScorerContext) -> Score.
                      (keys: resolution_plan, verdict, comment, persona_action)
   context.expected = human_canonical dict
 
-Two per-run caches keyed on the output dict's identity collapse repeated work
-within one row: the judge scorers share a single LLM Verdict, and the two
-execution scorers share a single dry-run. id() keys are only safe while the
-output objects stay alive, so runners call :func:`reset_run_caches` before each
-run — otherwise a recycled id from a previous run could serve stale results.
+Two per-run caches collapse repeated work within one row: the judge scorers
+share a single LLM Verdict (keyed on the output object's identity, valid only
+while that object stays alive for the row), and the two execution scorers
+share a single dry-run (keyed on a content hash of the output dict, so it
+cannot collide with an unrelated output from a recycled object address).
+Runners call :func:`reset_run_caches` before each run to bound cache growth
+and drop the identity-keyed entries before their backing objects can be GC'd.
 """
 
 from __future__ import annotations
@@ -24,8 +26,13 @@ from evals.judge import JudgeLLM, Verdict
 
 _CACHE_MAX = 512
 _VERDICT_CACHE: dict[int, Verdict] = {}
-_DRY_RUN_CACHE: dict[int, dict[str, Any]] = {}
+_DRY_RUN_CACHE: dict[str, dict[str, Any]] = {}
 _CEILING_CACHE: dict[str, dict[str, bool]] = {}
+
+
+def _output_key(output: dict[str, Any]) -> str:
+    """Stable content key for an output dict, immune to id() reuse after GC."""
+    return json.dumps(output, sort_keys=True, default=str)
 
 
 def reset_run_caches() -> None:
@@ -218,7 +225,7 @@ def _dry_run_output(output: dict[str, Any]) -> dict[str, Any]:
     ``{"ok": False, "error": ...}``. Never raises — a broken plan is a score of
     0, not a harness crash.
     """
-    key = id(output)
+    key = _output_key(output)
     cached = _DRY_RUN_CACHE.get(key)
     if cached is not None:
         return cached

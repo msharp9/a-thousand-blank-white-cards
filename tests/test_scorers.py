@@ -227,6 +227,37 @@ class TestDidSomething:
         assert len(calls) == 1
 
 
+class TestDryRunCacheKeying:
+    """Regression: _DRY_RUN_CACHE must be keyed on output content, not
+    id(output), so a recycled object address can never serve another
+    output's cached report (CPython reuses freed dict addresses)."""
+
+    def test_recycled_id_never_serves_a_stale_report(self) -> None:
+        reset_run_caches()
+        output_a = {"verdict": "ok", **_ops_plan({"op": "add_points", "target": "self", "amount": 5})}
+        report_a = scorers._dry_run_output(output_a)
+        assert report_a["ok"] is True
+
+        output_b = {"verdict": "ok", **_ops_plan({"op": "custom_note", "note": "different content"})}
+        stale_marker = {"ok": False, "error": "STALE: belongs to output_a, not output_b", "emitted_ops": []}
+        # Simulate the pre-fix bug: if output_b's address recycled output_a's
+        # freed id, an id()-keyed cache would have this entry under
+        # id(output_b) and serve it back unchanged.
+        scorers._DRY_RUN_CACHE[id(output_b)] = stale_marker
+
+        report_b = scorers._dry_run_output(output_b)
+
+        assert report_b != stale_marker
+        assert report_b["ok"] is True
+        assert report_b is not report_a
+        reset_run_caches()
+
+    def test_output_key_differs_for_different_content(self) -> None:
+        output_a = {"verdict": "ok", **_ops_plan({"op": "add_points", "target": "self", "amount": 5})}
+        output_b = {"verdict": "ok", **_ops_plan({"op": "add_points", "target": "self", "amount": 6})}
+        assert scorers._output_key(output_a) != scorers._output_key(output_b)
+
+
 class TestSandboxBehavior:
     def _ctx(self, output: dict, expected: dict) -> ScorerContext:
         item = EvalItem(id="sb", input={"title": "x", "description": "y"}, expected=expected)
