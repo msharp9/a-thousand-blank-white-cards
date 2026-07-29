@@ -15,7 +15,7 @@ from engine.sandbox.revalidate import parse_diff
 from board.rooms.redaction import redact_snapshot
 from board.rooms.room import Room
 from models.effects import DestroyCardOp, MoveCardsOp, OpsStep, ResolutionPlan, RevealHandOp, op_requires_choice
-from models.game_state import GameState, Player, RevealBinding
+from models.game_state import GameState, Player
 
 
 def _card(cid: str) -> dict:
@@ -245,16 +245,10 @@ def test_partial_conceal_drops_only_that_viewers_binding() -> None:
 
 
 def test_viewer_still_granted_by_a_live_binding_survives_release() -> None:
-    state = _board_state().model_copy(
-        update={
-            "reveal_bindings": [
-                RevealBinding(source_card_id="rvl", player_id="p1", viewer_id="p2"),
-                RevealBinding(source_card_id="rvl2", player_id="p1", viewer_id="p2"),
-            ]
-        }
-    )
-    players = [p.model_copy(update={"hand_revealed_to": ["p2"]}) if p.id == "p1" else p for p in state.players]
-    state = state.model_copy(update={"players": players})
+    state = apply_op(_board_state(), RevealHandOp(target="self", to="id:p2", persistent=True), _card_ctx("rvl"))
+    state = apply_op(state, RevealHandOp(target="self", to="id:p2", persistent=True), _card_ctx("rvl2"))
+    assert state.get_player("p1").hand_revealed_to == ["p2"]
+    assert [b.source_card_id for b in state.reveal_bindings] == ["rvl", "rvl2"]
     state = apply_op(state, DestroyCardOp(card_id="rvl"), _ctx("p2"))
     assert state.get_player("p1").hand_revealed_to == ["p2"]
     assert [b.source_card_id for b in state.reveal_bindings] == ["rvl2"]

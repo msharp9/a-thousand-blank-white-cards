@@ -786,9 +786,10 @@ def _reduce_reveal_hand(state: GameState, op: RevealHandOp, ctx: HookContext) ->
             else:
                 current = state.get_player(pid).hand_revealed_to
                 added = [v for v in viewers if v != pid and v not in current]
-                if source is not None and added:
-                    bindings = [RevealBinding(source_card_id=source, player_id=pid, viewer_id=v) for v in added]
-                    state = state.model_copy(update={"reveal_bindings": [*state.reveal_bindings, *bindings]})
+                if source is not None:
+                    for v in viewers:
+                        if v != pid:
+                            state = _bind_viewer_reveal(state, source, pid, v)
                 state = _update_player_visibility(state, pid, {"hand_revealed_to": [*current, *added]})
     else:
         viewers = _resolve_targets(op.to, ctx, state)
@@ -1122,6 +1123,21 @@ def _bind_public_reveal(state: GameState, source: str, player_id: str) -> GameSt
         player_id=player_id,
         previous_public=state.get_player(player_id).hand_public,
     )
+    return state.model_copy(update={"reveal_bindings": [*state.reveal_bindings, binding]})
+
+
+def _bind_viewer_reveal(state: GameState, source: str, player_id: str, viewer_id: str) -> GameState:
+    top = next(
+        (
+            binding
+            for binding in reversed(state.reveal_bindings)
+            if binding.player_id == player_id and binding.viewer_id == viewer_id
+        ),
+        None,
+    )
+    if top is not None and top.source_card_id == source:
+        return state
+    binding = RevealBinding(source_card_id=source, player_id=player_id, viewer_id=viewer_id)
     return state.model_copy(update={"reveal_bindings": [*state.reveal_bindings, binding]})
 
 
