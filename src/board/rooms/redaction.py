@@ -118,6 +118,8 @@ def redact_snapshot(
       to must not leak to the rest of the table. The owner keeps the full
       list (they know who is peeking); every other viewer keeps at most
       their own id — just enough for the client's "revealed to you" badge.
+      ``reveal_bindings`` (engine bookkeeping) name the same audience, so
+      they are stripped for every viewer.
     - ``deck_count`` is always added; ``deck`` is emptied outside
       :data:`PUBLIC_DECK_PHASES`.
     - The ``cards`` registry is filtered to :func:`_visible_card_ids` — the
@@ -145,6 +147,7 @@ def redact_snapshot(
             entry["hand_revealed_to"] = [viewer_id] if viewer_id in revealed_to else []
         players.append(entry)
     redacted["players"] = players
+    redacted.pop("reveal_bindings", None)
     redacted["deck_count"] = len(snap.get("deck", []))
     if not reveal_all_cards and snap.get("phase") not in PUBLIC_DECK_PHASES:
         redacted["deck"] = []
